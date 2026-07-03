@@ -49,7 +49,12 @@ function drawNumber(
   ctx.font = `900 ${fontSize}px "Chakra Petch", sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const label = kind === 'crit' ? `${amount}!` : `${amount}`;
+  const label =
+    kind === 'crit' || kind === 'takenCrit'
+      ? `${amount}!`
+      : kind === 'heal'
+        ? `+${amount}`
+        : `${amount}`;
   ctx.lineWidth = 8;
   ctx.strokeStyle = 'rgba(8, 12, 9, 0.85)';
   ctx.strokeText(label, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);

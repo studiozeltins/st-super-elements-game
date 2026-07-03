@@ -66,6 +66,8 @@ export interface Game {
   syncRemotePlayers(players: readonly Player[], myIdentityHex: string | null): void;
   syncMyServerRow(row: Player): void;
   handleRemoteSkillCast(cast: SkillCast): void;
+  /** Floats a number over the local player — PVP damage taken, or heals. */
+  spawnSelfNumber(amount: number, kind: DamageKind): void;
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
@@ -518,7 +520,14 @@ export function createGame(
     // Effects tick first so projectile/skill reactions this frame are already
     // flagged when the enemy update refreshes their status icons.
     effectSystem.update(deltaSeconds);
-    enemySystem.update(deltaSeconds, playerPosition, damage => network.sendTakeDamage(damage));
+    enemySystem.update(deltaSeconds, playerPosition, (damage, isCrit) => {
+      network.sendTakeDamage(damage);
+      damageNumbers.spawn(
+        playerPosition.clone().setY(playerPosition.y + 1.4),
+        damage,
+        isCrit ? 'takenCrit' : 'taken'
+      );
+    });
     resolveAllCollisions();
     damageNumbers.update(deltaSeconds);
     world.update(deltaSeconds);
@@ -636,6 +645,9 @@ export function createGame(
         hasReportedVoidDeath = false;
       }
       game.setActiveCharacter(row.activeCharacterId);
+    },
+    spawnSelfNumber(amount, kind) {
+      damageNumbers.spawn(playerPosition.clone().setY(playerPosition.y + 1.4), amount, kind);
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];

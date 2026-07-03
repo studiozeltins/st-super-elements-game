@@ -21,6 +21,13 @@ export const BannerPity = __t.object("BannerPity", {
 });
 export type BannerPity = __Infer<typeof BannerPity>;
 
+export const HealEvent = __t.object("HealEvent", {
+  owner: __t.identity(),
+  characterId: __t.string(),
+  amount: __t.u32(),
+});
+export type HealEvent = __Infer<typeof HealEvent>;
+
 export const OwnedCharacter = __t.object("OwnedCharacter", {
   id: __t.u64(),
   owner: __t.identity(),
@@ -56,6 +63,12 @@ export const PullResult = __t.object("PullResult", {
   isFeatured: __t.bool(),
 });
 export type PullResult = __Infer<typeof PullResult>;
+
+export const PvpHit = __t.object("PvpHit", {
+  target: __t.identity(),
+  amount: __t.u32(),
+});
+export type PvpHit = __Infer<typeof PvpHit>;
 
 export const RegenTimer = __t.object("RegenTimer", {
   scheduledId: __t.u64(),

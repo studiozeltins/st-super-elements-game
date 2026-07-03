@@ -80,7 +80,7 @@ const SOFT_PITY_STEP = 0.06;
 const FOUR_STAR_RATE = 0.16;
 const FOUR_STAR_PITY = 10;
 const FEATURED_5STAR_WIN = 0.5;
-const FOUR_STAR_CHARACTER_SHARE = 0.6;
+const FOUR_STAR_CHARACTER_SHARE = 0.5;
 const MAX_PULLS_PER_REQUEST = 10;
 // Keep in sync with src/game/data/constants.ts (archipelago extent).
 const WORLD_BOUND = 130;
@@ -229,6 +229,25 @@ const pullResult = table(
   }
 );
 
+// Broadcasts a PVP hit so the victim's client can float a purple number.
+const pvpHit = table(
+  { name: 'pvp_hit', public: true, event: true },
+  {
+    target: t.identity(),
+    amount: t.u32(),
+  }
+);
+
+// Broadcasts a heal so the healer's client can float green numbers (self + party).
+const healEvent = table(
+  { name: 'heal_event', public: true, event: true },
+  {
+    owner: t.identity(),
+    characterId: t.string(),
+    amount: t.u32(),
+  }
+);
+
 const regenTimer = table(
   {
     name: 'regen_timer',
@@ -247,6 +266,8 @@ const spacetimedb = schema({
   bannerPity,
   weaponItem,
   pullResult,
+  pvpHit,
+  healEvent,
   regenTimer,
 });
 export default spacetimedb;
@@ -395,12 +416,20 @@ export const attackPlayer = spacetimedb.reducer(
     }
 
     const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
-    const remainingHealth = target.currentHealth - Math.min(clampedDamage, target.currentHealth);
+    const dealt = Math.min(clampedDamage, target.currentHealth);
+    ctx.db.pvpHit.insert({ target: targetIdentity, amount: dealt });
+
+    const remainingHealth = target.currentHealth - dealt;
     if (remainingHealth > 0) {
       setActiveHealth(ctx, target, remainingHealth);
       return;
     }
-    respawnPlayerAtSpawn(ctx, target);
+    // Kill: the loser forfeits a third of their primogems to the winner.
+    const stolen = Math.floor(target.primogems / 3);
+    if (stolen > 0) {
+      ctx.db.player.identity.update({ ...attacker, primogems: attacker.primogems + stolen });
+    }
+    respawnPlayerAtSpawn(ctx, { ...target, primogems: target.primogems - stolen });
   }
 );
 
@@ -545,6 +574,11 @@ export const healParty = spacetimedb.reducer(
       if (amount <= 0 || owned.currentHealth >= targetMax) continue;
       const healed = Math.min(targetMax, owned.currentHealth + amount);
       ctx.db.ownedCharacter.id.update({ ...owned, currentHealth: healed });
+      ctx.db.healEvent.insert({
+        owner: ctx.sender,
+        characterId: owned.characterId,
+        amount: healed - owned.currentHealth,
+      });
       if (owned.characterId === currentPlayer.activeCharacterId) activeHealth = healed;
     }
     // Mirror the active character's new HP onto the player row for combat/HUD.

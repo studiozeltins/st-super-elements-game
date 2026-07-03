@@ -57,7 +57,7 @@ export interface EnemySystem {
   update(
     deltaSeconds: number,
     playerPosition: THREE.Vector3,
-    onPlayerHit: (damage: number) => void
+    onPlayerHit: (damage: number, isCrit: boolean) => void
   ): void;
   applyDamageInRadius(
     center: { x: number; y: number; z: number },
@@ -77,6 +77,8 @@ const ENEMY_AGGRO_RANGE = 13;
 const ENEMY_LEASH_RANGE = 22;
 const ENEMY_CONTACT_RANGE = 1.4;
 const ENEMY_CONTACT_COOLDOWN_SECONDS = 1;
+const ENEMY_CRIT_CHANCE = 0.25;
+const ENEMY_CRIT_MULTIPLIER = 1.8;
 const AURA_DURATION_SECONDS = 8;
 // A reaction deals bonus damage over a fixed number of ticks (framerate
 // independent). Per-tick scales with the reaction's own strength.
@@ -358,7 +360,11 @@ export function createEnemySystem(
           elapsedSeconds >= enemy.nextContactHitAt;
         if (canHit) {
           enemy.nextContactHitAt = elapsedSeconds + ENEMY_CONTACT_COOLDOWN_SECONDS;
-          onPlayerHit(enemy.contactDamage);
+          const isCrit = Math.random() < ENEMY_CRIT_CHANCE;
+          const damageDealt = isCrit
+            ? Math.round(enemy.contactDamage * ENEMY_CRIT_MULTIPLIER)
+            : enemy.contactDamage;
+          onPlayerHit(damageDealt, isCrit);
         }
       }
     },

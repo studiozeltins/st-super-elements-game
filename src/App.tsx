@@ -50,6 +50,8 @@ export default function App() {
         tables.bannerPity,
         tables.weaponItem,
         tables.pullResult,
+        tables.pvpHit,
+        tables.healEvent,
       ]);
     return () => {
       try {
@@ -91,6 +93,20 @@ export default function App() {
       flushTimerRef.current = window.setTimeout(() => {
         setPullResults([...pullBufferRef.current]);
       }, 120);
+    },
+  });
+  // Another player hit me → purple number over my character.
+  useTable(tables.pvpHit, {
+    onInsert: row => {
+      if (row.target.toHexString() !== myIdentityRef.current) return;
+      gameRef.current?.spawnSelfNumber(row.amount, 'pvp');
+    },
+  });
+  // A healer restored one of my characters → green +number.
+  useTable(tables.healEvent, {
+    onInsert: row => {
+      if (row.owner.toHexString() !== myIdentityRef.current) return;
+      gameRef.current?.spawnSelfNumber(row.amount, 'heal');
     },
   });
 

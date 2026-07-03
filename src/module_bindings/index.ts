@@ -51,9 +51,11 @@ import UpdatePositionReducer from "./update_position_reducer";
 
 // Import all table schema definitions
 import BannerPityRow from "./banner_pity_table";
+import HealEventRow from "./heal_event_table";
 import OwnedCharacterRow from "./owned_character_table";
 import PlayerRow from "./player_table";
 import PullResultRow from "./pull_result_table";
+import PvpHitRow from "./pvp_hit_table";
 import SkillCastRow from "./skill_cast_table";
 import WeaponItemRow from "./weapon_item_table";
 
@@ -76,6 +78,14 @@ const tablesSchema = __schema({
       { name: 'banner_pity_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, BannerPityRow),
+  healEvent: __table({
+    name: 'heal_event',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, HealEventRow),
   ownedCharacter: __table({
     name: 'owned_character',
     indexes: [
@@ -109,6 +119,14 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, PullResultRow),
+  pvpHit: __table({
+    name: 'pvp_hit',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, PvpHitRow),
   skillCast: __table({
     name: 'skill_cast',
     indexes: [
