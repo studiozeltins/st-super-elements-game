@@ -99,10 +99,13 @@ function createEnemyMesh(isBoss: boolean) {
   return { group, body, healthBarFill };
 }
 
+const ENEMY_PLATFORM_REACH = 2.6;
+const ENEMY_MAX_DROP = 4;
+
 export function createEnemySystem(
   scene: THREE.Scene,
   effectSystem: EffectSystem,
-  getGroundHeight: (x: number, z: number) => number,
+  getGroundHeight: (x: number, z: number, maxSurfaceY?: number) => number,
   onEnemyKilled: () => void
 ): EnemySystem {
   let elapsedSeconds = 0;
@@ -218,7 +221,15 @@ export function createEnemySystem(
       scratchMoveDirection
         .set(moveTarget.x - position.x, 0, moveTarget.z - position.z)
         .normalize();
-      position.addScaledVector(scratchMoveDirection, ENEMY_MOVE_SPEED * deltaSeconds);
+      const nextX = position.x + scratchMoveDirection.x * ENEMY_MOVE_SPEED * deltaSeconds;
+      const nextZ = position.z + scratchMoveDirection.z * ENEMY_MOVE_SPEED * deltaSeconds;
+      const nextGround = getGroundHeight(nextX, nextZ, position.y + ENEMY_PLATFORM_REACH);
+      // Slimes stop at cliff edges instead of diving into the void.
+      const wouldFallOffCliff = position.y - nextGround > ENEMY_MAX_DROP;
+      if (!wouldFallOffCliff) {
+        position.x = nextX;
+        position.z = nextZ;
+      }
       const distanceFromCenter = Math.hypot(position.x, position.z);
       if (distanceFromCenter < SAFE_ZONE_RADIUS + 1) {
         const pushOut = (SAFE_ZONE_RADIUS + 1) / distanceFromCenter;
@@ -228,7 +239,7 @@ export function createEnemySystem(
       enemy.group.lookAt(moveTarget.x, position.y, moveTarget.z);
     }
 
-    position.y = getGroundHeight(position.x, position.z);
+    position.y = getGroundHeight(position.x, position.z, position.y + ENEMY_PLATFORM_REACH);
     const isHopping = moveTarget !== null;
     enemy.body.position.y = 0.55 + (isHopping ? Math.abs(Math.sin(elapsedSeconds * 6)) * 0.35 : 0);
     return distanceToPlayer;

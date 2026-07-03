@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getCampSites } from '../camps';
-import { getTerrainHeight, ISLANDS } from '../terrain';
+import { getTerrainHeight, isOnLand, ISLANDS } from '../terrain';
 import { SAFE_ZONE_RADIUS } from '../../data/constants';
 
 const OUTER_ISLAND_COUNT = ISLANDS.length - 1;
@@ -17,7 +17,8 @@ describe('getCampSites', () => {
 
   it('places every camp on solid ground', () => {
     for (const camp of getCampSites()) {
-      expect(getTerrainHeight(camp.x, camp.z)).toBeGreaterThan(0);
+      expect(isOnLand(camp.x, camp.z)).toBe(true);
+      expect(getTerrainHeight(camp.x, camp.z)).toBeGreaterThanOrEqual(0);
     }
   });
 

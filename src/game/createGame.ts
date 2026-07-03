@@ -68,8 +68,13 @@ const CAMERA_OFFSET = new THREE.Vector3(7, 15, 11);
 const CAMERA_YAW = Math.atan2(CAMERA_OFFSET.x, CAMERA_OFFSET.z);
 const DASH_DISTANCE = 5;
 const DASH_SUBSTEPS = 4;
-/** Walkable step height; anything taller needs a jump (terrace = 1.8, jump apex ≈ 2). */
+/** Walkable step height; anything taller needs a jump (terrace = 1.8, jump apex ≈ 2.4). */
 const MAX_STEP_UP = 0.9;
+/**
+ * Platforms more than this above the player's feet are unreachable by jumping,
+ * so they are ignored as ground — a bridge deck overhead is not a wall.
+ */
+const PLATFORM_REACH = 2.6;
 const PVP_HIT_COOLDOWN_SECONDS = 0.3;
 const PVP_MAX_HIT_RANGE = 45; // server MAX_HIT_RANGE
 /** Attacks only connect within this vertical gap — no hitting across cliffs. */
@@ -251,24 +256,24 @@ export function createGame(
     playerPosition.z = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.z));
   }
 
+  function reachableGroundHeight(x: number, z: number): number {
+    return world.getGroundHeight(x, z, playerPosition.y + PLATFORM_REACH);
+  }
+
   function isGrounded(): boolean {
-    return (
-      playerPosition.y <= world.getGroundHeight(playerPosition.x, playerPosition.z) + 0.02
-    );
+    return playerPosition.y <= reachableGroundHeight(playerPosition.x, playerPosition.z) + 0.02;
   }
 
   /** Moves horizontally unless blocked by a ledge taller than one step. */
   function tryMove(deltaX: number, deltaZ: number): boolean {
     const targetX = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.x + deltaX));
     const targetZ = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.z + deltaZ));
-    const targetGround = world.getGroundHeight(targetX, targetZ);
+    const targetGround = reachableGroundHeight(targetX, targetZ);
     const ledgeHeight = targetGround - playerPosition.y;
-    const grounded = isGrounded();
-    if (grounded && ledgeHeight > MAX_STEP_UP) return false;
-    if (!grounded && ledgeHeight > 0.1) return false;
+    if (ledgeHeight > MAX_STEP_UP) return false;
     playerPosition.x = targetX;
     playerPosition.z = targetZ;
-    if (grounded && ledgeHeight > 0) playerPosition.y = targetGround;
+    if (isGrounded() && ledgeHeight > 0) playerPosition.y = targetGround;
     return true;
   }
 
@@ -301,7 +306,7 @@ export function createGame(
     playerVelocityY -= GRAVITY * deltaSeconds;
     playerPosition.y += playerVelocityY * deltaSeconds;
     fallPeakY = Math.max(fallPeakY, playerPosition.y);
-    const groundBelow = world.getGroundHeight(playerPosition.x, playerPosition.z);
+    const groundBelow = reachableGroundHeight(playerPosition.x, playerPosition.z);
     if (playerPosition.y <= groundBelow) {
       playerPosition.y = groundBelow;
       playerVelocityY = 0;

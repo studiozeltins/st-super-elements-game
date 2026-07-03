@@ -6,7 +6,7 @@ const TERRAIN_SEED = 20260703;
 const NOISE_FREQUENCY = 0.03;
 const MAX_HILL_HEIGHT = 10;
 const HEIGHT_OFFSET = -2.5;
-/** One terrace is jumpable (jump apex ≈ 2.0) but not walkable (max step 0.9). */
+/** One terrace is jumpable (jump apex ≈ 2.4) but not walkable (max step 0.9). */
 export const TERRACE_HEIGHT = 1.8;
 const TERRACE_BLEND = 0.75;
 const FLAT_CENTER_RADIUS = 24;
@@ -71,6 +71,17 @@ function applyTerracing(height: number): number {
   const fraction = (height - terraceBase) / TERRACE_HEIGHT;
   const terracedHeight = terraceBase + smoothstep(0.6, 0.95, fraction) * TERRACE_HEIGHT;
   return height + (terracedHeight - height) * TERRACE_BLEND;
+}
+
+/**
+ * Solid ground test by island footprint. Height alone cannot be used —
+ * flat city terrain sits at exactly 0, which a `height > 0.1` check
+ * would misclassify as void.
+ */
+export function isOnLand(x: number, z: number): boolean {
+  return ISLANDS.some(
+    island => Math.hypot(x - island.centerX, z - island.centerZ) <= island.radius
+  );
 }
 
 /** Analytic terrain height — identical on every client, no mesh raycasts. */

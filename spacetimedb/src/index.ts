@@ -28,6 +28,23 @@ const FIVE_STAR_CHANCE = 0.1;
 const WORLD_BOUND = 130;
 const MOVEMENT_LIMIT = 135;
 const VOID_DEATH_DEPTH = -10;
+const MAX_VERTICAL_STEP = 8;
+
+// Keep in sync with ISLANDS in src/game/world/terrain.ts.
+const ISLAND_ZONES = [
+  { centerX: 0, centerZ: 0, radius: 46 },
+  { centerX: 95, centerZ: 20, radius: 26 },
+  { centerX: -80, centerZ: -60, radius: 24 },
+  { centerX: -20, centerZ: 100, radius: 22 },
+  { centerX: 60, centerZ: -85, radius: 24 },
+];
+
+function isOverAnyIsland(positionX: number, positionZ: number) {
+  return ISLAND_ZONES.some(
+    island =>
+      Math.hypot(positionX - island.centerX, positionZ - island.centerZ) <= island.radius
+  );
+}
 const SAFE_ZONE_RADIUS = 18;
 const SPAWN_X = 6;
 const SPAWN_Z = 6;
@@ -170,8 +187,12 @@ export const updatePosition = spacetimedb.reducer(
     ctx.db.player.identity.update({
       ...currentPlayer,
       positionX: clampToWorld(currentPlayer.positionX + stepX * stepScale),
-      // Negative Y allowed so the server can witness falls off the island edge.
-      positionY: Math.max(-60, Math.min(20, positionY)),
+      // Negative Y allowed (falls off island edges are real), but per-update
+      // steps are clamped so a client cannot teleport straight to the void.
+      positionY: Math.max(
+        currentPlayer.positionY - MAX_VERTICAL_STEP,
+        Math.min(currentPlayer.positionY + MAX_VERTICAL_STEP, Math.max(-60, Math.min(20, positionY)))
+      ),
       positionZ: clampToWorld(currentPlayer.positionZ + stepZ * stepScale),
       rotationY,
     });
@@ -259,10 +280,11 @@ export const takeDamage = spacetimedb.reducer(
 
 export const fallToDeath = spacetimedb.reducer(ctx => {
   const currentPlayer = requirePlayer(ctx);
-  // The only ground below this depth is the void between islands.
-  if (currentPlayer.positionY >= VOID_DEATH_DEPTH) {
-    throw new SenderError('Not falling into the void');
-  }
+  // A real void fall is deep below ground AND outside every island footprint.
+  const isInTheVoid =
+    currentPlayer.positionY < VOID_DEATH_DEPTH &&
+    !isOverAnyIsland(currentPlayer.positionX, currentPlayer.positionZ);
+  if (!isInTheVoid) throw new SenderError('Not falling into the void');
   respawnPlayerAtSpawn(ctx, currentPlayer);
 });
 

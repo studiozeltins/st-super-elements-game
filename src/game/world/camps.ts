@@ -1,5 +1,5 @@
 import { createSeededRandom } from './rng';
-import { getTerrainHeight, ISLANDS } from './terrain';
+import { isOnLand, ISLANDS } from './terrain';
 import { SAFE_ZONE_RADIUS } from '../data/constants';
 
 export interface CampSite {
@@ -10,10 +10,6 @@ export interface CampSite {
 const CAMP_SEED = 0x5eed5;
 const CITY_ISLAND_CAMP_COUNT = 2;
 const CITY_CAMP_MIN_RADIUS = SAFE_ZONE_RADIUS + 14;
-
-function isOnLand(x: number, z: number): boolean {
-  return getTerrainHeight(x, z) > 0.1;
-}
 
 /**
  * Deterministic enemy camp locations — one per outer island plus a couple on
