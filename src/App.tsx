@@ -76,6 +76,9 @@ export default function App() {
   useTable(tables.pullResult, {
     onInsert: row => {
       if (row.owner.toHexString() !== myIdentityRef.current) return;
+      // The table is delivered through two subscriptions, so each row can fire
+      // onInsert twice; slot is unique per request, so dedupe on it.
+      if (pullBufferRef.current.some(view => view.slot === row.slot)) return;
       pullBufferRef.current.push({
         slot: row.slot,
         kind: row.kind,

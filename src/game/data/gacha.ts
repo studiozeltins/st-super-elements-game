@@ -82,7 +82,7 @@ export const BANNERS_BY_ID: Record<string, BannerDef> = Object.fromEntries(
 );
 
 // ---- Pity math (mirror of the server roll in spacetimedb/src/index.ts) ----
-export const FIVE_STAR_BASE_RATE = 0.006;
+export const FIVE_STAR_BASE_RATE = 0.06;
 export const SOFT_PITY_START = 74; // this pull number onward, odds ramp up
 export const HARD_PITY = 90; // guaranteed 5★ on this pull
 export const SOFT_PITY_STEP = 0.06;

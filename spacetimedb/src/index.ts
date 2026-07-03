@@ -71,14 +71,16 @@ const GACHA_WEAPONS: Array<{ id: string; rarity: 3 | 4 | 5 }> = [
   { id: 'mednieka-loks', rarity: 3 },
   { id: 'dzelzs-skeps', rarity: 3 },
 ];
-const FIVE_STAR_BASE_RATE = 0.006;
+// Generous, fun rates: multiple 5★ per 10-pull are possible, and every pull
+// has a real shot at a character. Pity still guarantees a 4★ within 10.
+const FIVE_STAR_BASE_RATE = 0.06;
 const SOFT_PITY_START = 74;
 const HARD_PITY = 90;
 const SOFT_PITY_STEP = 0.06;
-const FOUR_STAR_RATE = 0.051;
+const FOUR_STAR_RATE = 0.16;
 const FOUR_STAR_PITY = 10;
 const FEATURED_5STAR_WIN = 0.5;
-const FOUR_STAR_CHARACTER_SHARE = 0.5;
+const FOUR_STAR_CHARACTER_SHARE = 0.6;
 const MAX_PULLS_PER_REQUEST = 10;
 // Keep in sync with src/game/data/constants.ts (archipelago extent).
 const WORLD_BOUND = 130;
