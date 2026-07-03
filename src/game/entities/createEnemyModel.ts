@@ -15,6 +15,7 @@ const sharedGolemTorsoGeometry = new THREE.BoxGeometry(1.1, 1.2, 0.8);
 const sharedGolemHeadGeometry = new THREE.BoxGeometry(0.6, 0.5, 0.55);
 const sharedGolemArmGeometry = new THREE.BoxGeometry(0.35, 1.1, 0.4);
 const sharedEyeMaterial = new THREE.MeshBasicMaterial({ color: 0x101410 });
+const sharedSpikeMaterial = new THREE.MeshLambertMaterial({ color: 0x3a4a2a });
 
 function createHealthBar(group: THREE.Group, barHeight: number): THREE.Sprite {
   const background = new THREE.Sprite(
@@ -49,10 +50,9 @@ function buildSlimeBody(group: THREE.Group, archetype: EnemyArchetype, withSpike
   addEyes(group, 0.7, 0.6);
 
   if (!withSpikes) return body;
-  const spikeMaterial = new THREE.MeshLambertMaterial({ color: 0x3a4a2a });
   for (let spikeIndex = 0; spikeIndex < 6; spikeIndex++) {
     const angle = (spikeIndex / 6) * Math.PI * 2;
-    const spike = new THREE.Mesh(sharedSpikeGeometry, spikeMaterial);
+    const spike = new THREE.Mesh(sharedSpikeGeometry, sharedSpikeMaterial);
     spike.position.set(Math.cos(angle) * 0.5, 0.9, Math.sin(angle) * 0.5);
     spike.rotation.set(Math.sin(angle) * 0.6, 0, -Math.cos(angle) * 0.6);
     group.add(spike);

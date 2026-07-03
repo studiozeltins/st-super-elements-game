@@ -255,7 +255,7 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     const groundY = getTerrainHeight(x, z);
     asset.group.position.set(x, groundY, z);
     group.add(asset.group);
-    if (collisionRadius) obstacles.push({ x, z, radius: collisionRadius });
+    if (collisionRadius) obstacles.push({ x, y: groundY, z, radius: collisionRadius });
     if (asset.platformRadius && asset.platformTopHeight) {
       platforms.push({
         x,
@@ -383,7 +383,7 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
   group.add(createTerrainMesh());
   createPlaza(group);
   group.add(createFountain());
-  obstacles.push({ x: 0, z: 0, radius: 3.0 }); // fountain basin
+  obstacles.push({ x: 0, y: 0, z: 0, radius: 3.0 }); // fountain basin, plaza is flat at y=0
   createInstancedGroundCover(group, random);
   buildBridges();
   buildPillarStairs();
@@ -393,11 +393,21 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     const angle = (houseIndex / houseCount) * Math.PI * 2 + 0.4;
     const house = createHouse(random, angle, 12);
     group.add(house);
-    obstacles.push({ x: house.position.x, z: house.position.z, radius: 2.8 });
+    obstacles.push({
+      x: house.position.x,
+      y: getTerrainHeight(house.position.x, house.position.z),
+      z: house.position.z,
+      radius: 2.8,
+    });
   }
   const { group: windmill, blades } = createWindmill();
   group.add(windmill);
-  obstacles.push({ x: windmill.position.x, z: windmill.position.z, radius: 2.1 });
+  obstacles.push({
+    x: windmill.position.x,
+    y: getTerrainHeight(windmill.position.x, windmill.position.z),
+    z: windmill.position.z,
+    radius: 2.1,
+  });
 
   const scatterRules: AssetScatterRule[] = [
     // Boulders stay obstacle-free: they are climbable platforms.

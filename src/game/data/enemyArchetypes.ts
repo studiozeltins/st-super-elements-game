@@ -67,19 +67,6 @@ export const ENEMY_ARCHETYPES: Record<EnemyArchetypeId, EnemyArchetype> = {
   },
 };
 
-/**
- * Which archetype guards each camp, in getCampSites() order:
- * outer islands first (matching ISLANDS.slice(1)), then the city outskirts.
- */
-export const CAMP_ARCHETYPES: EnemyArchetypeId[] = [
-  'spikySlime', // island at baseHeight 1.8
-  'windWisp', // island at baseHeight 3.6
-  'stoneGolem', // island at baseHeight 5.4 — hardest
-  'spikySlime', // island at baseHeight 1.8
-  'slime', // city outskirts
-  'slime', // city outskirts
-];
-
 export const BOSS_HEALTH_MULTIPLIER = 2.5;
 export const BOSS_DAMAGE_MULTIPLIER = 1.5;
 export const BOSS_SCALE = 1.55;

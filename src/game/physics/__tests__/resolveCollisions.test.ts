@@ -48,14 +48,21 @@ describe('resolveBodyCollisions', () => {
 describe('resolveObstacleCollisions', () => {
   it('pushes a body out of a solid obstacle along the contact normal', () => {
     const walker = body(0.4, 0, 0.45, 1);
-    resolveObstacleCollisions(walker, [{ x: 0, z: 0, radius: 0.7 }]);
+    resolveObstacleCollisions(walker, [{ x: 0, y: 0, z: 0, radius: 0.7 }]);
     expect(Math.hypot(walker.position.x, walker.position.z)).toBeCloseTo(1.15, 5);
   });
 
   it('does nothing when the body is clear of every obstacle', () => {
     const walker = body(5, 5, 0.45, 1);
-    resolveObstacleCollisions(walker, [{ x: 0, z: 0, radius: 0.7 }]);
+    resolveObstacleCollisions(walker, [{ x: 0, y: 0, z: 0, radius: 0.7 }]);
     expect(walker.position.x).toBe(5);
     expect(walker.position.z).toBe(5);
+  });
+
+  it('ignores obstacles far below (bridge deck passing over a spire base)', () => {
+    const walkerOnDeck = body(0.4, 0, 0.45, 1, 6);
+    resolveObstacleCollisions(walkerOnDeck, [{ x: 0, y: 0, z: 0, radius: 0.7 }]);
+    expect(walkerOnDeck.position.x).toBe(0.4);
+    expect(walkerOnDeck.position.z).toBe(0);
   });
 });

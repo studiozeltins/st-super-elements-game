@@ -292,6 +292,9 @@ export const fallToDeath = spacetimedb.reducer(ctx => {
 export const grantKillReward = spacetimedb.reducer(
   { rewardTier: t.u32() },
   (ctx, { rewardTier }) => {
+    // PVE enemies are client-simulated, so the server cannot yet verify a kill
+    // or its tier. The cooldown caps farm rate; move enemies server-side to
+    // close this fully. Tier is clamped so a spoofed value cannot exceed x3.
     const currentPlayer = requirePlayer(ctx);
     const microsSinceLastReward =
       ctx.timestamp.microsSinceUnixEpoch - currentPlayer.lastKillRewardAt.microsSinceUnixEpoch;

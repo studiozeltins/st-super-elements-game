@@ -10,12 +10,16 @@ export interface CollisionBody {
 
 export interface ObstacleCircle {
   x: number;
+  /** Ground height at the obstacle base — bodies far above/below pass freely. */
+  y: number;
   z: number;
   radius: number;
 }
 
 /** Bodies more than this far apart vertically ignore each other (cliff levels). */
 const VERTICAL_OVERLAP_GATE = 1.6;
+/** Obstacles are solid this far up from their base (bridge decks pass above). */
+const OBSTACLE_HEIGHT_GATE = 3;
 
 /**
  * Pairwise separation: overlapping bodies push each other apart along the
@@ -33,11 +37,12 @@ export function resolveBodyCollisions(bodies: readonly CollisionBody[]) {
       const deltaZ = second.position.z - first.position.z;
       const distance = Math.hypot(deltaX, deltaZ);
       const combinedRadius = first.radius + second.radius;
-      if (distance >= combinedRadius || distance === 0) continue;
+      if (distance >= combinedRadius) continue;
 
       const overlap = combinedRadius - distance;
-      const directionX = deltaX / distance;
-      const directionZ = deltaZ / distance;
+      // Perfectly stacked bodies get a deterministic +x separation.
+      const directionX = distance === 0 ? 1 : deltaX / distance;
+      const directionZ = distance === 0 ? 0 : deltaZ / distance;
       const totalMass = first.mass + second.mass;
       const firstShare = second.mass / totalMass;
       const secondShare = first.mass / totalMass;
@@ -56,6 +61,7 @@ export function resolveObstacleCollisions(
   obstacles: readonly ObstacleCircle[]
 ) {
   for (const obstacle of obstacles) {
+    if (Math.abs(body.position.y - obstacle.y) > OBSTACLE_HEIGHT_GATE) continue;
     const deltaX = body.position.x - obstacle.x;
     const deltaZ = body.position.z - obstacle.z;
     const distance = Math.hypot(deltaX, deltaZ);

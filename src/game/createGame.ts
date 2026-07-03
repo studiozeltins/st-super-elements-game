@@ -393,11 +393,29 @@ export function createGame(
   }
 
   /** Bodies shove each other apart (mass-weighted), then solids push everyone out. */
+  const collisionBodies: CollisionBody[] = [];
+
   function resolveAllCollisions() {
-    const bodies = [playerCollisionBody, ...enemySystem.getCollisionBodies()];
-    resolveBodyCollisions(bodies);
+    collisionBodies.length = 0;
+    collisionBodies.push(playerCollisionBody);
+    enemySystem.collectCollisionBodies(collisionBodies);
+
+    const playerBeforeX = playerPosition.x;
+    const playerBeforeZ = playerPosition.z;
+    resolveBodyCollisions(collisionBodies);
     const obstacles = world.getObstacles();
-    for (const body of bodies) resolveObstacleCollisions(body, obstacles);
+    for (const body of collisionBodies) resolveObstacleCollisions(body, obstacles);
+
+    // A shove must not push the player up a wall (would snap them onto the
+    // cliff next frame). Revert the horizontal push if it lands against a ledge.
+    if (isGrounded()) {
+      const pushedGround = reachableGroundHeight(playerPosition.x, playerPosition.z);
+      if (pushedGround - playerPosition.y > MAX_STEP_UP) {
+        playerPosition.x = playerBeforeX;
+        playerPosition.z = playerBeforeZ;
+      }
+    }
+    playerModel.group.position.copy(playerPosition);
   }
 
   let hudPushTimer = 0;

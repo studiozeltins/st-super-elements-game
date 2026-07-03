@@ -6,7 +6,6 @@ import {
   BOSS_HEALTH_MULTIPLIER,
   BOSS_MASS_MULTIPLIER,
   BOSS_SCALE,
-  CAMP_ARCHETYPES,
   ENEMY_ARCHETYPES,
   type EnemyArchetype,
 } from '../data/enemyArchetypes';
@@ -23,6 +22,7 @@ interface Enemy {
   baseBodyY: number;
   homeX: number;
   homeZ: number;
+  homeGroundY: number;
   maxHealth: number;
   health: number;
   contactDamage: number;
@@ -47,8 +47,8 @@ export interface EnemySystem {
     element: ElementId
   ): boolean;
   getAlivePositions(): THREE.Vector3[];
-  /** Live pushable bodies (position refs) for the shared collision pass. */
-  getCollisionBodies(): CollisionBody[];
+  /** Appends live pushable bodies (position refs) into the shared, reused array. */
+  collectCollisionBodies(target: CollisionBody[]): void;
   dispose(): void;
 }
 
@@ -96,9 +96,8 @@ export function createEnemySystem(
     return new THREE.Vector3(x, getGroundHeight(x, z), z);
   }
 
-  getCampSites().forEach((campSite, campIndex) => {
-    const archetype =
-      ENEMY_ARCHETYPES[CAMP_ARCHETYPES[campIndex % CAMP_ARCHETYPES.length]];
+  for (const campSite of getCampSites()) {
+    const archetype = ENEMY_ARCHETYPES[campSite.archetypeId];
     const packSize = PACK_SIZE_PER_CAMP + 1; // pack + one boss
     for (let memberIndex = 0; memberIndex < packSize; memberIndex++) {
       const isBoss = memberIndex === 0;
@@ -118,6 +117,7 @@ export function createEnemySystem(
         baseBodyY: model.body.position.y,
         homeX: campSite.x,
         homeZ: campSite.z,
+        homeGroundY: getGroundHeight(campSite.x, campSite.z),
         maxHealth,
         health: maxHealth,
         contactDamage: Math.round(
@@ -134,7 +134,7 @@ export function createEnemySystem(
       scene.add(enemy.model.group);
       enemies.push(enemy);
     }
-  });
+  }
 
   function refreshAuraVisual(enemy: Enemy) {
     const material = enemy.model.body.material as THREE.MeshLambertMaterial;
@@ -228,13 +228,19 @@ export function createEnemySystem(
         position.x = nextX;
         position.z = nextZ;
       }
-      const distanceFromCenter = Math.hypot(position.x, position.z);
-      if (distanceFromCenter < SAFE_ZONE_RADIUS + 1) {
-        const pushOut = (SAFE_ZONE_RADIUS + 1) / distanceFromCenter;
-        position.x *= pushOut;
-        position.z *= pushOut;
-      }
       enemy.model.group.lookAt(moveTarget.x, position.y, moveTarget.z);
+    }
+
+    // Applies even when idle — collision shoves must not leave enemies inside
+    // the safe zone or stranded in the void below their home island.
+    const distanceFromCenter = Math.hypot(position.x, position.z);
+    if (distanceFromCenter < SAFE_ZONE_RADIUS + 1 && distanceFromCenter > 0) {
+      const pushOut = (SAFE_ZONE_RADIUS + 1) / distanceFromCenter;
+      position.x *= pushOut;
+      position.z *= pushOut;
+    }
+    if (enemy.homeGroundY - position.y > ENEMY_MAX_DROP) {
+      position.copy(spawnPositionNearHome(enemy));
     }
 
     position.y = getGroundHeight(position.x, position.z, position.y + ENEMY_PLATFORM_REACH);
@@ -290,8 +296,10 @@ export function createEnemySystem(
     getAlivePositions() {
       return enemies.filter(enemy => enemy.isAlive).map(enemy => enemy.model.group.position);
     },
-    getCollisionBodies() {
-      return enemies.filter(enemy => enemy.isAlive).map(enemy => enemy.collisionBody);
+    collectCollisionBodies(target) {
+      for (const enemy of enemies) {
+        if (enemy.isAlive) target.push(enemy.collisionBody);
+      }
     },
     dispose() {
       for (const enemy of enemies) {
