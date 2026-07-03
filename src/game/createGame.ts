@@ -426,7 +426,7 @@ export function createGame(
     if (healTimer < 1) return;
     healTimer = 0;
     const inSafeZone = isInsideSafeZone(playerPosition.x, playerPosition.z);
-    if (inSafeZone && myServerHealth < MAX_HEALTH) {
+    if (inSafeZone && myServerHealth < activeCharacter.maxHealth) {
       network.sendHeal(SAFE_ZONE_HEAL_PER_SECOND);
     }
   }

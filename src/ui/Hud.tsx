@@ -41,7 +41,8 @@ export function Hud({
 }: HudProps) {
   const activeCharacter = CHARACTERS[activeCharacterId];
   const activeElement = activeCharacter ? ELEMENTS[activeCharacter.element] : null;
-  const healthFraction = Math.max(0, Math.min(1, health / MAX_HEALTH));
+  const maxHealth = activeCharacter?.maxHealth ?? MAX_HEALTH;
+  const healthFraction = Math.max(0, Math.min(1, health / maxHealth));
 
   return (
     <div className="hud">

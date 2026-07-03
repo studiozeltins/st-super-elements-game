@@ -1,22 +1,28 @@
 import { schema, t, table, SenderError } from 'spacetimedb/server';
+import { ScheduleAt } from 'spacetimedb';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
-const CHARACTER_POOL = [
-  { characterId: 'aeris', stars: 5 },
-  { characterId: 'terron', stars: 5 },
-  { characterId: 'volta', stars: 5 },
-  { characterId: 'silva', stars: 5 },
-  { characterId: 'marina', stars: 5 },
-  { characterId: 'ignis', stars: 5 },
-  { characterId: 'sarma', stars: 5 },
-  { characterId: 'zefs', stars: 4 },
-  { characterId: 'petra', stars: 4 },
-  { characterId: 'zibo', stars: 4 },
-  { characterId: 'lapa', stars: 4 },
-  { characterId: 'rasa', stars: 4 },
-  { characterId: 'dzirkste', stars: 4 },
-  { characterId: 'stindzis', stars: 4 },
-];
+// maxHealth = per-character pool, healthRegen = HP restored per second (0 = none).
+const CHARACTER_STATS: Record<string, { stars: 4 | 5; maxHealth: number; healthRegen: number }> = {
+  aeris: { stars: 5, maxHealth: 950, healthRegen: 0 },
+  terron: { stars: 5, maxHealth: 1400, healthRegen: 0 },
+  volta: { stars: 5, maxHealth: 1000, healthRegen: 0 },
+  silva: { stars: 5, maxHealth: 1050, healthRegen: 8 },
+  marina: { stars: 5, maxHealth: 1150, healthRegen: 12 },
+  ignis: { stars: 5, maxHealth: 1300, healthRegen: 0 },
+  sarma: { stars: 5, maxHealth: 1000, healthRegen: 0 },
+  zefs: { stars: 4, maxHealth: 900, healthRegen: 0 },
+  petra: { stars: 4, maxHealth: 1200, healthRegen: 0 },
+  zibo: { stars: 4, maxHealth: 1000, healthRegen: 0 },
+  lapa: { stars: 4, maxHealth: 950, healthRegen: 15 },
+  rasa: { stars: 4, maxHealth: 1000, healthRegen: 10 },
+  dzirkste: { stars: 4, maxHealth: 1000, healthRegen: 0 },
+  stindzis: { stars: 4, maxHealth: 950, healthRegen: 0 },
+};
+const CHARACTER_POOL = Object.entries(CHARACTER_STATS).map(([characterId, s]) => ({
+  characterId,
+  stars: s.stars,
+}));
 
 const STARTER_CHARACTER_ID = 'zibo';
 const STARTING_PRIMOGEMS = 16000;
@@ -49,8 +55,13 @@ function isOverAnyIsland(positionX: number, positionZ: number) {
 const SAFE_ZONE_RADIUS = 18;
 const SPAWN_X = 6;
 const SPAWN_Z = 6;
-const MAX_HEALTH = 1000;
+const DEFAULT_MAX_HEALTH = 1000;
+const REGEN_INTERVAL_MICROS = 1_000_000n;
 const MAX_HIT_DAMAGE = 400;
+
+function statsFor(characterId: string) {
+  return CHARACTER_STATS[characterId] ?? { stars: 4 as const, maxHealth: DEFAULT_MAX_HEALTH, healthRegen: 0 };
+}
 // Bow projectiles fly up to ~45 units; server range check must cover them.
 const MAX_HIT_RANGE = 45;
 const MAX_STEP_DISTANCE = 12;
@@ -105,7 +116,18 @@ const gachaResult = table(
   }
 );
 
-const spacetimedb = schema({ player, ownedCharacter, skillCast, gachaResult });
+const regenTimer = table(
+  {
+    name: 'regen_timer',
+    scheduled: (): any => regenTick,
+  },
+  {
+    scheduled_id: t.u64().primaryKey().autoInc(),
+    scheduled_at: t.scheduleAt(),
+  }
+);
+
+const spacetimedb = schema({ player, ownedCharacter, skillCast, gachaResult, regenTimer });
 export default spacetimedb;
 
 function requirePlayer(ctx: { db: any; sender: any }) {
@@ -126,7 +148,7 @@ function clampToWorld(coordinate: number) {
 function respawnPlayerAtSpawn(ctx: { db: any }, targetPlayer: any) {
   ctx.db.player.identity.update({
     ...targetPlayer,
-    currentHealth: MAX_HEALTH,
+    currentHealth: statsFor(targetPlayer.activeCharacterId).maxHealth,
     positionX: SPAWN_X,
     positionY: 0,
     positionZ: SPAWN_Z,
@@ -165,7 +187,7 @@ export const joinGame = spacetimedb.reducer(
       rotationY: 0,
       activeCharacterId: STARTER_CHARACTER_ID,
       primogems: STARTING_PRIMOGEMS,
-      currentHealth: MAX_HEALTH,
+      currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
       lastKillRewardAt: ctx.timestamp,
     });
     ctx.db.ownedCharacter.insert({
@@ -234,9 +256,16 @@ export const setActiveCharacter = spacetimedb.reducer(
     if (!ownsCharacter(ctx, characterId)) {
       throw new SenderError('Character not owned');
     }
+    // Each character has its own pool; preserve the wounded fraction across a
+    // switch so swapping is not a free heal (and not a free kill).
+    const oldMax = statsFor(currentPlayer.activeCharacterId).maxHealth;
+    const newMax = statsFor(characterId).maxHealth;
+    const fraction = oldMax > 0 ? currentPlayer.currentHealth / oldMax : 1;
+    const scaledHealth = Math.max(1, Math.min(newMax, Math.round(newMax * fraction)));
     ctx.db.player.identity.update({
       ...currentPlayer,
       activeCharacterId: characterId,
+      currentHealth: scaledHealth,
     });
   }
 );
@@ -315,7 +344,8 @@ export const healInSafeZone = spacetimedb.reducer(
     if (!isInsideSafeZone(currentPlayer.positionX, currentPlayer.positionZ)) {
       throw new SenderError('Healing only works inside the safe zone');
     }
-    const healedHealth = Math.min(MAX_HEALTH, currentPlayer.currentHealth + amount);
+    const maxHealth = statsFor(currentPlayer.activeCharacterId).maxHealth;
+    const healedHealth = Math.min(maxHealth, currentPlayer.currentHealth + amount);
     ctx.db.player.identity.update({ ...currentPlayer, currentHealth: healedHealth });
   }
 );
@@ -360,7 +390,25 @@ export const pullGacha = spacetimedb.reducer(ctx => {
   });
 });
 
-export const init = spacetimedb.init(_ctx => {});
+export const regenTick = spacetimedb.reducer(
+  { timer: regenTimer.rowType },
+  ctx => {
+    for (const currentPlayer of [...ctx.db.player.iter()]) {
+      if (!currentPlayer.online) continue;
+      const { maxHealth, healthRegen } = statsFor(currentPlayer.activeCharacterId);
+      if (healthRegen <= 0 || currentPlayer.currentHealth >= maxHealth) continue;
+      const healed = Math.min(maxHealth, currentPlayer.currentHealth + healthRegen);
+      ctx.db.player.identity.update({ ...currentPlayer, currentHealth: healed });
+    }
+  }
+);
+
+export const init = spacetimedb.init(ctx => {
+  ctx.db.regenTimer.insert({
+    scheduled_id: 0n,
+    scheduled_at: ScheduleAt.interval(REGEN_INTERVAL_MICROS),
+  });
+});
 
 export const onConnect = spacetimedb.clientConnected(ctx => {
   const existingPlayer = ctx.db.player.identity.find(ctx.sender);

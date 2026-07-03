@@ -23,6 +23,10 @@ export interface CharacterDefinition {
   element: ElementId;
   weapon: WeaponId;
   moveSpeed: number;
+  /** Per-character health pool. */
+  maxHealth: number;
+  /** Passive health regenerated per second (0 = no regen). */
+  healthRegen: number;
   hairColor: number;
   skill: SkillDefinition;
 }
@@ -48,7 +52,7 @@ function skill(
   };
 }
 
-// Keep ids/stars in sync with CHARACTER_POOL in spacetimedb/src/index.ts.
+// Keep ids/stars/maxHealth/healthRegen in sync with CHARACTER_STATS in spacetimedb/src/index.ts.
 export const CHARACTERS: Record<string, CharacterDefinition> = {
   aeris: {
     id: 'aeris',
@@ -58,6 +62,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'anemo',
     weapon: 'sword',
     moveSpeed: 7.5,
+    maxHealth: 950,
+    healthRegen: 0,
     hairColor: 0xd8f5e8,
     skill: skill('wind-spiral', 'Vēja spirāle', 'dash', 140, 6, { radius: 2.5 }),
   },
@@ -69,6 +75,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'geo',
     weapon: 'greatsword',
     moveSpeed: 6,
+    maxHealth: 1400,
+    healthRegen: 0,
     hairColor: 0x6b4a2f,
     skill: skill('earthquake', 'Zemestrīce', 'nova', 220, 10, { radius: 5 }),
   },
@@ -80,6 +88,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'electro',
     weapon: 'book',
     moveSpeed: 6.8,
+    maxHealth: 1000,
+    healthRegen: 0,
     hairColor: 0x7a4fd8,
     skill: skill('lightning-lances', 'Zibens šķēpi', 'volley', 90, 8, {
       projectileCount: 5,
@@ -95,6 +105,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'dendro',
     weapon: 'bow',
     moveSpeed: 7,
+    maxHealth: 1050,
+    healthRegen: 8,
     hairColor: 0x3f7d2c,
     skill: skill('life-arrow', 'Dzīvības bulta', 'projectile', 180, 7, {
       projectileSpeed: 26,
@@ -109,6 +121,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'hydro',
     weapon: 'spear',
     moveSpeed: 6.8,
+    maxHealth: 1150,
+    healthRegen: 12,
     hairColor: 0x2c5f9e,
     skill: skill('water-ring', 'Ūdens aplis', 'ring', 45, 12, { radius: 4, durationSeconds: 4 }),
   },
@@ -120,6 +134,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'pyro',
     weapon: 'greatsword',
     moveSpeed: 6.2,
+    maxHealth: 1300,
+    healthRegen: 0,
     hairColor: 0xb32a10,
     skill: skill('firestorm', 'Uguns vētra', 'nova', 200, 9, { radius: 4.5 }),
   },
@@ -131,6 +147,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'cryo',
     weapon: 'sword',
     moveSpeed: 7.2,
+    maxHealth: 1000,
+    healthRegen: 0,
     hairColor: 0xe8f6ff,
     skill: skill('ice-needles', 'Ledus adatas', 'volley', 70, 6, {
       projectileCount: 3,
@@ -146,6 +164,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'anemo',
     weapon: 'book',
     moveSpeed: 7.2,
+    maxHealth: 900,
+    healthRegen: 0,
     hairColor: 0x8fd8c0,
     skill: skill('vortex-orb', 'Virpuļsfēra', 'projectile', 110, 5, {
       projectileSpeed: 14,
@@ -160,6 +180,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'geo',
     weapon: 'spear',
     moveSpeed: 6.4,
+    maxHealth: 1200,
+    healthRegen: 0,
     hairColor: 0x9c7b52,
     skill: skill('stone-strike', 'Akmens trieciens', 'dash', 130, 7, { radius: 2.2 }),
   },
@@ -171,6 +193,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'electro',
     weapon: 'sword',
     moveSpeed: 7,
+    maxHealth: 1000,
+    healthRegen: 0,
     hairColor: 0x4a3a6e,
     skill: skill('static-field', 'Statiskais lauks', 'nova', 120, 6, { radius: 3.5 }),
   },
@@ -182,6 +206,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'dendro',
     weapon: 'book',
     moveSpeed: 6.6,
+    maxHealth: 950,
+    healthRegen: 15,
     hairColor: 0x86b04a,
     skill: skill('spore-cloud', 'Sporu mākonis', 'ring', 35, 10, {
       radius: 3.5,
@@ -196,6 +222,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'hydro',
     weapon: 'bow',
     moveSpeed: 7,
+    maxHealth: 1000,
+    healthRegen: 10,
     hairColor: 0x74b6e8,
     skill: skill('water-drop', 'Ūdens lāse', 'projectile', 140, 5, {
       projectileSpeed: 22,
@@ -210,6 +238,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'pyro',
     weapon: 'spear',
     moveSpeed: 7,
+    maxHealth: 1000,
+    healthRegen: 0,
     hairColor: 0xe07a30,
     skill: skill('flame-lunge', 'Liesmu izklupiens', 'dash', 150, 6, { radius: 2.4 }),
   },
@@ -221,6 +251,8 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     element: 'cryo',
     weapon: 'bow',
     moveSpeed: 7,
+    maxHealth: 950,
+    healthRegen: 0,
     hairColor: 0xcfe8f0,
     skill: skill('frost-shot', 'Sala šāviens', 'projectile', 150, 6, {
       projectileSpeed: 24,
