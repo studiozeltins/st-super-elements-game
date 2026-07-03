@@ -43,7 +43,7 @@ interface Enemy {
   contactDamage: number;
   auraElement: ElementId | null;
   auraExpiresAt: number;
-  reactionDotUntil: number;
+  reactionTicksRemaining: number;
   reactionNextTickAt: number;
   reactionDotColor: number;
   reactionDotDamagePerTick: number;
@@ -80,10 +80,11 @@ const ENEMY_CONTACT_COOLDOWN_SECONDS = 1;
 const AURA_DURATION_SECONDS = 8;
 /** Above this remaining-fraction the aura icon is solid; below it blinks. */
 const AURA_STRONG_FRACTION = 0.5;
-// A reaction deals bonus damage over time; these set its length and cadence.
-const REACTION_DOT_SECONDS = 3;
+// A reaction deals bonus damage over a fixed number of ticks (framerate
+// independent). Per-tick scales with the reaction's own strength.
+const REACTION_TOTAL_TICKS = 6;
 const REACTION_TICK_SECONDS = 0.5;
-const REACTION_DOT_DAMAGE_FRACTION = 0.3;
+const REACTION_DOT_DAMAGE_FRACTION = 0.12;
 const FREEZE_DURATION_SECONDS = 2;
 const RESPAWN_DELAY_SECONDS = 6;
 const SPAWN_SCATTER_RADIUS = 3;
@@ -152,7 +153,7 @@ export function createEnemySystem(
         ),
         auraElement: null,
         auraExpiresAt: 0,
-        reactionDotUntil: 0,
+        reactionTicksRemaining: 0,
         reactionNextTickAt: 0,
         reactionDotColor: 0,
         reactionDotDamagePerTick: 0,
@@ -196,28 +197,33 @@ export function createEnemySystem(
       enemy.model.auraIcon.hide();
     }
 
-    if (elapsedSeconds < enemy.reactionDotUntil) {
-      const remaining = (enemy.reactionDotUntil - elapsedSeconds) / REACTION_DOT_SECONDS;
+    if (enemy.reactionTicksRemaining > 0) {
+      const remaining = enemy.reactionTicksRemaining / REACTION_TOTAL_TICKS;
       enemy.model.reactionIcon.show(remaining, enemy.reactionDotColor, false, elapsedSeconds);
     } else {
       enemy.model.reactionIcon.hide();
     }
   }
 
+  /** Fixed-count catch-up: total DoT damage is framerate independent. */
   function tickReactionDot(enemy: Enemy) {
-    if (elapsedSeconds >= enemy.reactionDotUntil) return;
-    if (elapsedSeconds < enemy.reactionNextTickAt) return;
-    enemy.reactionNextTickAt += REACTION_TICK_SECONDS;
-    enemy.health -= enemy.reactionDotDamagePerTick;
-    const barPosition = enemy.model.group.position;
-    enemy.model.healthBarFill.scale.x = 1.2 * Math.max(0, enemy.health / enemy.maxHealth);
-    reportDamage(
-      barPosition.clone().setY(barPosition.y + 1),
-      enemy.reactionDotDamagePerTick,
-      'reaction',
-      enemy.reactionDotColor
-    );
-    if (enemy.health <= 0) killEnemy(enemy);
+    while (enemy.reactionTicksRemaining > 0 && elapsedSeconds >= enemy.reactionNextTickAt) {
+      enemy.reactionTicksRemaining--;
+      enemy.reactionNextTickAt += REACTION_TICK_SECONDS;
+      enemy.health -= enemy.reactionDotDamagePerTick;
+      const barPosition = enemy.model.group.position;
+      enemy.model.healthBarFill.scale.x = 1.2 * Math.max(0, enemy.health / enemy.maxHealth);
+      reportDamage(
+        barPosition.clone().setY(barPosition.y + 1),
+        enemy.reactionDotDamagePerTick,
+        'reaction',
+        enemy.reactionDotColor
+      );
+      if (enemy.health <= 0) {
+        killEnemy(enemy);
+        return;
+      }
+    }
   }
 
   function killEnemy(enemy: Enemy) {
@@ -238,7 +244,7 @@ export function createEnemySystem(
     enemy.health = enemy.maxHealth;
     enemy.model.healthBarFill.scale.x = 1.2;
     enemy.auraElement = null;
-    enemy.reactionDotUntil = 0;
+    enemy.reactionTicksRemaining = 0;
     enemy.model.auraIcon.hide();
     enemy.model.reactionIcon.hide();
     enemy.frozenUntil = 0;
@@ -265,9 +271,11 @@ export function createEnemySystem(
     // bonus, and start a damage-over-time that ticks for a few seconds.
     enemy.auraElement = null;
     enemy.reactionDotColor = reaction.color;
-    enemy.reactionDotUntil = elapsedSeconds + REACTION_DOT_SECONDS;
+    enemy.reactionTicksRemaining = REACTION_TOTAL_TICKS;
     enemy.reactionNextTickAt = elapsedSeconds + REACTION_TICK_SECONDS;
-    enemy.reactionDotDamagePerTick = damage * REACTION_DOT_DAMAGE_FRACTION;
+    // Stronger reactions keep a stronger DoT, not a flat generic one.
+    enemy.reactionDotDamagePerTick =
+      damage * REACTION_DOT_DAMAGE_FRACTION * reaction.damageMultiplier;
     refreshAuraVisual(enemy);
     if (reaction.freezes) enemy.frozenUntil = elapsedSeconds + FREEZE_DURATION_SECONDS;
     effectSystem.spawnBurst(
