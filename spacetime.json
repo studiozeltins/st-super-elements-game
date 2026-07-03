@@ -1,0 +1,8 @@
+{
+  "dev": {
+    "run": "pnpm run dev"
+  },
+  "module-path": "./spacetimedb",
+  "database": "2d-impact-game-fr9ti",
+  "server": "maincloud"
+}
