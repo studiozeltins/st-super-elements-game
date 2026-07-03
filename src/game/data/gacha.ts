@@ -40,6 +40,7 @@ export interface BannerDef {
   displayName: string;
   subtitle: string;
   featuredCharacterId: string;
+  lore: string;
 }
 
 export const BANNERS: BannerDef[] = [
@@ -48,20 +49,33 @@ export const BANNERS: BannerDef[] = [
     displayName: 'Vēja Solījums',
     subtitle: 'Pastiprināta parādīšanās',
     featuredCharacterId: 'aeris',
+    lore:
+      'Kur vējš griežas, tur Aeris dejo. Katrs viņas solis ir vētras čuksts, ' +
+      'katra kustība — brīvības zvērests. Debesis pieder tiem, kas nebaidās krist.',
   },
   {
     id: 'flame',
     displayName: 'Liesmu Ceļš',
     subtitle: 'Pastiprināta parādīšanās',
     featuredCharacterId: 'ignis',
+    lore:
+      'Ignis nesa liesmu cauri tūkstoš kaujām un nekad nepazuda tumsā. ' +
+      'Viņa uguns nav iznīcība — tā ir apņēmība, kas izkausē pat dzelzi.',
   },
   {
     id: 'flood',
     displayName: 'Plūdu Dziesma',
     subtitle: 'Pastiprināta parādīšanās',
     featuredCharacterId: 'marina',
+    lore:
+      'Marina valda pār plūdiem, kas apraka veselas pilsētas. Mierīga kā spogulis, ' +
+      'nežēlīga kā vilnis — okeāns klausa tikai viņas balsij.',
   },
 ];
+
+/** Rarity → accent colors, shared by CSS classes and the 3D/canvas reveal. */
+export const RARITY_CSS: Record<number, string> = { 3: '#7aa7d8', 4: '#b98cff', 5: '#f2c14e' };
+export const RARITY_HEX: Record<number, number> = { 3: 0x7aa7d8, 4: 0xb98cff, 5: 0xf2c14e };
 
 export const BANNERS_BY_ID: Record<string, BannerDef> = Object.fromEntries(
   BANNERS.map(banner => [banner.id, banner])

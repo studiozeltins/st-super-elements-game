@@ -5,6 +5,7 @@ import { WEAPONS } from '../game/data/weapons';
 import { BANNERS, WEAPONS_BY_ID, fiveStarChanceForNextPull, HARD_PITY } from '../game/data/gacha';
 import { GACHA_PULL_COST } from '../game/data/constants';
 import { CharacterPreview } from './CharacterPreview';
+import { PullAnimation } from './PullAnimation';
 
 export interface PityInfo {
   pullsSinceFiveStar: number;
@@ -43,11 +44,6 @@ const DEFAULT_PITY: PityInfo = {
   totalPulls: 0,
 };
 
-function pullItemName(view: PullView): string {
-  if (view.kind === 'character') return CHARACTERS[view.itemId]?.displayName ?? view.itemId;
-  return WEAPONS_BY_ID[view.itemId]?.displayName ?? view.itemId;
-}
-
 export function GachaScreen({
   primogems,
   ownedCharacterIds,
@@ -71,6 +67,7 @@ export function GachaScreen({
   const fiveStarChance = fiveStarChanceForNextPull(pity.pullsSinceFiveStar);
   const pullsToHardPity = Math.max(0, HARD_PITY - pity.pullsSinceFiveStar);
   const pityFraction = Math.min(1, pity.pullsSinceFiveStar / HARD_PITY);
+  const pityProgress = pityFraction * 100;
 
   const canPullOne = primogems >= GACHA_PULL_COST;
   const canPullTen = primogems >= GACHA_PULL_COST * 10;
@@ -146,43 +143,51 @@ export function GachaScreen({
               </div>
             </div>
 
-            <aside className="banner__side">
-              <div className="pity">
-                <div className="pity__row">
-                  <span className="pity__label">5★ IZREDZES</span>
-                  <span className="pity__value">{(fiveStarChance * 100).toFixed(1)}%</span>
-                </div>
-                <div className="pity__bar">
-                  <span className="pity__fill" style={{ transform: `scaleX(${pityFraction})` }} />
-                </div>
-                <div className="pity__row pity__row--muted">
-                  <span>Vēlēšanās: {pity.pullsSinceFiveStar}</span>
-                  <span>Garantija pēc {pullsToHardPity}</span>
-                </div>
-                {pity.guaranteedFeatured && (
-                  <span className="pity__guarantee">NĀKAMAIS 5★ = GARANTĒTS {featured.displayName}</span>
-                )}
-              </div>
+            <div className="banner__panel">
+              <p className="banner__lore">{banner.lore}</p>
 
-              <div className="pull-actions">
-                <button
-                  className="pull-btn"
-                  disabled={!canPullOne}
-                  onClick={() => onPull(banner.id, 1)}
-                >
-                  <span className="pull-btn__count">VĒLĒTIES ×1</span>
-                  <span className="pull-btn__cost">✦ {GACHA_PULL_COST}</span>
-                </button>
-                <button
-                  className="pull-btn pull-btn--ten"
-                  disabled={!canPullTen}
-                  onClick={() => onPull(banner.id, 10)}
-                >
-                  <span className="pull-btn__count">VĒLĒTIES ×10</span>
-                  <span className="pull-btn__cost">✦ {GACHA_PULL_COST * 10}</span>
-                </button>
+              <div className="banner__controls">
+                <div className="pity">
+                  <div className="pity__row">
+                    <span className="pity__label">GARANTIJAS PROGRESS</span>
+                    <span className="pity__value">{pityProgress.toFixed(2)}%</span>
+                  </div>
+                  <div className="pity__bar">
+                    <span className="pity__fill" style={{ transform: `scaleX(${pityFraction})` }} />
+                  </div>
+                  <div className="pity__row pity__row--muted">
+                    <span>5★ izredzes {(fiveStarChance * 100).toFixed(2)}%</span>
+                    <span>
+                      Vēlēšanās {pity.pullsSinceFiveStar} · garantija pēc {pullsToHardPity}
+                    </span>
+                  </div>
+                  {pity.guaranteedFeatured && (
+                    <span className="pity__guarantee">
+                      NĀKAMAIS 5★ = GARANTĒTS {featured.displayName}
+                    </span>
+                  )}
+                </div>
+
+                <div className="pull-actions">
+                  <button
+                    className="pull-btn"
+                    disabled={!canPullOne}
+                    onClick={() => onPull(banner.id, 1)}
+                  >
+                    <span className="pull-btn__count">VĒLĒTIES ×1</span>
+                    <span className="pull-btn__cost">✦ {GACHA_PULL_COST}</span>
+                  </button>
+                  <button
+                    className="pull-btn pull-btn--ten"
+                    disabled={!canPullTen}
+                    onClick={() => onPull(banner.id, 10)}
+                  >
+                    <span className="pull-btn__count">VĒLĒTIES ×10</span>
+                    <span className="pull-btn__cost">✦ {GACHA_PULL_COST * 10}</span>
+                  </button>
+                </div>
               </div>
-            </aside>
+            </div>
           </div>
         </div>
       ) : (
@@ -240,36 +245,7 @@ export function GachaScreen({
       )}
 
       {pullResults && pullResults.length > 0 && (
-        <div className="pull-reveal" onClick={onDismissResults}>
-          <div
-            className={`pull-reveal__grid ${
-              pullResults.length > 1 ? 'pull-reveal__grid--ten' : ''
-            }`}
-          >
-            {[...pullResults]
-              .sort((a, b) => a.slot - b.slot)
-              .map(view => (
-                <div
-                  key={view.slot}
-                  className={`reveal-card rarity-border-${view.rarity}`}
-                  style={{ animationDelay: `${view.slot * 0.05}s` }}
-                >
-                  <span className={`reveal-card__rarity rarity-${view.rarity}`}>
-                    {'✦'.repeat(view.rarity)}
-                  </span>
-                  <span className="reveal-card__name">{pullItemName(view)}</span>
-                  <span className="reveal-card__kind">
-                    {view.kind === 'character' ? 'VARONIS' : 'IEROCIS'}
-                  </span>
-                  {view.isFeatured && <span className="reveal-card__tag">PASTIPRINĀTS</span>}
-                  {view.kind === 'character' && view.isNew && (
-                    <span className="reveal-card__tag reveal-card__tag--new">JAUNS</span>
-                  )}
-                </div>
-              ))}
-          </div>
-          <span className="pull-reveal__hint">Pieskaries, lai aizvērtu</span>
-        </div>
+        <PullAnimation results={pullResults} onClose={onDismissResults} />
       )}
     </div>
   );

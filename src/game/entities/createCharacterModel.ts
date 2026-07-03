@@ -16,7 +16,7 @@ export interface CharacterModel {
 const SKIN_COLOR = 0xf0c8a0;
 const PANTS_COLOR = 0x3a3a4a;
 
-function createWeaponMesh(weaponId: WeaponId, accentColor: number): THREE.Object3D {
+export function createWeaponMesh(weaponId: WeaponId, accentColor: number): THREE.Object3D {
   const accentMaterial = new THREE.MeshLambertMaterial({
     color: accentColor,
     emissive: accentColor,
