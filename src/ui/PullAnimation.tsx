@@ -50,11 +50,11 @@ function StarField({ colors, onDone }: { colors: string[]; onDone: () => void })
 
     const stars = colors.map((color, i) => ({
       color,
-      x: w * (0.16 + i * 0.26) + (Math.random() * 0.1 - 0.05) * w,
-      y: -h * 0.15 - i * h * 0.08,
-      vx: w * (0.09 + i * 0.02),
-      vy: h * (0.52 + i * 0.17),
-      delay: i * 0.16,
+      x: w * ((i + 0.5) / colors.length) + (Math.random() * 0.08 - 0.04) * w,
+      y: -h * (0.12 + Math.random() * 0.32),
+      vx: w * (0.05 + Math.random() * 0.06),
+      vy: h * (0.46 + Math.random() * 0.4),
+      delay: i * 0.09 + Math.random() * 0.12,
       trail: [] as { x: number; y: number }[],
       sparkles: [] as Sparkle[],
       done: false,
@@ -78,15 +78,15 @@ function StarField({ colors, onDone }: { colors: string[]; onDone: () => void })
           star.x += star.vx * dt;
           star.y += star.vy * dt;
           star.trail.push({ x: star.x, y: star.y });
-          if (star.trail.length > 28) star.trail.shift();
-          if (Math.random() < 0.7) {
+          if (star.trail.length > 40) star.trail.shift();
+          if (Math.random() < 0.9) {
             star.sparkles.push({
-              x: star.x + (Math.random() * 12 - 6),
-              y: star.y + (Math.random() * 12 - 6),
-              vx: Math.random() * 60 - 30,
-              vy: Math.random() * 60 - 30,
+              x: star.x + (Math.random() * 18 - 9),
+              y: star.y + (Math.random() * 18 - 9),
+              vx: Math.random() * 90 - 45,
+              vy: Math.random() * 90 - 45,
               life: 0,
-              max: 0.4 + Math.random() * 0.5,
+              max: 0.4 + Math.random() * 0.6,
             });
           }
           if (star.y > h + h * 0.15) {
@@ -99,21 +99,22 @@ function StarField({ colors, onDone }: { colors: string[]; onDone: () => void })
           const point = star.trail[k];
           const along = k / star.trail.length;
           ctx.beginPath();
-          ctx.arc(point.x, point.y, 1 + along * 3.6, 0, Math.PI * 2);
-          ctx.fillStyle = hexToRgba(star.color, along * 0.5);
+          ctx.arc(point.x, point.y, 1.5 + along * 6, 0, Math.PI * 2);
+          ctx.fillStyle = hexToRgba(star.color, along * 0.55);
           ctx.fill();
         }
 
-        const glow = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, 18);
-        glow.addColorStop(0, hexToRgba(star.color, 0.95));
+        const glow = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, 34);
+        glow.addColorStop(0, hexToRgba(star.color, 0.98));
+        glow.addColorStop(0.5, hexToRgba(star.color, 0.4));
         glow.addColorStop(1, hexToRgba(star.color, 0));
         ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.arc(star.x, star.y, 18, 0, Math.PI * 2);
+        ctx.arc(star.x, star.y, 34, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#ffffff';
         ctx.beginPath();
-        ctx.arc(star.x, star.y, 2.4, 0, Math.PI * 2);
+        ctx.arc(star.x, star.y, 4.5, 0, Math.PI * 2);
         ctx.fill();
 
         for (const sparkle of star.sparkles) {
@@ -123,7 +124,7 @@ function StarField({ colors, onDone }: { colors: string[]; onDone: () => void })
           const alpha = Math.max(0, 1 - sparkle.life / sparkle.max);
           ctx.fillStyle = hexToRgba(star.color, alpha);
           ctx.beginPath();
-          ctx.arc(sparkle.x, sparkle.y, 1.4 * alpha + 0.4, 0, Math.PI * 2);
+          ctx.arc(sparkle.x, sparkle.y, 2.4 * alpha + 0.5, 0, Math.PI * 2);
           ctx.fill();
         }
         star.sparkles = star.sparkles.filter(sparkle => sparkle.life < sparkle.max);
@@ -155,9 +156,9 @@ export function PullAnimation({ results, onClose }: { results: PullView[]; onClo
 
   const starColors = useMemo(() => {
     const rarities = results.map(view => view.rarity).sort((a, b) => b - a);
-    const count = results.length === 1 ? 1 : 3;
-    const top = rarities.slice(0, count);
-    while (top.length < count) top.push(rarities[rarities.length - 1] ?? 3);
+    const count = results.length === 1 ? 3 : 8;
+    const top: number[] = [];
+    for (let i = 0; i < count; i++) top.push(rarities[i % rarities.length] ?? 3);
     return top.map(rarity => RARITY_CSS[rarity] ?? RARITY_CSS[3]);
   }, [results]);
 
@@ -175,7 +176,7 @@ export function PullAnimation({ results, onClose }: { results: PullView[]; onClo
     return (
       <div className="pull-anim">
         <StarField colors={starColors} onDone={toSplash} />
-        <button className="pull-anim__skip" onClick={toSplash}>
+        <button className="pull-anim__skip" onClick={() => setPhase('summary')}>
           IZLAIST
         </button>
       </div>

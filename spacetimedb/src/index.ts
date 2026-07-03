@@ -43,8 +43,9 @@ const CHARACTER_POOL = Object.entries(CHARACTER_STATS).map(([characterId, s]) =>
 }));
 
 const STARTER_CHARACTER_ID = 'zibo';
+const PARTY_SIZE = 4;
 const STARTING_PRIMOGEMS = 16000;
-const GACHA_PULL_COST = 1600;
+const GACHA_PULL_COST = 160;
 const DUPLICATE_REFUND = 800;
 const KILL_REWARD_PRIMOGEMS = 40;
 const MAX_KILL_REWARD_TIER = 3;
@@ -148,6 +149,8 @@ const player = table(
     positionZ: t.f32(),
     rotationY: t.f32(),
     activeCharacterId: t.string(),
+    // Ordered party (up to PARTY_SIZE character ids) the player picked.
+    partyOrder: t.array(t.string()),
     primogems: t.u32(),
     currentHealth: t.u32(),
     lastKillRewardAt: t.timestamp(),
@@ -334,6 +337,7 @@ export const joinGame = spacetimedb.reducer(
       positionZ: SPAWN_Z,
       rotationY: 0,
       activeCharacterId: STARTER_CHARACTER_ID,
+      partyOrder: [STARTER_CHARACTER_ID],
       primogems: STARTING_PRIMOGEMS,
       currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
       lastKillRewardAt: ctx.timestamp,
@@ -417,6 +421,27 @@ export const setActiveCharacter = spacetimedb.reducer(
       activeCharacterId: characterId,
       currentHealth: nextOwned.currentHealth,
     });
+  }
+);
+
+// Sets the ordered party (membership + order). Keeps only owned, unique ids up
+// to PARTY_SIZE, and makes sure the active character stays inside the party.
+export const setParty = spacetimedb.reducer(
+  { characterIds: t.array(t.string()) },
+  (ctx, { characterIds }) => {
+    const currentPlayer = requirePlayer(ctx);
+    const cleaned: string[] = [];
+    for (const characterId of characterIds) {
+      if (cleaned.length >= PARTY_SIZE) break;
+      if (cleaned.includes(characterId)) continue;
+      if (!ownsCharacter(ctx, characterId)) continue;
+      cleaned.push(characterId);
+    }
+    if (cleaned.length === 0) throw new SenderError('Party cannot be empty');
+    const activeCharacterId = cleaned.includes(currentPlayer.activeCharacterId)
+      ? currentPlayer.activeCharacterId
+      : cleaned[0];
+    ctx.db.player.identity.update({ ...currentPlayer, partyOrder: cleaned, activeCharacterId });
   }
 );
 

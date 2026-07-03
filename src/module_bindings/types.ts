@@ -38,6 +38,7 @@ export const Player = __t.object("Player", {
   positionZ: __t.f32(),
   rotationY: __t.f32(),
   activeCharacterId: __t.string(),
+  partyOrder: __t.array(__t.string()),
   primogems: __t.u32(),
   currentHealth: __t.u32(),
   lastKillRewardAt: __t.timestamp(),

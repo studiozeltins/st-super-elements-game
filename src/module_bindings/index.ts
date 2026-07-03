@@ -43,6 +43,7 @@ import HealPartyReducer from "./heal_party_reducer";
 import JoinGameReducer from "./join_game_reducer";
 import PullBannerReducer from "./pull_banner_reducer";
 import SetActiveCharacterReducer from "./set_active_character_reducer";
+import SetPartyReducer from "./set_party_reducer";
 import TakeDamageReducer from "./take_damage_reducer";
 import UpdatePositionReducer from "./update_position_reducer";
 
@@ -143,6 +144,7 @@ const reducersSchema = __reducers(
   __reducerSchema("join_game", JoinGameReducer),
   __reducerSchema("pull_banner", PullBannerReducer),
   __reducerSchema("set_active_character", SetActiveCharacterReducer),
+  __reducerSchema("set_party", SetPartyReducer),
   __reducerSchema("take_damage", TakeDamageReducer),
   __reducerSchema("update_position", UpdatePositionReducer),
 );

@@ -1218,3 +1218,89 @@ button {
     font-size: 26px;
   }
 }
+
+/* ---------- Party drag-and-drop editor ---------- */
+
+.party-slots {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.party-drop {
+  position: relative;
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 12px;
+  border: 1px solid var(--element-color, var(--line));
+  background: var(--panel);
+  cursor: pointer;
+  transition: border-color 0.14s, box-shadow 0.14s, transform 0.14s;
+}
+
+.party-drop--empty {
+  border-style: dashed;
+  border-color: var(--line);
+}
+
+.party-drop--over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  transform: translateY(-2px);
+}
+
+.party-drop--active {
+  box-shadow: 0 0 0 1px var(--element-color);
+}
+
+.party-drop__index {
+  position: absolute;
+  top: 6px;
+  left: 9px;
+  font: 700 11px var(--font-display);
+  color: var(--muted);
+}
+
+.party-drop__face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+  cursor: grab;
+}
+
+.party-drop__face:active {
+  cursor: grabbing;
+}
+
+.party-drop__hint {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+
+.party-drop__active {
+  margin-top: 3px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+  border: 1px solid currentColor;
+  padding: 2px 6px;
+}
+
+.inv-card--draggable {
+  cursor: grab;
+}
+
+.inv-card--draggable:active {
+  cursor: grabbing;
+}
+
+@media (max-width: 720px) {
+  .party-slots {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

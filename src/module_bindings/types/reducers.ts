@@ -15,6 +15,7 @@ import HealPartyReducer from "../heal_party_reducer";
 import JoinGameReducer from "../join_game_reducer";
 import PullBannerReducer from "../pull_banner_reducer";
 import SetActiveCharacterReducer from "../set_active_character_reducer";
+import SetPartyReducer from "../set_party_reducer";
 import TakeDamageReducer from "../take_damage_reducer";
 import UpdatePositionReducer from "../update_position_reducer";
 
@@ -27,6 +28,7 @@ export type HealPartyParams = __Infer<typeof HealPartyReducer>;
 export type JoinGameParams = __Infer<typeof JoinGameReducer>;
 export type PullBannerParams = __Infer<typeof PullBannerReducer>;
 export type SetActiveCharacterParams = __Infer<typeof SetActiveCharacterReducer>;
+export type SetPartyParams = __Infer<typeof SetPartyReducer>;
 export type TakeDamageParams = __Infer<typeof TakeDamageReducer>;
 export type UpdatePositionParams = __Infer<typeof UpdatePositionReducer>;
 

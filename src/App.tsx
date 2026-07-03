@@ -98,7 +98,10 @@ export default function App() {
     .filter(row => row.owner.toHexString() === myIdentityHex)
     .sort((rowA, rowB) => (rowA.id < rowB.id ? -1 : 1))
     .map(row => row.characterId);
-  const partyCharacterIds = myCharacterIds.slice(0, PARTY_SIZE);
+  // Prefer the player's chosen party order; fall back to the first owned characters.
+  const chosenParty = (myPlayer?.partyOrder ?? []).filter(id => myCharacterIds.includes(id));
+  const partyCharacterIds =
+    chosenParty.length > 0 ? chosenParty.slice(0, PARTY_SIZE) : myCharacterIds.slice(0, PARTY_SIZE);
   partyRef.current = partyCharacterIds;
 
   const partyHealthById: Record<string, number> = {};
@@ -127,6 +130,13 @@ export default function App() {
       pullBufferRef.current = [];
       setPullResults(null);
       connection?.reducers.pullBanner({ bannerId, count });
+    },
+    [connection]
+  );
+
+  const setParty = useCallback(
+    (characterIds: string[]) => {
+      connection?.reducers.setParty({ characterIds });
     },
     [connection]
   );
@@ -219,9 +229,11 @@ export default function App() {
           ownedCharacterIds={new Set(myCharacterIds)}
           activeCharacterId={myPlayer?.activeCharacterId ?? ''}
           weaponItems={myWeaponItems}
+          partyCharacterIds={partyCharacterIds}
           pityByBanner={pityByBanner}
           pullResults={pullResults}
           onPull={pullBanner}
+          onSetParty={setParty}
           onSelectCharacter={selectCharacter}
           onDismissResults={() => setPullResults(null)}
           onClose={() => {

@@ -30,9 +30,11 @@ interface GachaScreenProps {
   ownedCharacterIds: Set<string>;
   activeCharacterId: string;
   weaponItems: WeaponRow[];
+  partyCharacterIds: string[];
   pityByBanner: Record<string, PityInfo>;
   pullResults: PullView[] | null;
   onPull(bannerId: string, count: number): void;
+  onSetParty(characterIds: string[]): void;
   onSelectCharacter(characterId: string): void;
   onDismissResults(): void;
   onClose(): void;
@@ -49,14 +51,45 @@ export function GachaScreen({
   ownedCharacterIds,
   activeCharacterId,
   weaponItems,
+  partyCharacterIds,
   pityByBanner,
   pullResults,
   onPull,
+  onSetParty,
   onSelectCharacter,
   onDismissResults,
   onClose,
 }: GachaScreenProps) {
-  const [tab, setTab] = useState<'banners' | 'inventory'>('banners');
+  const [tab, setTab] = useState<'banners' | 'party' | 'inventory'>('banners');
+  // Drag-and-drop party editing. Source is either a roster character or a slot.
+  const [dragItem, setDragItem] = useState<
+    { from: 'roster'; id: string } | { from: 'slot'; index: number } | null
+  >(null);
+  const [overSlot, setOverSlot] = useState<number | null>(null);
+
+  const dropOnSlot = (slotIndex: number) => {
+    setOverSlot(null);
+    if (!dragItem) return;
+    const party = [...partyCharacterIds];
+    if (dragItem.from === 'roster') {
+      if (slotIndex < party.length) party[slotIndex] = dragItem.id;
+      else if (party.length < 4) party.push(dragItem.id);
+    } else if (slotIndex < party.length) {
+      [party[dragItem.index], party[slotIndex]] = [party[slotIndex], party[dragItem.index]];
+    } else {
+      const [moved] = party.splice(dragItem.index, 1);
+      party.push(moved);
+    }
+    setDragItem(null);
+    onSetParty(party);
+  };
+
+  const dropOnRoster = () => {
+    if (dragItem?.from === 'slot' && partyCharacterIds.length > 1) {
+      onSetParty(partyCharacterIds.filter((_, i) => i !== dragItem.index));
+    }
+    setDragItem(null);
+  };
   const [bannerId, setBannerId] = useState(BANNERS[0].id);
 
   const banner = BANNERS.find(entry => entry.id === bannerId) ?? BANNERS[0];
@@ -91,6 +124,12 @@ export function GachaScreen({
             onClick={() => setTab('banners')}
           >
             BANERI
+          </button>
+          <button
+            className={`gacha__tab ${tab === 'party' ? 'gacha__tab--on' : ''}`}
+            onClick={() => setTab('party')}
+          >
+            KOMANDA
           </button>
           <button
             className={`gacha__tab ${tab === 'inventory' ? 'gacha__tab--on' : ''}`}
@@ -188,6 +227,96 @@ export function GachaScreen({
               </div>
             </div>
           </div>
+        </div>
+      ) : tab === 'party' ? (
+        <div className="gacha__body gacha__body--inventory">
+          <section className="inv">
+            <h3 className="inv__heading">KOMANDA · VELC UN NOMET ({partyCharacterIds.length}/4)</h3>
+            <div className="party-slots">
+              {Array.from({ length: 4 }).map((_, slotIndex) => {
+                const characterId = partyCharacterIds[slotIndex];
+                const character = characterId ? CHARACTERS[characterId] : null;
+                const element = character ? ELEMENTS[character.element] : null;
+                const isActive = Boolean(characterId) && characterId === activeCharacterId;
+                return (
+                  <div
+                    key={slotIndex}
+                    className={`party-drop ${character ? '' : 'party-drop--empty'} ${
+                      overSlot === slotIndex ? 'party-drop--over' : ''
+                    } ${isActive ? 'party-drop--active' : ''}`}
+                    style={
+                      element
+                        ? ({ '--element-color': element.cssColor } as React.CSSProperties)
+                        : undefined
+                    }
+                    onDragOver={event => {
+                      event.preventDefault();
+                      setOverSlot(slotIndex);
+                    }}
+                    onDragLeave={() => setOverSlot(prev => (prev === slotIndex ? null : prev))}
+                    onDrop={() => dropOnSlot(slotIndex)}
+                    onClick={() => characterId && onSelectCharacter(characterId)}
+                  >
+                    <span className="party-drop__index">{slotIndex + 1}</span>
+                    {character && element ? (
+                      <div
+                        className="party-drop__face"
+                        draggable
+                        onDragStart={event => {
+                          event.dataTransfer.setData('text/plain', characterId as string);
+                          setDragItem({ from: 'slot', index: slotIndex });
+                        }}
+                        onDragEnd={() => {
+                          setDragItem(null);
+                          setOverSlot(null);
+                        }}
+                      >
+                        <span className="inv-card__name">{character.displayName}</span>
+                        <span className="inv-card__sub">{element.displayName}</span>
+                        {isActive && <span className="party-drop__active">AKTĪVS</span>}
+                      </div>
+                    ) : (
+                      <span className="party-drop__hint">Tukšs</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="inv" onDragOver={event => event.preventDefault()} onDrop={dropOnRoster}>
+            <h3 className="inv__heading">PIEEJAMIE VAROŅI · velc slotā (nomet šeit, lai izņemtu)</h3>
+            <div className="inv__grid">
+              {CHARACTER_LIST.filter(
+                character =>
+                  ownedCharacterIds.has(character.id) && !partyCharacterIds.includes(character.id)
+              ).map(character => {
+                const element = ELEMENTS[character.element];
+                return (
+                  <div
+                    key={character.id}
+                    className="inv-card inv-card--draggable"
+                    style={{ '--element-color': element.cssColor } as React.CSSProperties}
+                    draggable
+                    onDragStart={event => {
+                      event.dataTransfer.setData('text/plain', character.id);
+                      setDragItem({ from: 'roster', id: character.id });
+                    }}
+                    onDragEnd={() => {
+                      setDragItem(null);
+                      setOverSlot(null);
+                    }}
+                  >
+                    <span className={`inv-card__rarity rarity-${character.stars}`}>
+                      {'✦'.repeat(character.stars)}
+                    </span>
+                    <span className="inv-card__name">{character.displayName}</span>
+                    <span className="inv-card__sub">{element.displayName}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
       ) : (
         <div className="gacha__body gacha__body--inventory">

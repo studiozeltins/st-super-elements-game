@@ -2,7 +2,7 @@
 export const SAFE_ZONE_RADIUS = 18; // server
 export const WORLD_BOUND = 130; // server — archipelago extent, islands + bridges fit inside
 export const MAX_HEALTH = 1000; // server
-export const GACHA_PULL_COST = 1600; // server
+export const GACHA_PULL_COST = 160; // server — ×10 pull costs 1600
 
 export const GRAVITY = 30;
 /** Jump apex ≈ v²/2g = 2.4 — clears a 1.8 terrace and medium boulders. */
