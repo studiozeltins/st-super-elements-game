@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { getTerrainHeight, ISLAND_RADIUS, VOID_DEPTH } from '../terrain';
+import { getTerrainHeight, ISLANDS, VOID_DEPTH } from '../terrain';
 import { createSeededRandom } from '../rng';
 
 describe('getTerrainHeight', () => {
   it('is deterministic: two calls with the same coordinates match', () => {
     const random = createSeededRandom(11);
     for (let sample = 0; sample < 25; sample += 1) {
-      const x = (random() - 0.5) * 150;
-      const z = (random() - 0.5) * 150;
+      const x = (random() - 0.5) * 260;
+      const z = (random() - 0.5) * 260;
       expect(getTerrainHeight(x, z)).toBe(getTerrainHeight(x, z));
     }
   });
@@ -21,34 +21,48 @@ describe('getTerrainHeight', () => {
     }
   });
 
-  it('plunges toward the void beyond ISLAND_RADIUS + 6', () => {
-    expect(ISLAND_RADIUS).toBeGreaterThan(0);
+  it('every island stands on solid ground near its center', () => {
+    for (const island of ISLANDS) {
+      const height = getTerrainHeight(island.centerX, island.centerZ);
+      expect(height).toBeGreaterThanOrEqual(island.baseHeight);
+      expect(height).toBeLessThanOrEqual(island.baseHeight + 11);
+    }
+  });
+
+  it('plunges toward the void away from every island', () => {
     const random = createSeededRandom(33);
-    for (let sample = 0; sample < 25; sample += 1) {
-      const angle = random() * Math.PI * 2;
-      const distance = ISLAND_RADIUS + 6 + random() * 20;
-      const height = getTerrainHeight(Math.cos(angle) * distance, Math.sin(angle) * distance);
+    for (let sample = 0; sample < 40; sample += 1) {
+      const x = (random() - 0.5) * 260;
+      const z = (random() - 0.5) * 260;
+      const isNearAnyIsland = ISLANDS.some(
+        island => Math.hypot(x - island.centerX, z - island.centerZ) < island.radius + 7
+      );
+      if (isNearAnyIsland) continue;
+      const height = getTerrainHeight(x, z);
       expect(height).toBeLessThan(-30);
       expect(height).toBeGreaterThanOrEqual(VOID_DEPTH);
     }
   });
 
-  it('keeps island heights within sane bounds (0..12 for radius < 78)', () => {
-    for (let x = -78; x <= 78; x += 6) {
-      for (let z = -78; z <= 78; z += 6) {
-        if (Math.hypot(x, z) >= 78) continue;
+  it('keeps land heights within sane bounds on every island interior', () => {
+    for (const island of ISLANDS) {
+      for (let step = 0; step < 40; step += 1) {
+        const angle = (step / 40) * Math.PI * 2;
+        const distance = (step % 5) * island.radius * 0.15;
+        const x = island.centerX + Math.cos(angle) * distance;
+        const z = island.centerZ + Math.sin(angle) * distance;
         const height = getTerrainHeight(x, z);
         expect(height).toBeGreaterThanOrEqual(0);
-        expect(height).toBeLessThanOrEqual(12);
+        expect(height).toBeLessThanOrEqual(island.baseHeight + 12);
       }
     }
   });
 
-  it('has no teleport cliffs: adjacent samples 0.5 apart differ by less than 2.0', () => {
+  it('has no teleport cliffs on the city island: 0.5-apart samples differ < 2.0', () => {
     const random = createSeededRandom(44);
     for (let sample = 0; sample < 50; sample += 1) {
       const angle = random() * Math.PI * 2;
-      const distance = random() * 75;
+      const distance = random() * 40;
       const x = Math.cos(angle) * distance;
       const z = Math.sin(angle) * distance;
       const here = getTerrainHeight(x, z);

@@ -1,38 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import { getCampSites } from '../camps';
-import { SAFE_ZONE_RADIUS, WORLD_BOUND } from '../../data/constants';
+import { getTerrainHeight, ISLANDS } from '../terrain';
+import { SAFE_ZONE_RADIUS } from '../../data/constants';
 
-const MIN_CAMP_RADIUS = SAFE_ZONE_RADIUS + 16;
-const MAX_CAMP_RADIUS = WORLD_BOUND - 12;
-const MIN_CAMP_SPACING = 24;
+const OUTER_ISLAND_COUNT = ISLANDS.length - 1;
+const CITY_CAMP_COUNT = 2;
 
 describe('getCampSites', () => {
   it('is deterministic across calls', () => {
     expect(getCampSites()).toEqual(getCampSites());
   });
 
-  it('places exactly 5 camps', () => {
-    expect(getCampSites()).toHaveLength(5);
+  it('places one camp per outer island plus two on the city island', () => {
+    expect(getCampSites()).toHaveLength(OUTER_ISLAND_COUNT + CITY_CAMP_COUNT);
   });
 
-  it('keeps every camp outside the safe zone and inside the world bound', () => {
+  it('places every camp on solid ground', () => {
     for (const camp of getCampSites()) {
-      const distance = Math.hypot(camp.x, camp.z);
-      expect(distance).toBeGreaterThanOrEqual(MIN_CAMP_RADIUS);
-      expect(distance).toBeLessThanOrEqual(MAX_CAMP_RADIUS);
+      expect(getTerrainHeight(camp.x, camp.z)).toBeGreaterThan(0);
     }
   });
 
-  it('keeps pairwise spacing of at least 24 between camps', () => {
-    const camps = getCampSites();
-    for (let first = 0; first < camps.length; first += 1) {
-      for (let second = first + 1; second < camps.length; second += 1) {
-        const spacing = Math.hypot(
-          camps[first].x - camps[second].x,
-          camps[first].z - camps[second].z
-        );
-        expect(spacing).toBeGreaterThanOrEqual(MIN_CAMP_SPACING);
-      }
+  it('keeps every camp outside the safe zone', () => {
+    for (const camp of getCampSites()) {
+      expect(Math.hypot(camp.x, camp.z)).toBeGreaterThan(SAFE_ZONE_RADIUS + 10);
     }
+  });
+
+  it('assigns the outer-island camps near their island centers', () => {
+    const camps = getCampSites();
+    ISLANDS.slice(1).forEach((island, islandIndex) => {
+      const camp = camps[islandIndex];
+      const distanceFromIslandCenter = Math.hypot(camp.x - island.centerX, camp.z - island.centerZ);
+      expect(distanceFromIslandCenter).toBeLessThanOrEqual(island.radius * 0.4);
+    });
   });
 });

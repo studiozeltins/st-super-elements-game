@@ -11,12 +11,28 @@ export const TERRACE_HEIGHT = 1.8;
 const TERRACE_BLEND = 0.75;
 const FLAT_CENTER_RADIUS = 24;
 const FLAT_BLEND_RADIUS = 40;
-const TERRAIN_SIZE = WORLD_BOUND * 2.2;
-const TERRAIN_SEGMENTS = 128;
-/** Beyond this radius the island plunges into the void — walk off and you fall. */
-export const ISLAND_RADIUS = WORLD_BOUND + 2;
-const EDGE_FALLOFF_WIDTH = 5;
+const TERRAIN_SIZE = WORLD_BOUND * 2 + 12;
+const TERRAIN_SEGMENTS = 150;
+const EDGE_FALLOFF_WIDTH = 6;
 export const VOID_DEPTH = -40;
+
+export interface IslandDefinition {
+  centerX: number;
+  centerZ: number;
+  radius: number;
+  /** Multiples of TERRACE_HEIGHT so bridges land on clean terrace levels. */
+  baseHeight: number;
+  hilliness: number;
+}
+
+/** The archipelago: main city island plus outer islands linked by bridges. */
+export const ISLANDS: IslandDefinition[] = [
+  { centerX: 0, centerZ: 0, radius: 46, baseHeight: 0, hilliness: 1 },
+  { centerX: 95, centerZ: 20, radius: 26, baseHeight: 1.8, hilliness: 0.7 },
+  { centerX: -80, centerZ: -60, radius: 24, baseHeight: 3.6, hilliness: 0.6 },
+  { centerX: -20, centerZ: 100, radius: 22, baseHeight: 5.4, hilliness: 0.5 },
+  { centerX: 60, centerZ: -85, radius: 24, baseHeight: 1.8, hilliness: 0.8 },
+];
 
 const GRASS_LOW = new THREE.Color(0x4f9147);
 const GRASS_HIGH = new THREE.Color(0x67b35a);
@@ -59,18 +75,28 @@ function applyTerracing(height: number): number {
 
 /** Analytic terrain height — identical on every client, no mesh raycasts. */
 export function getTerrainHeight(x: number, z: number): number {
-  const distanceFromCenter = Math.hypot(x, z);
   const noise = fractalNoise(x * NOISE_FREQUENCY, z * NOISE_FREQUENCY);
-  const rawHeight = Math.max(0, noise * MAX_HILL_HEIGHT + HEIGHT_OFFSET);
-  const terracedHeight = applyTerracing(rawHeight);
-  const flattenFactor = smoothstep(FLAT_CENTER_RADIUS, FLAT_BLEND_RADIUS, distanceFromCenter);
-  const islandHeight = terracedHeight * flattenFactor;
-  const edgeFactor = smoothstep(
-    ISLAND_RADIUS,
-    ISLAND_RADIUS + EDGE_FALLOFF_WIDTH,
-    distanceFromCenter
-  );
-  return islandHeight + (VOID_DEPTH - islandHeight) * edgeFactor;
+  const terracedHills = applyTerracing(Math.max(0, noise * MAX_HILL_HEIGHT + HEIGHT_OFFSET));
+
+  let highestSurface = VOID_DEPTH;
+  for (const island of ISLANDS) {
+    const distanceFromIslandCenter = Math.hypot(x - island.centerX, z - island.centerZ);
+    if (distanceFromIslandCenter > island.radius + EDGE_FALLOFF_WIDTH) continue;
+
+    let hills = terracedHills * island.hilliness;
+    const isCityIsland = island === ISLANDS[0];
+    if (isCityIsland) {
+      hills *= smoothstep(FLAT_CENTER_RADIUS, FLAT_BLEND_RADIUS, Math.hypot(x, z));
+    }
+    const surface = island.baseHeight + hills;
+    const edgeFactor = smoothstep(
+      island.radius,
+      island.radius + EDGE_FALLOFF_WIDTH,
+      distanceFromIslandCenter
+    );
+    highestSurface = Math.max(highestSurface, surface + (VOID_DEPTH - surface) * edgeFactor);
+  }
+  return highestSurface;
 }
 
 /** Average gradient magnitude — shared by cliff coloring and prop placement. */
@@ -84,7 +110,10 @@ export function getTerrainSlope(x: number, z: number, sampleStep = 1): number {
   );
 }
 
+const ABYSS_COLOR = new THREE.Color(0x232833);
+
 function vertexColorAt(x: number, z: number, height: number): THREE.Color {
+  if (height < -15) return ABYSS_COLOR.clone();
   if (getTerrainSlope(x, z) > 0.85) return CLIFF_COLOR.clone();
   const tintNoise = valueNoise(x * 0.25, z * 0.25, TERRAIN_SEED ^ 0xc2b2ae35);
   const heightFraction = Math.min(1, height / (MAX_HILL_HEIGHT * 0.7));

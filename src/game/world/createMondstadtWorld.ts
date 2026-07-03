@@ -3,6 +3,7 @@ import { disposeObject } from '../engine/disposeObject';
 import { SAFE_ZONE_RADIUS, WORLD_BOUND } from '../data/constants';
 import { createSeededRandom } from './rng';
 import { createTerrainMesh, getTerrainHeight, getTerrainSlope } from './terrain';
+import { getBridges, type BridgeSpec } from './bridges';
 import { getCampSites } from './camps';
 import {
   createBoulder,
@@ -170,11 +171,13 @@ function createInstancedGroundCover(group: THREE.Group, random: SeededRandom) {
     const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
     const dummy = new THREE.Object3D();
     for (let instanceIndex = 0; instanceIndex < count; instanceIndex++) {
-      const angle = random() * Math.PI * 2;
-      const distance = minRadius + random() * (WORLD_BOUND - 6 - minRadius);
-      const x = Math.cos(angle) * distance;
-      const z = Math.sin(angle) * distance;
-      dummy.position.set(x, getTerrainHeight(x, z) + yOffset, z);
+      const landPosition = findRandomLandPosition(random, minRadius);
+      if (!landPosition) continue;
+      dummy.position.set(
+        landPosition.x,
+        getTerrainHeight(landPosition.x, landPosition.z) + yOffset,
+        landPosition.z
+      );
       dummy.rotation.set(0, random() * Math.PI, 0);
       dummy.updateMatrix();
       instancedMesh.setMatrixAt(instanceIndex, dummy.matrix);
@@ -205,9 +208,32 @@ interface AssetScatterRule {
   maxSlope: number;
 }
 
+/** Uniform sample across the whole map, rejected until it lands on an island. */
+function findRandomLandPosition(
+  random: SeededRandom,
+  minDistanceFromOrigin: number
+): { x: number; z: number } | null {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const x = (random() * 2 - 1) * (WORLD_BOUND - 4);
+    const z = (random() * 2 - 1) * (WORLD_BOUND - 4);
+    if (Math.hypot(x, z) < minDistanceFromOrigin) continue;
+    if (getTerrainHeight(x, z) < 0.1) continue;
+    return { x, z };
+  }
+  return null;
+}
+
+const BRIDGE_SEGMENT_LENGTH = 2;
+const BRIDGE_WIDTH = 3;
+const BRIDGE_ARC_LIFT = 1.2;
+const BRIDGE_WALK_RADIUS = 1.7;
+
+const PILLAR_STAIR_CLUSTER_COUNT = 5;
+const PILLAR_STEP_HEIGHT = 1.5;
+
 export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
   scene.background = new THREE.Color(0x8ecae6);
-  scene.fog = new THREE.Fog(0x8ecae6, 60, 160);
+  scene.fog = new THREE.Fog(0x8ecae6, 80, 300);
 
   const group = new THREE.Group();
   const random = createSeededRandom(WORLD_DECOR_SEED);
@@ -232,13 +258,82 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     let attempts = 0;
     while (placed < rule.count && attempts < rule.count * 12) {
       attempts++;
-      const angle = random() * Math.PI * 2;
-      const distance = rule.minRadius + random() * (WORLD_BOUND - 6 - rule.minRadius);
-      const x = Math.cos(angle) * distance;
-      const z = Math.sin(angle) * distance;
-      if (getTerrainSlope(x, z) > rule.maxSlope) continue;
-      placeAsset(rule.create(random), x, z);
+      const landPosition = findRandomLandPosition(random, rule.minRadius);
+      if (!landPosition) continue;
+      if (getTerrainSlope(landPosition.x, landPosition.z) > rule.maxSlope) continue;
+      placeAsset(rule.create(random), landPosition.x, landPosition.z);
       placed++;
+    }
+  }
+
+  function buildBridge(bridge: BridgeSpec) {
+    const bridgeGroup = new THREE.Group();
+    const plankMaterial = new THREE.MeshLambertMaterial({ color: 0x8a5a3a });
+    const postMaterial = new THREE.MeshLambertMaterial({ color: 0x6b4a2f });
+    const plankGeometry = new THREE.BoxGeometry(BRIDGE_WIDTH, 0.25, BRIDGE_SEGMENT_LENGTH * 1.1);
+    const postGeometry = new THREE.CylinderGeometry(0.09, 0.09, 1.1, 5);
+    const heading = Math.atan2(bridge.endX - bridge.startX, bridge.endZ - bridge.startZ);
+    const segmentCount = Math.max(2, Math.ceil(bridge.length / BRIDGE_SEGMENT_LENGTH));
+
+    for (let segmentIndex = 0; segmentIndex <= segmentCount; segmentIndex++) {
+      const progress = segmentIndex / segmentCount;
+      const x = bridge.startX + (bridge.endX - bridge.startX) * progress;
+      const z = bridge.startZ + (bridge.endZ - bridge.startZ) * progress;
+      const deckY =
+        bridge.startY +
+        (bridge.endY - bridge.startY) * progress +
+        Math.sin(progress * Math.PI) * BRIDGE_ARC_LIFT;
+
+      const plank = new THREE.Mesh(plankGeometry, plankMaterial);
+      plank.position.set(x, deckY - 0.12, z);
+      plank.rotation.y = heading;
+      plank.castShadow = true;
+      bridgeGroup.add(plank);
+      platforms.push({ x, z, radius: BRIDGE_WALK_RADIUS, topY: deckY });
+
+      if (segmentIndex % 3 === 0) {
+        for (const side of [-1, 1]) {
+          const post = new THREE.Mesh(postGeometry, postMaterial);
+          post.position.set(
+            x + Math.cos(heading) * side * (BRIDGE_WIDTH / 2),
+            deckY + 0.4,
+            z - Math.sin(heading) * side * (BRIDGE_WIDTH / 2)
+          );
+          bridgeGroup.add(post);
+        }
+      }
+    }
+    group.add(bridgeGroup);
+  }
+
+  function buildPillarStairs() {
+    const pillarMaterial = new THREE.MeshLambertMaterial({ color: 0x5a6678 });
+    const pillarTopMaterial = new THREE.MeshLambertMaterial({ color: 0x8a94a4 });
+    for (let clusterIndex = 0; clusterIndex < PILLAR_STAIR_CLUSTER_COUNT; clusterIndex++) {
+      const clusterCenter = findRandomLandPosition(random, SAFE_ZONE_RADIUS + 6);
+      if (!clusterCenter) continue;
+      const pillarCount = 3 + Math.floor(random() * 3);
+      const spiralPhase = random() * Math.PI * 2;
+      const baseGroundY = getTerrainHeight(clusterCenter.x, clusterCenter.z);
+      for (let pillarIndex = 0; pillarIndex < pillarCount; pillarIndex++) {
+        const angle = spiralPhase + pillarIndex * 1.9;
+        const x = clusterCenter.x + Math.cos(angle) * 2.6;
+        const z = clusterCenter.z + Math.sin(angle) * 2.6;
+        const groundY = getTerrainHeight(x, z);
+        if (groundY < 0.1) continue;
+        const topY = baseGroundY + PILLAR_STEP_HEIGHT * (pillarIndex + 1);
+        const pillarHeight = topY - groundY;
+        if (pillarHeight < PILLAR_STEP_HEIGHT * 0.5) continue;
+
+        const pillar = new THREE.Mesh(
+          new THREE.CylinderGeometry(1.15, 1.35, pillarHeight, 7),
+          pillarIndex === pillarCount - 1 ? pillarTopMaterial : pillarMaterial
+        );
+        pillar.position.set(x, groundY + pillarHeight / 2, z);
+        pillar.castShadow = true;
+        group.add(pillar);
+        platforms.push({ x, z, radius: 1.2, topY });
+      }
     }
   }
 
@@ -247,6 +342,8 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
   createPlaza(group);
   group.add(createFountain());
   createInstancedGroundCover(group, random);
+  for (const bridge of getBridges()) buildBridge(bridge);
+  buildPillarStairs();
 
   const houseCount = 6;
   for (let houseIndex = 0; houseIndex < houseCount; houseIndex++) {

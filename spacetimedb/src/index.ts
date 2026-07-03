@@ -24,10 +24,9 @@ const GACHA_PULL_COST = 1600;
 const DUPLICATE_REFUND = 800;
 const KILL_REWARD_PRIMOGEMS = 40;
 const FIVE_STAR_CHANCE = 0.1;
-const WORLD_BOUND = 80;
-// Keep in sync with ISLAND_RADIUS / MOVEMENT_LIMIT in src/game/world/terrain.ts + createGame.ts.
-const ISLAND_RADIUS = 82;
-const MOVEMENT_LIMIT = 87;
+// Keep in sync with src/game/data/constants.ts (archipelago extent).
+const WORLD_BOUND = 130;
+const MOVEMENT_LIMIT = 135;
 const VOID_DEATH_DEPTH = -10;
 const SAFE_ZONE_RADIUS = 18;
 const SPAWN_X = 6;
@@ -260,10 +259,10 @@ export const takeDamage = spacetimedb.reducer(
 
 export const fallToDeath = spacetimedb.reducer(ctx => {
   const currentPlayer = requirePlayer(ctx);
-  const isOffIsland =
-    Math.hypot(currentPlayer.positionX, currentPlayer.positionZ) > ISLAND_RADIUS ||
-    currentPlayer.positionY < VOID_DEATH_DEPTH;
-  if (!isOffIsland) throw new SenderError('Not falling off the island');
+  // The only ground below this depth is the void between islands.
+  if (currentPlayer.positionY >= VOID_DEATH_DEPTH) {
+    throw new SenderError('Not falling into the void');
+  }
   respawnPlayerAtSpawn(ctx, currentPlayer);
 });
 

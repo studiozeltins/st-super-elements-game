@@ -8,10 +8,10 @@ import {
   MAX_HEALTH,
   POSITION_SYNC_INTERVAL_SECONDS,
   SAFE_ZONE_HEAL_PER_SECOND,
+  WORLD_BOUND,
 } from './data/constants';
 import { createPixelRenderer } from './engine/createPixelRenderer';
 import { createMondstadtWorld, isInsideSafeZone } from './world/createMondstadtWorld';
-import { ISLAND_RADIUS } from './world/terrain';
 import { createCharacterModel, createNameSprite, type CharacterModel } from './entities/createCharacterModel';
 import { createInputSystem } from './systems/createInputSystem';
 import { createEffectSystem, type DamageApplier } from './systems/createEffectSystem';
@@ -81,9 +81,9 @@ const RESPAWN_HEALTH_JUMP = 100;
 /** Falls up to ~2 terraces are free; longer drops hurt. */
 const SAFE_FALL_DISTANCE = 4.5;
 const FALL_DAMAGE_PER_UNIT = 50;
-/** Below this Y the player has fallen off the island — instant death. */
+/** Below this Y the player has fallen off the islands — instant death. */
 const VOID_KILL_DEPTH = -15;
-const MOVEMENT_LIMIT = ISLAND_RADIUS + 5;
+const MOVEMENT_LIMIT = WORLD_BOUND + 5; // matches server clamp
 
 export function createGame(
   canvas: HTMLCanvasElement,

@@ -330,6 +330,17 @@ button {
   }
 }
 
+/* Narrow screens: drop the wallet row below the name so they never overlap. */
+@media (max-width: 640px) {
+  .hud__top-left {
+    width: min(220px, 52vw);
+  }
+
+  .hud__top-right {
+    top: calc(max(14px, env(safe-area-inset-top)) + 64px);
+  }
+}
+
 .joystick {
   position: absolute;
   bottom: max(26px, env(safe-area-inset-bottom));
