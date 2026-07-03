@@ -22,6 +22,7 @@ export const OwnedCharacter = __t.object("OwnedCharacter", {
   id: __t.u64(),
   owner: __t.identity(),
   characterId: __t.string(),
+  currentHealth: __t.u32(),
 });
 export type OwnedCharacter = __Infer<typeof OwnedCharacter>;
 
@@ -39,6 +40,12 @@ export const Player = __t.object("Player", {
   lastKillRewardAt: __t.timestamp(),
 });
 export type Player = __Infer<typeof Player>;
+
+export const RegenTimer = __t.object("RegenTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type RegenTimer = __Infer<typeof RegenTimer>;
 
 export const SkillCast = __t.object("SkillCast", {
   caster: __t.identity(),

@@ -2,23 +2,41 @@ import { schema, t, table, SenderError } from 'spacetimedb/server';
 import { ScheduleAt } from 'spacetimedb';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
-// maxHealth = per-character pool, healthRegen = HP restored per second (0 = none).
-const CHARACTER_STATS: Record<string, { stars: 4 | 5; maxHealth: number; healthRegen: number }> = {
-  aeris: { stars: 5, maxHealth: 950, healthRegen: 0 },
-  terron: { stars: 5, maxHealth: 1400, healthRegen: 0 },
-  volta: { stars: 5, maxHealth: 1000, healthRegen: 0 },
-  silva: { stars: 5, maxHealth: 1050, healthRegen: 8 },
-  marina: { stars: 5, maxHealth: 1150, healthRegen: 12 },
-  ignis: { stars: 5, maxHealth: 1300, healthRegen: 0 },
-  sarma: { stars: 5, maxHealth: 1000, healthRegen: 0 },
-  zefs: { stars: 4, maxHealth: 900, healthRegen: 0 },
-  petra: { stars: 4, maxHealth: 1200, healthRegen: 0 },
-  zibo: { stars: 4, maxHealth: 1000, healthRegen: 0 },
-  lapa: { stars: 4, maxHealth: 950, healthRegen: 15 },
-  rasa: { stars: 4, maxHealth: 1000, healthRegen: 10 },
-  dzirkste: { stars: 4, maxHealth: 1000, healthRegen: 0 },
-  stindzis: { stars: 4, maxHealth: 950, healthRegen: 0 },
+// maxHealth  = per-character pool.
+// healthRegen = HP the character regens for itself per second (0 = none).
+// healType   = 'none' | 'active' (heals party on skill cast) | 'passive' (aura, heals party ~1/s while on field).
+// healMode   = how healPower is read: 'percent' of target maxHP | 'combo' HP per combo point | 'flat' HP per proc.
+type HealType = 'none' | 'active' | 'passive';
+type HealMode = 'percent' | 'combo' | 'flat';
+interface CharacterStat {
+  stars: 4 | 5;
+  maxHealth: number;
+  healthRegen: number;
+  healType: HealType;
+  healMode: HealMode;
+  healPower: number;
+}
+const NO_HEAL = { healType: 'none' as HealType, healMode: 'flat' as HealMode, healPower: 0 };
+const CHARACTER_STATS: Record<string, CharacterStat> = {
+  aeris: { stars: 5, maxHealth: 950, healthRegen: 0, ...NO_HEAL },
+  terron: { stars: 5, maxHealth: 1400, healthRegen: 0, ...NO_HEAL },
+  volta: { stars: 5, maxHealth: 1000, healthRegen: 0, ...NO_HEAL },
+  silva: { stars: 5, maxHealth: 1050, healthRegen: 8, ...NO_HEAL },
+  // Marina: active healer — her water ring heals the whole party for 20% of each pool.
+  marina: { stars: 5, maxHealth: 1150, healthRegen: 12, healType: 'active', healMode: 'percent', healPower: 0.2 },
+  ignis: { stars: 5, maxHealth: 1300, healthRegen: 0, ...NO_HEAL },
+  sarma: { stars: 5, maxHealth: 1000, healthRegen: 0, ...NO_HEAL },
+  zefs: { stars: 4, maxHealth: 900, healthRegen: 0, ...NO_HEAL },
+  petra: { stars: 4, maxHealth: 1200, healthRegen: 0, ...NO_HEAL },
+  zibo: { stars: 4, maxHealth: 1000, healthRegen: 0, ...NO_HEAL },
+  // Lapa (dendro): active healer — spore burst heal scales with the combo count.
+  lapa: { stars: 4, maxHealth: 950, healthRegen: 15, healType: 'active', healMode: 'combo', healPower: 6 },
+  // Rasa (hydro): passive healer — water aura heals the party 10 HP/sec while on field.
+  rasa: { stars: 4, maxHealth: 1000, healthRegen: 10, healType: 'passive', healMode: 'flat', healPower: 10 },
+  dzirkste: { stars: 4, maxHealth: 1000, healthRegen: 0, ...NO_HEAL },
+  stindzis: { stars: 4, maxHealth: 950, healthRegen: 0, ...NO_HEAL },
 };
+const MAX_COMBO_FOR_HEAL = 50;
 const CHARACTER_POOL = Object.entries(CHARACTER_STATS).map(([characterId, s]) => ({
   characterId,
   stars: s.stars,
@@ -90,6 +108,9 @@ const ownedCharacter = table(
     id: t.u64().primaryKey().autoInc(),
     owner: t.identity().index('btree'),
     characterId: t.string(),
+    // Each character keeps its own HP; only the active one is in the world, so
+    // benched characters stay wounded until a healer tops them up.
+    currentHealth: t.u32(),
   }
 );
 
@@ -145,6 +166,31 @@ function clampToWorld(coordinate: number) {
   return Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, coordinate));
 }
 
+function findOwnedRow(ctx: { db: any }, targetPlayer: any, characterId: string) {
+  return [...ctx.db.ownedCharacter.owner.filter(targetPlayer.identity)].find(
+    (row: any) => row.characterId === characterId
+  );
+}
+
+// The player row mirrors the ACTIVE character's live HP (for combat/HUD); the
+// owned_character row is the persistent store. Keep both in step.
+function setActiveHealth(ctx: { db: any }, targetPlayer: any, health: number) {
+  ctx.db.player.identity.update({ ...targetPlayer, currentHealth: health });
+  const activeOwned = findOwnedRow(ctx, targetPlayer, targetPlayer.activeCharacterId);
+  if (activeOwned) ctx.db.ownedCharacter.id.update({ ...activeOwned, currentHealth: health });
+}
+
+function healAmountFor(stats: CharacterStat, targetMaxHealth: number, comboCount: number) {
+  switch (stats.healMode) {
+    case 'percent':
+      return Math.round(targetMaxHealth * stats.healPower);
+    case 'combo':
+      return stats.healPower * Math.min(comboCount, MAX_COMBO_FOR_HEAL);
+    default:
+      return stats.healPower;
+  }
+}
+
 function respawnPlayerAtSpawn(ctx: { db: any }, targetPlayer: any) {
   ctx.db.player.identity.update({
     ...targetPlayer,
@@ -153,6 +199,13 @@ function respawnPlayerAtSpawn(ctx: { db: any }, targetPlayer: any) {
     positionY: 0,
     positionZ: SPAWN_Z,
   });
+  const activeOwned = findOwnedRow(ctx, targetPlayer, targetPlayer.activeCharacterId);
+  if (activeOwned) {
+    ctx.db.ownedCharacter.id.update({
+      ...activeOwned,
+      currentHealth: statsFor(targetPlayer.activeCharacterId).maxHealth,
+    });
+  }
 }
 
 function isInsideSafeZone(positionX: number, positionZ: number) {
@@ -194,6 +247,7 @@ export const joinGame = spacetimedb.reducer(
       id: 0n,
       owner: ctx.sender,
       characterId: STARTER_CHARACTER_ID,
+      currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
     });
   }
 );
@@ -242,7 +296,7 @@ export const attackPlayer = spacetimedb.reducer(
     const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
     const remainingHealth = target.currentHealth - Math.min(clampedDamage, target.currentHealth);
     if (remainingHealth > 0) {
-      ctx.db.player.identity.update({ ...target, currentHealth: remainingHealth });
+      setActiveHealth(ctx, target, remainingHealth);
       return;
     }
     respawnPlayerAtSpawn(ctx, target);
@@ -253,19 +307,20 @@ export const setActiveCharacter = spacetimedb.reducer(
   { characterId: t.string() },
   (ctx, { characterId }) => {
     const currentPlayer = requirePlayer(ctx);
-    if (!ownsCharacter(ctx, characterId)) {
-      throw new SenderError('Character not owned');
+    if (characterId === currentPlayer.activeCharacterId) return;
+    const nextOwned = findOwnedRow(ctx, currentPlayer, characterId);
+    if (!nextOwned) throw new SenderError('Character not owned');
+
+    // Persist the outgoing character's live HP, then bring in the incoming
+    // character at whatever HP it was last left with (each keeps its own pool).
+    const outgoing = findOwnedRow(ctx, currentPlayer, currentPlayer.activeCharacterId);
+    if (outgoing) {
+      ctx.db.ownedCharacter.id.update({ ...outgoing, currentHealth: currentPlayer.currentHealth });
     }
-    // Each character has its own pool; preserve the wounded fraction across a
-    // switch so swapping is not a free heal (and not a free kill).
-    const oldMax = statsFor(currentPlayer.activeCharacterId).maxHealth;
-    const newMax = statsFor(characterId).maxHealth;
-    const fraction = oldMax > 0 ? currentPlayer.currentHealth / oldMax : 1;
-    const scaledHealth = Math.max(1, Math.min(newMax, Math.round(newMax * fraction)));
     ctx.db.player.identity.update({
       ...currentPlayer,
       activeCharacterId: characterId,
-      currentHealth: scaledHealth,
+      currentHealth: nextOwned.currentHealth,
     });
   }
 );
@@ -301,7 +356,7 @@ export const takeDamage = spacetimedb.reducer(
     const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE, currentPlayer.currentHealth);
     const remainingHealth = currentPlayer.currentHealth - clampedDamage;
     if (remainingHealth > 0) {
-      ctx.db.player.identity.update({ ...currentPlayer, currentHealth: remainingHealth });
+      setActiveHealth(ctx, currentPlayer, remainingHealth);
       return;
     }
     respawnPlayerAtSpawn(ctx, currentPlayer);
@@ -346,7 +401,34 @@ export const healInSafeZone = spacetimedb.reducer(
     }
     const maxHealth = statsFor(currentPlayer.activeCharacterId).maxHealth;
     const healedHealth = Math.min(maxHealth, currentPlayer.currentHealth + amount);
-    ctx.db.player.identity.update({ ...currentPlayer, currentHealth: healedHealth });
+    setActiveHealth(ctx, currentPlayer, healedHealth);
+  }
+);
+
+// Healer characters restore the whole owned party (benched + self). Called by
+// the client when an active healer casts (burst) or once per second while a
+// passive healer is on field. comboCount only matters for combo-mode healers
+// and is clamped server-side. PVE self-heal, so no PVP advantage to abuse.
+export const healParty = spacetimedb.reducer(
+  { comboCount: t.u32() },
+  (ctx, { comboCount }) => {
+    const currentPlayer = requirePlayer(ctx);
+    const stats = statsFor(currentPlayer.activeCharacterId);
+    if (stats.healType === 'none') return;
+
+    let activeHealth = currentPlayer.currentHealth;
+    for (const owned of [...ctx.db.ownedCharacter.owner.filter(ctx.sender)]) {
+      const targetMax = statsFor(owned.characterId).maxHealth;
+      const amount = healAmountFor(stats, targetMax, comboCount);
+      if (amount <= 0 || owned.currentHealth >= targetMax) continue;
+      const healed = Math.min(targetMax, owned.currentHealth + amount);
+      ctx.db.ownedCharacter.id.update({ ...owned, currentHealth: healed });
+      if (owned.characterId === currentPlayer.activeCharacterId) activeHealth = healed;
+    }
+    // Mirror the active character's new HP onto the player row for combat/HUD.
+    if (activeHealth !== currentPlayer.currentHealth) {
+      ctx.db.player.identity.update({ ...currentPlayer, currentHealth: activeHealth });
+    }
   }
 );
 
@@ -379,6 +461,7 @@ export const pullGacha = spacetimedb.reducer(ctx => {
       id: 0n,
       owner: ctx.sender,
       characterId: pulledCharacter.characterId,
+      currentHealth: statsFor(pulledCharacter.characterId).maxHealth,
     });
   }
 
@@ -398,7 +481,7 @@ export const regenTick = spacetimedb.reducer(
       const { maxHealth, healthRegen } = statsFor(currentPlayer.activeCharacterId);
       if (healthRegen <= 0 || currentPlayer.currentHealth >= maxHealth) continue;
       const healed = Math.min(maxHealth, currentPlayer.currentHealth + healthRegen);
-      ctx.db.player.identity.update({ ...currentPlayer, currentHealth: healed });
+      setActiveHealth(ctx, currentPlayer, healed);
     }
   }
 );

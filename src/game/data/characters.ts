@@ -263,3 +263,27 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
 
 export const CHARACTER_LIST = Object.values(CHARACTERS);
 export const STARTER_CHARACTER_ID = 'zibo';
+
+export type HealType = 'none' | 'active' | 'passive';
+export type HealMode = 'percent' | 'combo' | 'flat';
+
+export interface HealSpec {
+  /** 'active' fires on skill cast, 'passive' is an on-field aura (~1/s). */
+  type: HealType;
+  /** How power is read: 'percent' of max HP, 'combo' HP per combo point, 'flat' HP. */
+  mode: HealMode;
+  power: number;
+}
+
+// Which characters heal the party, and how. Server is the source of truth for
+// the actual amount — keep in sync with CHARACTER_STATS in spacetimedb/src/index.ts.
+// Hydro characters are healers (with active/passive sub-types); Lapa (dendro) too.
+const HEALERS: Record<string, HealSpec> = {
+  marina: { type: 'active', mode: 'percent', power: 0.2 },
+  lapa: { type: 'active', mode: 'combo', power: 6 },
+  rasa: { type: 'passive', mode: 'flat', power: 10 },
+};
+
+export function healSpecFor(characterId: string): HealSpec {
+  return HEALERS[characterId] ?? { type: 'none', mode: 'flat', power: 0 };
+}

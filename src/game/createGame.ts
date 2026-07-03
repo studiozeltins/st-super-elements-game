@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CHARACTERS, type CharacterDefinition } from './data/characters';
+import { CHARACTERS, healSpecFor, type CharacterDefinition } from './data/characters';
 import { WEAPONS } from './data/weapons';
 import { ELEMENTS, type ElementId } from './data/elements';
 import {
@@ -53,6 +53,8 @@ export interface GameNetworkActions {
   sendAttackPlayer(target: Player, damage: number): void;
   sendTakeDamage(damage: number): void;
   sendHeal(amount: number): void;
+  /** Trigger a healer character's party heal (combo only matters for combo-mode). */
+  sendHealParty(comboCount: number): void;
   sendKillReward(rewardTier: number): void;
   sendFallToDeath(): void;
 }
@@ -323,6 +325,11 @@ export function createGame(
       followPosition: () => playerPosition,
     });
     network.sendCastSkill(skill.id, playerPosition.x, playerPosition.z, direction.x, direction.z);
+
+    // Active healers (e.g. Marina, Lapa) heal the whole owned party on cast.
+    if (healSpecFor(activeCharacter.id).type === 'active') {
+      network.sendHealParty(combo);
+    }
   }
 
   function clampPlayerToWorld() {
@@ -428,6 +435,10 @@ export function createGame(
     const inSafeZone = isInsideSafeZone(playerPosition.x, playerPosition.z);
     if (inSafeZone && myServerHealth < activeCharacter.maxHealth) {
       network.sendHeal(SAFE_ZONE_HEAL_PER_SECOND);
+    }
+    // Passive healers (e.g. Rasa) emit a party-heal aura once per second on field.
+    if (healSpecFor(activeCharacter.id).type === 'passive') {
+      network.sendHealParty(combo);
     }
   }
 

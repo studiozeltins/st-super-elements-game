@@ -3,6 +3,7 @@ import { useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { tables, type DbConnection } from './module_bindings';
 import type { GachaResult, Player } from './module_bindings/types';
 import { createGame, type Game, type HudState } from './game/createGame';
+import { CHARACTERS } from './game/data/characters';
 import { MAX_HEALTH } from './game/data/constants';
 import { JoinScreen } from './ui/JoinScreen';
 import { Hud } from './ui/Hud';
@@ -76,6 +77,13 @@ export default function App() {
   const partyCharacterIds = myCharacterIds.slice(0, PARTY_SIZE);
   partyRef.current = partyCharacterIds;
 
+  const partyHealthById: Record<string, number> = {};
+  for (const row of ownedCharacterRows) {
+    if (row.owner.toHexString() !== myIdentityHex) continue;
+    const maxHealth = CHARACTERS[row.characterId]?.maxHealth ?? MAX_HEALTH;
+    partyHealthById[row.characterId] = maxHealth > 0 ? row.currentHealth / maxHealth : 1;
+  }
+
   const selectCharacter = useCallback(
     (characterId: string) => {
       connection?.reducers.setActiveCharacter({ characterId });
@@ -101,6 +109,7 @@ export default function App() {
           connection.reducers.attackPlayer({ targetIdentity: target.identity, damage }),
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
+        sendHealParty: comboCount => connection.reducers.healParty({ comboCount }),
         sendKillReward: rewardTier => connection.reducers.grantKillReward({ rewardTier }),
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
@@ -145,6 +154,7 @@ export default function App() {
         health={myPlayer?.currentHealth ?? MAX_HEALTH}
         primogems={myPlayer?.primogems ?? 0}
         partyCharacterIds={partyCharacterIds}
+        partyHealthById={partyHealthById}
         activeCharacterId={myPlayer?.activeCharacterId ?? ''}
         hudState={hudState}
         onSelectPartySlot={slotIndex => {

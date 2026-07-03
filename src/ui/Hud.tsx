@@ -9,6 +9,8 @@ interface HudProps {
   health: number;
   primogems: number;
   partyCharacterIds: string[];
+  /** characterId -> current HP fraction [0..1] for each owned character. */
+  partyHealthById: Record<string, number>;
   activeCharacterId: string;
   hudState: HudState;
   onSelectPartySlot(slotIndex: number): void;
@@ -31,6 +33,7 @@ export function Hud({
   health,
   primogems,
   partyCharacterIds,
+  partyHealthById,
   activeCharacterId,
   hudState,
   onSelectPartySlot,
@@ -95,6 +98,7 @@ export function Hud({
           if (!character) return null;
           const element = ELEMENTS[character.element];
           const isActive = characterId === activeCharacterId;
+          const hpFraction = Math.max(0, Math.min(1, partyHealthById[characterId] ?? 1));
           return (
             <button
               key={characterId}
@@ -105,6 +109,15 @@ export function Hud({
               <span className="party-slot__inner">
                 <span className="party-slot__initial">{character.displayName[0]}</span>
                 <span className="party-slot__key">{slotIndex + 1}</span>
+                <span className="party-slot__hp">
+                  <span
+                    className="party-slot__hp-fill"
+                    style={{
+                      transform: `scaleX(${hpFraction})`,
+                      background: hpFraction > 0.35 ? 'var(--accent)' : 'var(--danger)',
+                    }}
+                  />
+                </span>
               </span>
             </button>
           );

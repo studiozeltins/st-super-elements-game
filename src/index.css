@@ -310,6 +310,24 @@ button {
   color: var(--muted);
 }
 
+.party-slot__hp {
+  position: absolute;
+  bottom: -3px;
+  left: 15%;
+  width: 70%;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.party-slot__hp-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  transition: transform 0.25s ease-out;
+}
+
 /* ---------- Touch controls ---------- */
 
 .hud__touch-controls {

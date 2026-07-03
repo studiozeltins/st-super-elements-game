@@ -39,6 +39,7 @@ import CastSkillReducer from "./cast_skill_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
 import GrantKillRewardReducer from "./grant_kill_reward_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
+import HealPartyReducer from "./heal_party_reducer";
 import JoinGameReducer from "./join_game_reducer";
 import PullGachaReducer from "./pull_gacha_reducer";
 import SetActiveCharacterReducer from "./set_active_character_reducer";
@@ -107,6 +108,7 @@ const reducersSchema = __reducers(
   __reducerSchema("fall_to_death", FallToDeathReducer),
   __reducerSchema("grant_kill_reward", GrantKillRewardReducer),
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
+  __reducerSchema("heal_party", HealPartyReducer),
   __reducerSchema("join_game", JoinGameReducer),
   __reducerSchema("pull_gacha", PullGachaReducer),
   __reducerSchema("set_active_character", SetActiveCharacterReducer),
