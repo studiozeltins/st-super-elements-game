@@ -9,10 +9,15 @@
  *   open) and have the module published there.
  */
 function resolveSpacetimedbUri(): string {
-  const override = import.meta.env.VITE_SPACETIMEDB_HOST;
-  if (override) return override;
   const { protocol, hostname, host } = window.location;
+  // Host's own dev box: honor the override (defaults to loopback).
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return import.meta.env.VITE_SPACETIMEDB_HOST ?? 'ws://127.0.0.1:3000';
+  }
+  // HTTPS: can't open ws:// from https, so go same-origin wss (nginx → :3000).
   if (protocol === 'https:') return `wss://${host}`;
+  // LAN over http: hit the host's SpacetimeDB port directly using the page's
+  // host, so other machines resolve the host — never loopback.
   return `ws://${hostname}:3000`;
 }
 
