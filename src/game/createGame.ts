@@ -12,6 +12,11 @@ import {
 } from './data/constants';
 import { createPixelRenderer } from './engine/createPixelRenderer';
 import { createMondstadtWorld, isInsideSafeZone } from './world/createMondstadtWorld';
+import {
+  resolveBodyCollisions,
+  resolveObstacleCollisions,
+  type CollisionBody,
+} from './physics/resolveCollisions';
 import { createCharacterModel, createNameSprite, type CharacterModel } from './entities/createCharacterModel';
 import { createInputSystem } from './systems/createInputSystem';
 import { createEffectSystem, type DamageApplier } from './systems/createEffectSystem';
@@ -36,7 +41,7 @@ export interface GameNetworkActions {
   sendAttackPlayer(target: Player, damage: number): void;
   sendTakeDamage(damage: number): void;
   sendHeal(amount: number): void;
-  sendKillReward(): void;
+  sendKillReward(rewardTier: number): void;
   sendFallToDeath(): void;
 }
 
@@ -99,8 +104,8 @@ export function createGame(
   const pixelRenderer = createPixelRenderer(canvas);
   const world = createMondstadtWorld(scene);
   const effectSystem = createEffectSystem(scene);
-  const enemySystem = createEnemySystem(scene, effectSystem, world.getGroundHeight, () =>
-    network.sendKillReward()
+  const enemySystem = createEnemySystem(scene, effectSystem, world.getGroundHeight, rewardTier =>
+    network.sendKillReward(rewardTier)
   );
   const inputSystem = createInputSystem(canvas);
 
@@ -110,6 +115,7 @@ export function createGame(
 
   // Matches SPAWN_X/SPAWN_Z on the server (next to the plaza fountain).
   const playerPosition = new THREE.Vector3(6, 0, 6);
+  const playerCollisionBody: CollisionBody = { position: playerPosition, radius: 0.45, mass: 1 };
   let playerVelocityY = 0;
   let playerRotationY = 0;
   let myServerHealth = MAX_HEALTH;
@@ -386,6 +392,14 @@ export function createGame(
     });
   }
 
+  /** Bodies shove each other apart (mass-weighted), then solids push everyone out. */
+  function resolveAllCollisions() {
+    const bodies = [playerCollisionBody, ...enemySystem.getCollisionBodies()];
+    resolveBodyCollisions(bodies);
+    const obstacles = world.getObstacles();
+    for (const body of bodies) resolveObstacleCollisions(body, obstacles);
+  }
+
   let hudPushTimer = 0;
 
   function frame(frameTime: number) {
@@ -396,6 +410,7 @@ export function createGame(
 
     updateLocalPlayer(deltaSeconds);
     enemySystem.update(deltaSeconds, playerPosition, damage => network.sendTakeDamage(damage));
+    resolveAllCollisions();
     effectSystem.update(deltaSeconds);
     world.update(deltaSeconds);
     updateRemotePlayerViews(deltaSeconds);

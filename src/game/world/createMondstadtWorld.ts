@@ -5,6 +5,7 @@ import { createSeededRandom } from './rng';
 import { createTerrainMesh, getTerrainHeight, getTerrainSlope, isOnLand } from './terrain';
 import { getBridges, type BridgeSpec } from './bridges';
 import { getCampSites } from './camps';
+import type { ObstacleCircle } from '../physics/resolveCollisions';
 import {
   createBoulder,
   createBush,
@@ -32,6 +33,8 @@ export interface MondstadtWorld {
    * do not act as invisible walls for someone walking underneath.
    */
   getGroundHeight(x: number, z: number, maxSurfaceY?: number): number;
+  /** Solid trunks/walls entities cannot pass through (trees, spires, houses…). */
+  getObstacles(): readonly ObstacleCircle[];
   dispose(): void;
 }
 
@@ -211,6 +214,8 @@ interface AssetScatterRule {
   count: number;
   minRadius: number;
   maxSlope: number;
+  /** Solid trunk/base radius; omitted means entities can walk through. */
+  collisionRadius?: number;
 }
 
 /** Uniform sample across the whole map, rejected until it lands on an island. */
@@ -244,11 +249,13 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
   const group = new THREE.Group();
   const random = createSeededRandom(WORLD_DECOR_SEED);
   const platforms: Platform[] = [];
+  const obstacles: ObstacleCircle[] = [];
 
-  function placeAsset(asset: WorldAsset, x: number, z: number) {
+  function placeAsset(asset: WorldAsset, x: number, z: number, collisionRadius?: number) {
     const groundY = getTerrainHeight(x, z);
     asset.group.position.set(x, groundY, z);
     group.add(asset.group);
+    if (collisionRadius) obstacles.push({ x, z, radius: collisionRadius });
     if (asset.platformRadius && asset.platformTopHeight) {
       platforms.push({
         x,
@@ -267,7 +274,7 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
       const landPosition = findRandomLandPosition(random, rule.minRadius);
       if (!landPosition) continue;
       if (getTerrainSlope(landPosition.x, landPosition.z) > rule.maxSlope) continue;
-      placeAsset(rule.create(random), landPosition.x, landPosition.z);
+      placeAsset(rule.create(random), landPosition.x, landPosition.z, rule.collisionRadius);
       placed++;
     }
   }
@@ -376,6 +383,7 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
   group.add(createTerrainMesh());
   createPlaza(group);
   group.add(createFountain());
+  obstacles.push({ x: 0, z: 0, radius: 3.0 }); // fountain basin
   createInstancedGroundCover(group, random);
   buildBridges();
   buildPillarStairs();
@@ -383,16 +391,26 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
   const houseCount = 6;
   for (let houseIndex = 0; houseIndex < houseCount; houseIndex++) {
     const angle = (houseIndex / houseCount) * Math.PI * 2 + 0.4;
-    group.add(createHouse(random, angle, 12));
+    const house = createHouse(random, angle, 12);
+    group.add(house);
+    obstacles.push({ x: house.position.x, z: house.position.z, radius: 2.8 });
   }
   const { group: windmill, blades } = createWindmill();
   group.add(windmill);
+  obstacles.push({ x: windmill.position.x, z: windmill.position.z, radius: 2.1 });
 
   const scatterRules: AssetScatterRule[] = [
+    // Boulders stay obstacle-free: they are climbable platforms.
     { create: createBoulder, count: 26, minRadius: SAFE_ZONE_RADIUS + 8, maxSlope: 0.9 },
-    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2 },
-    { create: createCanopyTree, count: 8, minRadius: 30, maxSlope: 0.45 },
-    { create: createPalmTree, count: 14, minRadius: SAFE_ZONE_RADIUS + 4, maxSlope: 0.4 },
+    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2, collisionRadius: 1.5 },
+    { create: createCanopyTree, count: 8, minRadius: 30, maxSlope: 0.45, collisionRadius: 0.7 },
+    {
+      create: createPalmTree,
+      count: 14,
+      minRadius: SAFE_ZONE_RADIUS + 4,
+      maxSlope: 0.4,
+      collisionRadius: 0.45,
+    },
     { create: createBush, count: 24, minRadius: SAFE_ZONE_RADIUS + 2, maxSlope: 0.6 },
     { create: createMushroom, count: 12, minRadius: SAFE_ZONE_RADIUS + 4, maxSlope: 0.6 },
     { create: createFlower, count: 16, minRadius: SAFE_ZONE_RADIUS + 1, maxSlope: 0.5 },
@@ -404,18 +422,19 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     const campRandom = createSeededRandom(
       WORLD_DECOR_SEED ^ (Math.round(campSite.x * 31 + campSite.z * 17) | 0)
     );
-    const placeAroundCamp = (asset: WorldAsset, radius: number) => {
+    const placeAroundCamp = (asset: WorldAsset, radius: number, collisionRadius?: number) => {
       const angle = campRandom() * Math.PI * 2;
       placeAsset(
         asset,
         campSite.x + Math.cos(angle) * radius,
-        campSite.z + Math.sin(angle) * radius
+        campSite.z + Math.sin(angle) * radius,
+        collisionRadius
       );
     };
-    placeAsset(createCampfire(campRandom), campSite.x, campSite.z);
-    placeAroundCamp(createTeepee(campRandom), 4.5);
-    placeAroundCamp(createTeepee(campRandom), 5);
-    placeAroundCamp(createTotem(campRandom), 3.5);
+    placeAsset(createCampfire(campRandom), campSite.x, campSite.z, 0.8);
+    placeAroundCamp(createTeepee(campRandom), 4.5, 1.4);
+    placeAroundCamp(createTeepee(campRandom), 5, 1.4);
+    placeAroundCamp(createTotem(campRandom), 3.5, 0.5);
     placeAroundCamp(createSpikes(campRandom), 6);
     placeAroundCamp(createSpikes(campRandom), 6.5);
     if (campRandom() < 0.5) placeAroundCamp(createWoodenArch(campRandom), 7);
@@ -437,6 +456,9 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
         }
       }
       return groundHeight;
+    },
+    getObstacles() {
+      return obstacles;
     },
     dispose() {
       scene.remove(group);

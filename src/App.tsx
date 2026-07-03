@@ -100,7 +100,7 @@ export default function App() {
           connection.reducers.attackPlayer({ targetIdentity: target.identity, damage }),
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
-        sendKillReward: () => connection.reducers.grantKillReward({}),
+        sendKillReward: rewardTier => connection.reducers.grantKillReward({ rewardTier }),
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
       setHudState

@@ -23,6 +23,7 @@ const STARTING_PRIMOGEMS = 16000;
 const GACHA_PULL_COST = 1600;
 const DUPLICATE_REFUND = 800;
 const KILL_REWARD_PRIMOGEMS = 40;
+const MAX_KILL_REWARD_TIER = 3;
 const FIVE_STAR_CHANCE = 0.1;
 // Keep in sync with src/game/data/constants.ts (archipelago extent).
 const WORLD_BOUND = 130;
@@ -288,17 +289,21 @@ export const fallToDeath = spacetimedb.reducer(ctx => {
   respawnPlayerAtSpawn(ctx, currentPlayer);
 });
 
-export const grantKillReward = spacetimedb.reducer(ctx => {
-  const currentPlayer = requirePlayer(ctx);
-  const microsSinceLastReward =
-    ctx.timestamp.microsSinceUnixEpoch - currentPlayer.lastKillRewardAt.microsSinceUnixEpoch;
-  if (microsSinceLastReward < KILL_REWARD_COOLDOWN_MICROS) return;
-  ctx.db.player.identity.update({
-    ...currentPlayer,
-    primogems: currentPlayer.primogems + KILL_REWARD_PRIMOGEMS,
-    lastKillRewardAt: ctx.timestamp,
-  });
-});
+export const grantKillReward = spacetimedb.reducer(
+  { rewardTier: t.u32() },
+  (ctx, { rewardTier }) => {
+    const currentPlayer = requirePlayer(ctx);
+    const microsSinceLastReward =
+      ctx.timestamp.microsSinceUnixEpoch - currentPlayer.lastKillRewardAt.microsSinceUnixEpoch;
+    if (microsSinceLastReward < KILL_REWARD_COOLDOWN_MICROS) return;
+    const clampedTier = Math.max(1, Math.min(MAX_KILL_REWARD_TIER, rewardTier));
+    ctx.db.player.identity.update({
+      ...currentPlayer,
+      primogems: currentPlayer.primogems + KILL_REWARD_PRIMOGEMS * clampedTier,
+      lastKillRewardAt: ctx.timestamp,
+    });
+  }
+);
 
 export const healInSafeZone = spacetimedb.reducer(
   { amount: t.u32() },
