@@ -453,12 +453,12 @@ button {
   color: var(--text);
 }
 
-.hud__combo--finisher .hud__combo-count {
+.hud__combo--hot .hud__combo-count {
   color: var(--danger);
   animation: combo-flash 0.4s ease-out;
 }
 
-.hud__combo--finisher .hud__combo-label {
+.hud__combo--hot .hud__combo-label {
   color: var(--danger);
 }
 

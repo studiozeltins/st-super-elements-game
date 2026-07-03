@@ -68,17 +68,13 @@ export function Hud({
         </span>
       </div>
 
-      {hudState.comboStep > 1 && (
+      {hudState.combo > 1 && (
         <div
-          className={`hud__combo ${
-            hudState.comboStep >= hudState.maxComboStep ? 'hud__combo--finisher' : ''
-          }`}
-          key={hudState.comboStep}
+          className={`hud__combo ${hudState.combo >= 25 ? 'hud__combo--hot' : ''}`}
+          key={hudState.combo}
         >
-          <span className="hud__combo-count">{hudState.comboStep}</span>
-          <span className="hud__combo-label">
-            {hudState.comboStep >= hudState.maxComboStep ? 'FINIŠS!' : 'KOMBO'}
-          </span>
+          <span className="hud__combo-count">{hudState.combo}</span>
+          <span className="hud__combo-label">KOMBO</span>
         </div>
       )}
 

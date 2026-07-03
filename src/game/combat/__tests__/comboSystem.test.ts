@@ -1,102 +1,84 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COMBO_CONTINUE_WINDOW_SECONDS,
-  MAX_COMBO_STEP,
-  type SwingKind,
-  comboProfile,
-  nextComboStep,
+  comboWindowSeconds,
+  regularAttackMultiplier,
+  skillAttackMultiplier,
+  swingProfile,
+  COMBO_BASE_WINDOW_SECONDS,
+  COMBO_MIN_WINDOW_SECONDS,
 } from '../comboSystem';
 
-const KNOWN_SWING_KINDS: readonly SwingKind[] = [
-  'slashLeft',
-  'slashRight',
-  'thrust',
-  'spin',
-  'finisher',
-];
-
-describe('nextComboStep', () => {
-  it('starts a fresh combo from idle (0)', () => {
-    expect(nextComboStep(0, 0)).toBe(1);
+describe('comboWindowSeconds', () => {
+  it('starts at the base window with no combo', () => {
+    expect(comboWindowSeconds(0)).toBeCloseTo(COMBO_BASE_WINDOW_SECONDS, 5);
   });
 
-  it('climbs step by step within the continue window', () => {
-    let step = 0;
-    for (let expected = 1; expected < MAX_COMBO_STEP; expected += 1) {
-      step = nextComboStep(step, 0);
-      expect(step).toBe(expected);
+  it('shrinks monotonically as the combo climbs', () => {
+    let previous = comboWindowSeconds(0);
+    for (let combo = 1; combo <= 200; combo += 5) {
+      const current = comboWindowSeconds(combo);
+      expect(current).toBeLessThan(previous);
+      previous = current;
     }
   });
 
-  it('wraps back to 1 after reaching MAX_COMBO_STEP', () => {
-    expect(nextComboStep(MAX_COMBO_STEP, 0)).toBe(1);
+  it('never drops below the floor and stays within the band', () => {
+    for (let combo = 0; combo <= 5000; combo += 250) {
+      const window = comboWindowSeconds(combo);
+      expect(window).toBeGreaterThanOrEqual(COMBO_MIN_WINDOW_SECONDS - 1e-9);
+      expect(window).toBeLessThanOrEqual(COMBO_BASE_WINDOW_SECONDS + 1e-9);
+    }
   });
 
-  it('resets to 1 when the continue window has expired', () => {
-    expect(nextComboStep(3, COMBO_CONTINUE_WINDOW_SECONDS + 0.01)).toBe(1);
-  });
-
-  it('still climbs when exactly at the continue window boundary', () => {
-    expect(nextComboStep(3, COMBO_CONTINUE_WINDOW_SECONDS)).toBe(4);
-  });
-
-  it('treats a negative previous step as a fresh combo', () => {
-    expect(nextComboStep(-5, 0)).toBe(1);
-  });
-
-  it('treats an out-of-range large previous step as a wrap', () => {
-    expect(nextComboStep(999, 0)).toBe(1);
+  it('clamps a negative combo to the base window', () => {
+    expect(comboWindowSeconds(-10)).toBeCloseTo(COMBO_BASE_WINDOW_SECONDS, 5);
   });
 });
 
-describe('comboProfile', () => {
-  it('clamps step below 1 up to 1', () => {
-    expect(comboProfile(0).step).toBe(1);
-    expect(comboProfile(-4).step).toBe(1);
+describe('attack multipliers', () => {
+  it('regular multiplier is 1 at zero combo and rises slowly', () => {
+    expect(regularAttackMultiplier(0)).toBe(1);
+    expect(regularAttackMultiplier(10)).toBeGreaterThan(1);
+    expect(regularAttackMultiplier(10)).toBeLessThan(1.3);
   });
 
-  it('clamps step above MAX down to MAX', () => {
-    expect(comboProfile(MAX_COMBO_STEP + 20).step).toBe(MAX_COMBO_STEP);
+  it('regular multiplier is capped', () => {
+    expect(regularAttackMultiplier(100000)).toBeLessThanOrEqual(1.75 + 1e-9);
   });
 
-  it('increases damageMultiplier strictly for non-finisher steps', () => {
-    for (let step = 1; step < MAX_COMBO_STEP - 1; step += 1) {
-      expect(comboProfile(step + 1).damageMultiplier).toBeGreaterThan(
-        comboProfile(step).damageMultiplier,
-      );
+  it('skill multiplier is 1 at zero combo and grows uncapped, far above regular', () => {
+    expect(skillAttackMultiplier(0)).toBe(1);
+    expect(skillAttackMultiplier(50)).toBeGreaterThan(regularAttackMultiplier(50) * 3);
+    expect(skillAttackMultiplier(1000)).toBeGreaterThan(skillAttackMultiplier(100));
+  });
+
+  it('clamps negative combos to the base multiplier', () => {
+    expect(regularAttackMultiplier(-5)).toBe(1);
+    expect(skillAttackMultiplier(-5)).toBe(1);
+  });
+});
+
+describe('swingProfile', () => {
+  const VALID_KINDS = new Set(['slashLeft', 'slashRight', 'thrust', 'spin']);
+
+  it('returns a valid swing kind and sane timing for every swing', () => {
+    for (let swingIndex = 1; swingIndex <= 40; swingIndex += 1) {
+      const profile = swingProfile(swingIndex, swingIndex);
+      expect(VALID_KINDS.has(profile.swingKind)).toBe(true);
+      expect(profile.swingDurationSeconds).toBeGreaterThan(0);
+      expect(profile.swingDurationSeconds).toBeLessThanOrEqual(1);
+      expect(profile.swingArc).toBeGreaterThan(0);
     }
   });
 
-  it('makes the finisher (step 10) the biggest multiplier and marks isFinisher', () => {
-    const finisher = comboProfile(MAX_COMBO_STEP);
-    expect(finisher.isFinisher).toBe(true);
-    for (let step = 1; step < MAX_COMBO_STEP; step += 1) {
-      expect(comboProfile(step).isFinisher).toBe(false);
-      expect(finisher.damageMultiplier).toBeGreaterThan(comboProfile(step).damageMultiplier);
-    }
+  it('does a spin flourish every sixth swing', () => {
+    expect(swingProfile(6, 0).swingKind).toBe('spin');
+    expect(swingProfile(6, 0).isFlourish).toBe(true);
+    expect(swingProfile(12, 0).isFlourish).toBe(true);
+    expect(swingProfile(5, 0).isFlourish).toBe(false);
   });
 
-  it('grows swingArc with step depth', () => {
-    for (let step = 1; step < MAX_COMBO_STEP; step += 1) {
-      expect(comboProfile(step + 1).swingArc).toBeGreaterThan(comboProfile(step).swingArc);
-    }
-  });
-
-  it('keeps swingDurationSeconds within (0, 1] for every step', () => {
-    for (let step = 1; step <= MAX_COMBO_STEP; step += 1) {
-      const { swingDurationSeconds } = comboProfile(step);
-      expect(swingDurationSeconds).toBeGreaterThan(0);
-      expect(swingDurationSeconds).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it('returns a valid swingKind from the known set for every step', () => {
-    for (let step = 1; step <= MAX_COMBO_STEP; step += 1) {
-      expect(KNOWN_SWING_KINDS).toContain(comboProfile(step).swingKind);
-    }
-  });
-
-  it('uses the finisher swingKind at step 10', () => {
-    expect(comboProfile(MAX_COMBO_STEP).swingKind).toBe('finisher');
+  it('grows the swing arc a little with combo depth (non-flourish)', () => {
+    expect(swingProfile(1, 40).swingArc).toBeGreaterThan(swingProfile(1, 0).swingArc);
   });
 });

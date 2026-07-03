@@ -3,13 +3,13 @@ import { disposeObject } from '../engine/disposeObject';
 import { ELEMENTS, type ElementId } from '../data/elements';
 import type { CharacterDefinition } from '../data/characters';
 import type { WeaponId } from '../data/weapons';
-import type { ComboProfile } from '../combat/comboSystem';
+import type { SwingProfile } from '../combat/comboSystem';
 
 export interface CharacterModel {
   group: THREE.Group;
   animate(elapsedSeconds: number, deltaSeconds: number, isMoving: boolean): void;
-  /** Starts a weapon swing whose shape and size come from the combo profile. */
-  triggerAttack(profile: ComboProfile): void;
+  /** Starts a weapon swing whose shape and size come from the swing profile. */
+  triggerAttack(profile: SwingProfile): void;
   dispose(): void;
 }
 
@@ -195,22 +195,16 @@ export function createCharacterModel(character: CharacterDefinition): CharacterM
 
   let swingRemaining = 0;
   let swingDuration = 0;
-  let activeProfile: ComboProfile | null = null;
+  let activeProfile: SwingProfile | null = null;
 
   function applySwing(progress: number) {
     if (!activeProfile) return;
     const eased = Math.sin(progress * Math.PI); // 0 → 1 → 0 over the swing
     const arc = activeProfile.swingArc;
 
-    if (activeProfile.swingKind === 'finisher') {
-      bodyPivot.rotation.y = progress * Math.PI * 2;
-      rightShoulder.rotation.x = restShoulderRotation - eased * 2.4;
-      rightShoulder.rotation.z = -eased * 0.6;
-      return;
-    }
     if (activeProfile.swingKind === 'spin') {
       bodyPivot.rotation.y = progress * Math.PI * 2;
-      rightShoulder.rotation.x = restShoulderRotation - eased * 1.2;
+      rightShoulder.rotation.x = restShoulderRotation - eased * 1.6;
       rightShoulder.rotation.z = -eased * 1.1;
       return;
     }

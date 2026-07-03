@@ -24,10 +24,16 @@ export interface SkillEffectOptions {
   origin: THREE.Vector3;
   direction: { x: number; z: number };
   applyDamage: DamageApplier | null;
+  /** Combo-scaled damage boost applied to every tick of the skill. */
+  damageMultiplier?: number;
   followPosition?: () => THREE.Vector3;
 }
 
 const SKILL_DAMAGE_KIND: DamageKind = 'skill';
+
+function skillDamage(options: SkillEffectOptions): number {
+  return options.skill.damage * (options.damageMultiplier ?? 1);
+}
 
 export interface EffectSystem {
   update(deltaSeconds: number): void;
@@ -169,7 +175,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
     options.applyDamage?.(
       options.origin,
       options.skill.radius,
-      options.skill.damage,
+      skillDamage(options),
       options.element,
       SKILL_DAMAGE_KIND
     );
@@ -212,7 +218,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
           options.applyDamage?.(
             { x: center.x, y: center.y + 1, z: center.z },
             options.skill.radius,
-            options.skill.damage,
+            skillDamage(options),
             options.element,
             SKILL_DAMAGE_KIND
           );
@@ -233,7 +239,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
         origin: options.origin,
         direction: { x: Math.sin(angle), z: Math.cos(angle) },
         speed: options.skill.projectileSpeed,
-        damage: options.skill.damage,
+        damage: skillDamage(options),
         element: options.element,
         hitRadius: options.skill.radius,
         applyDamage: options.applyDamage,
@@ -276,7 +282,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
         origin: options.origin,
         direction: options.direction,
         speed: options.skill.projectileSpeed,
-        damage: options.skill.damage,
+        damage: skillDamage(options),
         element: options.element,
         hitRadius: options.skill.radius,
         applyDamage: options.applyDamage,
@@ -288,7 +294,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
     options.applyDamage?.(
       options.origin,
       options.skill.radius,
-      options.skill.damage,
+      skillDamage(options),
       options.element,
       SKILL_DAMAGE_KIND
     );

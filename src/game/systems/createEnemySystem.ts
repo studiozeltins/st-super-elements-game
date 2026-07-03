@@ -44,6 +44,8 @@ interface Enemy {
   auraElement: ElementId | null;
   auraExpiresAt: number;
   reactionFlashUntil: number;
+  reactionColorA: number;
+  reactionColorB: number;
   frozenUntil: number;
   nextContactHitAt: number;
   respawnAt: number;
@@ -147,6 +149,8 @@ export function createEnemySystem(
         auraElement: null,
         auraExpiresAt: 0,
         reactionFlashUntil: 0,
+        reactionColorA: 0,
+        reactionColorB: 0,
         frozenUntil: 0,
         nextContactHitAt: 0,
         respawnAt: 0,
@@ -172,29 +176,34 @@ export function createEnemySystem(
     iconMaterial.color.setHex(ELEMENTS[enemy.auraElement].color);
   }
 
-  /** Solid icon = fresh/strong aura, blinking = fading; mixed color on reaction. */
+  /** Solid icon = fresh/strong aura, blinking = fading; both dots on reaction. */
   function updateAuraIcon(enemy: Enemy) {
-    const icon = enemy.model.auraIcon;
-    const iconMaterial = icon.material as THREE.SpriteMaterial;
+    const auraMaterial = enemy.model.auraIcon.material as THREE.SpriteMaterial;
+    const reactionMaterial = enemy.model.reactionIcon.material as THREE.SpriteMaterial;
 
+    // While mixing, show both element dots (existing aura + incoming element).
     if (elapsedSeconds < enemy.reactionFlashUntil) {
-      icon.visible = true;
-      iconMaterial.opacity = 1;
-      icon.scale.set(0.6, 0.6, 1); // pops bigger while the elements mix
+      enemy.model.auraIcon.visible = true;
+      auraMaterial.color.setHex(enemy.reactionColorA);
+      auraMaterial.opacity = 1;
+      enemy.model.reactionIcon.visible = true;
+      reactionMaterial.color.setHex(enemy.reactionColorB);
+      reactionMaterial.opacity = 1;
       return;
     }
+
+    enemy.model.reactionIcon.visible = false;
     if (!enemy.auraElement) {
-      icon.visible = false;
+      enemy.model.auraIcon.visible = false;
       return;
     }
-    icon.visible = true;
-    icon.scale.set(0.42, 0.42, 1);
+    enemy.model.auraIcon.visible = true;
+    auraMaterial.color.setHex(ELEMENTS[enemy.auraElement].color);
     const remainingFraction = (enemy.auraExpiresAt - elapsedSeconds) / AURA_DURATION_SECONDS;
-    if (remainingFraction > AURA_STRONG_FRACTION) {
-      iconMaterial.opacity = 1;
-      return;
-    }
-    iconMaterial.opacity = 0.35 + Math.abs(Math.sin(elapsedSeconds * 9)) * 0.65;
+    auraMaterial.opacity =
+      remainingFraction > AURA_STRONG_FRACTION
+        ? 1
+        : 0.35 + Math.abs(Math.sin(elapsedSeconds * 9)) * 0.65;
   }
 
   function killEnemy(enemy: Enemy) {
@@ -217,6 +226,7 @@ export function createEnemySystem(
     enemy.auraElement = null;
     enemy.reactionFlashUntil = 0;
     enemy.model.auraIcon.visible = false;
+    enemy.model.reactionIcon.visible = false;
     enemy.frozenUntil = 0;
     enemy.model.group.position.copy(spawnPositionNearHome(enemy));
     refreshAuraVisual(enemy);
@@ -236,11 +246,12 @@ export function createEnemySystem(
       return { finalDamage: damage, reacted: false, reactionColor: null };
     }
 
-    // Second element mixes with the aura: consume it, flash the mixed color,
-    // and deal bonus reaction damage.
+    // Second element mixes with the aura: show both element dots for the flash,
+    // consume the aura, and deal bonus reaction damage.
+    enemy.reactionColorA = ELEMENTS[enemy.auraElement].color;
+    enemy.reactionColorB = ELEMENTS[element].color;
     enemy.auraElement = null;
     enemy.reactionFlashUntil = elapsedSeconds + REACTION_FLASH_SECONDS;
-    (enemy.model.auraIcon.material as THREE.SpriteMaterial).color.setHex(reaction.color);
     refreshAuraVisual(enemy);
     if (reaction.freezes) enemy.frozenUntil = elapsedSeconds + FREEZE_DURATION_SECONDS;
     effectSystem.spawnBurst(

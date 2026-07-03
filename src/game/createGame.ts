@@ -23,12 +23,12 @@ import { createEffectSystem, type DamageApplier } from './systems/createEffectSy
 import { createEnemySystem } from './systems/createEnemySystem';
 import { createDamageNumbers } from './systems/createDamageNumbers';
 import {
-  comboProfile,
-  nextComboStep,
-  COMBO_CONTINUE_WINDOW_SECONDS,
+  comboWindowSeconds,
+  regularAttackMultiplier,
+  skillAttackMultiplier,
+  swingProfile,
   COMBO_INPUT_COOLDOWN_SECONDS,
-  MAX_COMBO_STEP,
-  type ComboProfile,
+  type SwingProfile,
 } from './combat/comboSystem';
 import type { DamageKind } from './combat/damageKind';
 import type { Player, SkillCast } from '../module_bindings/types';
@@ -37,8 +37,8 @@ export interface HudState {
   attackCooldownFraction: number;
   skillCooldownFraction: number;
   inSafeZone: boolean;
-  comboStep: number;
-  maxComboStep: number;
+  /** Current hit combo (0 = none); unbounded, only rises on landed hits. */
+  combo: number;
 }
 
 export interface GameNetworkActions {
@@ -139,8 +139,10 @@ export function createGame(
   let elapsedSeconds = 0;
   let positionSyncTimer = 0;
   let healTimer = 0;
-  let comboStep = 0;
+  let combo = 0;
+  let lastComboHitAt = -Infinity;
   let lastSwingAt = -Infinity;
+  let swingIndex = 0;
   const skillReadyAtByCharacter = new Map<string, number>();
   const remotePlayers = new Map<string, RemotePlayerView>();
   let animationFrameHandle = 0;
@@ -153,8 +155,17 @@ export function createGame(
   const applyLocalDamage: DamageApplier = (center, radius, damage, element, kind) => {
     const hitEnemy = enemySystem.applyDamageInRadius(center, radius, damage, element, kind);
     const hitPlayer = applyPvpDamage(center, radius, damage, kind);
+    // The combo only climbs when an attack actually lands (once per attack,
+    // even if it struck several targets). Fired here so deferred projectile
+    // and channeled skill hits count at their true impact time.
+    if (hitEnemy || hitPlayer) registerComboHit();
     return hitEnemy || hitPlayer;
   };
+
+  function registerComboHit() {
+    combo++;
+    lastComboHitAt = elapsedSeconds;
+  }
 
   function applyPvpDamage(
     center: { x: number; y: number; z: number },
@@ -224,31 +235,32 @@ export function createGame(
   const CRIT_MULTIPLIER = 1.9;
 
   /** Client-only visual crit roll (no shared state, so plain randomness is fine). */
-  function rollDamage(baseDamage: number, profile: ComboProfile): { amount: number; kind: DamageKind } {
-    const comboDamage = baseDamage * profile.damageMultiplier;
+  function rollDamage(baseDamage: number): { amount: number; kind: DamageKind } {
     if (Math.random() < CRIT_CHANCE) {
-      return { amount: comboDamage * CRIT_MULTIPLIER, kind: 'crit' };
+      return { amount: baseDamage * CRIT_MULTIPLIER, kind: 'crit' };
     }
-    return { amount: comboDamage, kind: 'normal' };
+    return { amount: baseDamage, kind: 'normal' };
   }
 
   function performAttack() {
-    // Each click advances the combo; deeper steps swing bigger and hit harder,
-    // the 10th being the finisher. Rapid clicks are paced by the input cooldown.
+    // Clicks are paced by the input cooldown; the combo itself only rises when
+    // a hit lands (in applyLocalDamage), not per swing.
     if (elapsedSeconds - lastSwingAt < COMBO_INPUT_COOLDOWN_SECONDS) return;
-    comboStep = nextComboStep(comboStep, elapsedSeconds - lastSwingAt);
     lastSwingAt = elapsedSeconds;
-    const profile = comboProfile(comboStep);
+    swingIndex++;
+    const profile = swingProfile(swingIndex, combo);
     playerModel.triggerAttack(profile);
 
     const weapon = WEAPONS[activeCharacter.weapon];
     faceNearestTarget(weapon.range + 3);
     const direction = facingDirection();
     const elementColor = ELEMENTS[activeCharacter.element].color;
-    const { amount, kind } = rollDamage(weapon.damage, profile);
+    // Regular attacks get only a small combo boost — the payoff is the skill.
+    const baseDamage = weapon.damage * regularAttackMultiplier(combo);
+    const { amount, kind } = rollDamage(baseDamage);
 
-    if (profile.isFinisher) {
-      effectSystem.spawnBurst(playerPosition.clone().setY(playerPosition.y + 1), elementColor, 40);
+    if (profile.isFlourish) {
+      effectSystem.spawnBurst(playerPosition.clone().setY(playerPosition.y + 1), elementColor, 30);
     }
 
     if (weapon.isRanged) {
@@ -265,12 +277,10 @@ export function createGame(
       return;
     }
 
-    // Finisher and deeper swings reach a bit further.
-    const reach = weapon.range * (0.6 + profile.step * 0.03);
     const hitCenter = {
-      x: playerPosition.x + direction.x * reach,
+      x: playerPosition.x + direction.x * weapon.range * 0.6,
       y: playerPosition.y + 1,
-      z: playerPosition.z + direction.z * reach,
+      z: playerPosition.z + direction.z * weapon.range * 0.6,
     };
     effectSystem.spawnMeleeSlash(playerPosition, playerRotationY, elementColor);
     applyLocalDamage(hitCenter, weapon.range * 0.75, amount, activeCharacter.element, kind);
@@ -298,6 +308,8 @@ export function createGame(
       origin: playerPosition.clone().setY(playerPosition.y + 1),
       direction,
       applyDamage: applyLocalDamage,
+      // The combo's real payoff: the skill scales strongly and uncapped.
+      damageMultiplier: skillAttackMultiplier(combo),
       followPosition: () => playerPosition,
     });
     network.sendCastSkill(skill.id, playerPosition.x, playerPosition.z, direction.x, direction.z);
@@ -438,8 +450,7 @@ export function createGame(
         Math.min(1, (skillReadyAt - elapsedSeconds) / activeCharacter.skill.cooldownSeconds)
       ),
       inSafeZone: isInsideSafeZone(playerPosition.x, playerPosition.z),
-      comboStep,
-      maxComboStep: MAX_COMBO_STEP,
+      combo,
     });
   }
 
@@ -477,9 +488,9 @@ export function createGame(
     lastFrameTime = frameTime;
     elapsedSeconds += deltaSeconds;
 
-    // Combo lapses once the click window passes (visual reset only).
-    if (comboStep > 0 && elapsedSeconds - lastSwingAt > COMBO_CONTINUE_WINDOW_SECONDS) {
-      comboStep = 0;
+    // Combo drops if the next hit does not land inside the (shrinking) window.
+    if (combo > 0 && elapsedSeconds - lastComboHitAt > comboWindowSeconds(combo)) {
+      combo = 0;
     }
 
     updateLocalPlayer(deltaSeconds);

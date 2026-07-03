@@ -5,8 +5,47 @@ export interface EnemyModel {
   group: THREE.Group;
   body: THREE.Mesh;
   healthBarFill: THREE.Sprite;
-  /** Element status icon above the enemy (solid = strong aura, blink = fading). */
+  /** Standing element aura icon (solid = strong, blink = fading). */
   auraIcon: THREE.Sprite;
+  /** Second dot shown only while a reaction mixes two elements. */
+  reactionIcon: THREE.Sprite;
+}
+
+/** A soft white disc, tinted per-element via the sprite material color. */
+function createCircleTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d')!;
+  ctx.beginPath();
+  ctx.arc(32, 32, 25, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = 'rgba(8, 12, 9, 0.85)';
+  ctx.stroke();
+  const texture = new THREE.CanvasTexture(canvas);
+  return texture;
+}
+
+// Module-lifetime shared disc texture for all element status icons.
+const sharedCircleTexture = createCircleTexture();
+const ICON_WORLD_SIZE = 0.5;
+
+function createStatusIcon(scale: number): THREE.Sprite {
+  const icon = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: sharedCircleTexture,
+      color: 0xffffff,
+      depthTest: false,
+      transparent: true,
+    })
+  );
+  // Counter-scale so the disc is the same on-screen size for any enemy size.
+  const localSize = ICON_WORLD_SIZE / scale;
+  icon.scale.set(localSize, localSize, 1);
+  icon.visible = false;
+  return icon;
 }
 
 // Module-lifetime resources shared across all enemies and system instances.
@@ -110,16 +149,16 @@ export function createEnemyModel(archetype: EnemyArchetype, scale: number): Enem
   const barHeight = archetype.id === 'stoneGolem' ? 2.3 : 1.6;
   const healthBarFill = createHealthBar(group, barHeight);
 
-  const auraIcon = new THREE.Sprite(
-    new THREE.SpriteMaterial({ color: 0xffffff, depthTest: false, transparent: true })
-  );
-  auraIcon.scale.set(0.42, 0.42, 1);
-  auraIcon.position.y = barHeight + 0.4;
-  auraIcon.visible = false;
-  group.add(auraIcon);
+  const iconHeight = barHeight + 0.4;
+  const iconOffset = 0.33 / scale;
+  const auraIcon = createStatusIcon(scale);
+  auraIcon.position.set(0, iconHeight, 0);
+  const reactionIcon = createStatusIcon(scale);
+  reactionIcon.position.set(iconOffset * 2, iconHeight, 0);
+  group.add(auraIcon, reactionIcon);
 
   group.scale.setScalar(scale);
-  return { group, body, healthBarFill, auraIcon };
+  return { group, body, healthBarFill, auraIcon, reactionIcon };
 }
 
 export function disposeEnemyModel(model: EnemyModel) {
