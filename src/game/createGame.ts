@@ -21,12 +21,24 @@ import { createCharacterModel, createNameSprite, type CharacterModel } from './e
 import { createInputSystem } from './systems/createInputSystem';
 import { createEffectSystem, type DamageApplier } from './systems/createEffectSystem';
 import { createEnemySystem } from './systems/createEnemySystem';
+import { createDamageNumbers } from './systems/createDamageNumbers';
+import {
+  comboProfile,
+  nextComboStep,
+  COMBO_CONTINUE_WINDOW_SECONDS,
+  COMBO_INPUT_COOLDOWN_SECONDS,
+  MAX_COMBO_STEP,
+  type ComboProfile,
+} from './combat/comboSystem';
+import type { DamageKind } from './combat/damageKind';
 import type { Player, SkillCast } from '../module_bindings/types';
 
 export interface HudState {
   attackCooldownFraction: number;
   skillCooldownFraction: number;
   inSafeZone: boolean;
+  comboStep: number;
+  maxComboStep: number;
 }
 
 export interface GameNetworkActions {
@@ -104,8 +116,13 @@ export function createGame(
   const pixelRenderer = createPixelRenderer(canvas);
   const world = createMondstadtWorld(scene);
   const effectSystem = createEffectSystem(scene);
-  const enemySystem = createEnemySystem(scene, effectSystem, world.getGroundHeight, rewardTier =>
-    network.sendKillReward(rewardTier)
+  const damageNumbers = createDamageNumbers(scene);
+  const enemySystem = createEnemySystem(
+    scene,
+    effectSystem,
+    world.getGroundHeight,
+    rewardTier => network.sendKillReward(rewardTier),
+    (position, amount, kind, color) => damageNumbers.spawn(position, amount, kind, color)
   );
   const inputSystem = createInputSystem(canvas);
 
@@ -122,7 +139,8 @@ export function createGame(
   let elapsedSeconds = 0;
   let positionSyncTimer = 0;
   let healTimer = 0;
-  let attackReadyAt = 0;
+  let comboStep = 0;
+  let lastSwingAt = -Infinity;
   const skillReadyAtByCharacter = new Map<string, number>();
   const remotePlayers = new Map<string, RemotePlayerView>();
   let animationFrameHandle = 0;
@@ -132,16 +150,17 @@ export function createGame(
   let fallPeakY = 0;
   let hasReportedVoidDeath = false;
 
-  const applyLocalDamage: DamageApplier = (center, radius, damage, element) => {
-    const hitEnemy = enemySystem.applyDamageInRadius(center, radius, damage, element);
-    const hitPlayer = applyPvpDamage(center, radius, damage);
+  const applyLocalDamage: DamageApplier = (center, radius, damage, element, kind) => {
+    const hitEnemy = enemySystem.applyDamageInRadius(center, radius, damage, element, kind);
+    const hitPlayer = applyPvpDamage(center, radius, damage, kind);
     return hitEnemy || hitPlayer;
   };
 
   function applyPvpDamage(
     center: { x: number; y: number; z: number },
     radius: number,
-    damage: number
+    damage: number,
+    kind: DamageKind
   ): boolean {
     if (isInsideSafeZone(playerPosition.x, playerPosition.z)) return false;
     let hitSomeone = false;
@@ -157,6 +176,7 @@ export function createGame(
       hitSomeone = true;
       network.sendAttackPlayer(remotePlayer.row, Math.round(damage));
       effectSystem.spawnBurst(remotePosition.clone().setY(1.2), 0xff4a4a, 14);
+      damageNumbers.spawn(remotePosition.clone().setY(remotePosition.y + 1), damage, kind);
     }
     return hitSomeone;
   }
@@ -200,34 +220,60 @@ export function createGame(
     return nearestPosition;
   }
 
+  const CRIT_CHANCE = 0.22;
+  const CRIT_MULTIPLIER = 1.9;
+
+  /** Client-only visual crit roll (no shared state, so plain randomness is fine). */
+  function rollDamage(baseDamage: number, profile: ComboProfile): { amount: number; kind: DamageKind } {
+    const comboDamage = baseDamage * profile.damageMultiplier;
+    if (Math.random() < CRIT_CHANCE) {
+      return { amount: comboDamage * CRIT_MULTIPLIER, kind: 'crit' };
+    }
+    return { amount: comboDamage, kind: 'normal' };
+  }
+
   function performAttack() {
+    // Each click advances the combo; deeper steps swing bigger and hit harder,
+    // the 10th being the finisher. Rapid clicks are paced by the input cooldown.
+    if (elapsedSeconds - lastSwingAt < COMBO_INPUT_COOLDOWN_SECONDS) return;
+    comboStep = nextComboStep(comboStep, elapsedSeconds - lastSwingAt);
+    lastSwingAt = elapsedSeconds;
+    const profile = comboProfile(comboStep);
+    playerModel.triggerAttack(profile);
+
     const weapon = WEAPONS[activeCharacter.weapon];
-    if (elapsedSeconds < attackReadyAt) return;
-    attackReadyAt = elapsedSeconds + weapon.cooldownSeconds;
     faceNearestTarget(weapon.range + 3);
     const direction = facingDirection();
     const elementColor = ELEMENTS[activeCharacter.element].color;
+    const { amount, kind } = rollDamage(weapon.damage, profile);
+
+    if (profile.isFinisher) {
+      effectSystem.spawnBurst(playerPosition.clone().setY(playerPosition.y + 1), elementColor, 40);
+    }
 
     if (weapon.isRanged) {
       effectSystem.spawnProjectile({
         origin: playerPosition.clone().setY(playerPosition.y + 1.2),
         direction,
         speed: weapon.projectileSpeed,
-        damage: weapon.damage,
+        damage: amount,
         element: activeCharacter.element,
         hitRadius: 0.9,
         applyDamage: applyLocalDamage,
+        damageKind: kind,
       });
       return;
     }
 
+    // Finisher and deeper swings reach a bit further.
+    const reach = weapon.range * (0.6 + profile.step * 0.03);
     const hitCenter = {
-      x: playerPosition.x + direction.x * weapon.range * 0.6,
+      x: playerPosition.x + direction.x * reach,
       y: playerPosition.y + 1,
-      z: playerPosition.z + direction.z * weapon.range * 0.6,
+      z: playerPosition.z + direction.z * reach,
     };
     effectSystem.spawnMeleeSlash(playerPosition, playerRotationY, elementColor);
-    applyLocalDamage(hitCenter, weapon.range * 0.75, weapon.damage, activeCharacter.element);
+    applyLocalDamage(hitCenter, weapon.range * 0.75, amount, activeCharacter.element, kind);
   }
 
   function performSkill() {
@@ -324,14 +370,14 @@ export function createGame(
       network.sendFallToDeath();
     }
 
-    if (inputSystem.isAttackHeld()) performAttack();
+    while (inputSystem.consumeAttackClick()) performAttack();
     if (inputSystem.consumeSkill()) performSkill();
     const requestedSlot = inputSystem.consumePartySlot();
     if (requestedSlot !== null) game.onPartySlotRequested?.(requestedSlot);
 
     playerModel.group.position.copy(playerPosition);
     playerModel.group.rotation.y = playerRotationY;
-    playerModel.animate(elapsedSeconds, isMoving);
+    playerModel.animate(elapsedSeconds, deltaSeconds, isMoving);
   }
 
   function syncPositionToServer(deltaSeconds: number) {
@@ -366,7 +412,7 @@ export function createGame(
       group.position.lerp(remotePlayer.targetPosition, lerpFactor);
       group.rotation.y = remotePlayer.targetRotationY;
       const isMoving = group.position.distanceTo(remotePlayer.targetPosition) > 0.1;
-      remotePlayer.model.animate(elapsedSeconds, isMoving);
+      remotePlayer.model.animate(elapsedSeconds, deltaSeconds, isMoving);
     }
   }
 
@@ -377,18 +423,19 @@ export function createGame(
   }
 
   function pushHudState() {
-    const weapon = WEAPONS[activeCharacter.weapon];
     const skillReadyAt = skillReadyAtByCharacter.get(activeCharacter.id) ?? 0;
     onHudChange({
       attackCooldownFraction: Math.max(
         0,
-        Math.min(1, (attackReadyAt - elapsedSeconds) / weapon.cooldownSeconds)
+        Math.min(1, (lastSwingAt + COMBO_INPUT_COOLDOWN_SECONDS - elapsedSeconds) / COMBO_INPUT_COOLDOWN_SECONDS)
       ),
       skillCooldownFraction: Math.max(
         0,
         Math.min(1, (skillReadyAt - elapsedSeconds) / activeCharacter.skill.cooldownSeconds)
       ),
       inSafeZone: isInsideSafeZone(playerPosition.x, playerPosition.z),
+      comboStep,
+      maxComboStep: MAX_COMBO_STEP,
     });
   }
 
@@ -426,10 +473,16 @@ export function createGame(
     lastFrameTime = frameTime;
     elapsedSeconds += deltaSeconds;
 
+    // Combo lapses once the click window passes (visual reset only).
+    if (comboStep > 0 && elapsedSeconds - lastSwingAt > COMBO_CONTINUE_WINDOW_SECONDS) {
+      comboStep = 0;
+    }
+
     updateLocalPlayer(deltaSeconds);
     enemySystem.update(deltaSeconds, playerPosition, damage => network.sendTakeDamage(damage));
     resolveAllCollisions();
     effectSystem.update(deltaSeconds);
+    damageNumbers.update(deltaSeconds);
     world.update(deltaSeconds);
     updateRemotePlayerViews(deltaSeconds);
     updateCamera(deltaSeconds);
@@ -461,6 +514,7 @@ export function createGame(
       cancelAnimationFrame(animationFrameHandle);
       inputSystem.dispose();
       effectSystem.dispose();
+      damageNumbers.dispose();
       enemySystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);

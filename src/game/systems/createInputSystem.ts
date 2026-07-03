@@ -1,6 +1,8 @@
 export interface InputSystem {
   getMoveVector(): { x: number; z: number };
   isAttackHeld(): boolean;
+  /** One queued attack press (edge-triggered), for combo counting. */
+  consumeAttackClick(): boolean;
   consumeJump(): boolean;
   consumeSkill(): boolean;
   consumePartySlot(): number | null;
@@ -30,12 +32,14 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
   let skillQueued = false;
   let partySlotQueued: number | null = null;
   let mouseAttackHeld = false;
+  let attackClicksQueued = 0;
   let isEnabled = true;
 
   function handleKeyDown(event: KeyboardEvent) {
     if (!isEnabled || event.repeat) return;
     pressedKeys.add(event.code);
     if (event.code === 'Space') jumpQueued = true;
+    if (event.code === 'KeyJ') attackClicksQueued++;
     if (event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'KeyK') {
       skillQueued = true;
     }
@@ -49,7 +53,10 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
 
   function handlePointerDown(event: PointerEvent) {
     if (!isEnabled) return;
-    if (event.pointerType === 'mouse' && event.button === 0) mouseAttackHeld = true;
+    if (event.pointerType === 'mouse' && event.button === 0) {
+      mouseAttackHeld = true;
+      attackClicksQueued++;
+    }
   }
 
   function handlePointerUp() {
@@ -77,6 +84,11 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
     isAttackHeld() {
       return mouseAttackHeld || touchAttackHeld || pressedKeys.has('KeyJ');
     },
+    consumeAttackClick() {
+      if (attackClicksQueued <= 0) return false;
+      attackClicksQueued--;
+      return true;
+    },
     consumeJump() {
       const wasQueued = jumpQueued;
       jumpQueued = false;
@@ -97,7 +109,10 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
       touchMove.z = z;
     },
     pressTouchButton(button) {
-      if (button === 'attack') touchAttackHeld = true;
+      if (button === 'attack') {
+        touchAttackHeld = true;
+        attackClicksQueued++;
+      }
       if (button === 'skill') skillQueued = true;
       if (button === 'jump') jumpQueued = true;
     },
@@ -112,6 +127,7 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
       touchMove.z = 0;
       touchAttackHeld = false;
       mouseAttackHeld = false;
+      attackClicksQueued = 0;
       jumpQueued = false;
       skillQueued = false;
       partySlotQueued = null;

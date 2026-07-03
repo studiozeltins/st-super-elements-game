@@ -13,7 +13,22 @@ import type { CollisionBody } from '../physics/resolveCollisions';
 import { createEnemyModel, disposeEnemyModel, type EnemyModel } from '../entities/createEnemyModel';
 import { getCampSites } from '../world/camps';
 import { createSeededRandom } from '../world/rng';
+import type { DamageKind } from '../combat/damageKind';
 import type { EffectSystem } from './createEffectSystem';
+
+/** Reports a damage instance so the caller can spawn a floating number. */
+export type DamageReporter = (
+  worldPosition: THREE.Vector3,
+  amount: number,
+  kind: DamageKind,
+  color?: number
+) => void;
+
+interface ElementalHitResult {
+  finalDamage: number;
+  reacted: boolean;
+  reactionColor: number | null;
+}
 
 interface Enemy {
   model: EnemyModel;
@@ -28,6 +43,7 @@ interface Enemy {
   contactDamage: number;
   auraElement: ElementId | null;
   auraExpiresAt: number;
+  reactionFlashUntil: number;
   frozenUntil: number;
   nextContactHitAt: number;
   respawnAt: number;
@@ -44,7 +60,8 @@ export interface EnemySystem {
     center: { x: number; y: number; z: number },
     radius: number,
     damage: number,
-    element: ElementId
+    element: ElementId,
+    kind: DamageKind
   ): boolean;
   getAlivePositions(): THREE.Vector3[];
   /** Appends live pushable bodies (position refs) into the shared, reused array. */
@@ -58,6 +75,9 @@ const ENEMY_LEASH_RANGE = 22;
 const ENEMY_CONTACT_RANGE = 1.4;
 const ENEMY_CONTACT_COOLDOWN_SECONDS = 1;
 const AURA_DURATION_SECONDS = 8;
+/** Above this remaining-fraction the aura icon is solid; below it blinks. */
+const AURA_STRONG_FRACTION = 0.5;
+const REACTION_FLASH_SECONDS = 0.7;
 const FREEZE_DURATION_SECONDS = 2;
 const RESPAWN_DELAY_SECONDS = 6;
 const SPAWN_SCATTER_RADIUS = 3;
@@ -82,7 +102,8 @@ export function createEnemySystem(
   scene: THREE.Scene,
   effectSystem: EffectSystem,
   getGroundHeight: (x: number, z: number, maxSurfaceY?: number) => number,
-  onEnemyKilled: (rewardTier: number) => void
+  onEnemyKilled: (rewardTier: number) => void,
+  reportDamage: DamageReporter
 ): EnemySystem {
   let elapsedSeconds = 0;
   const enemies: Enemy[] = [];
@@ -125,6 +146,7 @@ export function createEnemySystem(
         ),
         auraElement: null,
         auraExpiresAt: 0,
+        reactionFlashUntil: 0,
         frozenUntil: 0,
         nextContactHitAt: 0,
         respawnAt: 0,
@@ -146,6 +168,33 @@ export function createEnemySystem(
     }
     material.emissive.setHex(ELEMENTS[enemy.auraElement].color);
     material.emissiveIntensity = 0.55;
+    const iconMaterial = enemy.model.auraIcon.material as THREE.SpriteMaterial;
+    iconMaterial.color.setHex(ELEMENTS[enemy.auraElement].color);
+  }
+
+  /** Solid icon = fresh/strong aura, blinking = fading; mixed color on reaction. */
+  function updateAuraIcon(enemy: Enemy) {
+    const icon = enemy.model.auraIcon;
+    const iconMaterial = icon.material as THREE.SpriteMaterial;
+
+    if (elapsedSeconds < enemy.reactionFlashUntil) {
+      icon.visible = true;
+      iconMaterial.opacity = 1;
+      icon.scale.set(0.6, 0.6, 1); // pops bigger while the elements mix
+      return;
+    }
+    if (!enemy.auraElement) {
+      icon.visible = false;
+      return;
+    }
+    icon.visible = true;
+    icon.scale.set(0.42, 0.42, 1);
+    const remainingFraction = (enemy.auraExpiresAt - elapsedSeconds) / AURA_DURATION_SECONDS;
+    if (remainingFraction > AURA_STRONG_FRACTION) {
+      iconMaterial.opacity = 1;
+      return;
+    }
+    iconMaterial.opacity = 0.35 + Math.abs(Math.sin(elapsedSeconds * 9)) * 0.65;
   }
 
   function killEnemy(enemy: Enemy) {
@@ -166,26 +215,32 @@ export function createEnemySystem(
     enemy.health = enemy.maxHealth;
     enemy.model.healthBarFill.scale.x = 1.2;
     enemy.auraElement = null;
+    enemy.reactionFlashUntil = 0;
+    enemy.model.auraIcon.visible = false;
     enemy.frozenUntil = 0;
     enemy.model.group.position.copy(spawnPositionNearHome(enemy));
     refreshAuraVisual(enemy);
   }
 
-  function applyElementalHit(enemy: Enemy, damage: number, element: ElementId): number {
+  function applyElementalHit(enemy: Enemy, damage: number, element: ElementId): ElementalHitResult {
     if (!enemy.auraElement) {
       enemy.auraElement = element;
       enemy.auraExpiresAt = elapsedSeconds + AURA_DURATION_SECONDS;
       refreshAuraVisual(enemy);
-      return damage;
+      return { finalDamage: damage, reacted: false, reactionColor: null };
     }
 
     const reaction = resolveReaction(enemy.auraElement, element);
     if (!reaction) {
       enemy.auraExpiresAt = elapsedSeconds + AURA_DURATION_SECONDS;
-      return damage;
+      return { finalDamage: damage, reacted: false, reactionColor: null };
     }
 
+    // Second element mixes with the aura: consume it, flash the mixed color,
+    // and deal bonus reaction damage.
     enemy.auraElement = null;
+    enemy.reactionFlashUntil = elapsedSeconds + REACTION_FLASH_SECONDS;
+    (enemy.model.auraIcon.material as THREE.SpriteMaterial).color.setHex(reaction.color);
     refreshAuraVisual(enemy);
     if (reaction.freezes) enemy.frozenUntil = elapsedSeconds + FREEZE_DURATION_SECONDS;
     effectSystem.spawnBurst(
@@ -193,7 +248,11 @@ export function createEnemySystem(
       reaction.color,
       32
     );
-    return damage * reaction.damageMultiplier;
+    return {
+      finalDamage: damage * reaction.damageMultiplier,
+      reacted: true,
+      reactionColor: reaction.color,
+    };
   }
 
   function moveEnemy(enemy: Enemy, playerPosition: THREE.Vector3, deltaSeconds: number): number {
@@ -261,6 +320,7 @@ export function createEnemySystem(
           enemy.auraElement = null;
           refreshAuraVisual(enemy);
         }
+        updateAuraIcon(enemy);
         if (elapsedSeconds < enemy.frozenUntil) continue;
 
         const distanceToPlayer = moveEnemy(enemy, playerPosition, deltaSeconds);
@@ -275,7 +335,7 @@ export function createEnemySystem(
         }
       }
     },
-    applyDamageInRadius(center, radius, damage, element) {
+    applyDamageInRadius(center, radius, damage, element, kind) {
       let hitSomething = false;
       for (const enemy of enemies) {
         if (!enemy.isAlive) continue;
@@ -284,11 +344,17 @@ export function createEnemySystem(
         const distance = Math.hypot(position.x - center.x, position.z - center.z);
         if (distance > radius + 0.75 * enemy.model.group.scale.x) continue;
         hitSomething = true;
-        const finalDamage = applyElementalHit(enemy, damage, element);
-        enemy.health -= finalDamage;
+        const result = applyElementalHit(enemy, damage, element);
+        enemy.health -= result.finalDamage;
         const healthFraction = Math.max(0, enemy.health / enemy.maxHealth);
         enemy.model.healthBarFill.scale.x = 1.2 * healthFraction;
         effectSystem.spawnBurst(position.clone().setY(position.y + 0.9), ELEMENTS[element].color, 10);
+        reportDamage(
+          position.clone().setY(position.y + 1),
+          result.finalDamage,
+          result.reacted ? 'reaction' : kind,
+          result.reactionColor ?? undefined
+        );
         if (enemy.health <= 0) killEnemy(enemy);
       }
       return hitSomething;

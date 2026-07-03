@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ELEMENTS, type ElementId } from '../data/elements';
 import type { SkillDefinition } from '../data/characters';
+import type { DamageKind } from '../combat/damageKind';
 import { disposeObject } from '../engine/disposeObject';
 
 /** Applies damage around a point; returns true when something was hit. */
@@ -8,7 +9,8 @@ export type DamageApplier = (
   center: { x: number; y: number; z: number },
   radius: number,
   damage: number,
-  element: ElementId
+  element: ElementId,
+  kind: DamageKind
 ) => boolean;
 
 interface ActiveEffect {
@@ -25,6 +27,8 @@ export interface SkillEffectOptions {
   followPosition?: () => THREE.Vector3;
 }
 
+const SKILL_DAMAGE_KIND: DamageKind = 'skill';
+
 export interface EffectSystem {
   update(deltaSeconds: number): void;
   spawnBurst(position: THREE.Vector3, color: number, particleCount?: number): void;
@@ -36,6 +40,7 @@ export interface EffectSystem {
     element: ElementId;
     hitRadius: number;
     applyDamage: DamageApplier | null;
+    damageKind: DamageKind;
   }): void;
   spawnMeleeSlash(position: THREE.Vector3, facingAngle: number, color: number): void;
   spawnSkillEffect(options: SkillEffectOptions): void;
@@ -113,6 +118,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
     element: ElementId;
     hitRadius: number;
     applyDamage: DamageApplier | null;
+    damageKind: DamageKind;
   }) {
     const elementColor = ELEMENTS[options.element].color;
     const projectile = new THREE.Mesh(
@@ -135,7 +141,8 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
           projectile.position,
           options.hitRadius,
           options.damage,
-          options.element
+          options.element,
+          options.damageKind
         );
         if (hitSomething) {
           spawnBurst(projectile.position, elementColor);
@@ -163,7 +170,8 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
       options.origin,
       options.skill.radius,
       options.skill.damage,
-      options.element
+      options.element,
+      SKILL_DAMAGE_KIND
     );
     spawnBurst(options.origin, elementColor, 26);
     let ageSeconds = 0;
@@ -205,7 +213,8 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
             { x: center.x, y: center.y + 1, z: center.z },
             options.skill.radius,
             options.skill.damage,
-            options.element
+            options.element,
+            SKILL_DAMAGE_KIND
           );
         }
         return ageSeconds < options.skill.durationSeconds;
@@ -228,6 +237,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
         element: options.element,
         hitRadius: options.skill.radius,
         applyDamage: options.applyDamage,
+        damageKind: SKILL_DAMAGE_KIND,
       });
     }
   }
@@ -270,6 +280,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
         element: options.element,
         hitRadius: options.skill.radius,
         applyDamage: options.applyDamage,
+        damageKind: SKILL_DAMAGE_KIND,
       });
     }
     // 'dash' movement is handled by the caster; show the impact visuals here.
@@ -278,7 +289,8 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
       options.origin,
       options.skill.radius,
       options.skill.damage,
-      options.element
+      options.element,
+      SKILL_DAMAGE_KIND
     );
   }
 

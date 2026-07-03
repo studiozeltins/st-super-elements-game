@@ -14,6 +14,8 @@ const INITIAL_HUD_STATE: HudState = {
   attackCooldownFraction: 0,
   skillCooldownFraction: 0,
   inSafeZone: true,
+  comboStep: 0,
+  maxComboStep: 10,
 };
 
 export default function App() {

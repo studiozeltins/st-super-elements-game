@@ -420,6 +420,58 @@ button {
   color: var(--muted);
 }
 
+/* ---------- Combo counter ---------- */
+
+.hud__combo {
+  position: absolute;
+  top: 24%;
+  right: max(6vw, 40px);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  pointer-events: none;
+  animation: combo-pop 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes combo-pop {
+  from {
+    transform: scale(1.5);
+    opacity: 0.4;
+  }
+}
+
+.hud__combo-count {
+  font: 900 clamp(40px, 8vw, 78px) var(--font-display);
+  line-height: 1;
+  color: var(--gold);
+  text-shadow: 0 3px 0 rgba(8, 12, 9, 0.6);
+}
+
+.hud__combo-label {
+  font: 700 13px var(--font-display);
+  letter-spacing: 0.18em;
+  color: var(--text);
+}
+
+.hud__combo--finisher .hud__combo-count {
+  color: var(--danger);
+  animation: combo-flash 0.4s ease-out;
+}
+
+.hud__combo--finisher .hud__combo-label {
+  color: var(--danger);
+}
+
+@keyframes combo-flash {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(2);
+  }
+}
+
 /* ---------- Gacha ---------- */
 
 .gacha {

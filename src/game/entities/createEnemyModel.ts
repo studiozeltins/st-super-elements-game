@@ -5,6 +5,8 @@ export interface EnemyModel {
   group: THREE.Group;
   body: THREE.Mesh;
   healthBarFill: THREE.Sprite;
+  /** Element status icon above the enemy (solid = strong aura, blink = fading). */
+  auraIcon: THREE.Sprite;
 }
 
 // Module-lifetime resources shared across all enemies and system instances.
@@ -107,8 +109,17 @@ export function createEnemyModel(archetype: EnemyArchetype, scale: number): Enem
 
   const barHeight = archetype.id === 'stoneGolem' ? 2.3 : 1.6;
   const healthBarFill = createHealthBar(group, barHeight);
+
+  const auraIcon = new THREE.Sprite(
+    new THREE.SpriteMaterial({ color: 0xffffff, depthTest: false, transparent: true })
+  );
+  auraIcon.scale.set(0.42, 0.42, 1);
+  auraIcon.position.y = barHeight + 0.4;
+  auraIcon.visible = false;
+  group.add(auraIcon);
+
   group.scale.setScalar(scale);
-  return { group, body, healthBarFill };
+  return { group, body, healthBarFill, auraIcon };
 }
 
 export function disposeEnemyModel(model: EnemyModel) {

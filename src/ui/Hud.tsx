@@ -68,6 +68,20 @@ export function Hud({
         </span>
       </div>
 
+      {hudState.comboStep > 1 && (
+        <div
+          className={`hud__combo ${
+            hudState.comboStep >= hudState.maxComboStep ? 'hud__combo--finisher' : ''
+          }`}
+          key={hudState.comboStep}
+        >
+          <span className="hud__combo-count">{hudState.comboStep}</span>
+          <span className="hud__combo-label">
+            {hudState.comboStep >= hudState.maxComboStep ? 'FINIŠS!' : 'KOMBO'}
+          </span>
+        </div>
+      )}
+
       <div className="hud__top-right">
         <span className="hud__gems">✦ {primogems}</span>
         <button className="hud__chip" onClick={onOpenGacha}>
