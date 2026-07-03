@@ -72,6 +72,8 @@ const DASH_SUBSTEPS = 4;
 const MAX_STEP_UP = 0.9;
 const PVP_HIT_COOLDOWN_SECONDS = 0.3;
 const PVP_MAX_HIT_RANGE = 45; // server MAX_HIT_RANGE
+/** Attacks only connect within this vertical gap — no hitting across cliffs. */
+const VERTICAL_HIT_GATE = 3;
 const POSITION_EPSILON = 0.01;
 const ROTATION_EPSILON = 0.02;
 const SERVER_TELEPORT_THRESHOLD = 20;
@@ -126,7 +128,7 @@ export function createGame(
   };
 
   function applyPvpDamage(
-    center: { x: number; z: number },
+    center: { x: number; y: number; z: number },
     radius: number,
     damage: number
   ): boolean {
@@ -137,6 +139,7 @@ export function createGame(
       if (isInsideSafeZone(remotePosition.x, remotePosition.z)) continue;
       if (elapsedSeconds < remotePlayer.lastPvpHitAt + PVP_HIT_COOLDOWN_SECONDS) continue;
       if (playerPosition.distanceTo(remotePosition) > PVP_MAX_HIT_RANGE) continue;
+      if (Math.abs(remotePosition.y + 1 - center.y) > VERTICAL_HIT_GATE) continue;
       const distance = Math.hypot(remotePosition.x - center.x, remotePosition.z - center.z);
       if (distance > radius + 0.8) continue;
       remotePlayer.lastPvpHitAt = elapsedSeconds;
@@ -209,6 +212,7 @@ export function createGame(
 
     const hitCenter = {
       x: playerPosition.x + direction.x * weapon.range * 0.6,
+      y: playerPosition.y + 1,
       z: playerPosition.z + direction.z * weapon.range * 0.6,
     };
     effectSystem.spawnMeleeSlash(playerPosition, playerRotationY, elementColor);
@@ -320,6 +324,9 @@ export function createGame(
   }
 
   function syncPositionToServer(deltaSeconds: number) {
+    // While void death is pending, stop pushing positions so the server's
+    // respawn row is not dragged back toward the falling client.
+    if (hasReportedVoidDeath) return;
     positionSyncTimer += deltaSeconds;
     if (positionSyncTimer < POSITION_SYNC_INTERVAL_SECONDS) return;
     positionSyncTimer = 0;
@@ -490,7 +497,9 @@ export function createGame(
       const serverPosition = new THREE.Vector3(row.positionX, row.positionY, row.positionZ);
       const isFarFromServer =
         playerPosition.distanceTo(serverPosition) > SERVER_TELEPORT_THRESHOLD;
-      if (wasRespawned || isFarFromServer) {
+      const voidRespawnConfirmed =
+        hasReportedVoidDeath && serverPosition.y >= 0 && playerPosition.y < 0;
+      if (wasRespawned || isFarFromServer || voidRespawnConfirmed) {
         playerPosition.copy(serverPosition);
         playerVelocityY = 0;
         fallPeakY = serverPosition.y;

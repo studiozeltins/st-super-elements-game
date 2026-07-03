@@ -25,6 +25,10 @@ const DUPLICATE_REFUND = 800;
 const KILL_REWARD_PRIMOGEMS = 40;
 const FIVE_STAR_CHANCE = 0.1;
 const WORLD_BOUND = 80;
+// Keep in sync with ISLAND_RADIUS / MOVEMENT_LIMIT in src/game/world/terrain.ts + createGame.ts.
+const ISLAND_RADIUS = 82;
+const MOVEMENT_LIMIT = 87;
+const VOID_DEATH_DEPTH = -10;
 const SAFE_ZONE_RADIUS = 18;
 const SPAWN_X = 6;
 const SPAWN_Z = 6;
@@ -99,7 +103,17 @@ function ownsCharacter(ctx: { db: any; sender: any }, characterId: string) {
 }
 
 function clampToWorld(coordinate: number) {
-  return Math.max(-WORLD_BOUND, Math.min(WORLD_BOUND, coordinate));
+  return Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, coordinate));
+}
+
+function respawnPlayerAtSpawn(ctx: { db: any }, targetPlayer: any) {
+  ctx.db.player.identity.update({
+    ...targetPlayer,
+    currentHealth: MAX_HEALTH,
+    positionX: SPAWN_X,
+    positionY: 0,
+    positionZ: SPAWN_Z,
+  });
 }
 
 function isInsideSafeZone(positionX: number, positionZ: number) {
@@ -157,7 +171,8 @@ export const updatePosition = spacetimedb.reducer(
     ctx.db.player.identity.update({
       ...currentPlayer,
       positionX: clampToWorld(currentPlayer.positionX + stepX * stepScale),
-      positionY: Math.max(0, Math.min(20, positionY)),
+      // Negative Y allowed so the server can witness falls off the island edge.
+      positionY: Math.max(-60, Math.min(20, positionY)),
       positionZ: clampToWorld(currentPlayer.positionZ + stepZ * stepScale),
       rotationY,
     });
@@ -187,14 +202,7 @@ export const attackPlayer = spacetimedb.reducer(
       ctx.db.player.identity.update({ ...target, currentHealth: remainingHealth });
       return;
     }
-
-    ctx.db.player.identity.update({
-      ...target,
-      currentHealth: MAX_HEALTH,
-      positionX: SPAWN_X,
-      positionY: 0,
-      positionZ: SPAWN_Z,
-    });
+    respawnPlayerAtSpawn(ctx, target);
   }
 );
 
@@ -246,26 +254,17 @@ export const takeDamage = spacetimedb.reducer(
       ctx.db.player.identity.update({ ...currentPlayer, currentHealth: remainingHealth });
       return;
     }
-
-    ctx.db.player.identity.update({
-      ...currentPlayer,
-      currentHealth: MAX_HEALTH,
-      positionX: SPAWN_X,
-      positionY: 0,
-      positionZ: SPAWN_Z,
-    });
+    respawnPlayerAtSpawn(ctx, currentPlayer);
   }
 );
 
 export const fallToDeath = spacetimedb.reducer(ctx => {
   const currentPlayer = requirePlayer(ctx);
-  ctx.db.player.identity.update({
-    ...currentPlayer,
-    currentHealth: MAX_HEALTH,
-    positionX: SPAWN_X,
-    positionY: 0,
-    positionZ: SPAWN_Z,
-  });
+  const isOffIsland =
+    Math.hypot(currentPlayer.positionX, currentPlayer.positionZ) > ISLAND_RADIUS ||
+    currentPlayer.positionY < VOID_DEATH_DEPTH;
+  if (!isOffIsland) throw new SenderError('Not falling off the island');
+  respawnPlayerAtSpawn(ctx, currentPlayer);
 });
 
 export const grantKillReward = spacetimedb.reducer(ctx => {

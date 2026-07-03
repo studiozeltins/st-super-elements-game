@@ -73,8 +73,8 @@ export function getTerrainHeight(x: number, z: number): number {
   return islandHeight + (VOID_DEPTH - islandHeight) * edgeFactor;
 }
 
-function terrainSlope(x: number, z: number): number {
-  const sampleStep = 0.8;
+/** Average gradient magnitude — shared by cliff coloring and prop placement. */
+export function getTerrainSlope(x: number, z: number, sampleStep = 1): number {
   const heightEast = getTerrainHeight(x + sampleStep, z);
   const heightWest = getTerrainHeight(x - sampleStep, z);
   const heightSouth = getTerrainHeight(x, z + sampleStep);
@@ -85,7 +85,7 @@ function terrainSlope(x: number, z: number): number {
 }
 
 function vertexColorAt(x: number, z: number, height: number): THREE.Color {
-  if (terrainSlope(x, z) > 0.85) return CLIFF_COLOR.clone();
+  if (getTerrainSlope(x, z) > 0.85) return CLIFF_COLOR.clone();
   const tintNoise = valueNoise(x * 0.25, z * 0.25, TERRAIN_SEED ^ 0xc2b2ae35);
   const heightFraction = Math.min(1, height / (MAX_HILL_HEIGHT * 0.7));
   const grassColor = GRASS_LOW.clone().lerp(GRASS_HIGH, heightFraction);
@@ -114,7 +114,7 @@ export function createTerrainMesh(): THREE.Mesh {
     colors[vertexIndex * 3 + 2] = color.b;
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geometry.computeVertexNormals();
+  // No computeVertexNormals: flatShading derives face normals in the shader.
 
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const terrainMesh = new THREE.Mesh(geometry, material);

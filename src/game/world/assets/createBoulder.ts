@@ -14,6 +14,7 @@ export function createBoulder(random: SeededRandom): WorldAsset {
 
   let stackTopHeight = 0;
   let radius = baseRadius;
+  let topChunkRadius = baseRadius;
   for (let index = 0; index < chunkCount; index += 1) {
     const isTopChunk = index === chunkCount - 1;
     const color = isTopChunk ? SLATE_LIGHT : facetColors[index % facetColors.length];
@@ -30,12 +31,14 @@ export function createBoulder(random: SeededRandom): WorldAsset {
     group.add(chunk);
 
     stackTopHeight = chunk.position.y + halfHeight * 0.8;
+    topChunkRadius = radius;
     radius *= randomBetween(random, 0.6, 0.8);
   }
 
   return {
     group,
-    platformRadius: baseRadius * 0.8,
+    // Standable area is the TOP chunk, not the base — otherwise players float.
+    platformRadius: topChunkRadius * 0.8,
     platformTopHeight: stackTopHeight,
   };
 }

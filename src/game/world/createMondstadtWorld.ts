@@ -2,13 +2,15 @@ import * as THREE from 'three';
 import { disposeObject } from '../engine/disposeObject';
 import { SAFE_ZONE_RADIUS, WORLD_BOUND } from '../data/constants';
 import { createSeededRandom } from './rng';
-import { createTerrainMesh, getTerrainHeight } from './terrain';
+import { createTerrainMesh, getTerrainHeight, getTerrainSlope } from './terrain';
 import { getCampSites } from './camps';
 import {
   createBoulder,
   createBush,
   createCampfire,
   createCanopyTree,
+  createFlower,
+  createGrassTuft,
   createMushroom,
   createPalmTree,
   createRockSpire,
@@ -211,17 +213,6 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
   const random = createSeededRandom(WORLD_DECOR_SEED);
   const platforms: Platform[] = [];
 
-  function terrainSlopeAt(x: number, z: number): number {
-    const step = 1;
-    return (
-      Math.hypot(
-        getTerrainHeight(x + step, z) - getTerrainHeight(x - step, z),
-        getTerrainHeight(x, z + step) - getTerrainHeight(x, z - step)
-      ) /
-      (2 * step)
-    );
-  }
-
   function placeAsset(asset: WorldAsset, x: number, z: number) {
     const groundY = getTerrainHeight(x, z);
     asset.group.position.set(x, groundY, z);
@@ -245,7 +236,7 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
       const distance = rule.minRadius + random() * (WORLD_BOUND - 6 - rule.minRadius);
       const x = Math.cos(angle) * distance;
       const z = Math.sin(angle) * distance;
-      if (terrainSlopeAt(x, z) > rule.maxSlope) continue;
+      if (getTerrainSlope(x, z) > rule.maxSlope) continue;
       placeAsset(rule.create(random), x, z);
       placed++;
     }
@@ -272,6 +263,8 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     { create: createPalmTree, count: 14, minRadius: SAFE_ZONE_RADIUS + 4, maxSlope: 0.4 },
     { create: createBush, count: 24, minRadius: SAFE_ZONE_RADIUS + 2, maxSlope: 0.6 },
     { create: createMushroom, count: 12, minRadius: SAFE_ZONE_RADIUS + 4, maxSlope: 0.6 },
+    { create: createFlower, count: 16, minRadius: SAFE_ZONE_RADIUS + 1, maxSlope: 0.5 },
+    { create: createGrassTuft, count: 20, minRadius: SAFE_ZONE_RADIUS + 1, maxSlope: 0.5 },
   ];
   for (const rule of scatterRules) scatterAssets(rule);
 

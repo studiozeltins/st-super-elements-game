@@ -5,7 +5,7 @@ import { disposeObject } from '../engine/disposeObject';
 
 /** Applies damage around a point; returns true when something was hit. */
 export type DamageApplier = (
-  center: { x: number; z: number },
+  center: { x: number; y: number; z: number },
   radius: number,
   damage: number,
   element: ElementId
@@ -132,7 +132,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
         projectile.position.addScaledVector(velocity, deltaSeconds);
         projectile.rotation.y += deltaSeconds * 10;
         const hitSomething = options.applyDamage?.(
-          { x: projectile.position.x, z: projectile.position.z },
+          projectile.position,
           options.hitRadius,
           options.damage,
           options.element
@@ -158,9 +158,9 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
       })
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.set(options.origin.x, 0.15, options.origin.z);
+    ring.position.set(options.origin.x, options.origin.y - 0.85, options.origin.z);
     options.applyDamage?.(
-      { x: options.origin.x, z: options.origin.z },
+      options.origin,
       options.skill.radius,
       options.skill.damage,
       options.element
@@ -194,11 +194,15 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
       update(deltaSeconds) {
         ageSeconds += deltaSeconds;
         const center = options.followPosition?.() ?? options.origin;
-        torus.position.set(center.x, 0.4 + Math.sin(ageSeconds * 4) * 0.15, center.z);
+        torus.position.set(
+          center.x,
+          center.y + 0.4 + Math.sin(ageSeconds * 4) * 0.15,
+          center.z
+        );
         if (ageSeconds >= nextTickSeconds) {
           nextTickSeconds += RING_TICK_SECONDS;
           options.applyDamage?.(
-            { x: center.x, z: center.z },
+            { x: center.x, y: center.y + 1, z: center.z },
             options.skill.radius,
             options.skill.damage,
             options.element
@@ -271,7 +275,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
     // 'dash' movement is handled by the caster; show the impact visuals here.
     spawnBurst(options.origin, ELEMENTS[options.element].color, 24);
     options.applyDamage?.(
-      { x: options.origin.x, z: options.origin.z },
+      options.origin,
       options.skill.radius,
       options.skill.damage,
       options.element

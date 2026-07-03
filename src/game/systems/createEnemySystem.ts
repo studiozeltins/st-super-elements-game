@@ -30,7 +30,7 @@ export interface EnemySystem {
     onPlayerHit: (damage: number) => void
   ): void;
   applyDamageInRadius(
-    center: { x: number; z: number },
+    center: { x: number; y: number; z: number },
     radius: number,
     damage: number,
     element: ElementId
@@ -54,11 +54,18 @@ const AURA_DURATION_SECONDS = 8;
 const FREEZE_DURATION_SECONDS = 2;
 const RESPAWN_DELAY_SECONDS = 6;
 const SPAWN_SCATTER_RADIUS = 3;
+/** Attacks only connect within this vertical gap — no hitting across cliffs. */
+const VERTICAL_HIT_GATE = 3;
 
-// Shared across all enemies — allocated once, disposed with the system.
+// Module-lifetime resources shared across all enemies and system instances.
 const sharedBodyGeometry = new THREE.SphereGeometry(0.75, 10, 8);
 const sharedEyeGeometry = new THREE.SphereGeometry(0.09, 6, 6);
 const sharedEyeMaterial = new THREE.MeshBasicMaterial({ color: 0x101410 });
+
+// Per-frame scratch vectors — avoids ~10k allocations/second in moveEnemy.
+const scratchToPlayer = new THREE.Vector3();
+const scratchMoveDirection = new THREE.Vector3();
+const scratchHomeTarget = new THREE.Vector3();
 
 function createHealthBar(group: THREE.Group): THREE.Sprite {
   const background = new THREE.Sprite(
@@ -160,6 +167,7 @@ export function createEnemySystem(
     enemy.isAlive = true;
     enemy.group.visible = true;
     enemy.health = enemy.maxHealth;
+    enemy.healthBarFill.scale.x = 1.2;
     enemy.auraElement = null;
     enemy.frozenUntil = 0;
     enemy.group.position.copy(spawnPositionNearHome(enemy));
@@ -189,9 +197,9 @@ export function createEnemySystem(
 
   function moveEnemy(enemy: Enemy, playerPosition: THREE.Vector3, deltaSeconds: number): number {
     const position = enemy.group.position;
-    const toPlayer = new THREE.Vector3().subVectors(playerPosition, position);
-    toPlayer.y = 0;
-    const distanceToPlayer = toPlayer.length();
+    scratchToPlayer.subVectors(playerPosition, position);
+    scratchToPlayer.y = 0;
+    const distanceToPlayer = scratchToPlayer.length();
     const distanceFromHome = Math.hypot(position.x - enemy.homeX, position.z - enemy.homeZ);
     const playerInSafeZone = Math.hypot(playerPosition.x, playerPosition.z) <= SAFE_ZONE_RADIUS;
 
@@ -204,15 +212,13 @@ export function createEnemySystem(
 
     let moveTarget: THREE.Vector3 | null = null;
     if (isChasing) moveTarget = playerPosition;
-    if (isReturningHome) moveTarget = new THREE.Vector3(enemy.homeX, 0, enemy.homeZ);
+    if (isReturningHome) moveTarget = scratchHomeTarget.set(enemy.homeX, 0, enemy.homeZ);
 
     if (moveTarget) {
-      const direction = new THREE.Vector3(
-        moveTarget.x - position.x,
-        0,
-        moveTarget.z - position.z
-      ).normalize();
-      position.addScaledVector(direction, ENEMY_MOVE_SPEED * deltaSeconds);
+      scratchMoveDirection
+        .set(moveTarget.x - position.x, 0, moveTarget.z - position.z)
+        .normalize();
+      position.addScaledVector(scratchMoveDirection, ENEMY_MOVE_SPEED * deltaSeconds);
       const distanceFromCenter = Math.hypot(position.x, position.z);
       if (distanceFromCenter < SAFE_ZONE_RADIUS + 1) {
         const pushOut = (SAFE_ZONE_RADIUS + 1) / distanceFromCenter;
@@ -258,6 +264,7 @@ export function createEnemySystem(
       let hitSomething = false;
       for (const enemy of enemies) {
         if (!enemy.isAlive) continue;
+        if (Math.abs(enemy.group.position.y + 0.6 - center.y) > VERTICAL_HIT_GATE) continue;
         const distance = Math.hypot(
           enemy.group.position.x - center.x,
           enemy.group.position.z - center.z
