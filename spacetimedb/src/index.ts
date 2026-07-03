@@ -26,6 +26,8 @@ const KILL_REWARD_PRIMOGEMS = 40;
 const FIVE_STAR_CHANCE = 0.1;
 const WORLD_BOUND = 80;
 const SAFE_ZONE_RADIUS = 18;
+const SPAWN_X = 6;
+const SPAWN_Z = 6;
 const MAX_HEALTH = 1000;
 const MAX_HIT_DAMAGE = 400;
 const MAX_HIT_RANGE = 12;
@@ -122,9 +124,9 @@ export const joinGame = spacetimedb.reducer(
       identity: ctx.sender,
       name,
       online: true,
-      positionX: 0,
+      positionX: SPAWN_X,
       positionY: 0,
-      positionZ: 0,
+      positionZ: SPAWN_Z,
       rotationY: 0,
       activeCharacterId: STARTER_CHARACTER_ID,
       primogems: STARTING_PRIMOGEMS,
@@ -179,9 +181,9 @@ export const attackPlayer = spacetimedb.reducer(
     ctx.db.player.identity.update({
       ...target,
       currentHealth: MAX_HEALTH,
-      positionX: 0,
+      positionX: SPAWN_X,
       positionY: 0,
-      positionZ: 0,
+      positionZ: SPAWN_Z,
     });
   }
 );
@@ -238,9 +240,9 @@ export const takeDamage = spacetimedb.reducer(
     ctx.db.player.identity.update({
       ...currentPlayer,
       currentHealth: MAX_HEALTH,
-      positionX: 0,
+      positionX: SPAWN_X,
       positionY: 0,
-      positionZ: 0,
+      positionZ: SPAWN_Z,
     });
   }
 );

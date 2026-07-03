@@ -85,7 +85,8 @@ export function createGame(
   let playerModel = createCharacterModel(activeCharacter);
   scene.add(playerModel.group);
 
-  const playerPosition = new THREE.Vector3(0, 0, 0);
+  // Matches SPAWN_X/SPAWN_Z on the server (next to the plaza fountain).
+  const playerPosition = new THREE.Vector3(6, 0, 6);
   let playerVelocityY = 0;
   let playerRotationY = 0;
   let myServerHealth = MAX_HEALTH;
