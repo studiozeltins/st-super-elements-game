@@ -49,6 +49,7 @@ export interface Game {
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
+  setInputEnabled(enabled: boolean): void;
   onPartySlotRequested: ((slotIndex: number) => void) | null;
 }
 
@@ -66,8 +67,11 @@ const CAMERA_OFFSET = new THREE.Vector3(7, 15, 11);
 const CAMERA_YAW = Math.atan2(CAMERA_OFFSET.x, CAMERA_OFFSET.z);
 const DASH_DISTANCE = 5;
 const PVP_HIT_COOLDOWN_SECONDS = 0.3;
+const PVP_MAX_HIT_RANGE = 45; // server MAX_HIT_RANGE
 const POSITION_EPSILON = 0.01;
+const ROTATION_EPSILON = 0.02;
 const SERVER_TELEPORT_THRESHOLD = 20;
+const RESPAWN_HEALTH_JUMP = 100;
 
 export function createGame(
   canvas: HTMLCanvasElement,
@@ -99,6 +103,7 @@ export function createGame(
   let animationFrameHandle = 0;
   let lastFrameTime = 0;
   let lastSentPosition = new THREE.Vector3(Infinity, 0, 0);
+  let lastSentRotationY = Infinity;
 
   const applyLocalDamage: DamageApplier = (center, radius, damage, element) => {
     const hitEnemy = enemySystem.applyDamageInRadius(center, radius, damage, element);
@@ -117,6 +122,7 @@ export function createGame(
       const remotePosition = remotePlayer.model.group.position;
       if (isInsideSafeZone(remotePosition.x, remotePosition.z)) continue;
       if (elapsedSeconds < remotePlayer.lastPvpHitAt + PVP_HIT_COOLDOWN_SECONDS) continue;
+      if (playerPosition.distanceTo(remotePosition) > PVP_MAX_HIT_RANGE) continue;
       const distance = Math.hypot(remotePosition.x - center.x, remotePosition.z - center.z);
       if (distance > radius + 0.8) continue;
       remotePlayer.lastPvpHitAt = elapsedSeconds;
@@ -261,8 +267,11 @@ export function createGame(
     positionSyncTimer += deltaSeconds;
     if (positionSyncTimer < POSITION_SYNC_INTERVAL_SECONDS) return;
     positionSyncTimer = 0;
-    if (playerPosition.distanceTo(lastSentPosition) < POSITION_EPSILON) return;
+    const positionUnchanged = playerPosition.distanceTo(lastSentPosition) < POSITION_EPSILON;
+    const rotationUnchanged = Math.abs(playerRotationY - lastSentRotationY) < ROTATION_EPSILON;
+    if (positionUnchanged && rotationUnchanged) return;
     lastSentPosition = playerPosition.clone();
+    lastSentRotationY = playerRotationY;
     network.sendPosition(playerPosition.x, playerPosition.y, playerPosition.z, playerRotationY);
   }
 
@@ -352,6 +361,10 @@ export function createGame(
       inputSystem.dispose();
       effectSystem.dispose();
       enemySystem.dispose();
+      for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
+      scene.remove(playerModel.group);
+      playerModel.dispose();
+      world.dispose();
       pixelRenderer.dispose();
     },
     setActiveCharacter(characterId) {
@@ -415,10 +428,13 @@ export function createGame(
       }
     },
     syncMyServerRow(row) {
+      // A big health jump only happens on death respawn (heals are +60/s).
+      const wasRespawned = row.currentHealth > myServerHealth + RESPAWN_HEALTH_JUMP;
       myServerHealth = row.currentHealth;
       const serverPosition = new THREE.Vector3(row.positionX, row.positionY, row.positionZ);
-      if (playerPosition.distanceTo(serverPosition) > SERVER_TELEPORT_THRESHOLD) {
-        // The server respawned us (death) — accept its position.
+      const isFarFromServer =
+        playerPosition.distanceTo(serverPosition) > SERVER_TELEPORT_THRESHOLD;
+      if (wasRespawned || isFarFromServer) {
         playerPosition.copy(serverPosition);
         playerVelocityY = 0;
       }
@@ -447,6 +463,9 @@ export function createGame(
     },
     releaseTouchButton(button) {
       inputSystem.releaseTouchButton(button);
+    },
+    setInputEnabled(enabled) {
+      inputSystem.setEnabled(enabled);
     },
   };
 

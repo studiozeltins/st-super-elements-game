@@ -21,4 +21,5 @@ export default __t.row({
   activeCharacterId: __t.string().name("active_character_id"),
   primogems: __t.u32(),
   currentHealth: __t.u32().name("current_health"),
+  lastKillRewardAt: __t.timestamp().name("last_kill_reward_at"),
 });

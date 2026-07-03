@@ -52,6 +52,11 @@ function randomSpawnPosition(): THREE.Vector3 {
   return new THREE.Vector3(Math.cos(angle) * distance, 0, Math.sin(angle) * distance);
 }
 
+// Shared across all enemies — allocated once, disposed with the system.
+const sharedBodyGeometry = new THREE.SphereGeometry(0.75, 10, 8);
+const sharedEyeGeometry = new THREE.SphereGeometry(0.09, 6, 6);
+const sharedEyeMaterial = new THREE.MeshBasicMaterial({ color: 0x101410 });
+
 function createHealthBar(group: THREE.Group): THREE.Sprite {
   const background = new THREE.Sprite(
     new THREE.SpriteMaterial({ color: 0x141814, depthTest: false })
@@ -68,14 +73,13 @@ function createHealthBar(group: THREE.Group): THREE.Sprite {
 function createEnemyMesh(): { group: THREE.Group; body: THREE.Mesh; healthBarFill: THREE.Sprite } {
   const group = new THREE.Group();
   const body = new THREE.Mesh(
-    new THREE.SphereGeometry(0.75, 10, 8),
+    sharedBodyGeometry,
     new THREE.MeshLambertMaterial({ color: 0x8aa87a, emissive: 0x000000 })
   );
   body.scale.y = 0.72;
   body.position.y = 0.55;
   body.castShadow = true;
-  const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x101410 });
-  const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), eyeMaterial);
+  const leftEye = new THREE.Mesh(sharedEyeGeometry, sharedEyeMaterial);
   leftEye.position.set(-0.22, 0.7, 0.6);
   const rightEye = leftEye.clone();
   rightEye.position.x = 0.22;
@@ -236,7 +240,13 @@ export function createEnemySystem(
       return enemies.filter(enemy => enemy.isAlive).map(enemy => enemy.group.position);
     },
     dispose() {
-      for (const enemy of enemies) scene.remove(enemy.group);
+      for (const enemy of enemies) {
+        (enemy.body.material as THREE.Material).dispose();
+        enemy.group.traverse(node => {
+          if (node instanceof THREE.Sprite) node.material.dispose();
+        });
+        scene.remove(enemy.group);
+      }
       enemies.length = 0;
     },
   };

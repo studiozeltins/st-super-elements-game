@@ -1,9 +1,11 @@
 import * as THREE from 'three';
+import { disposeObject } from '../engine/disposeObject';
 import { SAFE_ZONE_RADIUS, WORLD_BOUND } from '../data/constants';
 
 export interface MondstadtWorld {
   group: THREE.Group;
   update(deltaSeconds: number): void;
+  dispose(): void;
 }
 
 export function isInsideSafeZone(positionX: number, positionZ: number): boolean {
@@ -236,6 +238,10 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     group,
     update(deltaSeconds) {
       blades.rotation.z += deltaSeconds * 0.6;
+    },
+    dispose() {
+      scene.remove(group);
+      disposeObject(group);
     },
   };
 }

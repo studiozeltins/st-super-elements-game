@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { ELEMENTS, type ElementId } from '../data/elements';
 import type { SkillDefinition } from '../data/characters';
+import { disposeObject } from '../engine/disposeObject';
 
 /** Applies damage around a point; returns true when something was hit. */
 export type DamageApplier = (
@@ -68,6 +69,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
 
   function removeEffect(effect: ActiveEffect) {
     scene.remove(effect.object);
+    disposeObject(effect.object);
   }
 
   function spawnBurst(position: THREE.Vector3, color: number, particleCount = 18) {

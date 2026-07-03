@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { disposeObject } from '../engine/disposeObject';
 import { ELEMENTS } from '../data/elements';
 import type { CharacterDefinition } from '../data/characters';
 import type { WeaponId } from '../data/weapons';
@@ -110,7 +111,7 @@ export function createCharacterModel(character: CharacterDefinition): CharacterM
       visionGem.position.y = 2.45 + Math.sin(elapsedSeconds * 3) * 0.06;
     },
     dispose() {
-      group.removeFromParent();
+      disposeObject(group);
     },
   };
 }

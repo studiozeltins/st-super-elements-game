@@ -7,6 +7,7 @@ export interface InputSystem {
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
+  setEnabled(enabled: boolean): void;
   dispose(): void;
 }
 
@@ -29,9 +30,10 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
   let skillQueued = false;
   let partySlotQueued: number | null = null;
   let mouseAttackHeld = false;
+  let isEnabled = true;
 
   function handleKeyDown(event: KeyboardEvent) {
-    if (event.repeat) return;
+    if (!isEnabled || event.repeat) return;
     pressedKeys.add(event.code);
     if (event.code === 'Space') jumpQueued = true;
     if (event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'KeyK') {
@@ -46,6 +48,7 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
   }
 
   function handlePointerDown(event: PointerEvent) {
+    if (!isEnabled) return;
     if (event.pointerType === 'mouse' && event.button === 0) mouseAttackHeld = true;
   }
 
@@ -100,6 +103,18 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
     },
     releaseTouchButton() {
       touchAttackHeld = false;
+    },
+    setEnabled(enabled) {
+      isEnabled = enabled;
+      if (enabled) return;
+      pressedKeys.clear();
+      touchMove.x = 0;
+      touchMove.z = 0;
+      touchAttackHeld = false;
+      mouseAttackHeld = false;
+      jumpQueued = false;
+      skillQueued = false;
+      partySlotQueued = null;
     },
     dispose() {
       window.removeEventListener('keydown', handleKeyDown);

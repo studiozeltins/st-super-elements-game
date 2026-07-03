@@ -30,7 +30,10 @@ const SPAWN_X = 6;
 const SPAWN_Z = 6;
 const MAX_HEALTH = 1000;
 const MAX_HIT_DAMAGE = 400;
-const MAX_HIT_RANGE = 12;
+// Bow projectiles fly up to ~45 units; server range check must cover them.
+const MAX_HIT_RANGE = 45;
+const MAX_STEP_DISTANCE = 12;
+const KILL_REWARD_COOLDOWN_MICROS = 1_500_000n;
 
 const player = table(
   { name: 'player', public: true },
@@ -45,6 +48,7 @@ const player = table(
     activeCharacterId: t.string(),
     primogems: t.u32(),
     currentHealth: t.u32(),
+    lastKillRewardAt: t.timestamp(),
   }
 );
 
@@ -131,6 +135,7 @@ export const joinGame = spacetimedb.reducer(
       activeCharacterId: STARTER_CHARACTER_ID,
       primogems: STARTING_PRIMOGEMS,
       currentHealth: MAX_HEALTH,
+      lastKillRewardAt: ctx.timestamp,
     });
     ctx.db.ownedCharacter.insert({
       id: 0n,
@@ -144,11 +149,16 @@ export const updatePosition = spacetimedb.reducer(
   { positionX: t.f32(), positionY: t.f32(), positionZ: t.f32(), rotationY: t.f32() },
   (ctx, { positionX, positionY, positionZ, rotationY }) => {
     const currentPlayer = requirePlayer(ctx);
+    const stepX = positionX - currentPlayer.positionX;
+    const stepZ = positionZ - currentPlayer.positionZ;
+    const stepDistance = Math.hypot(stepX, stepZ);
+    // Anti-teleport: clamp each update toward the target at a sane max step.
+    const stepScale = stepDistance > MAX_STEP_DISTANCE ? MAX_STEP_DISTANCE / stepDistance : 1;
     ctx.db.player.identity.update({
       ...currentPlayer,
-      positionX: clampToWorld(positionX),
+      positionX: clampToWorld(currentPlayer.positionX + stepX * stepScale),
       positionY: Math.max(0, Math.min(20, positionY)),
-      positionZ: clampToWorld(positionZ),
+      positionZ: clampToWorld(currentPlayer.positionZ + stepZ * stepScale),
       rotationY,
     });
   }
@@ -249,9 +259,13 @@ export const takeDamage = spacetimedb.reducer(
 
 export const grantKillReward = spacetimedb.reducer(ctx => {
   const currentPlayer = requirePlayer(ctx);
+  const microsSinceLastReward =
+    ctx.timestamp.microsSinceUnixEpoch - currentPlayer.lastKillRewardAt.microsSinceUnixEpoch;
+  if (microsSinceLastReward < KILL_REWARD_COOLDOWN_MICROS) return;
   ctx.db.player.identity.update({
     ...currentPlayer,
     primogems: currentPlayer.primogems + KILL_REWARD_PRIMOGEMS,
+    lastKillRewardAt: ctx.timestamp,
   });
 });
 

@@ -36,6 +36,7 @@ export const Player = __t.object("Player", {
   activeCharacterId: __t.string(),
   primogems: __t.u32(),
   currentHealth: __t.u32(),
+  lastKillRewardAt: __t.timestamp(),
 });
 export type Player = __Infer<typeof Player>;
 

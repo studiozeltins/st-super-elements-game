@@ -32,11 +32,21 @@ export default function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
 
   useEffect(() => {
-    if (!connection || !isActive) return;
-    connection
+    if (!connection || !isActive) {
+      setIsSubscribed(false);
+      return;
+    }
+    const subscription = connection
       .subscriptionBuilder()
       .onApplied(() => setIsSubscribed(true))
       .subscribe([tables.player, tables.ownedCharacter, tables.skillCast, tables.gachaResult]);
+    return () => {
+      try {
+        subscription.unsubscribe();
+      } catch {
+        // Subscription may already be gone when the connection dropped.
+      }
+    };
   }, [connection, isActive]);
 
   const [players] = useTable(tables.player);
@@ -111,6 +121,10 @@ export default function App() {
     gameRef.current?.syncRemotePlayers(players, myIdentityHex);
     if (myPlayer) gameRef.current?.syncMyServerRow(myPlayer);
   }, [players, myPlayer, myIdentityHex]);
+
+  useEffect(() => {
+    gameRef.current?.setInputEnabled(!isGachaOpen);
+  }, [isGachaOpen]);
 
   if (!hasJoined) {
     return (
