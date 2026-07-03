@@ -8,6 +8,7 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all reducer arg schemas
 import AttackPlayerReducer from "../attack_player_reducer";
 import CastSkillReducer from "../cast_skill_reducer";
+import GrantKillRewardReducer from "../grant_kill_reward_reducer";
 import HealInSafeZoneReducer from "../heal_in_safe_zone_reducer";
 import JoinGameReducer from "../join_game_reducer";
 import PullGachaReducer from "../pull_gacha_reducer";
@@ -17,6 +18,7 @@ import UpdatePositionReducer from "../update_position_reducer";
 
 export type AttackPlayerParams = __Infer<typeof AttackPlayerReducer>;
 export type CastSkillParams = __Infer<typeof CastSkillReducer>;
+export type GrantKillRewardParams = __Infer<typeof GrantKillRewardReducer>;
 export type HealInSafeZoneParams = __Infer<typeof HealInSafeZoneReducer>;
 export type JoinGameParams = __Infer<typeof JoinGameReducer>;
 export type PullGachaParams = __Infer<typeof PullGachaReducer>;

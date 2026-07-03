@@ -22,6 +22,7 @@ const STARTER_CHARACTER_ID = 'zibo';
 const STARTING_PRIMOGEMS = 16000;
 const GACHA_PULL_COST = 1600;
 const DUPLICATE_REFUND = 800;
+const KILL_REWARD_PRIMOGEMS = 40;
 const FIVE_STAR_CHANCE = 0.1;
 const WORLD_BOUND = 80;
 const SAFE_ZONE_RADIUS = 18;
@@ -243,6 +244,14 @@ export const takeDamage = spacetimedb.reducer(
     });
   }
 );
+
+export const grantKillReward = spacetimedb.reducer(ctx => {
+  const currentPlayer = requirePlayer(ctx);
+  ctx.db.player.identity.update({
+    ...currentPlayer,
+    primogems: currentPlayer.primogems + KILL_REWARD_PRIMOGEMS,
+  });
+});
 
 export const healInSafeZone = spacetimedb.reducer(
   { amount: t.u32() },

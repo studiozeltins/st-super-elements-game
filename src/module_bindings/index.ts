@@ -36,6 +36,7 @@ import {
 // Import all reducer arg schemas
 import AttackPlayerReducer from "./attack_player_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
+import GrantKillRewardReducer from "./grant_kill_reward_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import JoinGameReducer from "./join_game_reducer";
 import PullGachaReducer from "./pull_gacha_reducer";
@@ -102,6 +103,7 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("attack_player", AttackPlayerReducer),
   __reducerSchema("cast_skill", CastSkillReducer),
+  __reducerSchema("grant_kill_reward", GrantKillRewardReducer),
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("join_game", JoinGameReducer),
   __reducerSchema("pull_gacha", PullGachaReducer),

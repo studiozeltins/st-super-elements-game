@@ -1,235 +1,160 @@
-import React, { useState } from 'react';
-import './App.css';
-import { tables, reducers } from './module_bindings';
-import type * as Types from './module_bindings/types';
-import { useSpacetimeDB, useTable, useReducer } from 'spacetimedb/react';
-import { Identity, Timestamp } from 'spacetimedb';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSpacetimeDB, useTable } from 'spacetimedb/react';
+import { tables, type DbConnection } from './module_bindings';
+import type { GachaResult, Player } from './module_bindings/types';
+import { createGame, type Game, type HudState } from './game/createGame';
+import { MAX_HEALTH } from './game/data/constants';
+import { JoinScreen } from './ui/JoinScreen';
+import { Hud } from './ui/Hud';
+import { GachaScreen } from './ui/GachaScreen';
 
-export type PrettyMessage = {
-  senderName: string;
-  text: string;
-  sent: Timestamp;
-  kind: 'system' | 'user';
+const PARTY_SIZE = 4;
+
+const INITIAL_HUD_STATE: HudState = {
+  attackCooldownFraction: 0,
+  skillCooldownFraction: 0,
+  inSafeZone: true,
 };
 
-function App() {
-  const [newName, setNewName] = useState('');
-  const [settingName, setSettingName] = useState(false);
-  const [systemMessages, setSystemMessages] = useState([] as Types.Message[]);
-  const [newMessage, setNewMessage] = useState('');
+export default function App() {
+  const { isActive, identity, getConnection } = useSpacetimeDB();
+  const connection = getConnection() as DbConnection | null;
+  const myIdentityHex = identity?.toHexString() ?? null;
+  const myIdentityRef = useRef<string | null>(null);
+  myIdentityRef.current = myIdentityHex;
 
-  const { identity, isActive: connected } = useSpacetimeDB();
-  const setName = useReducer(reducers.setName);
-  const sendMessage = useReducer(reducers.sendMessage);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const gameRef = useRef<Game | null>(null);
+  const partyRef = useRef<string[]>([]);
+  const [hudState, setHudState] = useState<HudState>(INITIAL_HUD_STATE);
+  const [isGachaOpen, setIsGachaOpen] = useState(false);
+  const [lastPullResult, setLastPullResult] = useState<GachaResult | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
 
-  // Subscribe to all messages in the chat
-  const [messages] = useTable(tables.message);
+  useEffect(() => {
+    if (!connection || !isActive) return;
+    connection
+      .subscriptionBuilder()
+      .onApplied(() => setIsSubscribed(true))
+      .subscribe([tables.player, tables.ownedCharacter, tables.skillCast, tables.gachaResult]);
+  }, [connection, isActive]);
 
-  // Subscribe to all online users in the chat
-  const [onlineUsers] = useTable(
-    tables.user.where(r => r.online.eq(true)),
-    {
-      onInsert: user => {
-        // All users being inserted here are online
-        const name = user.name || user.identity.toHexString().substring(0, 8);
-        setSystemMessages(prev => [
-          ...prev,
-          {
-            sender: Identity.zero(),
-            text: `${name} has connected.`,
-            sent: Timestamp.now(),
-          },
-        ]);
-      },
-      onDelete: user => {
-        // All users being deleted here are offline
-        const name = user.name || user.identity.toHexString().substring(0, 8);
-        setSystemMessages(prev => [
-          ...prev,
-          {
-            sender: Identity.zero(),
-            text: `${name} has disconnected.`,
-            sent: Timestamp.now(),
-          },
-        ]);
-      },
-    }
+  const [players] = useTable(tables.player);
+  const [ownedCharacterRows] = useTable(tables.ownedCharacter);
+
+  useTable(tables.skillCast, {
+    onInsert: cast => {
+      if (cast.caster.toHexString() === myIdentityRef.current) return;
+      gameRef.current?.handleRemoteSkillCast(cast);
+    },
+  });
+  useTable(tables.gachaResult, {
+    onInsert: result => {
+      if (result.owner.toHexString() !== myIdentityRef.current) return;
+      setLastPullResult(result);
+    },
+  });
+
+  const myPlayer: Player | undefined = players.find(
+    row => row.identity.toHexString() === myIdentityHex
+  );
+  const myCharacterIds = ownedCharacterRows
+    .filter(row => row.owner.toHexString() === myIdentityHex)
+    .sort((rowA, rowB) => (rowA.id < rowB.id ? -1 : 1))
+    .map(row => row.characterId);
+  const partyCharacterIds = myCharacterIds.slice(0, PARTY_SIZE);
+  partyRef.current = partyCharacterIds;
+
+  const selectCharacter = useCallback(
+    (characterId: string) => {
+      connection?.reducers.setActiveCharacter({ characterId });
+      gameRef.current?.setActiveCharacter(characterId);
+    },
+    [connection]
   );
 
-  const [offlineUsers] = useTable(tables.user.where(r => r.online.eq(false)));
-  const users = [...onlineUsers, ...offlineUsers];
+  const hasJoined = Boolean(myPlayer);
 
-  const prettyMessages: PrettyMessage[] = messages
-    .concat(systemMessages)
-    .sort((a, b) => (a.sent.toDate() > b.sent.toDate() ? 1 : -1))
-    .map(message => {
-      const user = users.find(
-        u => u.identity.toHexString() === message.sender.toHexString()
-      );
-      return {
-        senderName: user?.name || message.sender.toHexString().substring(0, 8),
-        text: message.text,
-        sent: message.sent,
-        kind: Identity.zero().isEqual(message.sender) ? 'system' : 'user',
-      };
-    });
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !connection || !hasJoined || gameRef.current) return;
 
-  console.log('connected:', connected, 'identity:', identity?.toHexString());
+    const game = createGame(
+      canvas,
+      {
+        sendPosition: (positionX, positionY, positionZ, rotationY) =>
+          connection.reducers.updatePosition({ positionX, positionY, positionZ, rotationY }),
+        sendCastSkill: (skillId, originX, originZ, directionX, directionZ) =>
+          connection.reducers.castSkill({ skillId, originX, originZ, directionX, directionZ }),
+        sendAttackPlayer: (target, damage) =>
+          connection.reducers.attackPlayer({ targetIdentity: target.identity, damage }),
+        sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
+        sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
+        sendKillReward: () => connection.reducers.grantKillReward({}),
+      },
+      setHudState
+    );
+    game.onPartySlotRequested = slotIndex => {
+      const characterId = partyRef.current[slotIndex];
+      if (characterId) selectCharacter(characterId);
+    };
+    game.start();
+    gameRef.current = game;
 
-  if (!connected || !identity) {
+    return () => {
+      game.dispose();
+      gameRef.current = null;
+    };
+  }, [connection, hasJoined, selectCharacter]);
+
+  useEffect(() => {
+    gameRef.current?.syncRemotePlayers(players, myIdentityHex);
+    if (myPlayer) gameRef.current?.syncMyServerRow(myPlayer);
+  }, [players, myPlayer, myIdentityHex]);
+
+  if (!hasJoined) {
     return (
-      <div className="App">
-        <h1>Connecting...</h1>
-      </div>
+      <JoinScreen
+        isConnected={isActive && isSubscribed}
+        onJoin={name => connection?.reducers.joinGame({ name })}
+      />
     );
   }
 
-  const name = (() => {
-    const user = users.find(u => u.identity.isEqual(identity));
-    return user?.name || identity?.toHexString().substring(0, 8) || '';
-  })();
-
-  const onSubmitNewName = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setSettingName(false);
-    setName({ name: newName });
-  };
-
-  const onSubmitMessage = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setNewMessage('');
-    sendMessage({ text: newMessage })
-      .then(() => {
-        console.log('Message sent.');
-      })
-      .catch(err => {
-        console.error('Error sending message:', err);
-      });
-  };
-
   return (
-    <div className="App">
-      <div className="profile">
-        <h1>Profile</h1>
-        {!settingName ? (
-          <>
-            <p>{name}</p>
-            <button
-              onClick={() => {
-                setSettingName(true);
-                setNewName(name);
-              }}
-            >
-              Edit Name
-            </button>
-          </>
-        ) : (
-          <form onSubmit={onSubmitNewName}>
-            <input
-              type="text"
-              aria-label="username input"
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-            />
-            <button type="submit">Submit</button>
-          </form>
-        )}
-      </div>
-      <div className="message-panel">
-        <h1>Messages</h1>
-        {prettyMessages.length < 1 && <p>No messages</p>}
-        <div className="messages">
-          {prettyMessages.map((message, key) => {
-            const sentDate = message.sent.toDate();
-            const now = new Date();
-            const isOlderThanDay =
-              now.getFullYear() !== sentDate.getFullYear() ||
-              now.getMonth() !== sentDate.getMonth() ||
-              now.getDate() !== sentDate.getDate();
-
-            const timeString = sentDate.toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            });
-            const dateString = isOlderThanDay
-              ? sentDate.toLocaleDateString([], {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                }) + ' '
-              : '';
-
-            return (
-              <div
-                key={key}
-                className={
-                  message.kind === 'system' ? 'system-message' : 'user-message'
-                }
-              >
-                <p>
-                  <b>
-                    {message.kind === 'system' ? 'System' : message.senderName}
-                  </b>
-                  <span
-                    style={{
-                      fontSize: '0.8rem',
-                      marginLeft: '0.5rem',
-                      color: '#666',
-                    }}
-                  >
-                    {dateString}
-                    {timeString}
-                  </span>
-                </p>
-                <p>{message.text}</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="online" style={{ whiteSpace: 'pre-wrap' }}>
-        <h1>Online</h1>
-        <div>
-          {onlineUsers.map((user, key) => (
-            <div key={key}>
-              <p>{user.name || user.identity.toHexString().substring(0, 8)}</p>
-            </div>
-          ))}
-        </div>
-        {offlineUsers.length > 0 && (
-          <div>
-            <h1>Offline</h1>
-            {offlineUsers.map((user, key) => (
-              <div key={key}>
-                <p>
-                  {user.name || user.identity.toHexString().substring(0, 8)}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="new-message">
-        <form
-          onSubmit={onSubmitMessage}
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            width: '50%',
-            margin: '0 auto',
+    <div className="app">
+      <canvas ref={canvasRef} className="game-canvas" />
+      <Hud
+        playerName={myPlayer?.name ?? ''}
+        health={myPlayer?.currentHealth ?? MAX_HEALTH}
+        primogems={myPlayer?.primogems ?? 0}
+        partyCharacterIds={partyCharacterIds}
+        activeCharacterId={myPlayer?.activeCharacterId ?? ''}
+        hudState={hudState}
+        onSelectPartySlot={slotIndex => {
+          const characterId = partyCharacterIds[slotIndex];
+          if (characterId) selectCharacter(characterId);
+        }}
+        onOpenGacha={() => setIsGachaOpen(true)}
+        onJoystickMove={(x, z) => gameRef.current?.setTouchMove(x, z)}
+        onTouchButton={button => gameRef.current?.pressTouchButton(button)}
+        onTouchButtonRelease={button => gameRef.current?.releaseTouchButton(button)}
+      />
+      {isGachaOpen && (
+        <GachaScreen
+          primogems={myPlayer?.primogems ?? 0}
+          ownedCharacterIds={new Set(myCharacterIds)}
+          activeCharacterId={myPlayer?.activeCharacterId ?? ''}
+          lastPullResult={lastPullResult}
+          onPull={() => connection?.reducers.pullGacha({})}
+          onSelectCharacter={selectCharacter}
+          onDismissResult={() => setLastPullResult(null)}
+          onClose={() => {
+            setIsGachaOpen(false);
+            setLastPullResult(null);
           }}
-        >
-          <h3>New Message</h3>
-          <textarea
-            aria-label="message input"
-            value={newMessage}
-            onChange={e => setNewMessage(e.target.value)}
-          ></textarea>
-          <button type="submit">Send</button>
-        </form>
-      </div>
+        />
+      )}
     </div>
   );
 }
-
-export default App;
