@@ -43,9 +43,10 @@ interface Enemy {
   contactDamage: number;
   auraElement: ElementId | null;
   auraExpiresAt: number;
-  reactionFlashUntil: number;
-  reactionColorA: number;
-  reactionColorB: number;
+  reactionDotUntil: number;
+  reactionNextTickAt: number;
+  reactionDotColor: number;
+  reactionDotDamagePerTick: number;
   frozenUntil: number;
   nextContactHitAt: number;
   respawnAt: number;
@@ -79,7 +80,10 @@ const ENEMY_CONTACT_COOLDOWN_SECONDS = 1;
 const AURA_DURATION_SECONDS = 8;
 /** Above this remaining-fraction the aura icon is solid; below it blinks. */
 const AURA_STRONG_FRACTION = 0.5;
-const REACTION_FLASH_SECONDS = 0.7;
+// A reaction deals bonus damage over time; these set its length and cadence.
+const REACTION_DOT_SECONDS = 3;
+const REACTION_TICK_SECONDS = 0.5;
+const REACTION_DOT_DAMAGE_FRACTION = 0.3;
 const FREEZE_DURATION_SECONDS = 2;
 const RESPAWN_DELAY_SECONDS = 6;
 const SPAWN_SCATTER_RADIUS = 3;
@@ -148,9 +152,10 @@ export function createEnemySystem(
         ),
         auraElement: null,
         auraExpiresAt: 0,
-        reactionFlashUntil: 0,
-        reactionColorA: 0,
-        reactionColorB: 0,
+        reactionDotUntil: 0,
+        reactionNextTickAt: 0,
+        reactionDotColor: 0,
+        reactionDotDamagePerTick: 0,
         frozenUntil: 0,
         nextContactHitAt: 0,
         respawnAt: 0,
@@ -172,42 +177,47 @@ export function createEnemySystem(
     }
     material.emissive.setHex(ELEMENTS[enemy.auraElement].color);
     material.emissiveIntensity = 0.55;
-    const iconMaterial = enemy.model.auraIcon.material as THREE.SpriteMaterial;
-    iconMaterial.color.setHex(ELEMENTS[enemy.auraElement].color);
   }
 
-  /** Solid icon = fresh/strong aura, blinking = fading; both dots on reaction. */
-  function updateAuraIcon(enemy: Enemy) {
-    const auraMaterial = enemy.model.auraIcon.material as THREE.SpriteMaterial;
-    const reactionMaterial = enemy.model.reactionIcon.material as THREE.SpriteMaterial;
-
-    // While mixing, show both element dots symmetric about the head.
-    if (elapsedSeconds < enemy.reactionFlashUntil) {
-      const dotOffset = 0.33 / enemy.model.group.scale.x;
-      enemy.model.auraIcon.visible = true;
-      enemy.model.auraIcon.position.x = -dotOffset;
-      auraMaterial.color.setHex(enemy.reactionColorA);
-      auraMaterial.opacity = 1;
-      enemy.model.reactionIcon.visible = true;
-      enemy.model.reactionIcon.position.x = dotOffset;
-      reactionMaterial.color.setHex(enemy.reactionColorB);
-      reactionMaterial.opacity = 1;
-      return;
+  /**
+   * Left dot = standing aura with its remaining-time ring (solid then blinking
+   * as it fades); right dot = active reaction damage-over-time with its own ring.
+   */
+  function updateStatusIcons(enemy: Enemy) {
+    if (enemy.auraElement) {
+      const remaining = (enemy.auraExpiresAt - elapsedSeconds) / AURA_DURATION_SECONDS;
+      enemy.model.auraIcon.show(
+        remaining,
+        ELEMENTS[enemy.auraElement].color,
+        remaining <= AURA_STRONG_FRACTION,
+        elapsedSeconds
+      );
+    } else {
+      enemy.model.auraIcon.hide();
     }
 
-    enemy.model.reactionIcon.visible = false;
-    if (!enemy.auraElement) {
-      enemy.model.auraIcon.visible = false;
-      return;
+    if (elapsedSeconds < enemy.reactionDotUntil) {
+      const remaining = (enemy.reactionDotUntil - elapsedSeconds) / REACTION_DOT_SECONDS;
+      enemy.model.reactionIcon.show(remaining, enemy.reactionDotColor, false, elapsedSeconds);
+    } else {
+      enemy.model.reactionIcon.hide();
     }
-    enemy.model.auraIcon.visible = true;
-    enemy.model.auraIcon.position.x = 0; // single dot sits centered
-    auraMaterial.color.setHex(ELEMENTS[enemy.auraElement].color);
-    const remainingFraction = (enemy.auraExpiresAt - elapsedSeconds) / AURA_DURATION_SECONDS;
-    auraMaterial.opacity =
-      remainingFraction > AURA_STRONG_FRACTION
-        ? 1
-        : 0.35 + Math.abs(Math.sin(elapsedSeconds * 9)) * 0.65;
+  }
+
+  function tickReactionDot(enemy: Enemy) {
+    if (elapsedSeconds >= enemy.reactionDotUntil) return;
+    if (elapsedSeconds < enemy.reactionNextTickAt) return;
+    enemy.reactionNextTickAt += REACTION_TICK_SECONDS;
+    enemy.health -= enemy.reactionDotDamagePerTick;
+    const barPosition = enemy.model.group.position;
+    enemy.model.healthBarFill.scale.x = 1.2 * Math.max(0, enemy.health / enemy.maxHealth);
+    reportDamage(
+      barPosition.clone().setY(barPosition.y + 1),
+      enemy.reactionDotDamagePerTick,
+      'reaction',
+      enemy.reactionDotColor
+    );
+    if (enemy.health <= 0) killEnemy(enemy);
   }
 
   function killEnemy(enemy: Enemy) {
@@ -228,9 +238,9 @@ export function createEnemySystem(
     enemy.health = enemy.maxHealth;
     enemy.model.healthBarFill.scale.x = 1.2;
     enemy.auraElement = null;
-    enemy.reactionFlashUntil = 0;
-    enemy.model.auraIcon.visible = false;
-    enemy.model.reactionIcon.visible = false;
+    enemy.reactionDotUntil = 0;
+    enemy.model.auraIcon.hide();
+    enemy.model.reactionIcon.hide();
     enemy.frozenUntil = 0;
     enemy.model.group.position.copy(spawnPositionNearHome(enemy));
     refreshAuraVisual(enemy);
@@ -238,11 +248,9 @@ export function createEnemySystem(
 
   function applyElementalHit(enemy: Enemy, damage: number, element: ElementId): ElementalHitResult {
     if (!enemy.auraElement) {
+      // A standing aura can coexist with an ongoing reaction DoT (two dots).
       enemy.auraElement = element;
       enemy.auraExpiresAt = elapsedSeconds + AURA_DURATION_SECONDS;
-      // A fresh aura must not stay hidden behind a lingering reaction flash.
-      enemy.reactionFlashUntil = 0;
-      enemy.model.reactionIcon.visible = false;
       refreshAuraVisual(enemy);
       return { finalDamage: damage, reacted: false, reactionColor: null };
     }
@@ -253,12 +261,13 @@ export function createEnemySystem(
       return { finalDamage: damage, reacted: false, reactionColor: null };
     }
 
-    // Second element mixes with the aura: show both element dots for the flash,
-    // consume the aura, and deal bonus reaction damage.
-    enemy.reactionColorA = ELEMENTS[enemy.auraElement].color;
-    enemy.reactionColorB = ELEMENTS[element].color;
+    // Second element mixes with the aura: consume it, deal the instant reaction
+    // bonus, and start a damage-over-time that ticks for a few seconds.
     enemy.auraElement = null;
-    enemy.reactionFlashUntil = elapsedSeconds + REACTION_FLASH_SECONDS;
+    enemy.reactionDotColor = reaction.color;
+    enemy.reactionDotUntil = elapsedSeconds + REACTION_DOT_SECONDS;
+    enemy.reactionNextTickAt = elapsedSeconds + REACTION_TICK_SECONDS;
+    enemy.reactionDotDamagePerTick = damage * REACTION_DOT_DAMAGE_FRACTION;
     refreshAuraVisual(enemy);
     if (reaction.freezes) enemy.frozenUntil = elapsedSeconds + FREEZE_DURATION_SECONDS;
     effectSystem.spawnBurst(
@@ -338,7 +347,9 @@ export function createEnemySystem(
           enemy.auraElement = null;
           refreshAuraVisual(enemy);
         }
-        updateAuraIcon(enemy);
+        tickReactionDot(enemy);
+        if (!enemy.isAlive) continue; // a DoT tick may have killed it
+        updateStatusIcons(enemy);
         if (elapsedSeconds < enemy.frozenUntil) continue;
 
         const distanceToPlayer = moveEnemy(enemy, playerPosition, deltaSeconds);

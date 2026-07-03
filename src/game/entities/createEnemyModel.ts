@@ -1,51 +1,104 @@
 import * as THREE from 'three';
 import type { EnemyArchetype } from '../data/enemyArchetypes';
 
+/**
+ * A circular element dot with a radial countdown: the bright pie wedge shows
+ * the remaining fraction of the aura / reaction, so the player reads how long
+ * it stays active. Owns its own canvas so each enemy times independently.
+ */
+export interface StatusIcon {
+  sprite: THREE.Sprite;
+  /** remaining 1→0, tinted colorHex; blink dims it near expiry. */
+  show(remaining: number, colorHex: number, blink: boolean, elapsedSeconds: number): void;
+  hide(): void;
+  dispose(): void;
+}
+
+const ICON_WORLD_SIZE = 0.5;
+const ICON_CANVAS_SIZE = 64;
+const ICON_RADIUS = 25;
+// Redraw only when the remaining time crosses one of this many buckets.
+const TIMER_BUCKETS = 40;
+
+function toCss(colorHex: number): string {
+  return `#${colorHex.toString(16).padStart(6, '0')}`;
+}
+
+function createStatusIcon(scale: number, localX: number, localY: number): StatusIcon {
+  const canvas = document.createElement('canvas');
+  canvas.width = ICON_CANVAS_SIZE;
+  canvas.height = ICON_CANVAS_SIZE;
+  const ctx = canvas.getContext('2d')!;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.NearestFilter;
+  const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
+  const sprite = new THREE.Sprite(material);
+  const localSize = ICON_WORLD_SIZE / scale; // constant on-screen size for any enemy
+  sprite.scale.set(localSize, localSize, 1);
+  sprite.position.set(localX, localY, 0);
+  sprite.visible = false;
+
+  let lastBucket = -1;
+  let lastColor = -1;
+
+  function redraw(remaining: number, colorHex: number) {
+    const center = ICON_CANVAS_SIZE / 2;
+    ctx.clearRect(0, 0, ICON_CANVAS_SIZE, ICON_CANVAS_SIZE);
+    const css = toCss(colorHex);
+    // Dim full disc = total duration.
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    ctx.arc(center, center, ICON_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = css;
+    ctx.fill();
+    // Bright pie wedge from the top, clockwise = remaining time.
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.moveTo(center, center);
+    ctx.arc(center, center, ICON_RADIUS, -Math.PI / 2, -Math.PI / 2 + remaining * Math.PI * 2);
+    ctx.closePath();
+    ctx.fillStyle = css;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(8, 12, 9, 0.85)';
+    ctx.beginPath();
+    ctx.arc(center, center, ICON_RADIUS, 0, Math.PI * 2);
+    ctx.stroke();
+    texture.needsUpdate = true;
+  }
+
+  return {
+    sprite,
+    show(remaining, colorHex, blink, elapsedSeconds) {
+      sprite.visible = true;
+      const clamped = Math.max(0, Math.min(1, remaining));
+      const bucket = Math.round(clamped * TIMER_BUCKETS);
+      if (bucket !== lastBucket || colorHex !== lastColor) {
+        redraw(clamped, colorHex);
+        lastBucket = bucket;
+        lastColor = colorHex;
+      }
+      material.opacity = blink ? 0.4 + Math.abs(Math.sin(elapsedSeconds * 9)) * 0.6 : 1;
+    },
+    hide() {
+      sprite.visible = false;
+    },
+    dispose() {
+      texture.dispose();
+      material.dispose();
+    },
+  };
+}
+
 export interface EnemyModel {
   group: THREE.Group;
   body: THREE.Mesh;
   healthBarFill: THREE.Sprite;
-  /** Standing element aura icon (solid = strong, blink = fading). */
-  auraIcon: THREE.Sprite;
-  /** Second dot shown only while a reaction mixes two elements. */
-  reactionIcon: THREE.Sprite;
-}
-
-/** A soft white disc, tinted per-element via the sprite material color. */
-function createCircleTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 64;
-  canvas.height = 64;
-  const ctx = canvas.getContext('2d')!;
-  ctx.beginPath();
-  ctx.arc(32, 32, 25, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffffff';
-  ctx.fill();
-  ctx.lineWidth = 7;
-  ctx.strokeStyle = 'rgba(8, 12, 9, 0.85)';
-  ctx.stroke();
-  const texture = new THREE.CanvasTexture(canvas);
-  return texture;
-}
-
-// Module-lifetime shared disc texture for all element status icons.
-const sharedCircleTexture = createCircleTexture();
-const ICON_WORLD_SIZE = 0.5;
-
-function createStatusIcon(scale: number): THREE.Sprite {
-  const icon = new THREE.Sprite(
-    new THREE.SpriteMaterial({
-      map: sharedCircleTexture,
-      color: 0xffffff,
-      depthTest: false,
-      transparent: true,
-    })
-  );
-  // Counter-scale so the disc is the same on-screen size for any enemy size.
-  const localSize = ICON_WORLD_SIZE / scale;
-  icon.scale.set(localSize, localSize, 1);
-  icon.visible = false;
-  return icon;
+  /** Standing element aura, with a remaining-time ring. */
+  auraIcon: StatusIcon;
+  /** Active reaction damage-over-time, with its own remaining-time ring. */
+  reactionIcon: StatusIcon;
 }
 
 // Module-lifetime resources shared across all enemies and system instances.
@@ -149,13 +202,12 @@ export function createEnemyModel(archetype: EnemyArchetype, scale: number): Enem
   const barHeight = archetype.id === 'stoneGolem' ? 2.3 : 1.6;
   const healthBarFill = createHealthBar(group, barHeight);
 
-  const iconHeight = barHeight + 0.4;
-  const iconOffset = 0.33 / scale;
-  const auraIcon = createStatusIcon(scale);
-  auraIcon.position.set(0, iconHeight, 0);
-  const reactionIcon = createStatusIcon(scale);
-  reactionIcon.position.set(iconOffset * 2, iconHeight, 0);
-  group.add(auraIcon, reactionIcon);
+  // Two dots side by side at the same height above the enemy.
+  const iconHeight = barHeight + 0.45;
+  const iconOffset = 0.3 / scale;
+  const auraIcon = createStatusIcon(scale, -iconOffset, iconHeight);
+  const reactionIcon = createStatusIcon(scale, iconOffset, iconHeight);
+  group.add(auraIcon.sprite, reactionIcon.sprite);
 
   group.scale.setScalar(scale);
   return { group, body, healthBarFill, auraIcon, reactionIcon };
@@ -163,6 +215,8 @@ export function createEnemyModel(archetype: EnemyArchetype, scale: number): Enem
 
 export function disposeEnemyModel(model: EnemyModel) {
   (model.body.material as THREE.Material).dispose();
+  model.auraIcon.dispose();
+  model.reactionIcon.dispose();
   model.group.traverse(node => {
     if (node instanceof THREE.Sprite) node.material.dispose();
   });
