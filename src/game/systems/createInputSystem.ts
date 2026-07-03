@@ -1,6 +1,5 @@
 export interface InputSystem {
   getMoveVector(): { x: number; z: number };
-  isAttackHeld(): boolean;
   /** One queued attack press (edge-triggered), for combo counting. */
   consumeAttackClick(): boolean;
   consumeJump(): boolean;
@@ -27,19 +26,23 @@ const MOVE_KEY_BINDINGS: Record<string, { x: number; z: number }> = {
 export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
   const pressedKeys = new Set<string>();
   const touchMove = { x: 0, z: 0 };
-  let touchAttackHeld = false;
   let jumpQueued = false;
   let skillQueued = false;
   let partySlotQueued: number | null = null;
-  let mouseAttackHeld = false;
   let attackClicksQueued = 0;
   let isEnabled = true;
+
+  // Bound the buffer so a click storm cannot spend a long combo in one frame.
+  const MAX_QUEUED_CLICKS = 3;
+  const queueAttackClick = () => {
+    attackClicksQueued = Math.min(MAX_QUEUED_CLICKS, attackClicksQueued + 1);
+  };
 
   function handleKeyDown(event: KeyboardEvent) {
     if (!isEnabled || event.repeat) return;
     pressedKeys.add(event.code);
     if (event.code === 'Space') jumpQueued = true;
-    if (event.code === 'KeyJ') attackClicksQueued++;
+    if (event.code === 'KeyJ') queueAttackClick();
     if (event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'KeyK') {
       skillQueued = true;
     }
@@ -53,20 +56,12 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
 
   function handlePointerDown(event: PointerEvent) {
     if (!isEnabled) return;
-    if (event.pointerType === 'mouse' && event.button === 0) {
-      mouseAttackHeld = true;
-      attackClicksQueued++;
-    }
-  }
-
-  function handlePointerUp() {
-    mouseAttackHeld = false;
+    if (event.pointerType === 'mouse' && event.button === 0) queueAttackClick();
   }
 
   window.addEventListener('keydown', handleKeyDown);
   window.addEventListener('keyup', handleKeyUp);
   canvas.addEventListener('pointerdown', handlePointerDown);
-  window.addEventListener('pointerup', handlePointerUp);
 
   return {
     getMoveVector() {
@@ -80,9 +75,6 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
       const magnitude = Math.hypot(x, z);
       if (magnitude <= 1) return { x, z };
       return { x: x / magnitude, z: z / magnitude };
-    },
-    isAttackHeld() {
-      return mouseAttackHeld || touchAttackHeld || pressedKeys.has('KeyJ');
     },
     consumeAttackClick() {
       if (attackClicksQueued <= 0) return false;
@@ -109,15 +101,12 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
       touchMove.z = z;
     },
     pressTouchButton(button) {
-      if (button === 'attack') {
-        touchAttackHeld = true;
-        attackClicksQueued++;
-      }
+      if (button === 'attack') queueAttackClick();
       if (button === 'skill') skillQueued = true;
       if (button === 'jump') jumpQueued = true;
     },
     releaseTouchButton() {
-      touchAttackHeld = false;
+      // Attack is click-driven now; nothing to release. Kept for the HUD wiring.
     },
     setEnabled(enabled) {
       isEnabled = enabled;
@@ -125,8 +114,6 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
       pressedKeys.clear();
       touchMove.x = 0;
       touchMove.z = 0;
-      touchAttackHeld = false;
-      mouseAttackHeld = false;
       attackClicksQueued = 0;
       jumpQueued = false;
       skillQueued = false;
@@ -136,7 +123,6 @@ export function createInputSystem(canvas: HTMLCanvasElement): InputSystem {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       canvas.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('pointerup', handlePointerUp);
     },
   };
 }

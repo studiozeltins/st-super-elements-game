@@ -110,11 +110,10 @@ describe('createInputSystem', () => {
       expect(z).toBeCloseTo(0.8);
     });
 
-    it('holds attack until released', () => {
+    it('queues one attack click per touch-attack press', () => {
       input.pressTouchButton('attack');
-      expect(input.isAttackHeld()).toBe(true);
-      input.releaseTouchButton('attack');
-      expect(input.isAttackHeld()).toBe(false);
+      expect(input.consumeAttackClick()).toBe(true);
+      expect(input.consumeAttackClick()).toBe(false);
     });
 
     it('queues jump and skill as edge-triggered actions', () => {

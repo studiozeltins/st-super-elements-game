@@ -370,7 +370,11 @@ export function createGame(
       network.sendFallToDeath();
     }
 
-    while (inputSystem.consumeAttackClick()) performAttack();
+    // Only drain one queued click per input-cooldown so rapid clicks buffer
+    // instead of being eaten within a single frame.
+    if (elapsedSeconds - lastSwingAt >= COMBO_INPUT_COOLDOWN_SECONDS && inputSystem.consumeAttackClick()) {
+      performAttack();
+    }
     if (inputSystem.consumeSkill()) performSkill();
     const requestedSlot = inputSystem.consumePartySlot();
     if (requestedSlot !== null) game.onPartySlotRequested?.(requestedSlot);

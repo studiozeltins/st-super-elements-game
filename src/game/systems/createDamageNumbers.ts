@@ -63,6 +63,7 @@ function toCssColor(color: number): string {
 
 export function createDamageNumbers(scene: THREE.Scene): DamageNumbers {
   const pool: FloatingNumber[] = [];
+  let spawnCounter = 0;
 
   function acquire(): FloatingNumber | null {
     const reused = pool.find(entry => !entry.active);
@@ -104,8 +105,9 @@ export function createDamageNumbers(scene: THREE.Scene): DamageNumbers {
       entry.sprite.scale.set(entry.baseScaleX, entry.baseScaleY, 1);
       entry.sprite.position.copy(worldPosition);
       entry.sprite.position.y += BASE_WORLD_HEIGHT;
-      // Jitter sideways so stacked hits do not overlap into one blob.
-      entry.sprite.position.x += (roundedAmount % 5) * 0.12 - 0.24;
+      // Fan successive spawns sideways so simultaneous equal hits do not stack.
+      entry.sprite.position.x += (spawnCounter % 5) * 0.16 - 0.32;
+      spawnCounter++;
       entry.sprite.visible = true;
       entry.ageSeconds = 0;
       entry.active = true;

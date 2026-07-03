@@ -160,10 +160,10 @@ export function createEnemySystem(
 
   function refreshAuraVisual(enemy: Enemy) {
     const material = enemy.model.body.material as THREE.MeshLambertMaterial;
+    const isFloat = enemy.archetype.locomotion === 'float';
     if (!enemy.auraElement) {
-      material.emissive.setHex(
-        enemy.archetype.locomotion === 'float' ? enemy.archetype.bodyColor : 0x000000
-      );
+      material.emissive.setHex(isFloat ? enemy.archetype.bodyColor : 0x000000);
+      material.emissiveIntensity = isFloat ? 0.4 : 1; // restore the wisp's base glow
       return;
     }
     material.emissive.setHex(ELEMENTS[enemy.auraElement].color);
@@ -349,11 +349,14 @@ export function createEnemySystem(
         const healthFraction = Math.max(0, enemy.health / enemy.maxHealth);
         enemy.model.healthBarFill.scale.x = 1.2 * healthFraction;
         effectSystem.spawnBurst(position.clone().setY(position.y + 0.9), ELEMENTS[element].color, 10);
+        // Crit styling wins over reaction so the gold "!" is never hidden;
+        // the reaction still reads via the mixed-color aura flash + burst.
+        const reportedKind = kind === 'crit' ? 'crit' : result.reacted ? 'reaction' : kind;
         reportDamage(
           position.clone().setY(position.y + 1),
           result.finalDamage,
-          result.reacted ? 'reaction' : kind,
-          result.reactionColor ?? undefined
+          reportedKind,
+          reportedKind === 'reaction' ? (result.reactionColor ?? undefined) : undefined
         );
         if (enemy.health <= 0) killEnemy(enemy);
       }
