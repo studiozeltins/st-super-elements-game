@@ -8,8 +8,11 @@ import {
   t as __t,
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
-} from 'spacetimedb';
+} from "spacetimedb";
 
 export default {
-  name: __t.string(),
+  positionX: __t.f32(),
+  positionY: __t.f32(),
+  positionZ: __t.f32(),
+  rotationY: __t.f32(),
 };

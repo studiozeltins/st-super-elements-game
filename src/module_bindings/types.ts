@@ -8,18 +8,45 @@ import {
   t as __t,
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
-} from 'spacetimedb';
+} from "spacetimedb";
 
-export const Message = __t.object('Message', {
-  sender: __t.identity(),
-  sent: __t.timestamp(),
-  text: __t.string(),
+export const GachaResult = __t.object("GachaResult", {
+  owner: __t.identity(),
+  characterId: __t.string(),
+  stars: __t.u32(),
+  wasNew: __t.bool(),
 });
-export type Message = __Infer<typeof Message>;
+export type GachaResult = __Infer<typeof GachaResult>;
 
-export const User = __t.object('User', {
+export const OwnedCharacter = __t.object("OwnedCharacter", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  characterId: __t.string(),
+});
+export type OwnedCharacter = __Infer<typeof OwnedCharacter>;
+
+export const Player = __t.object("Player", {
   identity: __t.identity(),
-  name: __t.option(__t.string()),
+  name: __t.string(),
   online: __t.bool(),
+  positionX: __t.f32(),
+  positionY: __t.f32(),
+  positionZ: __t.f32(),
+  rotationY: __t.f32(),
+  activeCharacterId: __t.string(),
+  primogems: __t.u32(),
+  currentHealth: __t.u32(),
 });
-export type User = __Infer<typeof User>;
+export type Player = __Infer<typeof Player>;
+
+export const SkillCast = __t.object("SkillCast", {
+  caster: __t.identity(),
+  characterId: __t.string(),
+  skillId: __t.string(),
+  originX: __t.f32(),
+  originZ: __t.f32(),
+  directionX: __t.f32(),
+  directionZ: __t.f32(),
+});
+export type SkillCast = __Infer<typeof SkillCast>;
+

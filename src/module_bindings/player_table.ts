@@ -8,10 +8,17 @@ import {
   t as __t,
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
-} from 'spacetimedb';
+} from "spacetimedb";
 
 export default __t.row({
   identity: __t.identity().primaryKey(),
-  name: __t.option(__t.string()),
+  name: __t.string(),
   online: __t.bool(),
+  positionX: __t.f32().name("position_x"),
+  positionY: __t.f32().name("position_y"),
+  positionZ: __t.f32().name("position_z"),
+  rotationY: __t.f32().name("rotation_y"),
+  activeCharacterId: __t.string().name("active_character_id"),
+  primogems: __t.u32(),
+  currentHealth: __t.u32().name("current_health"),
 });
