@@ -133,6 +133,7 @@ export function GachaScreen({
           >
             <div className="banner__stage">
               <CharacterPreview characterId={featured.id} />
+              <p className="banner__lore">{banner.lore}</p>
               <div className="banner__caption">
                 <span className="banner__tagline">{banner.subtitle}</span>
                 <span className="banner__name">{featured.displayName}</span>
@@ -144,8 +145,6 @@ export function GachaScreen({
             </div>
 
             <div className="banner__panel">
-              <p className="banner__lore">{banner.lore}</p>
-
               <div className="banner__controls">
                 <div className="pity">
                   <div className="pity__row">

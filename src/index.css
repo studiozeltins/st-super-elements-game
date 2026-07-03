@@ -668,10 +668,12 @@ button {
 }
 
 .banner__stars {
-  margin-top: 2px;
-  font-size: 14px;
-  letter-spacing: 0.22em;
+  margin-top: 6px;
+  font-size: 30px;
+  line-height: 1;
+  letter-spacing: 0.14em;
   color: var(--gold);
+  text-shadow: 0 2px 18px color-mix(in srgb, var(--gold) 65%, transparent);
 }
 
 .banner__panel {
@@ -681,11 +683,17 @@ button {
 }
 
 .banner__lore {
-  max-width: 780px;
+  position: absolute;
+  top: 20px;
+  left: 24px;
+  z-index: 2;
+  max-width: min(44%, 360px);
   font-size: 12.5px;
-  line-height: 1.6;
+  line-height: 1.65;
   font-style: italic;
-  color: var(--muted);
+  color: var(--text);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.92);
+  pointer-events: none;
 }
 
 .banner__controls {
