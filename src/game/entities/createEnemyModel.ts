@@ -1,88 +1,141 @@
 import * as THREE from 'three';
 import type { EnemyArchetype } from '../data/enemyArchetypes';
 
+/** One element status dot to draw: color + remaining time (1→0). */
+export interface StatusDot {
+  colorHex: number;
+  remaining: number;
+}
+
+export interface OverlayState {
+  healthFraction: number;
+  aura: StatusDot | null;
+  reaction: StatusDot | null;
+}
+
 /**
- * A circular element dot with a radial countdown: the bright pie wedge shows
- * the remaining fraction of the aura / reaction, so the player reads how long
- * it stays active. Owns its own canvas so each enemy times independently.
+ * A single billboard sprite drawing the whole enemy overlay: a modern health
+ * bar plus the element status dots. Because it always faces the camera the
+ * dots stay horizontally side by side on screen (a world-space offset would
+ * project diagonally in the isometric view).
  */
-export interface StatusIcon {
+export interface EnemyOverlay {
   sprite: THREE.Sprite;
-  /** remaining 1→0, tinted colorHex; blink dims it near expiry. */
-  show(remaining: number, colorHex: number, blink: boolean, elapsedSeconds: number): void;
-  hide(): void;
+  update(state: OverlayState): void;
   dispose(): void;
 }
 
-const ICON_WORLD_SIZE = 0.5;
-const ICON_CANVAS_SIZE = 64;
-const ICON_RADIUS = 25;
-// Redraw only when the remaining time crosses one of this many buckets.
-const TIMER_BUCKETS = 40;
+const OVERLAY_CANVAS_WIDTH = 256;
+const OVERLAY_CANVAS_HEIGHT = 96;
+const OVERLAY_WORLD_WIDTH = 1.7;
+// Redraw only when a value crosses one of this many buckets.
+const OVERLAY_BUCKETS = 40;
+
+const DOT_RADIUS = 19;
+const DOT_CENTER_Y = 26;
+const DOT_LEFT_X = 30;
+const DOT_RIGHT_X = 74;
+
+const BAR_X = 18;
+const BAR_Y = 60;
+const BAR_WIDTH = 220;
+const BAR_HEIGHT = 20;
+const BAR_RADIUS = 10;
 
 function toCss(colorHex: number): string {
   return `#${colorHex.toString(16).padStart(6, '0')}`;
 }
 
-function createStatusIcon(scale: number, localX: number, localY: number): StatusIcon {
+function healthColor(fraction: number): string {
+  if (fraction > 0.5) return '#7ec843';
+  if (fraction > 0.25) return '#f2c14e';
+  return '#ff5c3c';
+}
+
+function drawDot(ctx: CanvasRenderingContext2D, centerX: number, dot: StatusDot) {
+  const css = toCss(dot.colorHex);
+  const remaining = Math.max(0, Math.min(1, dot.remaining));
+  ctx.globalAlpha = 0.28; // dim full disc = total duration
+  ctx.beginPath();
+  ctx.arc(centerX, DOT_CENTER_Y, DOT_RADIUS, 0, Math.PI * 2);
+  ctx.fillStyle = css;
+  ctx.fill();
+  ctx.globalAlpha = 1; // bright wedge = remaining time
+  ctx.beginPath();
+  ctx.moveTo(centerX, DOT_CENTER_Y);
+  ctx.arc(centerX, DOT_CENTER_Y, DOT_RADIUS, -Math.PI / 2, -Math.PI / 2 + remaining * Math.PI * 2);
+  ctx.closePath();
+  ctx.fillStyle = css;
+  ctx.fill();
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = 'rgba(8, 12, 9, 0.85)';
+  ctx.beginPath();
+  ctx.arc(centerX, DOT_CENTER_Y, DOT_RADIUS, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function createEnemyOverlay(scale: number, barHeight: number): EnemyOverlay {
   const canvas = document.createElement('canvas');
-  canvas.width = ICON_CANVAS_SIZE;
-  canvas.height = ICON_CANVAS_SIZE;
+  canvas.width = OVERLAY_CANVAS_WIDTH;
+  canvas.height = OVERLAY_CANVAS_HEIGHT;
   const ctx = canvas.getContext('2d')!;
   const texture = new THREE.CanvasTexture(canvas);
-  texture.magFilter = THREE.NearestFilter;
   const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
   const sprite = new THREE.Sprite(material);
-  const localSize = ICON_WORLD_SIZE / scale; // constant on-screen size for any enemy
-  sprite.scale.set(localSize, localSize, 1);
-  sprite.position.set(localX, localY, 0);
-  sprite.visible = false;
+  const localWidth = OVERLAY_WORLD_WIDTH / scale; // constant on-screen size for any enemy
+  sprite.scale.set(localWidth, localWidth * (OVERLAY_CANVAS_HEIGHT / OVERLAY_CANVAS_WIDTH), 1);
+  sprite.position.y = barHeight;
 
-  let lastBucket = -1;
-  let lastColor = -1;
+  let lastKey = '';
 
-  function redraw(remaining: number, colorHex: number) {
-    const center = ICON_CANVAS_SIZE / 2;
-    ctx.clearRect(0, 0, ICON_CANVAS_SIZE, ICON_CANVAS_SIZE);
-    const css = toCss(colorHex);
-    // Dim full disc = total duration.
-    ctx.globalAlpha = 0.3;
+  function redraw(state: OverlayState) {
+    ctx.clearRect(0, 0, OVERLAY_CANVAS_WIDTH, OVERLAY_CANVAS_HEIGHT);
+
+    // Modern health bar: rounded dark track + rounded colored fill.
+    const fraction = Math.max(0, Math.min(1, state.healthFraction));
+    ctx.fillStyle = 'rgba(8, 12, 9, 0.72)';
     ctx.beginPath();
-    ctx.arc(center, center, ICON_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = css;
+    ctx.roundRect(BAR_X - 3, BAR_Y - 3, BAR_WIDTH + 6, BAR_HEIGHT + 6, BAR_RADIUS + 3);
     ctx.fill();
-    // Bright pie wedge from the top, clockwise = remaining time.
-    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(232, 245, 224, 0.14)';
     ctx.beginPath();
-    ctx.moveTo(center, center);
-    ctx.arc(center, center, ICON_RADIUS, -Math.PI / 2, -Math.PI / 2 + remaining * Math.PI * 2);
-    ctx.closePath();
-    ctx.fillStyle = css;
+    ctx.roundRect(BAR_X, BAR_Y, BAR_WIDTH, BAR_HEIGHT, BAR_RADIUS);
     ctx.fill();
+    if (fraction > 0) {
+      ctx.fillStyle = healthColor(fraction);
+      ctx.beginPath();
+      ctx.roundRect(BAR_X, BAR_Y, BAR_WIDTH * fraction, BAR_HEIGHT, BAR_RADIUS);
+      ctx.fill();
+      // Glossy top highlight.
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+      ctx.beginPath();
+      ctx.roundRect(BAR_X + 2, BAR_Y + 2, Math.max(0, BAR_WIDTH * fraction - 4), BAR_HEIGHT * 0.4, BAR_RADIUS);
+      ctx.fill();
+    }
+
+    // Element dots, left-aligned above the bar, side by side.
+    if (state.aura) drawDot(ctx, DOT_LEFT_X, state.aura);
+    if (state.reaction) drawDot(ctx, state.reaction && state.aura ? DOT_RIGHT_X : DOT_LEFT_X, state.reaction);
+
     ctx.globalAlpha = 1;
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = 'rgba(8, 12, 9, 0.85)';
-    ctx.beginPath();
-    ctx.arc(center, center, ICON_RADIUS, 0, Math.PI * 2);
-    ctx.stroke();
     texture.needsUpdate = true;
+  }
+
+  function bucket(value: number): number {
+    return Math.round(Math.max(0, Math.min(1, value)) * OVERLAY_BUCKETS);
   }
 
   return {
     sprite,
-    show(remaining, colorHex, blink, elapsedSeconds) {
-      sprite.visible = true;
-      const clamped = Math.max(0, Math.min(1, remaining));
-      const bucket = Math.round(clamped * TIMER_BUCKETS);
-      if (bucket !== lastBucket || colorHex !== lastColor) {
-        redraw(clamped, colorHex);
-        lastBucket = bucket;
-        lastColor = colorHex;
-      }
-      material.opacity = blink ? 0.4 + Math.abs(Math.sin(elapsedSeconds * 9)) * 0.6 : 1;
-    },
-    hide() {
-      sprite.visible = false;
+    update(state) {
+      const key = [
+        bucket(state.healthFraction),
+        state.aura ? `${state.aura.colorHex}:${bucket(state.aura.remaining)}` : '-',
+        state.reaction ? `${state.reaction.colorHex}:${bucket(state.reaction.remaining)}` : '-',
+      ].join('|');
+      if (key === lastKey) return;
+      lastKey = key;
+      redraw(state);
     },
     dispose() {
       texture.dispose();
@@ -94,11 +147,7 @@ function createStatusIcon(scale: number, localX: number, localY: number): Status
 export interface EnemyModel {
   group: THREE.Group;
   body: THREE.Mesh;
-  healthBarFill: THREE.Sprite;
-  /** Standing element aura, with a remaining-time ring. */
-  auraIcon: StatusIcon;
-  /** Active reaction damage-over-time, with its own remaining-time ring. */
-  reactionIcon: StatusIcon;
+  overlay: EnemyOverlay;
 }
 
 // Module-lifetime resources shared across all enemies and system instances.
@@ -110,19 +159,6 @@ const sharedGolemHeadGeometry = new THREE.BoxGeometry(0.6, 0.5, 0.55);
 const sharedGolemArmGeometry = new THREE.BoxGeometry(0.35, 1.1, 0.4);
 const sharedEyeMaterial = new THREE.MeshBasicMaterial({ color: 0x101410 });
 const sharedSpikeMaterial = new THREE.MeshLambertMaterial({ color: 0x3a4a2a });
-
-function createHealthBar(group: THREE.Group, barHeight: number): THREE.Sprite {
-  const background = new THREE.Sprite(
-    new THREE.SpriteMaterial({ color: 0x141814, depthTest: false })
-  );
-  background.scale.set(1.3, 0.14, 1);
-  background.position.y = barHeight;
-  const fill = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x7ec843, depthTest: false }));
-  fill.scale.set(1.2, 0.09, 1);
-  fill.position.y = barHeight;
-  group.add(background, fill);
-  return fill;
-}
 
 function addEyes(group: THREE.Group, y: number, z: number) {
   const leftEye = new THREE.Mesh(sharedEyeGeometry, sharedEyeMaterial);
@@ -199,24 +235,17 @@ export function createEnemyModel(archetype: EnemyArchetype, scale: number): Enem
   else if (archetype.id === 'windWisp') body = buildWispBody(group, archetype);
   else body = buildSlimeBody(group, archetype, archetype.id === 'spikySlime');
 
-  const barHeight = archetype.id === 'stoneGolem' ? 2.3 : 1.6;
-  const healthBarFill = createHealthBar(group, barHeight);
-
-  // Two dots side by side at the same height above the enemy.
-  const iconHeight = barHeight + 0.45;
-  const iconOffset = 0.3 / scale;
-  const auraIcon = createStatusIcon(scale, -iconOffset, iconHeight);
-  const reactionIcon = createStatusIcon(scale, iconOffset, iconHeight);
-  group.add(auraIcon.sprite, reactionIcon.sprite);
+  const barHeight = archetype.id === 'stoneGolem' ? 2.7 : 2.0;
+  const overlay = createEnemyOverlay(scale, barHeight);
+  group.add(overlay.sprite);
 
   group.scale.setScalar(scale);
-  return { group, body, healthBarFill, auraIcon, reactionIcon };
+  return { group, body, overlay };
 }
 
 export function disposeEnemyModel(model: EnemyModel) {
   (model.body.material as THREE.Material).dispose();
-  model.auraIcon.dispose();
-  model.reactionIcon.dispose();
+  model.overlay.dispose();
   model.group.traverse(node => {
     if (node instanceof THREE.Sprite) node.material.dispose();
   });

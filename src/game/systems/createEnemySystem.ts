@@ -78,8 +78,6 @@ const ENEMY_LEASH_RANGE = 22;
 const ENEMY_CONTACT_RANGE = 1.4;
 const ENEMY_CONTACT_COOLDOWN_SECONDS = 1;
 const AURA_DURATION_SECONDS = 8;
-/** Above this remaining-fraction the aura icon is solid; below it blinks. */
-const AURA_STRONG_FRACTION = 0.5;
 // A reaction deals bonus damage over a fixed number of ticks (framerate
 // independent). Per-tick scales with the reaction's own strength.
 const REACTION_TOTAL_TICKS = 6;
@@ -180,29 +178,24 @@ export function createEnemySystem(
     material.emissiveIntensity = 0.55;
   }
 
-  /**
-   * Left dot = standing aura with its remaining-time ring (solid then blinking
-   * as it fades); right dot = active reaction damage-over-time with its own ring.
-   */
-  function updateStatusIcons(enemy: Enemy) {
-    if (enemy.auraElement) {
-      const remaining = (enemy.auraExpiresAt - elapsedSeconds) / AURA_DURATION_SECONDS;
-      enemy.model.auraIcon.show(
-        remaining,
-        ELEMENTS[enemy.auraElement].color,
-        remaining <= AURA_STRONG_FRACTION,
-        elapsedSeconds
-      );
-    } else {
-      enemy.model.auraIcon.hide();
-    }
-
-    if (enemy.reactionTicksRemaining > 0) {
-      const remaining = enemy.reactionTicksRemaining / REACTION_TOTAL_TICKS;
-      enemy.model.reactionIcon.show(remaining, enemy.reactionDotColor, false, elapsedSeconds);
-    } else {
-      enemy.model.reactionIcon.hide();
-    }
+  /** Pushes health + aura/reaction timers into the single overlay sprite. */
+  function updateOverlay(enemy: Enemy) {
+    enemy.model.overlay.update({
+      healthFraction: Math.max(0, enemy.health / enemy.maxHealth),
+      aura: enemy.auraElement
+        ? {
+            colorHex: ELEMENTS[enemy.auraElement].color,
+            remaining: (enemy.auraExpiresAt - elapsedSeconds) / AURA_DURATION_SECONDS,
+          }
+        : null,
+      reaction:
+        enemy.reactionTicksRemaining > 0
+          ? {
+              colorHex: enemy.reactionDotColor,
+              remaining: enemy.reactionTicksRemaining / REACTION_TOTAL_TICKS,
+            }
+          : null,
+    });
   }
 
   /** Fixed-count catch-up: total DoT damage is framerate independent. */
@@ -212,7 +205,6 @@ export function createEnemySystem(
       enemy.reactionNextTickAt += REACTION_TICK_SECONDS;
       enemy.health -= enemy.reactionDotDamagePerTick;
       const barPosition = enemy.model.group.position;
-      enemy.model.healthBarFill.scale.x = 1.2 * Math.max(0, enemy.health / enemy.maxHealth);
       reportDamage(
         barPosition.clone().setY(barPosition.y + 1),
         enemy.reactionDotDamagePerTick,
@@ -242,14 +234,12 @@ export function createEnemySystem(
     enemy.isAlive = true;
     enemy.model.group.visible = true;
     enemy.health = enemy.maxHealth;
-    enemy.model.healthBarFill.scale.x = 1.2;
     enemy.auraElement = null;
     enemy.reactionTicksRemaining = 0;
-    enemy.model.auraIcon.hide();
-    enemy.model.reactionIcon.hide();
     enemy.frozenUntil = 0;
     enemy.model.group.position.copy(spawnPositionNearHome(enemy));
     refreshAuraVisual(enemy);
+    updateOverlay(enemy);
   }
 
   function applyElementalHit(enemy: Enemy, damage: number, element: ElementId): ElementalHitResult {
@@ -357,7 +347,7 @@ export function createEnemySystem(
         }
         tickReactionDot(enemy);
         if (!enemy.isAlive) continue; // a DoT tick may have killed it
-        updateStatusIcons(enemy);
+        updateOverlay(enemy);
         if (elapsedSeconds < enemy.frozenUntil) continue;
 
         const distanceToPlayer = moveEnemy(enemy, playerPosition, deltaSeconds);
@@ -383,8 +373,6 @@ export function createEnemySystem(
         hitSomething = true;
         const result = applyElementalHit(enemy, damage, element);
         enemy.health -= result.finalDamage;
-        const healthFraction = Math.max(0, enemy.health / enemy.maxHealth);
-        enemy.model.healthBarFill.scale.x = 1.2 * healthFraction;
         effectSystem.spawnBurst(position.clone().setY(position.y + 0.9), ELEMENTS[element].color, 10);
         // Crit styling wins over reaction so the gold "!" is never hidden;
         // the reaction still reads via the mixed-color aura flash + burst.
