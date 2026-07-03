@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { tables, type DbConnection } from './module_bindings';
-import type { GachaResult, Player } from './module_bindings/types';
+import type { Player } from './module_bindings/types';
 import { createGame, type Game, type HudState } from './game/createGame';
 import { CHARACTERS } from './game/data/characters';
 import { MAX_HEALTH } from './game/data/constants';
 import { JoinScreen } from './ui/JoinScreen';
 import { Hud } from './ui/Hud';
-import { GachaScreen } from './ui/GachaScreen';
+import { GachaScreen, type PityInfo, type PullView } from './ui/GachaScreen';
 
 const PARTY_SIZE = 4;
 
@@ -30,7 +30,9 @@ export default function App() {
   const partyRef = useRef<string[]>([]);
   const [hudState, setHudState] = useState<HudState>(INITIAL_HUD_STATE);
   const [isGachaOpen, setIsGachaOpen] = useState(false);
-  const [lastPullResult, setLastPullResult] = useState<GachaResult | null>(null);
+  const [pullResults, setPullResults] = useState<PullView[] | null>(null);
+  const pullBufferRef = useRef<PullView[]>([]);
+  const flushTimerRef = useRef<number | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
 
   useEffect(() => {
@@ -41,7 +43,14 @@ export default function App() {
     const subscription = connection
       .subscriptionBuilder()
       .onApplied(() => setIsSubscribed(true))
-      .subscribe([tables.player, tables.ownedCharacter, tables.skillCast, tables.gachaResult]);
+      .subscribe([
+        tables.player,
+        tables.ownedCharacter,
+        tables.skillCast,
+        tables.bannerPity,
+        tables.weaponItem,
+        tables.pullResult,
+      ]);
     return () => {
       try {
         subscription.unsubscribe();
@@ -53,6 +62,8 @@ export default function App() {
 
   const [players] = useTable(tables.player);
   const [ownedCharacterRows] = useTable(tables.ownedCharacter);
+  const [bannerPityRows] = useTable(tables.bannerPity);
+  const [weaponItemRows] = useTable(tables.weaponItem);
 
   useTable(tables.skillCast, {
     onInsert: cast => {
@@ -60,10 +71,23 @@ export default function App() {
       gameRef.current?.handleRemoteSkillCast(cast);
     },
   });
-  useTable(tables.gachaResult, {
-    onInsert: result => {
-      if (result.owner.toHexString() !== myIdentityRef.current) return;
-      setLastPullResult(result);
+  // Each pull emits one pull_result event row; collect a request's rows (they
+  // arrive in a burst) and flush them together into the reveal screen.
+  useTable(tables.pullResult, {
+    onInsert: row => {
+      if (row.owner.toHexString() !== myIdentityRef.current) return;
+      pullBufferRef.current.push({
+        slot: row.slot,
+        kind: row.kind,
+        itemId: row.itemId,
+        rarity: row.rarity,
+        isNew: row.isNew,
+        isFeatured: row.isFeatured,
+      });
+      if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current);
+      flushTimerRef.current = window.setTimeout(() => {
+        setPullResults([...pullBufferRef.current]);
+      }, 120);
     },
   });
 
@@ -83,6 +107,29 @@ export default function App() {
     const maxHealth = CHARACTERS[row.characterId]?.maxHealth ?? MAX_HEALTH;
     partyHealthById[row.characterId] = maxHealth > 0 ? row.currentHealth / maxHealth : 1;
   }
+
+  const pityByBanner: Record<string, PityInfo> = {};
+  for (const row of bannerPityRows) {
+    if (row.owner.toHexString() !== myIdentityHex) continue;
+    pityByBanner[row.bannerId] = {
+      pullsSinceFiveStar: row.pullsSinceFiveStar,
+      guaranteedFeatured: row.guaranteedFeatured,
+      totalPulls: row.totalPulls,
+    };
+  }
+
+  const myWeaponItems = weaponItemRows
+    .filter(row => row.owner.toHexString() === myIdentityHex)
+    .map(row => ({ weaponId: row.weaponId, rarity: row.rarity }));
+
+  const pullBanner = useCallback(
+    (bannerId: string, count: number) => {
+      pullBufferRef.current = [];
+      setPullResults(null);
+      connection?.reducers.pullBanner({ bannerId, count });
+    },
+    [connection]
+  );
 
   const selectCharacter = useCallback(
     (characterId: string) => {
@@ -171,13 +218,15 @@ export default function App() {
           primogems={myPlayer?.primogems ?? 0}
           ownedCharacterIds={new Set(myCharacterIds)}
           activeCharacterId={myPlayer?.activeCharacterId ?? ''}
-          lastPullResult={lastPullResult}
-          onPull={() => connection?.reducers.pullGacha({})}
+          weaponItems={myWeaponItems}
+          pityByBanner={pityByBanner}
+          pullResults={pullResults}
+          onPull={pullBanner}
           onSelectCharacter={selectCharacter}
-          onDismissResult={() => setLastPullResult(null)}
+          onDismissResults={() => setPullResults(null)}
           onClose={() => {
             setIsGachaOpen(false);
-            setLastPullResult(null);
+            setPullResults(null);
           }}
         />
       )}

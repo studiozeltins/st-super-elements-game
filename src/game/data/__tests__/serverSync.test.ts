@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CHARACTERS, healSpecFor } from '../characters';
+import { BANNERS, GACHA_WEAPONS } from '../gacha';
 import {
   GACHA_PULL_COST,
   MAX_HEALTH,
@@ -83,6 +84,28 @@ describe('server CHARACTER_STATS stays in sync with client CHARACTERS', () => {
       }).toEqual({ healType: spec.type, healMode: spec.mode, healPower: spec.power });
     }
   );
+});
+
+describe('server wish config stays in sync with client gacha data', () => {
+  it('banners have the same featured 5★ characters', () => {
+    const block = /const BANNERS[\s\S]*?= \{([\s\S]*?)\n\};/.exec(SERVER_SOURCE);
+    expect(block, 'BANNERS not found in server source').not.toBeNull();
+    const serverBanners = [...block![1].matchAll(/(\w+):\s*\{\s*featuredCharacterId:\s*'([^']+)'/g)]
+      .map(([, id, featured]) => `${id}:${featured}`)
+      .sort();
+    const clientBanners = BANNERS.map(banner => `${banner.id}:${banner.featuredCharacterId}`).sort();
+    expect(serverBanners).toEqual(clientBanners);
+  });
+
+  it('weapon catalog ids and rarities match', () => {
+    const block = /const GACHA_WEAPONS[^[]*= \[([\s\S]*?)\n\];/.exec(SERVER_SOURCE);
+    expect(block, 'GACHA_WEAPONS not found in server source').not.toBeNull();
+    const serverWeapons = [...block![1].matchAll(/id:\s*'([^']+)',\s*rarity:\s*(\d)/g)]
+      .map(([, id, rarity]) => `${id}:${rarity}`)
+      .sort();
+    const clientWeapons = GACHA_WEAPONS.map(weapon => `${weapon.id}:${weapon.rarity}`).sort();
+    expect(serverWeapons).toEqual(clientWeapons);
+  });
 });
 
 describe('server constants stay in sync with client constants', () => {

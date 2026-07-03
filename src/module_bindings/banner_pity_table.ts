@@ -11,8 +11,11 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
+  id: __t.u64().primaryKey(),
   owner: __t.identity(),
-  characterId: __t.string().name("character_id"),
-  stars: __t.u32(),
-  wasNew: __t.bool().name("was_new"),
+  bannerId: __t.string().name("banner_id"),
+  pullsSinceFiveStar: __t.u32().name("pulls_since_five_star"),
+  pullsSinceFourStar: __t.u32().name("pulls_since_four_star"),
+  guaranteedFeatured: __t.bool().name("guaranteed_featured"),
+  totalPulls: __t.u32().name("total_pulls"),
 });

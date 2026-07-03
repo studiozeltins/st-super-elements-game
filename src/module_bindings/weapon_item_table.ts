@@ -10,4 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {};
+export default __t.row({
+  id: __t.u64().primaryKey(),
+  owner: __t.identity(),
+  weaponId: __t.string().name("weapon_id"),
+  rarity: __t.u32(),
+  acquiredAt: __t.timestamp().name("acquired_at"),
+});

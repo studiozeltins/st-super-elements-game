@@ -10,13 +10,16 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export const GachaResult = __t.object("GachaResult", {
+export const BannerPity = __t.object("BannerPity", {
+  id: __t.u64(),
   owner: __t.identity(),
-  characterId: __t.string(),
-  stars: __t.u32(),
-  wasNew: __t.bool(),
+  bannerId: __t.string(),
+  pullsSinceFiveStar: __t.u32(),
+  pullsSinceFourStar: __t.u32(),
+  guaranteedFeatured: __t.bool(),
+  totalPulls: __t.u32(),
 });
-export type GachaResult = __Infer<typeof GachaResult>;
+export type BannerPity = __Infer<typeof BannerPity>;
 
 export const OwnedCharacter = __t.object("OwnedCharacter", {
   id: __t.u64(),
@@ -41,6 +44,18 @@ export const Player = __t.object("Player", {
 });
 export type Player = __Infer<typeof Player>;
 
+export const PullResult = __t.object("PullResult", {
+  owner: __t.identity(),
+  bannerId: __t.string(),
+  slot: __t.u32(),
+  kind: __t.string(),
+  itemId: __t.string(),
+  rarity: __t.u32(),
+  isNew: __t.bool(),
+  isFeatured: __t.bool(),
+});
+export type PullResult = __Infer<typeof PullResult>;
+
 export const RegenTimer = __t.object("RegenTimer", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
@@ -57,4 +72,13 @@ export const SkillCast = __t.object("SkillCast", {
   directionZ: __t.f32(),
 });
 export type SkillCast = __Infer<typeof SkillCast>;
+
+export const WeaponItem = __t.object("WeaponItem", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  weaponId: __t.string(),
+  rarity: __t.u32(),
+  acquiredAt: __t.timestamp(),
+});
+export type WeaponItem = __Infer<typeof WeaponItem>;
 

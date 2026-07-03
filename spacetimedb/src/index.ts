@@ -48,7 +48,37 @@ const GACHA_PULL_COST = 1600;
 const DUPLICATE_REFUND = 800;
 const KILL_REWARD_PRIMOGEMS = 40;
 const MAX_KILL_REWARD_TIER = 3;
-const FIVE_STAR_CHANCE = 0.1;
+
+// ---- Wish banners + weapon catalog + pity (mirror src/game/data/gacha.ts) ----
+const BANNERS: Record<string, { featuredCharacterId: string }> = {
+  wind: { featuredCharacterId: 'aeris' },
+  flame: { featuredCharacterId: 'ignis' },
+  flood: { featuredCharacterId: 'marina' },
+};
+const GACHA_WEAPONS: Array<{ id: string; rarity: 3 | 4 | 5 }> = [
+  { id: 'debesu-zobens', rarity: 5 },
+  { id: 'vilku-kaps', rarity: 5 },
+  { id: 'amosa-loks', rarity: 5 },
+  { id: 'homas-skeptrs', rarity: 5 },
+  { id: 'zudusi-lugsna', rarity: 5 },
+  { id: 'saules-zobens', rarity: 4 },
+  { id: 'kalna-cirvis', rarity: 4 },
+  { id: 'kara-loks', rarity: 4 },
+  { id: 'lietus-skeps', rarity: 4 },
+  { id: 'veja-gramata', rarity: 4 },
+  { id: 'koka-zobens', rarity: 3 },
+  { id: 'mednieka-loks', rarity: 3 },
+  { id: 'dzelzs-skeps', rarity: 3 },
+];
+const FIVE_STAR_BASE_RATE = 0.006;
+const SOFT_PITY_START = 74;
+const HARD_PITY = 90;
+const SOFT_PITY_STEP = 0.06;
+const FOUR_STAR_RATE = 0.051;
+const FOUR_STAR_PITY = 10;
+const FEATURED_5STAR_WIN = 0.5;
+const FOUR_STAR_CHARACTER_SHARE = 0.5;
+const MAX_PULLS_PER_REQUEST = 10;
 // Keep in sync with src/game/data/constants.ts (archipelago extent).
 const WORLD_BOUND = 130;
 const MOVEMENT_LIMIT = 135;
@@ -78,7 +108,29 @@ const REGEN_INTERVAL_MICROS = 1_000_000n;
 const MAX_HIT_DAMAGE = 400;
 
 function statsFor(characterId: string) {
-  return CHARACTER_STATS[characterId] ?? { stars: 4 as const, maxHealth: DEFAULT_MAX_HEALTH, healthRegen: 0 };
+  return CHARACTER_STATS[characterId] ?? { stars: 4 as const, maxHealth: DEFAULT_MAX_HEALTH, healthRegen: 0, ...NO_HEAL };
+}
+
+// 5★ probability of a pull, given how many pulls have happened since the last
+// 5★ (this pull included). Ramps from SOFT_PITY_START up to a guarantee at HARD_PITY.
+function fiveStarChance(pullNumber: number) {
+  if (pullNumber >= HARD_PITY) return 1;
+  if (pullNumber < SOFT_PITY_START) return FIVE_STAR_BASE_RATE;
+  return Math.min(1, FIVE_STAR_BASE_RATE + (pullNumber - (SOFT_PITY_START - 1)) * SOFT_PITY_STEP);
+}
+
+function weaponsByRarity(rarity: number) {
+  return GACHA_WEAPONS.filter(weapon => weapon.rarity === rarity);
+}
+
+function pickWeaponId(ctx: { random: any }, rarity: number) {
+  const pool = weaponsByRarity(rarity);
+  return pool[ctx.random.integerInRange(0, pool.length - 1)].id;
+}
+
+function pickFourStarCharacterId(ctx: { random: any }) {
+  const pool = Object.keys(CHARACTER_STATS).filter(id => CHARACTER_STATS[id].stars === 4);
+  return pool[ctx.random.integerInRange(0, pool.length - 1)];
 }
 // Bow projectiles fly up to ~45 units; server range check must cover them.
 const MAX_HIT_RANGE = 45;
@@ -127,13 +179,48 @@ const skillCast = table(
   }
 );
 
-const gachaResult = table(
-  { name: 'gacha_result', public: true, event: true },
+// Per-player, per-banner pity state.
+const bannerPity = table(
+  {
+    name: 'banner_pity',
+    public: true,
+    indexes: [{ accessor: 'by_owner_banner', algorithm: 'btree', columns: ['owner', 'bannerId'] }],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity(),
+    bannerId: t.string(),
+    pullsSinceFiveStar: t.u32(),
+    pullsSinceFourStar: t.u32(),
+    guaranteedFeatured: t.bool(),
+    totalPulls: t.u32(),
+  }
+);
+
+// Weapon inventory — one row per pulled weapon. No combat use yet.
+const weaponItem = table(
+  { name: 'weapon_item', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity().index('btree'),
+    weaponId: t.string(),
+    rarity: t.u32(),
+    acquiredAt: t.timestamp(),
+  }
+);
+
+// Broadcasts each pull's outcome so the client can animate the result screen.
+const pullResult = table(
+  { name: 'pull_result', public: true, event: true },
   {
     owner: t.identity(),
-    characterId: t.string(),
-    stars: t.u32(),
-    wasNew: t.bool(),
+    bannerId: t.string(),
+    slot: t.u32(),
+    kind: t.string(), // 'character' | 'weapon'
+    itemId: t.string(),
+    rarity: t.u32(),
+    isNew: t.bool(),
+    isFeatured: t.bool(),
   }
 );
 
@@ -148,7 +235,15 @@ const regenTimer = table(
   }
 );
 
-const spacetimedb = schema({ player, ownedCharacter, skillCast, gachaResult, regenTimer });
+const spacetimedb = schema({
+  player,
+  ownedCharacter,
+  skillCast,
+  bannerPity,
+  weaponItem,
+  pullResult,
+  regenTimer,
+});
 export default spacetimedb;
 
 function requirePlayer(ctx: { db: any; sender: any }) {
@@ -432,46 +527,129 @@ export const healParty = spacetimedb.reducer(
   }
 );
 
-function pickRandomCharacter(randomValue: number, pickFiveStar: boolean) {
-  const tierPool = CHARACTER_POOL.filter(entry =>
-    pickFiveStar ? entry.stars === 5 : entry.stars === 4
-  );
-  const index = Math.floor(randomValue * tierPool.length) % tierPool.length;
-  return tierPool[index];
+// Adds a character to the roster if unowned; returns whether it was new.
+function grantCharacter(ctx: { db: any; sender: any }, characterId: string) {
+  if (ownsCharacter(ctx, characterId)) return false;
+  ctx.db.ownedCharacter.insert({
+    id: 0n,
+    owner: ctx.sender,
+    characterId,
+    currentHealth: statsFor(characterId).maxHealth,
+  });
+  return true;
 }
 
-export const pullGacha = spacetimedb.reducer(ctx => {
-  const currentPlayer = requirePlayer(ctx);
-  if (currentPlayer.primogems < GACHA_PULL_COST) {
-    throw new SenderError('Not enough primogems');
-  }
-
-  const pickFiveStar = ctx.random() < FIVE_STAR_CHANCE;
-  const pulledCharacter = pickRandomCharacter(ctx.random(), pickFiveStar);
-  const wasNew = !ownsCharacter(ctx, pulledCharacter.characterId);
-
-  const refund = wasNew ? 0 : DUPLICATE_REFUND;
-  ctx.db.player.identity.update({
-    ...currentPlayer,
-    primogems: currentPlayer.primogems - GACHA_PULL_COST + refund,
+function grantWeapon(ctx: { db: any; sender: any; timestamp: any }, weaponId: string, rarity: number) {
+  ctx.db.weaponItem.insert({
+    id: 0n,
+    owner: ctx.sender,
+    weaponId,
+    rarity,
+    acquiredAt: ctx.timestamp,
   });
+}
 
-  if (wasNew) {
-    ctx.db.ownedCharacter.insert({
-      id: 0n,
-      owner: ctx.sender,
-      characterId: pulledCharacter.characterId,
-      currentHealth: statsFor(pulledCharacter.characterId).maxHealth,
+export const pullBanner = spacetimedb.reducer(
+  { bannerId: t.string(), count: t.u32() },
+  (ctx, { bannerId, count }) => {
+    const currentPlayer = requirePlayer(ctx);
+    const banner = BANNERS[bannerId];
+    if (!banner) throw new SenderError('Unknown banner');
+
+    const pullCount = count >= MAX_PULLS_PER_REQUEST ? MAX_PULLS_PER_REQUEST : 1;
+    const totalCost = GACHA_PULL_COST * pullCount;
+    if (currentPlayer.primogems < totalCost) throw new SenderError('Not enough primogems');
+
+    // Load (or create) this banner's pity row for the player.
+    let pity = [...ctx.db.bannerPity.by_owner_banner.filter([ctx.sender, bannerId])][0];
+    if (!pity) {
+      pity = ctx.db.bannerPity.insert({
+        id: 0n,
+        owner: ctx.sender,
+        bannerId,
+        pullsSinceFiveStar: 0,
+        pullsSinceFourStar: 0,
+        guaranteedFeatured: false,
+        totalPulls: 0,
+      });
+    }
+
+    let sinceFive = pity.pullsSinceFiveStar;
+    let sinceFour = pity.pullsSinceFourStar;
+    let guaranteed = pity.guaranteedFeatured;
+    let total = pity.totalPulls;
+    let refund = 0;
+
+    for (let slot = 0; slot < pullCount; slot++) {
+      sinceFive++;
+      sinceFour++;
+      total++;
+      let kind = 'weapon';
+      let itemId = '';
+      let rarity = 3;
+      let isNew = false;
+      let isFeatured = false;
+
+      if (ctx.random() < fiveStarChance(sinceFive)) {
+        sinceFive = 0;
+        rarity = 5;
+        const wonFeatured = guaranteed || ctx.random() < FEATURED_5STAR_WIN;
+        if (wonFeatured) {
+          guaranteed = false;
+          kind = 'character';
+          itemId = banner.featuredCharacterId;
+          isFeatured = true;
+          isNew = grantCharacter(ctx, itemId);
+          if (!isNew) refund += DUPLICATE_REFUND;
+        } else {
+          // Lost the 50/50 → a 5★ weapon, and the next 5★ is guaranteed featured.
+          guaranteed = true;
+          itemId = pickWeaponId(ctx, 5);
+          grantWeapon(ctx, itemId, 5);
+        }
+      } else if (sinceFour >= FOUR_STAR_PITY || ctx.random() < FOUR_STAR_RATE) {
+        sinceFour = 0;
+        rarity = 4;
+        if (ctx.random() < FOUR_STAR_CHARACTER_SHARE) {
+          kind = 'character';
+          itemId = pickFourStarCharacterId(ctx);
+          isNew = grantCharacter(ctx, itemId);
+          if (!isNew) refund += DUPLICATE_REFUND;
+        } else {
+          itemId = pickWeaponId(ctx, 4);
+          grantWeapon(ctx, itemId, 4);
+        }
+      } else {
+        rarity = 3;
+        itemId = pickWeaponId(ctx, 3);
+        grantWeapon(ctx, itemId, 3);
+      }
+
+      ctx.db.pullResult.insert({
+        owner: ctx.sender,
+        bannerId,
+        slot,
+        kind,
+        itemId,
+        rarity,
+        isNew,
+        isFeatured,
+      });
+    }
+
+    ctx.db.bannerPity.id.update({
+      ...pity,
+      pullsSinceFiveStar: sinceFive,
+      pullsSinceFourStar: sinceFour,
+      guaranteedFeatured: guaranteed,
+      totalPulls: total,
+    });
+    ctx.db.player.identity.update({
+      ...currentPlayer,
+      primogems: currentPlayer.primogems - totalCost + refund,
     });
   }
-
-  ctx.db.gachaResult.insert({
-    owner: ctx.sender,
-    characterId: pulledCharacter.characterId,
-    stars: pulledCharacter.stars,
-    wasNew,
-  });
-});
+);
 
 export const regenTick = spacetimedb.reducer(
   { timer: regenTimer.rowType },

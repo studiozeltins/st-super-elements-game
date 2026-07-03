@@ -41,7 +41,7 @@ import GrantKillRewardReducer from "./grant_kill_reward_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import HealPartyReducer from "./heal_party_reducer";
 import JoinGameReducer from "./join_game_reducer";
-import PullGachaReducer from "./pull_gacha_reducer";
+import PullBannerReducer from "./pull_banner_reducer";
 import SetActiveCharacterReducer from "./set_active_character_reducer";
 import TakeDamageReducer from "./take_damage_reducer";
 import UpdatePositionReducer from "./update_position_reducer";
@@ -49,23 +49,32 @@ import UpdatePositionReducer from "./update_position_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
-import GachaResultRow from "./gacha_result_table";
+import BannerPityRow from "./banner_pity_table";
 import OwnedCharacterRow from "./owned_character_table";
 import PlayerRow from "./player_table";
+import PullResultRow from "./pull_result_table";
 import SkillCastRow from "./skill_cast_table";
+import WeaponItemRow from "./weapon_item_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
-  gachaResult: __table({
-    name: 'gacha_result',
+  bannerPity: __table({
+    name: 'banner_pity',
     indexes: [
+      { accessor: 'id', name: 'banner_pity_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'by_owner_banner', name: 'banner_pity_owner_banner_id_idx_btree', algorithm: 'btree', columns: [
+        'owner',
+        'bannerId',
+      ] },
     ],
     constraints: [
+      { name: 'banner_pity_id_key', constraint: 'unique', columns: ['id'] },
     ],
-    event: true,
-  }, GachaResultRow),
+  }, BannerPityRow),
   ownedCharacter: __table({
     name: 'owned_character',
     indexes: [
@@ -91,6 +100,14 @@ const tablesSchema = __schema({
       { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, PlayerRow),
+  pullResult: __table({
+    name: 'pull_result',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, PullResultRow),
   skillCast: __table({
     name: 'skill_cast',
     indexes: [
@@ -99,6 +116,20 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, SkillCastRow),
+  weaponItem: __table({
+    name: 'weapon_item',
+    indexes: [
+      { accessor: 'id', name: 'weapon_item_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'owner', name: 'weapon_item_owner_idx_btree', algorithm: 'btree', columns: [
+        'owner',
+      ] },
+    ],
+    constraints: [
+      { name: 'weapon_item_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, WeaponItemRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -110,7 +141,7 @@ const reducersSchema = __reducers(
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("heal_party", HealPartyReducer),
   __reducerSchema("join_game", JoinGameReducer),
-  __reducerSchema("pull_gacha", PullGachaReducer),
+  __reducerSchema("pull_banner", PullBannerReducer),
   __reducerSchema("set_active_character", SetActiveCharacterReducer),
   __reducerSchema("take_damage", TakeDamageReducer),
   __reducerSchema("update_position", UpdatePositionReducer),
