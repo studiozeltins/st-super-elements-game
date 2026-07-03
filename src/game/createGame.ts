@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CHARACTERS, type CharacterDefinition } from './data/characters';
 import { WEAPONS } from './data/weapons';
-import { ELEMENTS } from './data/elements';
+import { ELEMENTS, type ElementId } from './data/elements';
 import {
   GRAVITY,
   JUMP_VELOCITY,
@@ -152,15 +152,26 @@ export function createGame(
   let fallPeakY = 0;
   let hasReportedVoidDeath = false;
 
-  const applyLocalDamage: DamageApplier = (center, radius, damage, element, kind) => {
+  function dealDamage(
+    center: { x: number; y: number; z: number },
+    radius: number,
+    damage: number,
+    element: ElementId,
+    kind: DamageKind
+  ): boolean {
     const hitEnemy = enemySystem.applyDamageInRadius(center, radius, damage, element, kind);
     const hitPlayer = applyPvpDamage(center, radius, damage, kind);
-    // The combo only climbs when an attack actually lands (once per attack,
-    // even if it struck several targets). Fired here so deferred projectile
-    // and channeled skill hits count at their true impact time.
-    if (hitEnemy || hitPlayer) registerComboHit();
     return hitEnemy || hitPlayer;
+  }
+
+  // Only regular attacks build the combo (once per landed attack, even across
+  // several targets); skills spend the combo scaling but do not add to it.
+  const applyAttackDamage: DamageApplier = (center, radius, damage, element, kind) => {
+    const hit = dealDamage(center, radius, damage, element, kind);
+    if (hit) registerComboHit();
+    return hit;
   };
+  const applySkillDamage: DamageApplier = dealDamage;
 
   function registerComboHit() {
     combo++;
@@ -243,9 +254,8 @@ export function createGame(
   }
 
   function performAttack() {
-    // Clicks are paced by the input cooldown; the combo itself only rises when
-    // a hit lands (in applyLocalDamage), not per swing.
-    if (elapsedSeconds - lastSwingAt < COMBO_INPUT_COOLDOWN_SECONDS) return;
+    // The caller already paced this by the input cooldown; the combo itself
+    // only rises when a hit lands (applyAttackDamage), not per swing.
     lastSwingAt = elapsedSeconds;
     swingIndex++;
     const profile = swingProfile(swingIndex, combo);
@@ -271,7 +281,7 @@ export function createGame(
         damage: amount,
         element: activeCharacter.element,
         hitRadius: 0.9,
-        applyDamage: applyLocalDamage,
+        applyDamage: applyAttackDamage,
         damageKind: kind,
       });
       return;
@@ -283,7 +293,7 @@ export function createGame(
       z: playerPosition.z + direction.z * weapon.range * 0.6,
     };
     effectSystem.spawnMeleeSlash(playerPosition, playerRotationY, elementColor);
-    applyLocalDamage(hitCenter, weapon.range * 0.75, amount, activeCharacter.element, kind);
+    applyAttackDamage(hitCenter, weapon.range * 0.75, amount, activeCharacter.element, kind);
   }
 
   function performSkill() {
@@ -307,7 +317,7 @@ export function createGame(
       element: activeCharacter.element,
       origin: playerPosition.clone().setY(playerPosition.y + 1),
       direction,
-      applyDamage: applyLocalDamage,
+      applyDamage: applySkillDamage,
       // The combo's real payoff: the skill scales strongly and uncapped.
       damageMultiplier: skillAttackMultiplier(combo),
       followPosition: () => playerPosition,
@@ -494,9 +504,11 @@ export function createGame(
     }
 
     updateLocalPlayer(deltaSeconds);
+    // Effects tick first so projectile/skill reactions this frame are already
+    // flagged when the enemy update refreshes their status icons.
+    effectSystem.update(deltaSeconds);
     enemySystem.update(deltaSeconds, playerPosition, damage => network.sendTakeDamage(damage));
     resolveAllCollisions();
-    effectSystem.update(deltaSeconds);
     damageNumbers.update(deltaSeconds);
     world.update(deltaSeconds);
     updateRemotePlayerViews(deltaSeconds);

@@ -181,12 +181,15 @@ export function createEnemySystem(
     const auraMaterial = enemy.model.auraIcon.material as THREE.SpriteMaterial;
     const reactionMaterial = enemy.model.reactionIcon.material as THREE.SpriteMaterial;
 
-    // While mixing, show both element dots (existing aura + incoming element).
+    // While mixing, show both element dots symmetric about the head.
     if (elapsedSeconds < enemy.reactionFlashUntil) {
+      const dotOffset = 0.33 / enemy.model.group.scale.x;
       enemy.model.auraIcon.visible = true;
+      enemy.model.auraIcon.position.x = -dotOffset;
       auraMaterial.color.setHex(enemy.reactionColorA);
       auraMaterial.opacity = 1;
       enemy.model.reactionIcon.visible = true;
+      enemy.model.reactionIcon.position.x = dotOffset;
       reactionMaterial.color.setHex(enemy.reactionColorB);
       reactionMaterial.opacity = 1;
       return;
@@ -198,6 +201,7 @@ export function createEnemySystem(
       return;
     }
     enemy.model.auraIcon.visible = true;
+    enemy.model.auraIcon.position.x = 0; // single dot sits centered
     auraMaterial.color.setHex(ELEMENTS[enemy.auraElement].color);
     const remainingFraction = (enemy.auraExpiresAt - elapsedSeconds) / AURA_DURATION_SECONDS;
     auraMaterial.opacity =
@@ -236,6 +240,9 @@ export function createEnemySystem(
     if (!enemy.auraElement) {
       enemy.auraElement = element;
       enemy.auraExpiresAt = elapsedSeconds + AURA_DURATION_SECONDS;
+      // A fresh aura must not stay hidden behind a lingering reaction flash.
+      enemy.reactionFlashUntil = 0;
+      enemy.model.reactionIcon.visible = false;
       refreshAuraVisual(enemy);
       return { finalDamage: damage, reacted: false, reactionColor: null };
     }
