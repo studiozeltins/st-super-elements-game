@@ -101,6 +101,7 @@ export default function App() {
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
         sendKillReward: () => connection.reducers.grantKillReward({}),
+        sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
       setHudState
     );

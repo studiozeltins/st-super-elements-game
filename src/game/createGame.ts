@@ -8,10 +8,10 @@ import {
   MAX_HEALTH,
   POSITION_SYNC_INTERVAL_SECONDS,
   SAFE_ZONE_HEAL_PER_SECOND,
-  WORLD_BOUND,
 } from './data/constants';
 import { createPixelRenderer } from './engine/createPixelRenderer';
 import { createMondstadtWorld, isInsideSafeZone } from './world/createMondstadtWorld';
+import { ISLAND_RADIUS } from './world/terrain';
 import { createCharacterModel, createNameSprite, type CharacterModel } from './entities/createCharacterModel';
 import { createInputSystem } from './systems/createInputSystem';
 import { createEffectSystem, type DamageApplier } from './systems/createEffectSystem';
@@ -37,6 +37,7 @@ export interface GameNetworkActions {
   sendTakeDamage(damage: number): void;
   sendHeal(amount: number): void;
   sendKillReward(): void;
+  sendFallToDeath(): void;
 }
 
 export interface Game {
@@ -66,12 +67,21 @@ interface RemotePlayerView {
 const CAMERA_OFFSET = new THREE.Vector3(7, 15, 11);
 const CAMERA_YAW = Math.atan2(CAMERA_OFFSET.x, CAMERA_OFFSET.z);
 const DASH_DISTANCE = 5;
+const DASH_SUBSTEPS = 4;
+/** Walkable step height; anything taller needs a jump (terrace = 1.8, jump apex ≈ 2). */
+const MAX_STEP_UP = 0.9;
 const PVP_HIT_COOLDOWN_SECONDS = 0.3;
 const PVP_MAX_HIT_RANGE = 45; // server MAX_HIT_RANGE
 const POSITION_EPSILON = 0.01;
 const ROTATION_EPSILON = 0.02;
 const SERVER_TELEPORT_THRESHOLD = 20;
 const RESPAWN_HEALTH_JUMP = 100;
+/** Falls up to ~2 terraces are free; longer drops hurt. */
+const SAFE_FALL_DISTANCE = 4.5;
+const FALL_DAMAGE_PER_UNIT = 50;
+/** Below this Y the player has fallen off the island — instant death. */
+const VOID_KILL_DEPTH = -15;
+const MOVEMENT_LIMIT = ISLAND_RADIUS + 5;
 
 export function createGame(
   canvas: HTMLCanvasElement,
@@ -82,7 +92,9 @@ export function createGame(
   const pixelRenderer = createPixelRenderer(canvas);
   const world = createMondstadtWorld(scene);
   const effectSystem = createEffectSystem(scene);
-  const enemySystem = createEnemySystem(scene, effectSystem, () => network.sendKillReward());
+  const enemySystem = createEnemySystem(scene, effectSystem, world.getGroundHeight, () =>
+    network.sendKillReward()
+  );
   const inputSystem = createInputSystem(canvas);
 
   let activeCharacter: CharacterDefinition = CHARACTERS.zibo;
@@ -104,6 +116,8 @@ export function createGame(
   let lastFrameTime = 0;
   let lastSentPosition = new THREE.Vector3(Infinity, 0, 0);
   let lastSentRotationY = Infinity;
+  let fallPeakY = 0;
+  let hasReportedVoidDeath = false;
 
   const applyLocalDamage: DamageApplier = (center, radius, damage, element) => {
     const hitEnemy = enemySystem.applyDamageInRadius(center, radius, damage, element);
@@ -182,7 +196,7 @@ export function createGame(
 
     if (weapon.isRanged) {
       effectSystem.spawnProjectile({
-        origin: playerPosition.clone().setY(1.2),
+        origin: playerPosition.clone().setY(playerPosition.y + 1.2),
         direction,
         speed: weapon.projectileSpeed,
         damage: weapon.damage,
@@ -210,15 +224,17 @@ export function createGame(
     const direction = facingDirection();
 
     if (skill.kind === 'dash') {
-      playerPosition.x += direction.x * DASH_DISTANCE;
-      playerPosition.z += direction.z * DASH_DISTANCE;
+      const substep = DASH_DISTANCE / DASH_SUBSTEPS;
+      for (let dashStep = 0; dashStep < DASH_SUBSTEPS; dashStep++) {
+        if (!tryMove(direction.x * substep, direction.z * substep)) break;
+      }
       clampPlayerToWorld();
     }
 
     effectSystem.spawnSkillEffect({
       skill,
       element: activeCharacter.element,
-      origin: playerPosition.clone().setY(1),
+      origin: playerPosition.clone().setY(playerPosition.y + 1),
       direction,
       applyDamage: applyLocalDamage,
       followPosition: () => playerPosition,
@@ -227,8 +243,37 @@ export function createGame(
   }
 
   function clampPlayerToWorld() {
-    playerPosition.x = Math.max(-WORLD_BOUND, Math.min(WORLD_BOUND, playerPosition.x));
-    playerPosition.z = Math.max(-WORLD_BOUND, Math.min(WORLD_BOUND, playerPosition.z));
+    playerPosition.x = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.x));
+    playerPosition.z = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.z));
+  }
+
+  function isGrounded(): boolean {
+    return (
+      playerPosition.y <= world.getGroundHeight(playerPosition.x, playerPosition.z) + 0.02
+    );
+  }
+
+  /** Moves horizontally unless blocked by a ledge taller than one step. */
+  function tryMove(deltaX: number, deltaZ: number): boolean {
+    const targetX = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.x + deltaX));
+    const targetZ = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.z + deltaZ));
+    const targetGround = world.getGroundHeight(targetX, targetZ);
+    const ledgeHeight = targetGround - playerPosition.y;
+    const grounded = isGrounded();
+    if (grounded && ledgeHeight > MAX_STEP_UP) return false;
+    if (!grounded && ledgeHeight > 0.1) return false;
+    playerPosition.x = targetX;
+    playerPosition.z = targetZ;
+    if (grounded && ledgeHeight > 0) playerPosition.y = targetGround;
+    return true;
+  }
+
+  function applyFallDamage(landingY: number) {
+    const fallDistance = fallPeakY - landingY;
+    if (fallDistance <= SAFE_FALL_DISTANCE) return;
+    const damage = Math.round((fallDistance - SAFE_FALL_DISTANCE) * FALL_DAMAGE_PER_UNIT);
+    network.sendTakeDamage(damage);
+    effectSystem.spawnBurst(playerPosition.clone().setY(playerPosition.y + 0.5), 0xd8b48a, 16);
   }
 
   function updateLocalPlayer(deltaSeconds: number) {
@@ -240,18 +285,29 @@ export function createGame(
         moveVector.x * Math.cos(CAMERA_YAW) + moveVector.z * Math.sin(CAMERA_YAW);
       const worldMoveZ =
         -moveVector.x * Math.sin(CAMERA_YAW) + moveVector.z * Math.cos(CAMERA_YAW);
-      playerPosition.x += worldMoveX * activeCharacter.moveSpeed * deltaSeconds;
-      playerPosition.z += worldMoveZ * activeCharacter.moveSpeed * deltaSeconds;
+      const stepX = worldMoveX * activeCharacter.moveSpeed * deltaSeconds;
+      const stepZ = worldMoveZ * activeCharacter.moveSpeed * deltaSeconds;
+      if (!tryMove(stepX, stepZ) && !tryMove(stepX, 0)) tryMove(0, stepZ);
       playerRotationY = Math.atan2(worldMoveX, worldMoveZ);
-      clampPlayerToWorld();
     }
 
-    if (inputSystem.consumeJump() && playerPosition.y <= 0.001) {
+    if (inputSystem.consumeJump() && isGrounded()) {
       playerVelocityY = JUMP_VELOCITY;
     }
     playerVelocityY -= GRAVITY * deltaSeconds;
-    playerPosition.y = Math.max(0, playerPosition.y + playerVelocityY * deltaSeconds);
-    if (playerPosition.y === 0) playerVelocityY = 0;
+    playerPosition.y += playerVelocityY * deltaSeconds;
+    fallPeakY = Math.max(fallPeakY, playerPosition.y);
+    const groundBelow = world.getGroundHeight(playerPosition.x, playerPosition.z);
+    if (playerPosition.y <= groundBelow) {
+      playerPosition.y = groundBelow;
+      playerVelocityY = 0;
+      applyFallDamage(groundBelow);
+      fallPeakY = groundBelow;
+    }
+    if (playerPosition.y < VOID_KILL_DEPTH && !hasReportedVoidDeath) {
+      hasReportedVoidDeath = true;
+      network.sendFallToDeath();
+    }
 
     if (inputSystem.isAttackHeld()) performAttack();
     if (inputSystem.consumeSkill()) performSkill();
@@ -299,7 +355,7 @@ export function createGame(
   function updateCamera(deltaSeconds: number) {
     const desiredPosition = playerPosition.clone().add(CAMERA_OFFSET);
     pixelRenderer.camera.position.lerp(desiredPosition, Math.min(1, deltaSeconds * 6));
-    pixelRenderer.camera.lookAt(playerPosition.x, 1, playerPosition.z);
+    pixelRenderer.camera.lookAt(playerPosition.x, playerPosition.y + 1, playerPosition.z);
   }
 
   function pushHudState() {
@@ -437,6 +493,8 @@ export function createGame(
       if (wasRespawned || isFarFromServer) {
         playerPosition.copy(serverPosition);
         playerVelocityY = 0;
+        fallPeakY = serverPosition.y;
+        hasReportedVoidDeath = false;
       }
       game.setActiveCharacter(row.activeCharacterId);
     },
@@ -449,7 +507,11 @@ export function createGame(
       effectSystem.spawnSkillEffect({
         skill: character.skill,
         element: character.element,
-        origin: new THREE.Vector3(cast.originX, 1, cast.originZ),
+        origin: new THREE.Vector3(
+          cast.originX,
+          world.getGroundHeight(cast.originX, cast.originZ) + 1,
+          cast.originZ
+        ),
         direction: { x: cast.directionX, z: cast.directionZ },
         applyDamage: null,
         followPosition: casterView ? () => casterView.model.group.position : undefined,

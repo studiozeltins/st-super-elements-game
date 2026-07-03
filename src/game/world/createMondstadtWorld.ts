@@ -1,12 +1,41 @@
 import * as THREE from 'three';
 import { disposeObject } from '../engine/disposeObject';
 import { SAFE_ZONE_RADIUS, WORLD_BOUND } from '../data/constants';
+import { createSeededRandom } from './rng';
+import { createTerrainMesh, getTerrainHeight } from './terrain';
+import { getCampSites } from './camps';
+import {
+  createBoulder,
+  createBush,
+  createCampfire,
+  createCanopyTree,
+  createMushroom,
+  createPalmTree,
+  createRockSpire,
+  createSpikes,
+  createTeepee,
+  createTotem,
+  createWoodenArch,
+  type SeededRandom,
+  type WorldAsset,
+} from './assets';
 
 export interface MondstadtWorld {
   group: THREE.Group;
   update(deltaSeconds: number): void;
+  /** Walkable height: terrain plus climbable platform tops (boulders). */
+  getGroundHeight(x: number, z: number): number;
   dispose(): void;
 }
+
+interface Platform {
+  x: number;
+  z: number;
+  radius: number;
+  topY: number;
+}
+
+const WORLD_DECOR_SEED = 0xa11ce;
 
 export function isInsideSafeZone(positionX: number, positionZ: number): boolean {
   return Math.hypot(positionX, positionZ) <= SAFE_ZONE_RADIUS;
@@ -29,14 +58,7 @@ function createLighting(group: THREE.Group) {
   group.add(sunLight);
 }
 
-function createGround(group: THREE.Group) {
-  const groundGeometry = new THREE.PlaneGeometry(WORLD_BOUND * 2.4, WORLD_BOUND * 2.4);
-  const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x58a24f });
-  const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  group.add(ground);
-
+function createPlaza(group: THREE.Group) {
   const plaza = new THREE.Mesh(
     new THREE.CircleGeometry(SAFE_ZONE_RADIUS, 32),
     new THREE.MeshLambertMaterial({ color: 0xb9b2a4 })
@@ -55,12 +77,12 @@ function createGround(group: THREE.Group) {
   group.add(safeZoneRing);
 }
 
-function createHouse(angleRadians: number, distanceFromCenter: number): THREE.Group {
+function createHouse(random: SeededRandom, angleRadians: number, distanceFromCenter: number) {
   const house = new THREE.Group();
   const wallColors = [0xe8dcc0, 0xdccfb4, 0xf0e6d0];
   const roofColors = [0xb0452f, 0x3d7a78, 0x8a5a3a];
-  const wallColor = wallColors[Math.floor(Math.random() * wallColors.length)];
-  const roofColor = roofColors[Math.floor(Math.random() * roofColors.length)];
+  const wallColor = wallColors[Math.floor(random() * wallColors.length)];
+  const roofColor = roofColors[Math.floor(random() * roofColors.length)];
 
   const walls = new THREE.Mesh(
     new THREE.BoxGeometry(4, 3.4, 4),
@@ -135,83 +157,50 @@ function createFountain(): THREE.Group {
   return fountain;
 }
 
-function randomPositionOutsidePlaza(minimumRadius: number): { x: number; z: number } {
-  const angle = Math.random() * Math.PI * 2;
-  const distance = minimumRadius + Math.random() * (WORLD_BOUND - 6 - minimumRadius);
-  return { x: Math.cos(angle) * distance, z: Math.sin(angle) * distance };
-}
-
-function createInstancedScatter(
-  group: THREE.Group,
-  geometry: THREE.BufferGeometry,
-  material: THREE.Material,
-  count: number,
-  placeInstance: (dummy: THREE.Object3D) => void
-) {
-  const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
-  instancedMesh.castShadow = true;
-  const dummy = new THREE.Object3D();
-  for (let instanceIndex = 0; instanceIndex < count; instanceIndex++) {
-    placeInstance(dummy);
-    dummy.updateMatrix();
-    instancedMesh.setMatrixAt(instanceIndex, dummy.matrix);
-  }
-  group.add(instancedMesh);
-}
-
-function createNature(group: THREE.Group) {
-  const treePositions = Array.from({ length: 44 }, () => randomPositionOutsidePlaza(24));
-  let treeIndex = 0;
-  createInstancedScatter(
-    group,
-    new THREE.BoxGeometry(0.7, 2.4, 0.7),
-    new THREE.MeshLambertMaterial({ color: 0x6b4a2f }),
-    treePositions.length,
-    dummy => {
-      const treePosition = treePositions[treeIndex++];
-      dummy.position.set(treePosition.x, 1.2, treePosition.z);
-      dummy.scale.setScalar(0.8 + Math.random() * 0.6);
-      dummy.rotation.set(0, Math.random() * Math.PI, 0);
+function createInstancedGroundCover(group: THREE.Group, random: SeededRandom) {
+  const placeOnTerrain = (
+    geometry: THREE.BufferGeometry,
+    material: THREE.Material,
+    count: number,
+    minRadius: number,
+    yOffset: number
+  ) => {
+    const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
+    const dummy = new THREE.Object3D();
+    for (let instanceIndex = 0; instanceIndex < count; instanceIndex++) {
+      const angle = random() * Math.PI * 2;
+      const distance = minRadius + random() * (WORLD_BOUND - 6 - minRadius);
+      const x = Math.cos(angle) * distance;
+      const z = Math.sin(angle) * distance;
+      dummy.position.set(x, getTerrainHeight(x, z) + yOffset, z);
+      dummy.rotation.set(0, random() * Math.PI, 0);
+      dummy.updateMatrix();
+      instancedMesh.setMatrixAt(instanceIndex, dummy.matrix);
     }
-  );
-  treeIndex = 0;
-  createInstancedScatter(
-    group,
-    new THREE.ConeGeometry(1.8, 3.4, 6),
-    new THREE.MeshLambertMaterial({ color: 0x3f8a36 }),
-    treePositions.length,
-    dummy => {
-      const treePosition = treePositions[treeIndex++];
-      dummy.position.set(treePosition.x, 3.6, treePosition.z);
-      dummy.scale.setScalar(0.8 + Math.random() * 0.7);
-      dummy.rotation.set(0, Math.random() * Math.PI, 0);
-    }
-  );
+    group.add(instancedMesh);
+  };
 
-  createInstancedScatter(
-    group,
-    new THREE.DodecahedronGeometry(0.9),
-    new THREE.MeshLambertMaterial({ color: 0x8f8f86 }),
-    16,
-    dummy => {
-      const rockPosition = randomPositionOutsidePlaza(22);
-      dummy.position.set(rockPosition.x, 0.4, rockPosition.z);
-      dummy.scale.setScalar(0.5 + Math.random() * 1.1);
-      dummy.rotation.set(Math.random(), Math.random() * Math.PI, Math.random());
-    }
-  );
-
-  createInstancedScatter(
-    group,
+  placeOnTerrain(
     new THREE.BoxGeometry(0.22, 0.5, 0.22),
     new THREE.MeshLambertMaterial({ color: 0xfff0a8 }),
-    70,
-    dummy => {
-      const flowerPosition = randomPositionOutsidePlaza(19);
-      dummy.position.set(flowerPosition.x, 0.25, flowerPosition.z);
-      dummy.rotation.set(0, Math.random() * Math.PI, 0);
-    }
+    50,
+    SAFE_ZONE_RADIUS + 1,
+    0.25
   );
+  placeOnTerrain(
+    new THREE.BoxGeometry(0.1, 0.55, 0.1),
+    new THREE.MeshLambertMaterial({ color: 0x86c86a }),
+    70,
+    SAFE_ZONE_RADIUS + 1,
+    0.27
+  );
+}
+
+interface AssetScatterRule {
+  create(random: SeededRandom): WorldAsset;
+  count: number;
+  minRadius: number;
+  maxSlope: number;
 }
 
 export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
@@ -219,25 +208,110 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
   scene.fog = new THREE.Fog(0x8ecae6, 60, 160);
 
   const group = new THREE.Group();
+  const random = createSeededRandom(WORLD_DECOR_SEED);
+  const platforms: Platform[] = [];
+
+  function terrainSlopeAt(x: number, z: number): number {
+    const step = 1;
+    return (
+      Math.hypot(
+        getTerrainHeight(x + step, z) - getTerrainHeight(x - step, z),
+        getTerrainHeight(x, z + step) - getTerrainHeight(x, z - step)
+      ) /
+      (2 * step)
+    );
+  }
+
+  function placeAsset(asset: WorldAsset, x: number, z: number) {
+    const groundY = getTerrainHeight(x, z);
+    asset.group.position.set(x, groundY, z);
+    group.add(asset.group);
+    if (asset.platformRadius && asset.platformTopHeight) {
+      platforms.push({
+        x,
+        z,
+        radius: asset.platformRadius,
+        topY: groundY + asset.platformTopHeight,
+      });
+    }
+  }
+
+  function scatterAssets(rule: AssetScatterRule) {
+    let placed = 0;
+    let attempts = 0;
+    while (placed < rule.count && attempts < rule.count * 12) {
+      attempts++;
+      const angle = random() * Math.PI * 2;
+      const distance = rule.minRadius + random() * (WORLD_BOUND - 6 - rule.minRadius);
+      const x = Math.cos(angle) * distance;
+      const z = Math.sin(angle) * distance;
+      if (terrainSlopeAt(x, z) > rule.maxSlope) continue;
+      placeAsset(rule.create(random), x, z);
+      placed++;
+    }
+  }
+
   createLighting(group);
-  createGround(group);
-  createNature(group);
+  group.add(createTerrainMesh());
+  createPlaza(group);
   group.add(createFountain());
+  createInstancedGroundCover(group, random);
 
   const houseCount = 6;
   for (let houseIndex = 0; houseIndex < houseCount; houseIndex++) {
     const angle = (houseIndex / houseCount) * Math.PI * 2 + 0.4;
-    group.add(createHouse(angle, 12));
+    group.add(createHouse(random, angle, 12));
   }
-
   const { group: windmill, blades } = createWindmill();
   group.add(windmill);
+
+  const scatterRules: AssetScatterRule[] = [
+    { create: createBoulder, count: 26, minRadius: SAFE_ZONE_RADIUS + 8, maxSlope: 0.9 },
+    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2 },
+    { create: createCanopyTree, count: 8, minRadius: 30, maxSlope: 0.45 },
+    { create: createPalmTree, count: 14, minRadius: SAFE_ZONE_RADIUS + 4, maxSlope: 0.4 },
+    { create: createBush, count: 24, minRadius: SAFE_ZONE_RADIUS + 2, maxSlope: 0.6 },
+    { create: createMushroom, count: 12, minRadius: SAFE_ZONE_RADIUS + 4, maxSlope: 0.6 },
+  ];
+  for (const rule of scatterRules) scatterAssets(rule);
+
+  for (const campSite of getCampSites()) {
+    const campRandom = createSeededRandom(
+      WORLD_DECOR_SEED ^ (Math.round(campSite.x * 31 + campSite.z * 17) | 0)
+    );
+    const placeAroundCamp = (asset: WorldAsset, radius: number) => {
+      const angle = campRandom() * Math.PI * 2;
+      placeAsset(
+        asset,
+        campSite.x + Math.cos(angle) * radius,
+        campSite.z + Math.sin(angle) * radius
+      );
+    };
+    placeAsset(createCampfire(campRandom), campSite.x, campSite.z);
+    placeAroundCamp(createTeepee(campRandom), 4.5);
+    placeAroundCamp(createTeepee(campRandom), 5);
+    placeAroundCamp(createTotem(campRandom), 3.5);
+    placeAroundCamp(createSpikes(campRandom), 6);
+    placeAroundCamp(createSpikes(campRandom), 6.5);
+    if (campRandom() < 0.5) placeAroundCamp(createWoodenArch(campRandom), 7);
+  }
+
   scene.add(group);
 
   return {
     group,
     update(deltaSeconds) {
       blades.rotation.z += deltaSeconds * 0.6;
+    },
+    getGroundHeight(x, z) {
+      let groundHeight = getTerrainHeight(x, z);
+      for (const platform of platforms) {
+        if (platform.topY <= groundHeight) continue;
+        if (Math.hypot(platform.x - x, platform.z - z) <= platform.radius) {
+          groundHeight = platform.topY;
+        }
+      }
+      return groundHeight;
     },
     dispose() {
       scene.remove(group);

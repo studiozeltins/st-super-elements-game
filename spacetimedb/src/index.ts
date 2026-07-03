@@ -257,6 +257,17 @@ export const takeDamage = spacetimedb.reducer(
   }
 );
 
+export const fallToDeath = spacetimedb.reducer(ctx => {
+  const currentPlayer = requirePlayer(ctx);
+  ctx.db.player.identity.update({
+    ...currentPlayer,
+    currentHealth: MAX_HEALTH,
+    positionX: SPAWN_X,
+    positionY: 0,
+    positionZ: SPAWN_Z,
+  });
+});
+
 export const grantKillReward = spacetimedb.reducer(ctx => {
   const currentPlayer = requirePlayer(ctx);
   const microsSinceLastReward =
