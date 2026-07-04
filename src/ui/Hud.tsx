@@ -41,6 +41,13 @@ export function Hud({
   const maxHealth = activeCharacter?.maxHealth ?? MAX_HEALTH;
   const healthFraction = Math.max(0, Math.min(1, health / maxHealth));
 
+  // Low-HP screen border: appears below 40%, blinks faster the lower it gets,
+  // and at <=5% locks solid red at double thickness (see .hud__lowhp CSS).
+  const lowHp = healthFraction < 0.4;
+  const criticalHp = healthFraction <= 0.05;
+  const blinkProgress = Math.max(0, Math.min(1, (0.4 - healthFraction) / (0.4 - 0.05)));
+  const blinkMs = Math.round(1100 - blinkProgress * (1100 - 260)); // 1100ms @40% → 260ms @5%
+
   return (
     <div className="hud">
       <div className="hud__top-left">
@@ -54,15 +61,6 @@ export function Hud({
               {activeCharacter.displayName}
             </span>
           )}
-        </div>
-        <div className="hud__health">
-          <div
-            className="hud__health-fill"
-            style={{
-              transform: `scaleX(${healthFraction})`,
-              background: healthFraction > 0.35 ? 'var(--accent)' : 'var(--danger)',
-            }}
-          />
         </div>
         <div className="hud__meta-row">
           <span className={`hud__zone ${hudState.inSafeZone ? 'hud__zone--safe' : 'hud__zone--pvp'}`}>
@@ -152,6 +150,31 @@ export function Hud({
           </button>
         </div>
       </div>
+
+      <div
+        className={`hud__health ${healthFraction <= 0.05 ? 'hud__health--critical' : ''}`}
+        role="progressbar"
+        aria-label="Veselība"
+        aria-valuemin={0}
+        aria-valuemax={maxHealth}
+        aria-valuenow={Math.round(health)}
+      >
+        <div
+          className="hud__health-fill"
+          style={{
+            transform: `scaleX(${healthFraction})`,
+            background: healthFraction > 0.4 ? 'var(--accent)' : 'var(--danger)',
+          }}
+        />
+      </div>
+
+      {lowHp && (
+        <div
+          className={`hud__lowhp ${criticalHp ? 'hud__lowhp--critical' : ''}`}
+          style={{ animationDuration: `${blinkMs}ms` }}
+          aria-hidden="true"
+        />
+      )}
 
       <div className="hud__hints">WASD kustība · Peles klikšķis uzbrukums · Q prasme · Space lēciens · 1-4 varoņi</div>
     </div>
