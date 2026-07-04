@@ -141,7 +141,6 @@ function pickFourStarCharacterId(ctx: { random: any }) {
 const MAX_HIT_RANGE = 45;
 const MAX_STEP_DISTANCE = 12;
 const KILL_REWARD_COOLDOWN_MICROS = 1_500_000n;
-const GEM_PICKUP_RANGE = 4.2;
 const MAX_COMBO_FOR_GEMS = 100;
 const COMBO_GEM_STEP = 0.03; // +3% dropped gems per combo point (capped)
 const PVP_DEATH_SPILL = 1 / 3; // fraction of primogems a PVP loser drops
@@ -635,17 +634,16 @@ export const enemyTakeGem = spacetimedb.reducer(
 );
 
 // Any player who walks over a drop grabs it. First one there wins the race.
+// The client only requests this once a drop has magneted to the player, so the
+// pickup proximity is gated client-side (same trust model as the sim enemies) —
+// a server distance check against the drop's origin would wrongly reject gems
+// that drifted toward the player.
 export const collectGem = spacetimedb.reducer(
   { dropId: t.u64() },
   (ctx, { dropId }) => {
     const currentPlayer = requirePlayer(ctx);
     const drop = ctx.db.gemDrop.id.find(dropId);
     if (!drop) return;
-    const distance = Math.hypot(
-      currentPlayer.positionX - drop.positionX,
-      currentPlayer.positionZ - drop.positionZ
-    );
-    if (distance > GEM_PICKUP_RANGE) return;
     ctx.db.gemDrop.id.delete(dropId);
     ctx.db.player.identity.update({
       ...currentPlayer,
