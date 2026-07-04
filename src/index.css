@@ -579,7 +579,9 @@ button {
 
 .hud__health-fill {
   height: 100%;
-  transform-origin: left;
+  /* Drain symmetrically toward the centre (both ends recede) so the remaining
+     HP stays visible under the player's thumbs on touch. */
+  transform-origin: center;
   transition: transform 0.25s ease-out, background 0.25s ease-out;
 }
 
@@ -594,9 +596,9 @@ button {
   z-index: 8;
   animation: lowhp-blink 1s infinite;
   background:
-    linear-gradient(to bottom, var(--lowhp-color), transparent) top / 100% var(--lowhp-size) no-repeat,
-    linear-gradient(to right, var(--lowhp-color), transparent) left / var(--lowhp-size) 100% no-repeat,
-    linear-gradient(to left, var(--lowhp-color), transparent) right / var(--lowhp-size) 100% no-repeat;
+    linear-gradient(to bottom, var(--lowhp-color), transparent) top / 100% 24px no-repeat,
+    linear-gradient(to right, var(--lowhp-color), transparent) left / 24px 100% no-repeat,
+    linear-gradient(to left, var(--lowhp-color), transparent) right / 24px 100% no-repeat;
 }
 
 /* Hold each state, then flip over a 1% sliver so the blink reads as hard on/off
