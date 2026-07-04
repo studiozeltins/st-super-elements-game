@@ -5,6 +5,14 @@ import { CHARACTERS, healSpecFor } from '../characters';
 import { BANNERS, GACHA_WEAPONS } from '../gacha';
 import { BOSS_GEM_MULTIPLIER, GEM_DENOMINATIONS } from '../gemDrops';
 import {
+  GOLIATH_BASE_GEMS_BY_SIZE,
+  KILL_REWARD_PRIMOGEMS,
+  goliathBaseGems,
+  regularEnemyBaseGems,
+} from '../gemRewards';
+import { GOLIATH_ARCHETYPES_BY_SIZE } from '../goliathArchetypes';
+import { GOLIATH_SLOT_IDS, goliathBatchForTime } from '../../systems/goliathIdentity';
+import {
   GACHA_PULL_COST,
   MAX_HEALTH,
   SAFE_ZONE_RADIUS,
@@ -134,5 +142,116 @@ describe('server gem-drop economy stays in sync with client gemDrops', () => {
       .map(part => Number(part.trim()))
       .filter(value => !Number.isNaN(value));
     expect(serverDenominations).toEqual([...GEM_DENOMINATIONS]);
+  });
+});
+
+function extractServerNumberArray(name: string): number[] {
+  const match = new RegExp(`const ${name} = \\[([^\\]]*)\\]`).exec(SERVER_SOURCE);
+  expect(match, `${name} not found in server source`).not.toBeNull();
+  return match![1]
+    .split(',')
+    .map(part => Number(part.trim()))
+    .filter(value => !Number.isNaN(value));
+}
+
+describe('server enemy base-gem math stays in sync with client gemRewards', () => {
+  it('KILL_REWARD_PRIMOGEMS matches', () => {
+    expect(extractServerConstant('KILL_REWARD_PRIMOGEMS')).toBe(KILL_REWARD_PRIMOGEMS);
+  });
+
+  it('BOSS_GEM_MULTIPLIER re-exported from gemRewards matches server', () => {
+    expect(extractServerConstant('BOSS_GEM_MULTIPLIER')).toBe(BOSS_GEM_MULTIPLIER);
+  });
+
+  it('GOLIATH_BASE_GEMS_BY_SIZE matches server literal [500, 1000, 2000]', () => {
+    expect(extractServerNumberArray('GOLIATH_BASE_GEMS_BY_SIZE')).toEqual([
+      ...GOLIATH_BASE_GEMS_BY_SIZE,
+    ]);
+    expect([...GOLIATH_BASE_GEMS_BY_SIZE]).toEqual([500, 1000, 2000]);
+  });
+
+  it('goliathBaseGems clamps out-of-range indices exactly like the server', () => {
+    // Server: clamp(index, 0, length-1) then index GOLIATH_BASE_GEMS_BY_SIZE.
+    expect(goliathBaseGems(0)).toBe(500);
+    expect(goliathBaseGems(1)).toBe(1000);
+    expect(goliathBaseGems(2)).toBe(2000);
+    expect(goliathBaseGems(-5)).toBe(500);
+    expect(goliathBaseGems(99)).toBe(2000);
+  });
+
+  it('regularEnemyBaseGems matches the server formula for tier/boss combos', () => {
+    // Rebuild the server formula from the server source, then compare.
+    const killReward = extractServerConstant('KILL_REWARD_PRIMOGEMS');
+    const bossMultiplier = extractServerConstant('BOSS_GEM_MULTIPLIER');
+    const maxTier = extractServerConstant('MAX_KILL_REWARD_TIER');
+    const serverRegularBaseGems = (rewardTier: number, isBoss: boolean): number => {
+      const clampedTier = Math.max(1, Math.min(maxTier, rewardTier));
+      return killReward * clampedTier * (isBoss ? bossMultiplier : 1);
+    };
+
+    // In-range tiers, plus below/above range to prove identical clamping.
+    for (const tier of [-1, 0, 1, 2, 3, 7]) {
+      for (const isBoss of [false, true]) {
+        expect(regularEnemyBaseGems(tier, isBoss)).toBe(serverRegularBaseGems(tier, isBoss));
+      }
+    }
+  });
+});
+
+describe('client goliath archetypes derive gems and splash from size', () => {
+  it('is length 3 with sequential size indices 0,1,2', () => {
+    expect(GOLIATH_ARCHETYPES_BY_SIZE).toHaveLength(3);
+    expect(GOLIATH_ARCHETYPES_BY_SIZE.map(archetype => archetype.sizeIndex)).toEqual([0, 1, 2]);
+  });
+
+  it('baseGems come from goliathBaseGems(sizeIndex), never hardcoded', () => {
+    GOLIATH_ARCHETYPES_BY_SIZE.forEach((archetype, index) => {
+      expect(archetype.baseGems).toBe(goliathBaseGems(index));
+    });
+  });
+
+  it('only the largest raider (index 2) splashes on attack', () => {
+    expect(GOLIATH_ARCHETYPES_BY_SIZE.map(archetype => archetype.splashesOnAttack)).toEqual([
+      false,
+      false,
+      true,
+    ]);
+  });
+});
+
+describe('goliathBatchForTime is deterministic across clients', () => {
+  const WINDOW = 300_000_000n;
+
+  const isValidBatch = (batch: ReturnType<typeof goliathBatchForTime>): void => {
+    expect(batch.length).toBeGreaterThanOrEqual(1);
+    expect(batch.length).toBeLessThanOrEqual(GOLIATH_SLOT_IDS.length);
+
+    const slotIds = batch.map(member => member.slotId);
+    // Unique slot ids, each drawn from GOLIATH_SLOT_IDS, assigned in order.
+    expect(new Set(slotIds).size).toBe(slotIds.length);
+    expect(slotIds).toEqual(GOLIATH_SLOT_IDS.slice(0, slotIds.length));
+
+    for (const member of batch) {
+      expect(GOLIATH_SLOT_IDS).toContain(member.slotId);
+      expect(GOLIATH_ARCHETYPES_BY_SIZE).toContain(member.archetype);
+    }
+  };
+
+  it('returns deep-equal output for repeated calls with the same input', () => {
+    const time = 42_000_000_000n;
+    expect(goliathBatchForTime(time)).toEqual(goliathBatchForTime(time));
+  });
+
+  it('produces the identical batch anywhere inside one 5-minute window', () => {
+    const windowStart = 137n * WINDOW;
+    const early = goliathBatchForTime(windowStart);
+    const late = goliathBatchForTime(windowStart + WINDOW - 1n);
+    expect(late).toEqual(early);
+  });
+
+  it('yields a valid batch for many windows (length 1..3, unique in-order slots)', () => {
+    for (let bucket = 0n; bucket < 50n; bucket++) {
+      isValidBatch(goliathBatchForTime(bucket * WINDOW + 1n));
+    }
   });
 });
