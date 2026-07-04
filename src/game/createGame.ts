@@ -31,7 +31,7 @@ import {
   type SwingProfile,
 } from './combat/comboSystem';
 import type { DamageKind } from './combat/damageKind';
-import type { Player, SkillCast } from '../module_bindings/types';
+import type { GemDrop, Player, SkillCast } from '../module_bindings/types';
 
 export interface HudState {
   attackCooldownFraction: number;
@@ -55,7 +55,9 @@ export interface GameNetworkActions {
   sendHeal(amount: number): void;
   /** Trigger a healer character's party heal (combo only matters for combo-mode). */
   sendHealParty(comboCount: number): void;
-  sendKillReward(rewardTier: number): void;
+  /** A kill drops gems at a spot; the amount scales with the current combo. */
+  sendGemDrop(x: number, z: number, rewardTier: number, comboCount: number): void;
+  sendCollectGem(dropId: bigint): void;
   sendFallToDeath(): void;
 }
 
@@ -70,6 +72,8 @@ export interface Game {
   handleRemoteSkillCast(cast: SkillCast): void;
   /** Floats a number over the local player — PVP damage taken, or heals. */
   spawnSelfNumber(amount: number, kind: DamageKind): void;
+  /** Syncs the primogem drops lying in the world (walk over to collect). */
+  syncGemDrops(drops: readonly GemDrop[]): void;
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
@@ -127,7 +131,7 @@ export function createGame(
     scene,
     effectSystem,
     world.getGroundHeight,
-    rewardTier => network.sendKillReward(rewardTier),
+    (rewardTier, position) => network.sendGemDrop(position.x, position.z, rewardTier, combo),
     (position, amount, kind, color) => damageNumbers.spawn(position, amount, kind, color)
   );
   const inputSystem = createInputSystem(canvas);
@@ -151,6 +155,9 @@ export function createGame(
   let swingIndex = 0;
   const skillReadyAtByCharacter = new Map<string, number>();
   const remotePlayers = new Map<string, RemotePlayerView>();
+  const gemDrops = new Map<string, { mesh: THREE.Mesh; rawId: bigint }>();
+  const requestedGemPickups = new Set<string>();
+  const GEM_PICKUP_RANGE = 2.2;
   let animationFrameHandle = 0;
   let lastFrameTime = 0;
   let lastSentPosition = new THREE.Vector3(Infinity, 0, 0);
@@ -436,6 +443,33 @@ export function createGame(
     network.sendPosition(playerPosition.x, playerPosition.y, playerPosition.z, playerRotationY);
   }
 
+  function createGemMesh(drop: GemDrop): THREE.Mesh {
+    const mesh = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.34),
+      new THREE.MeshLambertMaterial({ color: 0xf2c14e, emissive: 0xf2c14e, emissiveIntensity: 0.55 })
+    );
+    mesh.position.set(
+      drop.positionX,
+      world.getGroundHeight(drop.positionX, drop.positionZ) + 0.7,
+      drop.positionZ
+    );
+    scene.add(mesh);
+    return mesh;
+  }
+
+  function updateGemDrops(deltaSeconds: number) {
+    for (const [key, gem] of gemDrops) {
+      gem.mesh.rotation.y += deltaSeconds * 2.4;
+      const withinReach =
+        Math.hypot(gem.mesh.position.x - playerPosition.x, gem.mesh.position.z - playerPosition.z) <=
+        GEM_PICKUP_RANGE;
+      if (withinReach && !requestedGemPickups.has(key)) {
+        requestedGemPickups.add(key);
+        network.sendCollectGem(gem.rawId);
+      }
+    }
+  }
+
   function healInSafeZone(deltaSeconds: number) {
     healTimer += deltaSeconds;
     if (healTimer < 1) return;
@@ -534,6 +568,7 @@ export function createGame(
         isCrit ? 'takenCrit' : 'taken'
       );
     });
+    updateGemDrops(deltaSeconds);
     resolveAllCollisions();
     damageNumbers.update(deltaSeconds);
     world.update(deltaSeconds);
@@ -657,6 +692,24 @@ export function createGame(
     },
     spawnSelfNumber(amount, kind) {
       damageNumbers.spawn(playerPosition.clone().setY(playerPosition.y + 1.4), amount, kind);
+    },
+    syncGemDrops(drops) {
+      const seen = new Set<string>();
+      for (const drop of drops) {
+        const key = drop.id.toString();
+        seen.add(key);
+        if (!gemDrops.has(key)) {
+          gemDrops.set(key, { mesh: createGemMesh(drop), rawId: drop.id });
+        }
+      }
+      for (const [key, gem] of gemDrops) {
+        if (seen.has(key)) continue;
+        scene.remove(gem.mesh);
+        gem.mesh.geometry.dispose();
+        (gem.mesh.material as THREE.Material).dispose();
+        gemDrops.delete(key);
+        requestedGemPickups.delete(key);
+      }
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];

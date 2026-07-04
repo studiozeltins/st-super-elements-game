@@ -52,6 +52,7 @@ export default function App() {
         tables.pullResult,
         tables.pvpHit,
         tables.healEvent,
+        tables.gemDrop,
       ]);
     return () => {
       try {
@@ -66,6 +67,7 @@ export default function App() {
   const [ownedCharacterRows] = useTable(tables.ownedCharacter);
   const [bannerPityRows] = useTable(tables.bannerPity);
   const [weaponItemRows] = useTable(tables.weaponItem);
+  const [gemDropRows] = useTable(tables.gemDrop);
 
   useTable(tables.skillCast, {
     onInsert: cast => {
@@ -193,7 +195,9 @@ export default function App() {
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
         sendHealParty: comboCount => connection.reducers.healParty({ comboCount }),
-        sendKillReward: rewardTier => connection.reducers.grantKillReward({ rewardTier }),
+        sendGemDrop: (x, z, rewardTier, comboCount) =>
+          connection.reducers.dropGems({ positionX: x, positionZ: z, rewardTier, comboCount }),
+        sendCollectGem: dropId => connection.reducers.collectGem({ dropId }),
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
       setHudState
@@ -215,6 +219,10 @@ export default function App() {
     gameRef.current?.syncRemotePlayers(players, myIdentityHex);
     if (myPlayer) gameRef.current?.syncMyServerRow(myPlayer);
   }, [players, myPlayer, myIdentityHex]);
+
+  useEffect(() => {
+    gameRef.current?.syncGemDrops(gemDropRows);
+  }, [gemDropRows]);
 
   useEffect(() => {
     const active = myPlayer?.activeCharacterId;

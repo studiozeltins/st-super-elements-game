@@ -21,6 +21,15 @@ export const BannerPity = __t.object("BannerPity", {
 });
 export type BannerPity = __Infer<typeof BannerPity>;
 
+export const GemDrop = __t.object("GemDrop", {
+  id: __t.u64(),
+  positionX: __t.f32(),
+  positionZ: __t.f32(),
+  amount: __t.u32(),
+  droppedBy: __t.identity(),
+});
+export type GemDrop = __Infer<typeof GemDrop>;
+
 export const HealEvent = __t.object("HealEvent", {
   owner: __t.identity(),
   characterId: __t.string(),
@@ -50,6 +59,8 @@ export const Player = __t.object("Player", {
   primogems: __t.u32(),
   currentHealth: __t.u32(),
   lastKillRewardAt: __t.timestamp(),
+  gemsFromKills: __t.u32(),
+  gemsCollected: __t.u32(),
 });
 export type Player = __Infer<typeof Player>;
 

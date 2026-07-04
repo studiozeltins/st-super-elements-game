@@ -23,4 +23,6 @@ export default __t.row({
   primogems: __t.u32(),
   currentHealth: __t.u32().name("current_health"),
   lastKillRewardAt: __t.timestamp().name("last_kill_reward_at"),
+  gemsFromKills: __t.u32().name("gems_from_kills"),
+  gemsCollected: __t.u32().name("gems_collected"),
 });

@@ -36,8 +36,9 @@ import {
 // Import all reducer arg schemas
 import AttackPlayerReducer from "./attack_player_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
+import CollectGemReducer from "./collect_gem_reducer";
+import DropGemsReducer from "./drop_gems_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
-import GrantKillRewardReducer from "./grant_kill_reward_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import HealPartyReducer from "./heal_party_reducer";
 import JoinGameReducer from "./join_game_reducer";
@@ -51,6 +52,7 @@ import UpdatePositionReducer from "./update_position_reducer";
 
 // Import all table schema definitions
 import BannerPityRow from "./banner_pity_table";
+import GemDropRow from "./gem_drop_table";
 import HealEventRow from "./heal_event_table";
 import OwnedCharacterRow from "./owned_character_table";
 import PlayerRow from "./player_table";
@@ -78,6 +80,17 @@ const tablesSchema = __schema({
       { name: 'banner_pity_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, BannerPityRow),
+  gemDrop: __table({
+    name: 'gem_drop',
+    indexes: [
+      { accessor: 'id', name: 'gem_drop_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'gem_drop_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, GemDropRow),
   healEvent: __table({
     name: 'heal_event',
     indexes: [
@@ -155,8 +168,9 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("attack_player", AttackPlayerReducer),
   __reducerSchema("cast_skill", CastSkillReducer),
+  __reducerSchema("collect_gem", CollectGemReducer),
+  __reducerSchema("drop_gems", DropGemsReducer),
   __reducerSchema("fall_to_death", FallToDeathReducer),
-  __reducerSchema("grant_kill_reward", GrantKillRewardReducer),
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("heal_party", HealPartyReducer),
   __reducerSchema("join_game", JoinGameReducer),

@@ -109,7 +109,7 @@ export function createEnemySystem(
   scene: THREE.Scene,
   effectSystem: EffectSystem,
   getGroundHeight: (x: number, z: number, maxSurfaceY?: number) => number,
-  onEnemyKilled: (rewardTier: number) => void,
+  onEnemyKilled: (rewardTier: number, worldPosition: THREE.Vector3) => void,
   reportDamage: DamageReporter
 ): EnemySystem {
   let elapsedSeconds = 0;
@@ -229,7 +229,7 @@ export function createEnemySystem(
       0xffffff,
       26
     );
-    onEnemyKilled(enemy.archetype.rewardTier);
+    onEnemyKilled(enemy.archetype.rewardTier, enemy.model.group.position.clone());
   }
 
   function respawnEnemy(enemy: Enemy) {

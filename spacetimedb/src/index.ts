@@ -141,6 +141,9 @@ function pickFourStarCharacterId(ctx: { random: any }) {
 const MAX_HIT_RANGE = 45;
 const MAX_STEP_DISTANCE = 12;
 const KILL_REWARD_COOLDOWN_MICROS = 1_500_000n;
+const GEM_PICKUP_RANGE = 2.4;
+const MAX_COMBO_FOR_GEMS = 100;
+const COMBO_GEM_STEP = 0.03; // +3% dropped gems per combo point (capped)
 
 const player = table(
   { name: 'player', public: true },
@@ -158,6 +161,23 @@ const player = table(
     primogems: t.u32(),
     currentHealth: t.u32(),
     lastKillRewardAt: t.timestamp(),
+    // Leaderboard stats: gems this player dropped via kills vs gems they picked
+    // up off the ground (others can steal your drops).
+    gemsFromKills: t.u32(),
+    gemsCollected: t.u32(),
+  }
+);
+
+// Primogems dropped on the ground by a kill. Any player can walk over and grab
+// them; droppedBy records who earned them for the leaderboard.
+const gemDrop = table(
+  { name: 'gem_drop', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    positionX: t.f32(),
+    positionZ: t.f32(),
+    amount: t.u32(),
+    droppedBy: t.identity(),
   }
 );
 
@@ -267,6 +287,7 @@ const regenTimer = table(
 
 const spacetimedb = schema({
   player,
+  gemDrop,
   ownedCharacter,
   skillCast,
   bannerPity,
@@ -370,6 +391,8 @@ export const joinGame = spacetimedb.reducer(
       primogems: STARTING_PRIMOGEMS,
       currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
       lastKillRewardAt: ctx.timestamp,
+      gemsFromKills: 0,
+      gemsCollected: 0,
     });
     ctx.db.ownedCharacter.insert({
       id: 0n,
@@ -531,21 +554,51 @@ export const fallToDeath = spacetimedb.reducer(ctx => {
   respawnPlayerAtSpawn(ctx, currentPlayer);
 });
 
-export const grantKillReward = spacetimedb.reducer(
-  { rewardTier: t.u32() },
-  (ctx, { rewardTier }) => {
-    // PVE enemies are client-simulated, so the server cannot yet verify a kill
-    // or its tier. The cooldown caps farm rate; move enemies server-side to
-    // close this fully. Tier is clamped so a spoofed value cannot exceed x3.
+// A kill drops gems on the ground instead of paying the killer directly. The
+// amount scales with the combo. PVE enemies are client-simulated, so the
+// cooldown caps farm rate and the tier is clamped against spoofing.
+export const dropGems = spacetimedb.reducer(
+  { positionX: t.f32(), positionZ: t.f32(), rewardTier: t.u32(), comboCount: t.u32() },
+  (ctx, { positionX, positionZ, rewardTier, comboCount }) => {
     const currentPlayer = requirePlayer(ctx);
     const microsSinceLastReward =
       ctx.timestamp.microsSinceUnixEpoch - currentPlayer.lastKillRewardAt.microsSinceUnixEpoch;
     if (microsSinceLastReward < KILL_REWARD_COOLDOWN_MICROS) return;
     const clampedTier = Math.max(1, Math.min(MAX_KILL_REWARD_TIER, rewardTier));
+    const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
+    const amount = Math.round(KILL_REWARD_PRIMOGEMS * clampedTier * (1 + combo * COMBO_GEM_STEP));
+    ctx.db.gemDrop.insert({
+      id: 0n,
+      positionX: clampToWorld(positionX),
+      positionZ: clampToWorld(positionZ),
+      amount,
+      droppedBy: ctx.sender,
+    });
     ctx.db.player.identity.update({
       ...currentPlayer,
-      primogems: currentPlayer.primogems + KILL_REWARD_PRIMOGEMS * clampedTier,
+      gemsFromKills: currentPlayer.gemsFromKills + amount,
       lastKillRewardAt: ctx.timestamp,
+    });
+  }
+);
+
+// Any player who walks over a drop grabs it. First one there wins the race.
+export const collectGem = spacetimedb.reducer(
+  { dropId: t.u64() },
+  (ctx, { dropId }) => {
+    const currentPlayer = requirePlayer(ctx);
+    const drop = ctx.db.gemDrop.id.find(dropId);
+    if (!drop) return;
+    const distance = Math.hypot(
+      currentPlayer.positionX - drop.positionX,
+      currentPlayer.positionZ - drop.positionZ
+    );
+    if (distance > GEM_PICKUP_RANGE) return;
+    ctx.db.gemDrop.id.delete(dropId);
+    ctx.db.player.identity.update({
+      ...currentPlayer,
+      primogems: currentPlayer.primogems + drop.amount,
+      gemsCollected: currentPlayer.gemsCollected + drop.amount,
     });
   }
 );

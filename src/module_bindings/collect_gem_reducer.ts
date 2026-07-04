@@ -11,5 +11,5 @@ import {
 } from "spacetimedb";
 
 export default {
-  rewardTier: __t.u32(),
+  dropId: __t.u64(),
 };
