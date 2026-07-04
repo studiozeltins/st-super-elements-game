@@ -152,6 +152,15 @@ const BOSS_GEM_MULTIPLIER = 3; // a boss kill pays triple the base reward
 // hoard it grabbed. Mirrored client-side in src/game/data/goliathArchetypes.ts
 // (kept in sync by serverSync.test.ts).
 const GOLIATH_BASE_GEMS_BY_SIZE = [500, 1000, 2000];
+// Goliath raiders use enemy ids at/above this base, disjoint from camp enemy ids
+// (campIndex*100 + member). Lets the server tell a goliath from a camp enemy by id.
+// Mirrors client GOLIATH_SLOT_IDS in src/game/systems/goliathIdentity.ts.
+const GOLIATH_SLOT_ID_BASE = 900000n;
+// A goliath spawns once per 5-minute window and never respawns inside it, so once
+// its slot is killed (by a player OR a camp) it stays paid-out for the whole
+// window — unlike camp enemies, which respawn every ENEMY_RESPAWN_MICROS. Mirrors
+// client GOLIATH_BATCH_WINDOW_MICROS in src/game/systems/goliathIdentity.ts.
+const GOLIATH_BATCH_WINDOW_MICROS = 300_000_000n;
 // Enemies are client-simulated with a fixed respawn delay. The server treats an
 // enemy as "dead" (its hoard already dropped) for this window after a kill, so
 // concurrent kill calls from several clients only pay out once.
@@ -826,12 +835,19 @@ export const enemyGrabGem = spacetimedb.reducer(
   { enemyId: t.u64(), dropId: t.u64() },
   (ctx, { enemyId, dropId }) => {
     const currentPlayer = requirePlayer(ctx);
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    const existing = ctx.db.enemyCarry.enemyId.find(enemyId);
+
+    // A goliath already killed this window is gone; ignore late grabs from other
+    // clients still simulating it alive, so it can't revive its slot or re-open a
+    // second payout. Leave the drop for a live grabber or a player. (Camp enemies
+    // respawn on their own 6s window and keep the existing grab behaviour below.)
+    if (isGoliathSlotId(enemyId) && isKillAlreadyCounted(existing, now)) return;
+
     const drop = ctx.db.gemDrop.id.find(dropId);
     if (!drop) return; // already grabbed by someone/something else
     ctx.db.gemDrop.id.delete(dropId);
 
-    const now = ctx.timestamp.microsSinceUnixEpoch;
-    const existing = ctx.db.enemyCarry.enemyId.find(enemyId);
     if (existing) {
       const respawned =
         existing.killedAtMicros !== 0n && now - existing.killedAtMicros >= ENEMY_RESPAWN_MICROS;
@@ -873,15 +889,21 @@ function enemyBaseGems(
   return KILL_REWARD_PRIMOGEMS * clampedTier * (isBoss ? BOSS_GEM_MULTIPLIER : 1);
 }
 
-// True while the enemy is inside its post-kill dead window, meaning another
-// client's kill already paid its hoard out. Guards every payout against
-// concurrent/duplicate calls across clients.
-function isWithinDeadWindow(existingCarry: any, nowMicros: bigint) {
-  return (
-    existingCarry &&
-    existingCarry.killedAtMicros !== 0n &&
-    nowMicros - existingCarry.killedAtMicros < ENEMY_RESPAWN_MICROS
-  );
+function isGoliathSlotId(enemyId: bigint) {
+  return enemyId >= GOLIATH_SLOT_ID_BASE;
+}
+
+// True when a kill for this slot has already been counted, so a duplicate/late
+// call must no-op. Camp enemies respawn every ENEMY_RESPAWN_MICROS, so their
+// guard is that short real-time window. Goliaths live once per 5-minute window,
+// so theirs is the whole window (bucketed) — immune to clock skew between clients
+// and to a player kill and a scheduled camp kill landing seconds apart.
+function isKillAlreadyCounted(existingCarry: any, nowMicros: bigint) {
+  if (!existingCarry || existingCarry.killedAtMicros === 0n) return false;
+  if (isGoliathSlotId(existingCarry.enemyId)) {
+    return existingCarry.killedAtMicros / GOLIATH_BATCH_WINDOW_MICROS === nowMicros / GOLIATH_BATCH_WINDOW_MICROS;
+  }
+  return nowMicros - existingCarry.killedAtMicros < ENEMY_RESPAWN_MICROS;
 }
 
 // Stamps an enemy dead and clears its hoard so the respawned enemy starts empty
@@ -915,7 +937,7 @@ export const killEnemy = spacetimedb.reducer(
     const currentPlayer = requirePlayer(ctx);
     const now = ctx.timestamp.microsSinceUnixEpoch;
     const existing = ctx.db.enemyCarry.enemyId.find(enemyId);
-    if (isWithinDeadWindow(existing, now)) return;
+    if (isKillAlreadyCounted(existing, now)) return;
 
     const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
     const base = Math.round(
@@ -951,7 +973,7 @@ export const enemyRaidKill = spacetimedb.reducer(
     const currentPlayer = requirePlayer(ctx);
     const now = ctx.timestamp.microsSinceUnixEpoch;
     const existing = ctx.db.enemyCarry.enemyId.find(victimEnemyId);
-    if (isWithinDeadWindow(existing, now)) return;
+    if (isKillAlreadyCounted(existing, now)) return;
 
     const base = enemyBaseGems(isGoliath, goliathSizeIndex, rewardTier, isBoss);
     const carried = stampEnemyKilledAndClearHoard(ctx, victimEnemyId, existing, now, currentPlayer.identity);

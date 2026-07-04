@@ -110,6 +110,11 @@ export interface Game {
   syncEnemyCarry(carriedByEnemyId: ReadonlyMap<number, number>): void;
   /** Syncs the server-tracked hoard each goliath raider is carrying, by slot id. */
   syncGoliathCarry(carriedBySlotId: ReadonlyMap<bigint, number>): void;
+  /**
+   * Corrects the local wall clock toward server time (micros). Fed from
+   * reducer-event timestamps so goliath raid events fire on a shared clock.
+   */
+  syncServerClockOffset(offsetMicros: bigint): void;
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
@@ -196,6 +201,11 @@ export function createGame(
   const world = createMondstadtWorld(scene);
   const effectSystem = createEffectSystem(scene);
   const damageNumbers = createDamageNumbers(scene);
+  // Offset added to the local wall clock to estimate SERVER time, sampled from
+  // reducer-event timestamps (see App.tsx). Goliath raid events fire off this
+  // shared clock so every client triggers them within the server's dedup window,
+  // instead of drifting apart by each machine's unsynchronized system clock.
+  let serverClockOffsetMicros = 0n;
   const enemySystem = createEnemySystem(
     scene,
     effectSystem,
@@ -207,7 +217,7 @@ export function createGame(
   const goliathSystem = createGoliathSystem({
     scene,
     getGroundHeight: world.getGroundHeight,
-    getSharedTimeMicros: () => BigInt(Date.now()) * 1000n,
+    getSharedTimeMicros: () => BigInt(Date.now()) * 1000n + serverClockOffsetMicros,
     getLocalPlayerPosition: () => playerPosition,
     getComboCount: () => combo,
     network,
@@ -934,6 +944,9 @@ export function createGame(
     },
     syncGoliathCarry(carriedBySlotId) {
       goliathSystem.syncGoliathCarry(carriedBySlotId);
+    },
+    syncServerClockOffset(offsetMicros) {
+      serverClockOffsetMicros = offsetMicros;
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];

@@ -130,6 +130,8 @@ interface Goliath {
   provoked: boolean;
   nextContactHitAt: number;
   carriedGems: number;
+  /** Set once this client has drawn the goliath alive — gates the death topple. */
+  observedAlive: boolean;
   isDefeated: boolean;
   deathStartedAt: number;
   lastX: number;
@@ -188,6 +190,7 @@ export function createGoliathSystem(options: GoliathSystemOptions): GoliathSyste
       provoked: false,
       nextContactHitAt: 0,
       carriedGems: 0,
+      observedAlive: false,
       isDefeated: false,
       deathStartedAt: 0,
       lastX: model.group.position.x,
@@ -216,6 +219,14 @@ export function createGoliathSystem(options: GoliathSystemOptions): GoliathSyste
   function markDefeated(goliath: Goliath) {
     goliath.isDefeated = true;
     goliath.deathStartedAt = elapsedSeconds;
+  }
+
+  // A goliath the local client never watched alive (defeated before this client
+  // began tracking it) must not replay its topple. Backdate the death start so
+  // animateDeath reports progress 1 at once — it lands hidden, no visible fall.
+  function snapToFinishedDeath(goliath: Goliath) {
+    goliath.isDefeated = true;
+    goliath.deathStartedAt = elapsedSeconds - GOLIATH_DEATH_SECONDS;
   }
 
   function handleRaidEvent(event: GoliathRaidEvent) {
@@ -344,11 +355,15 @@ export function createGoliathSystem(options: GoliathSystemOptions): GoliathSyste
       for (const state of goliathStatesAtTime(campSites, nowMicros)) {
         const goliath = goliaths.get(state.slotId);
         if (!goliath) continue;
-        if (state.isDefeated && !goliath.isDefeated) markDefeated(goliath);
+        if (state.isDefeated && !goliath.isDefeated) {
+          if (goliath.observedAlive) markDefeated(goliath);
+          else snapToFinishedDeath(goliath);
+        }
         if (goliath.isDefeated) {
           animateDeath(goliath);
           continue;
         }
+        goliath.observedAlive = true;
         goliath.scheduleHealthFraction = state.healthFraction;
         placeAndAnimate(goliath, state.position, state.currentTargetCampIndex, gemField);
       }

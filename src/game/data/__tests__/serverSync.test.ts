@@ -11,7 +11,11 @@ import {
   regularEnemyBaseGems,
 } from '../gemRewards';
 import { GOLIATH_ARCHETYPES_BY_SIZE } from '../goliathArchetypes';
-import { GOLIATH_SLOT_IDS, goliathBatchForTime } from '../../systems/goliathIdentity';
+import {
+  GOLIATH_BATCH_WINDOW_MICROS,
+  GOLIATH_SLOT_IDS,
+  goliathBatchForTime,
+} from '../../systems/goliathIdentity';
 import {
   GACHA_PULL_COST,
   MAX_HEALTH,
@@ -145,6 +149,13 @@ describe('server gem-drop economy stays in sync with client gemDrops', () => {
   });
 });
 
+function extractServerBigInt(name: string): bigint {
+  // Server bigint literals carry a trailing `n` and may use `_` digit separators.
+  const match = new RegExp(`const ${name} = ([\\d_]+)n;`).exec(SERVER_SOURCE);
+  expect(match, `${name} not found in server source`).not.toBeNull();
+  return BigInt(match![1].replace(/_/g, ''));
+}
+
 function extractServerNumberArray(name: string): number[] {
   const match = new RegExp(`const ${name} = \\[([^\\]]*)\\]`).exec(SERVER_SOURCE);
   expect(match, `${name} not found in server source`).not.toBeNull();
@@ -253,5 +264,24 @@ describe('goliathBatchForTime is deterministic across clients', () => {
     for (let bucket = 0n; bucket < 50n; bucket++) {
       isValidBatch(goliathBatchForTime(bucket * WINDOW + 1n));
     }
+  });
+});
+
+describe('server goliath id/window constants stay in sync with client goliathIdentity', () => {
+  it('every client GOLIATH_SLOT_IDS value sits in the server id range (>= GOLIATH_SLOT_ID_BASE)', () => {
+    // The server's isGoliathSlotId gate is `enemyId >= GOLIATH_SLOT_ID_BASE`, so
+    // every client slot id must clear that base or the server would misclassify it.
+    const slotIdBase = extractServerBigInt('GOLIATH_SLOT_ID_BASE');
+    expect(slotIdBase).toBe(900000n);
+    for (const slotId of GOLIATH_SLOT_IDS) {
+      expect(slotId).toBeGreaterThanOrEqual(slotIdBase);
+    }
+  });
+
+  it('GOLIATH_BATCH_WINDOW_MICROS matches the server literal (300_000_000n)', () => {
+    const serverWindow = extractServerBigInt('GOLIATH_BATCH_WINDOW_MICROS');
+    expect(GOLIATH_BATCH_WINDOW_MICROS).toBe(300_000_000n);
+    expect(serverWindow).toBe(300_000_000n);
+    expect(GOLIATH_BATCH_WINDOW_MICROS).toBe(serverWindow);
   });
 });

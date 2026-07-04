@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSpacetimeDB, useTable } from 'spacetimedb/react';
-import { tables, type DbConnection } from './module_bindings';
+import { tables, type DbConnection, type EventContext } from './module_bindings';
 import type { Player } from './module_bindings/types';
 import { createGame, type Game, type HudState } from './game/createGame';
+import { serverClockOffsetFromEvent } from './game/net/serverClock';
 import { CHARACTERS } from './game/data/characters';
 import { MAX_HEALTH } from './game/data/constants';
 import { AuthScreen } from './ui/AuthScreen';
@@ -297,7 +298,16 @@ export default function App() {
     game.start();
     gameRef.current = game;
 
+    // Sample server time off reducer-driven player-row updates (~10x/sec from
+    // position syncs) so goliath raid events fire on a clock shared across clients.
+    const sampleServerClock = (ctx: EventContext) => {
+      const offset = serverClockOffsetFromEvent(ctx.event, BigInt(Date.now()) * 1000n);
+      if (offset !== null) gameRef.current?.syncServerClockOffset(offset);
+    };
+    connection.db.player.onUpdate(sampleServerClock);
+
     return () => {
+      connection.db.player.removeOnUpdate(sampleServerClock);
       game.dispose();
       gameRef.current = null;
     };

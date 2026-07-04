@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { createGoliathSystem, type GoliathNetworkActions } from '../createGoliathSystem';
-import { GOLIATH_BATCH_WINDOW_MICROS } from '../goliathIdentity';
+import { GOLIATH_BATCH_WINDOW_MICROS, goliathBatchForTime } from '../goliathIdentity';
+import { goliathStatesAtTime } from '../goliathRaidSchedule';
+import { getCampSites } from '../../world/camps';
 
 // jsdom has no 2D canvas; the overlay only touches it on update(), so stub a
 // no-op context (measureText returns a width) to let the overlay redraw.
@@ -145,6 +147,69 @@ describe('createGoliathSystem — smoke', () => {
       system.update(0.016, emptyGemField);
     }).not.toThrow();
     expect(alive.length).toBeGreaterThan(0);
+    system.dispose();
+  });
+});
+
+describe('createGoliathSystem — stale death on join', () => {
+  const campSites = getCampSites();
+  // First possible defeat is at 30s into a window; sample well past every fight
+  // but still inside the 300s window so a lost goliath reads as defeated.
+  const LATE_INTO_WINDOW = 290_000_000n;
+  // Early enough to be mid-travel toward the first camp (0..18s), so alive.
+  const EARLY_INTO_WINDOW = 5_000_000n;
+
+  // A window whose batch is a single raider that the schedule fells — one scene
+  // group, so its model maps unambiguously to the defeated slot.
+  function findSoleDefeatedWindowStart(): bigint {
+    for (let bucket = 0n; bucket < 5000n; bucket++) {
+      const windowStart = bucket * GOLIATH_BATCH_WINDOW_MICROS;
+      if (goliathBatchForTime(windowStart).length !== 1) continue;
+      const states = goliathStatesAtTime(campSites, windowStart + LATE_INTO_WINDOW);
+      if (states.length === 1 && states[0].isDefeated) return windowStart;
+    }
+    throw new Error('no single-goliath defeated window found in scan range');
+  }
+
+  const soleGroup = (scene: THREE.Scene): THREE.Group => {
+    const groups = scene.children.filter((child): child is THREE.Group => child instanceof THREE.Group);
+    expect(groups).toHaveLength(1);
+    return groups[0];
+  };
+
+  it('snaps a goliath first seen already defeated straight to the hidden death state (no topple)', () => {
+    const windowStart = findSoleDefeatedWindowStart();
+    const clock = { micros: windowStart + LATE_INTO_WINDOW };
+    const { scene, system } = makeSystem(clock, new THREE.Vector3(9999, 0, 9999), makeNetwork());
+    const group = soleGroup(scene);
+
+    system.update(0.016, emptyGemField);
+
+    // Never entered the visible topple: it lands finished and hidden at once.
+    expect(group.visible).toBe(false);
+    expect(group.rotation.z).toBeCloseTo(Math.PI / 2);
+    system.dispose();
+  });
+
+  it('animates the topple for a goliath watched alive before it is defeated', () => {
+    const windowStart = findSoleDefeatedWindowStart();
+    const clock = { micros: windowStart + EARLY_INTO_WINDOW };
+    const { scene, system } = makeSystem(clock, new THREE.Vector3(9999, 0, 9999), makeNetwork());
+    const group = soleGroup(scene);
+
+    // Observe it alive first, then jump to the same window's post-defeat instant.
+    system.update(0.016, emptyGemField);
+    expect(group.visible).toBe(true);
+    clock.micros = windowStart + LATE_INTO_WINDOW;
+
+    // The defeat frame begins the topple: still visible, rotation from zero.
+    system.update(0.016, emptyGemField);
+    expect(group.visible).toBe(true);
+    expect(group.rotation.z).toBeLessThan(Math.PI / 2);
+
+    // Advancing time drives the topple onward before it finally hides.
+    system.update(0.5, emptyGemField);
+    expect(group.rotation.z).toBeGreaterThan(0);
     system.dispose();
   });
 });
