@@ -273,7 +273,7 @@ button {
 
 /* HUD gear reuses the icon button, with a playful spin on hover. */
 .hud__gear {
-  align-self: flex-start;
+  flex: 0 0 auto;
   font-size: 17px;
 }
 
@@ -521,13 +521,31 @@ button {
   display: flex;
   flex-direction: column;
   gap: 7px;
-  width: min(280px, 44vw);
+  width: min(300px, 60vw);
 }
 
-.hud__name-row {
+/* Gear + name + active character share one line to reclaim vertical space. */
+.hud__id-row {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.hud__id-row .hud__player-name,
+.hud__id-row .hud__character {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Zone badge + wish button sit under the health bar (wish moved off top-right
+   so it no longer crowds the right-edge party switcher on landscape phones). */
+.hud__meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .hud__player-name {
@@ -708,14 +726,10 @@ button {
   }
 }
 
-/* Narrow screens: drop the wallet row below the name so they never overlap. */
+/* Narrow screens: keep the id/meta stack compact next to the gems wallet. */
 @media (max-width: 640px) {
   .hud__top-left {
-    width: min(220px, 52vw);
-  }
-
-  .hud__top-right {
-    top: calc(max(14px, env(safe-area-inset-top)) + 64px);
+    width: min(240px, 58vw);
   }
 }
 

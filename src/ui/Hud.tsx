@@ -21,27 +21,6 @@ interface HudProps {
   onTouchButtonRelease(button: 'attack'): void;
 }
 
-// iOS Safari does not support the Fullscreen API on regular elements (only
-// <video>), so requestFullscreen is undefined there. We gate the button on
-// support and fall back to the webkit-prefixed call where it exists.
-const el = typeof document !== 'undefined' ? document.documentElement : null;
-const fullscreenSupported = Boolean(
-  el && (el.requestFullscreen || (el as unknown as { webkitRequestFullscreen?: unknown }).webkitRequestFullscreen)
-);
-
-function toggleFullscreen() {
-  const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => void };
-  const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
-  const isFullscreen = doc.fullscreenElement || doc.webkitFullscreenElement;
-  if (isFullscreen) {
-    if (doc.exitFullscreen) void doc.exitFullscreen();
-    else doc.webkitExitFullscreen?.();
-    return;
-  }
-  if (root.requestFullscreen) void root.requestFullscreen();
-  else root.webkitRequestFullscreen?.();
-}
-
 export function Hud({
   playerName,
   health,
@@ -65,10 +44,10 @@ export function Hud({
   return (
     <div className="hud">
       <div className="hud__top-left">
-        <button className="icon-btn hud__gear" onClick={onOpenSettings} aria-label="Iestatījumi">
-          ⚙
-        </button>
-        <div className="hud__name-row">
+        <div className="hud__id-row">
+          <button className="icon-btn hud__gear" onClick={onOpenSettings} aria-label="Iestatījumi">
+            ⚙
+          </button>
           <span className="hud__player-name">{playerName}</span>
           {activeCharacter && activeElement && (
             <span className="hud__character" style={{ color: activeElement.cssColor }}>
@@ -85,9 +64,14 @@ export function Hud({
             }}
           />
         </div>
-        <span className={`hud__zone ${hudState.inSafeZone ? 'hud__zone--safe' : 'hud__zone--pvp'}`}>
-          {hudState.inSafeZone ? 'DROŠĀ ZONA' : 'PVP ZONA'}
-        </span>
+        <div className="hud__meta-row">
+          <span className={`hud__zone ${hudState.inSafeZone ? 'hud__zone--safe' : 'hud__zone--pvp'}`}>
+            {hudState.inSafeZone ? 'DROŠĀ ZONA' : 'PVP ZONA'}
+          </span>
+          <button className="hud__chip hud__wish" onClick={onOpenGacha}>
+            VĒLĒŠANĀS
+          </button>
+        </div>
       </div>
 
       {hudState.combo > 1 && (
@@ -102,14 +86,6 @@ export function Hud({
 
       <div className="hud__top-right">
         <span className="hud__gems">✦ {primogems}</span>
-        <button className="hud__chip" onClick={onOpenGacha}>
-          VĒLĒŠANĀS
-        </button>
-        {fullscreenSupported && (
-          <button className="hud__chip" onClick={toggleFullscreen} aria-label="Pilnekrāns">
-            ⛶
-          </button>
-        )}
       </div>
 
       <div className="hud__party">

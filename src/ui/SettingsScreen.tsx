@@ -1,6 +1,7 @@
 import { Modal } from './Modal';
 import { Toggle } from './Toggle';
 import { Button } from './Button';
+import { fullscreenSupported, toggleFullscreen } from './fullscreen';
 
 interface SettingsScreenProps {
   open: boolean;
@@ -26,6 +27,11 @@ export function SettingsScreen({
       <p className="settings__section">ATTĒLOŠANA</p>
       <Toggle label="Rādīt FPS" checked={showFps} onChange={onToggleFps} />
       <Toggle label="Rādīt ping" checked={showPing} onChange={onTogglePing} />
+      {fullscreenSupported && (
+        <Button variant="ghost" block onClick={toggleFullscreen}>
+          ⛶ Pilnekrāns
+        </Button>
+      )}
 
       <p className="settings__section">KONTS</p>
       <Button variant="danger" block onClick={onLogout}>
