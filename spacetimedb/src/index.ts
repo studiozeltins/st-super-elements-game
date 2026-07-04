@@ -141,7 +141,7 @@ function pickFourStarCharacterId(ctx: { random: any }) {
 const MAX_HIT_RANGE = 45;
 const MAX_STEP_DISTANCE = 12;
 const KILL_REWARD_COOLDOWN_MICROS = 1_500_000n;
-const GEM_PICKUP_RANGE = 2.4;
+const GEM_PICKUP_RANGE = 4.2;
 const MAX_COMBO_FOR_GEMS = 100;
 const COMBO_GEM_STEP = 0.03; // +3% dropped gems per combo point (capped)
 
@@ -454,10 +454,21 @@ export const attackPlayer = spacetimedb.reducer(
       setActiveHealth(ctx, target, remainingHealth);
       return;
     }
-    // Kill: the loser forfeits a third of their primogems to the winner.
+    // Kill: a third of the loser's primogems spill onto the ground at the death
+    // spot as a drop. The winner earns credit but must collect it (as can anyone).
     const stolen = Math.floor(target.primogems / 3);
     if (stolen > 0) {
-      ctx.db.player.identity.update({ ...attacker, primogems: attacker.primogems + stolen });
+      ctx.db.gemDrop.insert({
+        id: 0n,
+        positionX: clampToWorld(target.positionX),
+        positionZ: clampToWorld(target.positionZ),
+        amount: stolen,
+        droppedBy: ctx.sender,
+      });
+      ctx.db.player.identity.update({
+        ...attacker,
+        gemsFromKills: attacker.gemsFromKills + stolen,
+      });
     }
     respawnPlayerAtSpawn(ctx, { ...target, primogems: target.primogems - stolen });
   }

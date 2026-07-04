@@ -3,6 +3,8 @@ import { CHARACTERS, CHARACTER_LIST } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { WEAPONS } from '../game/data/weapons';
 import { BANNERS, WEAPONS_BY_ID, fiveStarChanceForNextPull, HARD_PITY } from '../game/data/gacha';
+import { constellationBonuses } from '../game/data/constellations';
+import type { CharacterDefinition } from '../game/data/characters';
 import { GACHA_PULL_COST } from '../game/data/constants';
 import { CharacterPreview } from './CharacterPreview';
 import { PullAnimation } from './PullAnimation';
@@ -48,6 +50,30 @@ const DEFAULT_PITY: PityInfo = {
   guaranteedFeatured: false,
   totalPulls: 0,
 };
+
+/** Inline C0–C6 dots + the currently-active cumulative bonus, shown on cards. */
+function ConstellationInline({
+  character,
+  constellation,
+}: {
+  character: CharacterDefinition;
+  constellation: number;
+}) {
+  const bonusText =
+    constellation > 0
+      ? constellationBonuses(character)[constellation - 1].effect
+      : 'C0 · bāzes spēks';
+  return (
+    <span className="con-inline">
+      <span className="con-dots" aria-label={`C${constellation}`}>
+        {[1, 2, 3, 4, 5, 6].map(level => (
+          <i key={level} className={`con-dot ${level <= constellation ? 'con-dot--on' : ''}`} />
+        ))}
+      </span>
+      <span className="con-inline__bonus">{bonusText}</span>
+    </span>
+  );
+}
 
 export function GachaScreen({
   primogems,
@@ -278,6 +304,10 @@ export function GachaScreen({
                       >
                         <span className="inv-card__name">{character.displayName}</span>
                         <span className="inv-card__sub">{element.displayName}</span>
+                        <ConstellationInline
+                          character={character}
+                          constellation={constellationById[characterId as string] ?? 0}
+                        />
                         {isActive && <span className="party-drop__active">AKTĪVS</span>}
                       </div>
                     ) : (
@@ -318,6 +348,10 @@ export function GachaScreen({
                     </span>
                     <span className="inv-card__name">{character.displayName}</span>
                     <span className="inv-card__sub">{element.displayName}</span>
+                    <ConstellationInline
+                      character={character}
+                      constellation={constellationById[character.id] ?? 0}
+                    />
                   </div>
                 );
               })}

@@ -155,9 +155,12 @@ export function createGame(
   let swingIndex = 0;
   const skillReadyAtByCharacter = new Map<string, number>();
   const remotePlayers = new Map<string, RemotePlayerView>();
-  const gemDrops = new Map<string, { mesh: THREE.Mesh; rawId: bigint }>();
+  const gemDrops = new Map<string, { mesh: THREE.Mesh; rawId: bigint; age: number; baseY: number }>();
   const requestedGemPickups = new Set<string>();
-  const GEM_PICKUP_RANGE = 2.2;
+  const GEM_PICKUP_RANGE = 3.8;
+  // Drops are un-grabbable for a moment so they are clearly visible before the
+  // killer (usually standing right on top) sweeps them up.
+  const GEM_PICKUP_DELAY = 1.2;
   let animationFrameHandle = 0;
   let lastFrameTime = 0;
   let lastSentPosition = new THREE.Vector3(Infinity, 0, 0);
@@ -443,23 +446,33 @@ export function createGame(
     network.sendPosition(playerPosition.x, playerPosition.y, playerPosition.z, playerRotationY);
   }
 
-  function createGemMesh(drop: GemDrop): THREE.Mesh {
-    const mesh = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.34),
-      new THREE.MeshLambertMaterial({ color: 0xf2c14e, emissive: 0xf2c14e, emissiveIntensity: 0.55 })
+  function createGemMesh(drop: GemDrop): { mesh: THREE.Mesh; baseY: number } {
+    const material = new THREE.MeshLambertMaterial({
+      color: 0xf2c14e,
+      emissive: 0xf2c14e,
+      emissiveIntensity: 0.7,
+    });
+    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.5), material);
+    const baseY = world.getGroundHeight(drop.positionX, drop.positionZ) + 0.9;
+    mesh.position.set(drop.positionX, baseY, drop.positionZ);
+    // A soft golden halo so drops read from a distance.
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.9, 12, 12),
+      new THREE.MeshBasicMaterial({ color: 0xf2c14e, transparent: true, opacity: 0.16 })
     );
-    mesh.position.set(
-      drop.positionX,
-      world.getGroundHeight(drop.positionX, drop.positionZ) + 0.7,
-      drop.positionZ
-    );
+    mesh.add(halo);
     scene.add(mesh);
-    return mesh;
+    // Sparkle burst on landing.
+    effectSystem.spawnBurst(mesh.position.clone(), 0xffe08a, 18);
+    return { mesh, baseY };
   }
 
   function updateGemDrops(deltaSeconds: number) {
     for (const [key, gem] of gemDrops) {
+      gem.age += deltaSeconds;
       gem.mesh.rotation.y += deltaSeconds * 2.4;
+      gem.mesh.position.y = gem.baseY + Math.sin(elapsedSeconds * 3) * 0.12;
+      if (gem.age < GEM_PICKUP_DELAY) continue;
       const withinReach =
         Math.hypot(gem.mesh.position.x - playerPosition.x, gem.mesh.position.z - playerPosition.z) <=
         GEM_PICKUP_RANGE;
@@ -699,14 +712,19 @@ export function createGame(
         const key = drop.id.toString();
         seen.add(key);
         if (!gemDrops.has(key)) {
-          gemDrops.set(key, { mesh: createGemMesh(drop), rawId: drop.id });
+          const { mesh, baseY } = createGemMesh(drop);
+          gemDrops.set(key, { mesh, rawId: drop.id, age: 0, baseY });
         }
       }
       for (const [key, gem] of gemDrops) {
         if (seen.has(key)) continue;
         scene.remove(gem.mesh);
-        gem.mesh.geometry.dispose();
-        (gem.mesh.material as THREE.Material).dispose();
+        gem.mesh.traverse(object => {
+          if (object instanceof THREE.Mesh) {
+            object.geometry.dispose();
+            (object.material as THREE.Material).dispose();
+          }
+        });
         gemDrops.delete(key);
         requestedGemPickups.delete(key);
       }
