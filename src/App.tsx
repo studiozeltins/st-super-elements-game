@@ -101,8 +101,13 @@ export default function App() {
   // Another player hit me → purple number over my character.
   useTable(tables.pvpHit, {
     onInsert: row => {
-      if (row.target.toHexString() !== myIdentityRef.current) return;
-      gameRef.current?.spawnSelfNumber(row.amount, 'pvp');
+      const targetHex = row.target.toHexString();
+      if (targetHex === myIdentityRef.current) {
+        gameRef.current?.spawnSelfNumber(row.amount, 'pvp');
+      } else {
+        // Someone else got hit — show their health bar (I'm the attacker/bystander).
+        gameRef.current?.flashRemoteHealth(targetHex);
+      }
     },
   });
   // A healer restored one of my characters → green +number.
@@ -195,9 +200,16 @@ export default function App() {
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
         sendHealParty: comboCount => connection.reducers.healParty({ comboCount }),
-        sendGemDrop: (x, z, rewardTier, comboCount) =>
-          connection.reducers.dropGems({ positionX: x, positionZ: z, rewardTier, comboCount }),
+        sendGemDrop: (x, z, rewardTier, comboCount, carriedGems) =>
+          connection.reducers.dropGems({
+            positionX: x,
+            positionZ: z,
+            rewardTier,
+            comboCount,
+            carriedGems,
+          }),
         sendCollectGem: dropId => connection.reducers.collectGem({ dropId }),
+        sendEnemyTakeGem: dropId => connection.reducers.enemyTakeGem({ dropId }),
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
       setHudState

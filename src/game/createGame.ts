@@ -55,9 +55,11 @@ export interface GameNetworkActions {
   sendHeal(amount: number): void;
   /** Trigger a healer character's party heal (combo only matters for combo-mode). */
   sendHealParty(comboCount: number): void;
-  /** A kill drops gems at a spot; the amount scales with the current combo. */
-  sendGemDrop(x: number, z: number, rewardTier: number, comboCount: number): void;
+  /** A kill drops gems at a spot; amount scales with combo, plus enemy-carried. */
+  sendGemDrop(x: number, z: number, rewardTier: number, comboCount: number, carriedGems: number): void;
   sendCollectGem(dropId: bigint): void;
+  /** A simulated enemy grabbed a ground drop — remove it from the world. */
+  sendEnemyTakeGem(dropId: bigint): void;
   sendFallToDeath(): void;
 }
 
@@ -72,6 +74,8 @@ export interface Game {
   handleRemoteSkillCast(cast: SkillCast): void;
   /** Floats a number over the local player — PVP damage taken, or heals. */
   spawnSelfNumber(amount: number, kind: DamageKind): void;
+  /** Shows a remote player's health bar for a few seconds (they were hit). */
+  flashRemoteHealth(identityHex: string): void;
   /** Syncs the primogem drops lying in the world (walk over to collect). */
   syncGemDrops(drops: readonly GemDrop[]): void;
   setTouchMove(x: number, z: number): void;
@@ -79,6 +83,12 @@ export interface Game {
   releaseTouchButton(button: 'attack'): void;
   setInputEnabled(enabled: boolean): void;
   onPartySlotRequested: ((slotIndex: number) => void) | null;
+}
+
+interface HealthBar {
+  sprite: THREE.Sprite;
+  texture: THREE.CanvasTexture;
+  canvas: HTMLCanvasElement;
 }
 
 interface RemotePlayerView {
@@ -89,6 +99,33 @@ interface RemotePlayerView {
   targetPosition: THREE.Vector3;
   targetRotationY: number;
   lastPvpHitAt: number;
+  healthBar: HealthBar;
+}
+
+function createHealthBar(): HealthBar {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 16;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.NearestFilter;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })
+  );
+  sprite.scale.set(1.7, 0.22, 1);
+  sprite.position.y = 2.7;
+  sprite.visible = false;
+  return { sprite, texture, canvas };
+}
+
+function drawHealthBar(bar: HealthBar, fraction: number) {
+  const ctx = bar.canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, 128, 16);
+  ctx.fillStyle = 'rgba(8, 12, 9, 0.82)';
+  ctx.fillRect(0, 0, 128, 16);
+  const clamped = Math.max(0, Math.min(1, fraction));
+  ctx.fillStyle = clamped > 0.3 ? '#7ec843' : '#ff5c3c';
+  ctx.fillRect(2, 2, (128 - 4) * clamped, 12);
+  bar.texture.needsUpdate = true;
 }
 
 const CAMERA_OFFSET = new THREE.Vector3(7, 15, 11);
@@ -131,7 +168,8 @@ export function createGame(
     scene,
     effectSystem,
     world.getGroundHeight,
-    (rewardTier, position) => network.sendGemDrop(position.x, position.z, rewardTier, combo),
+    (rewardTier, position, carriedGems) =>
+      network.sendGemDrop(position.x, position.z, rewardTier, combo, carriedGems),
     (position, amount, kind, color) => damageNumbers.spawn(position, amount, kind, color)
   );
   const inputSystem = createInputSystem(canvas);
@@ -155,12 +193,17 @@ export function createGame(
   let swingIndex = 0;
   const skillReadyAtByCharacter = new Map<string, number>();
   const remotePlayers = new Map<string, RemotePlayerView>();
-  const gemDrops = new Map<string, { mesh: THREE.Mesh; rawId: bigint; age: number; baseY: number }>();
+  const gemDrops = new Map<
+    string,
+    { mesh: THREE.Mesh; rawId: bigint; age: number; baseY: number; amount: number }
+  >();
   const requestedGemPickups = new Set<string>();
-  const GEM_PICKUP_RANGE = 3.8;
   // Drops are un-grabbable for a moment so they are clearly visible before the
-  // killer (usually standing right on top) sweeps them up.
+  // killer (usually standing right on top) sweeps them up. After that they
+  // magnet toward the nearest (local) player and get collected on contact.
   const GEM_PICKUP_DELAY = 1.2;
+  const GEM_MAGNET_RADIUS = 5.5;
+  const GEM_COLLECT_RADIUS = 1.1;
   let animationFrameHandle = 0;
   let lastFrameTime = 0;
   let lastSentPosition = new THREE.Vector3(Infinity, 0, 0);
@@ -473,10 +516,17 @@ export function createGame(
       gem.mesh.rotation.y += deltaSeconds * 2.4;
       gem.mesh.position.y = gem.baseY + Math.sin(elapsedSeconds * 3) * 0.12;
       if (gem.age < GEM_PICKUP_DELAY) continue;
-      const withinReach =
-        Math.hypot(gem.mesh.position.x - playerPosition.x, gem.mesh.position.z - playerPosition.z) <=
-        GEM_PICKUP_RANGE;
-      if (withinReach && !requestedGemPickups.has(key)) {
+
+      const dx = playerPosition.x - gem.mesh.position.x;
+      const dz = playerPosition.z - gem.mesh.position.z;
+      const distance = Math.hypot(dx, dz);
+      // Pull loose gems toward the player so none are left stranded.
+      if (distance < GEM_MAGNET_RADIUS && distance > 0.001) {
+        const pull = Math.min(1, deltaSeconds * (3 + (GEM_MAGNET_RADIUS - distance)));
+        gem.mesh.position.x += dx * pull;
+        gem.mesh.position.z += dz * pull;
+      }
+      if (distance <= GEM_COLLECT_RADIUS && !requestedGemPickups.has(key)) {
         requestedGemPickups.add(key);
         network.sendCollectGem(gem.rawId);
       }
@@ -505,6 +555,14 @@ export function createGame(
       group.rotation.y = remotePlayer.targetRotationY;
       const isMoving = group.position.distanceTo(remotePlayer.targetPosition) > 0.1;
       remotePlayer.model.animate(elapsedSeconds, deltaSeconds, isMoving);
+
+      // Show a health bar for 5s after this player was last hit in PVP.
+      const showBar = elapsedSeconds - remotePlayer.lastPvpHitAt < 5;
+      remotePlayer.healthBar.sprite.visible = showBar;
+      if (showBar) {
+        const maxHealth = CHARACTERS[remotePlayer.characterId]?.maxHealth ?? MAX_HEALTH;
+        drawHealthBar(remotePlayer.healthBar, remotePlayer.row.currentHealth / maxHealth);
+      }
     }
   }
 
@@ -573,14 +631,36 @@ export function createGame(
     // Effects tick first so projectile/skill reactions this frame are already
     // flagged when the enemy update refreshes their status icons.
     effectSystem.update(deltaSeconds);
-    enemySystem.update(deltaSeconds, playerPosition, (damage, isCrit) => {
-      network.sendTakeDamage(damage);
-      damageNumbers.spawn(
-        playerPosition.clone().setY(playerPosition.y + 1.4),
-        damage,
-        isCrit ? 'takenCrit' : 'taken'
-      );
-    });
+    const gemField = {
+      drops: [...gemDrops.entries()]
+        .filter(([, gem]) => gem.age >= GEM_PICKUP_DELAY)
+        .map(([key, gem]) => ({
+          id: key,
+          x: gem.mesh.position.x,
+          z: gem.mesh.position.z,
+          amount: gem.amount,
+        })),
+      onGrab: (dropId: string, _amount: number) => {
+        const gem = gemDrops.get(dropId);
+        if (!gem || requestedGemPickups.has(dropId)) return false;
+        requestedGemPickups.add(dropId);
+        network.sendEnemyTakeGem(gem.rawId);
+        return true;
+      },
+    };
+    enemySystem.update(
+      deltaSeconds,
+      playerPosition,
+      (damage, isCrit) => {
+        network.sendTakeDamage(damage);
+        damageNumbers.spawn(
+          playerPosition.clone().setY(playerPosition.y + 1.4),
+          damage,
+          isCrit ? 'takenCrit' : 'taken'
+        );
+      },
+      gemField
+    );
     updateGemDrops(deltaSeconds);
     resolveAllCollisions();
     damageNumbers.update(deltaSeconds);
@@ -602,6 +682,8 @@ export function createGame(
   function removeRemotePlayer(identityHex: string, view: RemotePlayerView) {
     scene.remove(view.model.group);
     view.model.dispose();
+    view.healthBar.texture.dispose();
+    (view.healthBar.sprite.material as THREE.SpriteMaterial).dispose();
     remotePlayers.delete(identityHex);
   }
 
@@ -653,7 +735,8 @@ export function createGame(
           const character = CHARACTERS[row.activeCharacterId] ?? CHARACTERS.zibo;
           const model = createCharacterModel(character);
           const nameSprite = createNameSprite(row.name);
-          model.group.add(nameSprite);
+          const healthBar = createHealthBar();
+          model.group.add(nameSprite, healthBar.sprite);
           model.group.position.set(row.positionX, row.positionY, row.positionZ);
           scene.add(model.group);
           remotePlayers.set(identityHex, {
@@ -664,6 +747,7 @@ export function createGame(
             targetPosition: new THREE.Vector3(row.positionX, row.positionY, row.positionZ),
             targetRotationY: row.rotationY,
             lastPvpHitAt: 0,
+            healthBar,
           });
           continue;
         }
@@ -676,7 +760,7 @@ export function createGame(
           scene.remove(existingView.model.group);
           existingView.model.dispose();
           existingView.model = createCharacterModel(character);
-          existingView.model.group.add(createNameSprite(row.name));
+          existingView.model.group.add(createNameSprite(row.name), existingView.healthBar.sprite);
           existingView.model.group.position.copy(previousPosition);
           scene.add(existingView.model.group);
           existingView.characterId = row.activeCharacterId;
@@ -706,6 +790,10 @@ export function createGame(
     spawnSelfNumber(amount, kind) {
       damageNumbers.spawn(playerPosition.clone().setY(playerPosition.y + 1.4), amount, kind);
     },
+    flashRemoteHealth(identityHex) {
+      const view = remotePlayers.get(identityHex);
+      if (view) view.lastPvpHitAt = elapsedSeconds;
+    },
     syncGemDrops(drops) {
       const seen = new Set<string>();
       for (const drop of drops) {
@@ -713,7 +801,7 @@ export function createGame(
         seen.add(key);
         if (!gemDrops.has(key)) {
           const { mesh, baseY } = createGemMesh(drop);
-          gemDrops.set(key, { mesh, rawId: drop.id, age: 0, baseY });
+          gemDrops.set(key, { mesh, rawId: drop.id, age: 0, baseY, amount: drop.amount });
         }
       }
       for (const [key, gem] of gemDrops) {

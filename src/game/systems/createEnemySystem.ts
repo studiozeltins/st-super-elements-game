@@ -51,13 +51,23 @@ interface Enemy {
   nextContactHitAt: number;
   respawnAt: number;
   isAlive: boolean;
+  carriedGems: number;
+  carryCapacity: number;
+}
+
+/** Ground drops the enemies can wander over and pick up. */
+export interface EnemyGemField {
+  drops: ReadonlyArray<{ id: string; x: number; z: number; amount: number }>;
+  /** Claims a drop for an enemy; returns false if another already took it. */
+  onGrab(dropId: string, amount: number): boolean;
 }
 
 export interface EnemySystem {
   update(
     deltaSeconds: number,
     playerPosition: THREE.Vector3,
-    onPlayerHit: (damage: number, isCrit: boolean) => void
+    onPlayerHit: (damage: number, isCrit: boolean) => void,
+    gemField: EnemyGemField
   ): void;
   applyDamageInRadius(
     center: { x: number; y: number; z: number },
@@ -79,6 +89,8 @@ const ENEMY_CONTACT_RANGE = 1.4;
 const ENEMY_CONTACT_COOLDOWN_SECONDS = 1;
 const ENEMY_CRIT_CHANCE = 0.25;
 const ENEMY_CRIT_MULTIPLIER = 1.8;
+const ENEMY_GEM_GRAB_RANGE = 1.7;
+const ENEMY_CARRY_CAPACITY = 800; // gems a normal enemy can hold; bosses hold more
 const AURA_DURATION_SECONDS = 8;
 // A reaction deals bonus damage over a fixed number of ticks (framerate
 // independent). Per-tick scales with the reaction's own strength.
@@ -109,7 +121,7 @@ export function createEnemySystem(
   scene: THREE.Scene,
   effectSystem: EffectSystem,
   getGroundHeight: (x: number, z: number, maxSurfaceY?: number) => number,
-  onEnemyKilled: (rewardTier: number, worldPosition: THREE.Vector3) => void,
+  onEnemyKilled: (rewardTier: number, worldPosition: THREE.Vector3, carriedGems: number) => void,
   reportDamage: DamageReporter
 ): EnemySystem {
   let elapsedSeconds = 0;
@@ -161,6 +173,8 @@ export function createEnemySystem(
         nextContactHitAt: 0,
         respawnAt: 0,
         isAlive: true,
+        carriedGems: 0,
+        carryCapacity: isBoss ? ENEMY_CARRY_CAPACITY * 3 : ENEMY_CARRY_CAPACITY,
       };
       enemy.model.group.position.copy(spawnPositionNearHome(enemy));
       scene.add(enemy.model.group);
@@ -229,13 +243,14 @@ export function createEnemySystem(
       0xffffff,
       26
     );
-    onEnemyKilled(enemy.archetype.rewardTier, enemy.model.group.position.clone());
+    onEnemyKilled(enemy.archetype.rewardTier, enemy.model.group.position.clone(), enemy.carriedGems);
   }
 
   function respawnEnemy(enemy: Enemy) {
     enemy.isAlive = true;
     enemy.model.group.visible = true;
     enemy.health = enemy.maxHealth;
+    enemy.carriedGems = 0;
     enemy.auraElement = null;
     enemy.reactionTicksRemaining = 0;
     enemy.frozenUntil = 0;
@@ -336,7 +351,7 @@ export function createEnemySystem(
   }
 
   return {
-    update(deltaSeconds, playerPosition, onPlayerHit) {
+    update(deltaSeconds, playerPosition, onPlayerHit, gemField) {
       elapsedSeconds += deltaSeconds;
       for (const enemy of enemies) {
         if (!enemy.isAlive) {
@@ -365,6 +380,21 @@ export function createEnemySystem(
             ? Math.round(enemy.contactDamage * ENEMY_CRIT_MULTIPLIER)
             : enemy.contactDamage;
           onPlayerHit(damageDealt, isCrit);
+        }
+
+        // Enemies wander over loose gems and pocket them (up to capacity); the
+        // hoard drops again when the player kills the enemy.
+        if (enemy.carriedGems < enemy.carryCapacity) {
+          const enemyPosition = enemy.model.group.position;
+          for (const drop of gemField.drops) {
+            if (
+              Math.hypot(enemyPosition.x - drop.x, enemyPosition.z - drop.z) <= ENEMY_GEM_GRAB_RANGE &&
+              gemField.onGrab(drop.id, drop.amount)
+            ) {
+              enemy.carriedGems += drop.amount;
+              break;
+            }
+          }
         }
       }
     },

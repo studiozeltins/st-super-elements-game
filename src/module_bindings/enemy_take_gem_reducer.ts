@@ -11,9 +11,5 @@ import {
 } from "spacetimedb";
 
 export default {
-  positionX: __t.f32(),
-  positionZ: __t.f32(),
-  rewardTier: __t.u32(),
-  comboCount: __t.u32(),
-  carriedGems: __t.u32(),
+  dropId: __t.u64(),
 };

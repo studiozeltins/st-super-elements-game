@@ -144,6 +144,9 @@ const KILL_REWARD_COOLDOWN_MICROS = 1_500_000n;
 const GEM_PICKUP_RANGE = 4.2;
 const MAX_COMBO_FOR_GEMS = 100;
 const COMBO_GEM_STEP = 0.03; // +3% dropped gems per combo point (capped)
+const PVP_DEATH_SPILL = 1 / 3; // fraction of primogems a PVP loser drops
+const PVE_DEATH_SPILL = 1 / 4; // fraction a player drops when an enemy kills them
+const CARRY_HARD_CAP = 20000; // server sanity cap on enemy-carried gems per kill
 
 const player = table(
   { name: 'player', public: true },
@@ -356,6 +359,21 @@ function respawnPlayerAtSpawn(ctx: { db: any }, targetPlayer: any) {
   }
 }
 
+// Spills a fraction of a victim's primogems onto the ground at their location.
+// Returns how much was dropped (the caller deducts it from the victim).
+function spillGems(ctx: { db: any }, victim: any, fraction: number, droppedBy: any) {
+  const amount = Math.floor(victim.primogems * fraction);
+  if (amount <= 0) return 0;
+  ctx.db.gemDrop.insert({
+    id: 0n,
+    positionX: clampToWorld(victim.positionX),
+    positionZ: clampToWorld(victim.positionZ),
+    amount,
+    droppedBy,
+  });
+  return amount;
+}
+
 function isInsideSafeZone(positionX: number, positionZ: number) {
   return Math.hypot(positionX, positionZ) <= SAFE_ZONE_RADIUS;
 }
@@ -454,17 +472,10 @@ export const attackPlayer = spacetimedb.reducer(
       setActiveHealth(ctx, target, remainingHealth);
       return;
     }
-    // Kill: a third of the loser's primogems spill onto the ground at the death
-    // spot as a drop. The winner earns credit but must collect it (as can anyone).
-    const stolen = Math.floor(target.primogems / 3);
+    // Kill: a third of the loser's primogems spill onto the ground. The winner
+    // earns credit but must collect it (as can anyone).
+    const stolen = spillGems(ctx, target, PVP_DEATH_SPILL, ctx.sender);
     if (stolen > 0) {
-      ctx.db.gemDrop.insert({
-        id: 0n,
-        positionX: clampToWorld(target.positionX),
-        positionZ: clampToWorld(target.positionZ),
-        amount: stolen,
-        droppedBy: ctx.sender,
-      });
       ctx.db.player.identity.update({
         ...attacker,
         gemsFromKills: attacker.gemsFromKills + stolen,
@@ -551,7 +562,9 @@ export const takeDamage = spacetimedb.reducer(
       setActiveHealth(ctx, currentPlayer, remainingHealth);
       return;
     }
-    respawnPlayerAtSpawn(ctx, currentPlayer);
+    // Died to an enemy: drop a quarter of your primogems where you fell.
+    const spilled = spillGems(ctx, currentPlayer, PVE_DEATH_SPILL, currentPlayer.identity);
+    respawnPlayerAtSpawn(ctx, { ...currentPlayer, primogems: currentPlayer.primogems - spilled });
   }
 );
 
@@ -569,19 +582,37 @@ export const fallToDeath = spacetimedb.reducer(ctx => {
 // amount scales with the combo. PVE enemies are client-simulated, so the
 // cooldown caps farm rate and the tier is clamped against spoofing.
 export const dropGems = spacetimedb.reducer(
-  { positionX: t.f32(), positionZ: t.f32(), rewardTier: t.u32(), comboCount: t.u32() },
-  (ctx, { positionX, positionZ, rewardTier, comboCount }) => {
+  {
+    positionX: t.f32(),
+    positionZ: t.f32(),
+    rewardTier: t.u32(),
+    comboCount: t.u32(),
+    // Gems this enemy had picked up off the ground; always re-dropped on death.
+    carriedGems: t.u32(),
+  },
+  (ctx, { positionX, positionZ, rewardTier, comboCount, carriedGems }) => {
     const currentPlayer = requirePlayer(ctx);
+    const carried = Math.min(carriedGems, CARRY_HARD_CAP);
+    const dropX = clampToWorld(positionX);
+    const dropZ = clampToWorld(positionZ);
     const microsSinceLastReward =
       ctx.timestamp.microsSinceUnixEpoch - currentPlayer.lastKillRewardAt.microsSinceUnixEpoch;
-    if (microsSinceLastReward < KILL_REWARD_COOLDOWN_MICROS) return;
+
+    // Cooldown gates the base reward (anti-farm), but carried gems always fall.
+    if (microsSinceLastReward < KILL_REWARD_COOLDOWN_MICROS) {
+      if (carried > 0) {
+        ctx.db.gemDrop.insert({ id: 0n, positionX: dropX, positionZ: dropZ, amount: carried, droppedBy: ctx.sender });
+      }
+      return;
+    }
     const clampedTier = Math.max(1, Math.min(MAX_KILL_REWARD_TIER, rewardTier));
     const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
-    const amount = Math.round(KILL_REWARD_PRIMOGEMS * clampedTier * (1 + combo * COMBO_GEM_STEP));
+    const amount =
+      Math.round(KILL_REWARD_PRIMOGEMS * clampedTier * (1 + combo * COMBO_GEM_STEP)) + carried;
     ctx.db.gemDrop.insert({
       id: 0n,
-      positionX: clampToWorld(positionX),
-      positionZ: clampToWorld(positionZ),
+      positionX: dropX,
+      positionZ: dropZ,
       amount,
       droppedBy: ctx.sender,
     });
@@ -590,6 +621,16 @@ export const dropGems = spacetimedb.reducer(
       gemsFromKills: currentPlayer.gemsFromKills + amount,
       lastKillRewardAt: ctx.timestamp,
     });
+  }
+);
+
+// A client's simulated enemy walked over a ground drop. Remove it; the client
+// tracks the amount and re-drops it (via dropGems carriedGems) when it dies.
+export const enemyTakeGem = spacetimedb.reducer(
+  { dropId: t.u64() },
+  (ctx, { dropId }) => {
+    requirePlayer(ctx);
+    ctx.db.gemDrop.id.delete(dropId);
   }
 );
 
