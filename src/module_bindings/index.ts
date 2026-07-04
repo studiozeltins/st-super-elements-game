@@ -41,9 +41,11 @@ import EnemyGrabGemReducer from "./enemy_grab_gem_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import HealPartyReducer from "./heal_party_reducer";
-import JoinGameReducer from "./join_game_reducer";
 import KillEnemyReducer from "./kill_enemy_reducer";
+import LoginReducer from "./login_reducer";
+import LogoutReducer from "./logout_reducer";
 import PullBannerReducer from "./pull_banner_reducer";
+import RegisterReducer from "./register_reducer";
 import RestoreBannerPityReducer from "./restore_banner_pity_reducer";
 import RestoreOwnedCharactersReducer from "./restore_owned_characters_reducer";
 import RestorePlayersReducer from "./restore_players_reducer";
@@ -56,6 +58,7 @@ import UpdatePositionReducer from "./update_position_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AccountLinkRow from "./account_link_table";
 import BannerPityRow from "./banner_pity_table";
 import EnemyCarryRow from "./enemy_carry_table";
 import GemDropRow from "./gem_drop_table";
@@ -71,6 +74,17 @@ import WeaponItemRow from "./weapon_item_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  accountLink: __table({
+    name: 'account_link',
+    indexes: [
+      { accessor: 'identity', name: 'account_link_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'account_link_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, AccountLinkRow),
   bannerPity: __table({
     name: 'banner_pity',
     indexes: [
@@ -190,9 +204,11 @@ const reducersSchema = __reducers(
   __reducerSchema("fall_to_death", FallToDeathReducer),
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("heal_party", HealPartyReducer),
-  __reducerSchema("join_game", JoinGameReducer),
   __reducerSchema("kill_enemy", KillEnemyReducer),
+  __reducerSchema("login", LoginReducer),
+  __reducerSchema("logout", LogoutReducer),
   __reducerSchema("pull_banner", PullBannerReducer),
+  __reducerSchema("register", RegisterReducer),
   __reducerSchema("restore_banner_pity", RestoreBannerPityReducer),
   __reducerSchema("restore_owned_characters", RestoreOwnedCharactersReducer),
   __reducerSchema("restore_players", RestorePlayersReducer),

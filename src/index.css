@@ -153,6 +153,85 @@ button {
   cursor: default;
 }
 
+/* ---------- Auth (login / register) ---------- */
+.auth__panel {
+  min-width: 320px;
+  max-width: 380px;
+}
+
+.auth__tabs {
+  display: flex;
+  gap: 6px;
+  margin-top: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.auth__tab {
+  flex: 1;
+  padding: 10px 8px;
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.auth__tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.auth__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.auth__input {
+  flex: none;
+  width: 100%;
+}
+
+.auth__button {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.auth__error {
+  font-size: 13px;
+  color: #ff6b6b;
+  letter-spacing: 0.02em;
+}
+
+.auth__hint {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.logout-btn {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 40;
+  padding: 6px 12px;
+  font: 700 11px var(--font-display);
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  background: rgba(10, 16, 8, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.logout-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 /* ---------- HUD ---------- */
 
 .hud {

@@ -10,6 +10,26 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const Account = __t.object("Account", {
+  accountId: __t.u64(),
+  username: __t.string(),
+  usernameLower: __t.string(),
+  email: __t.string(),
+  passwordHash: __t.string(),
+  salt: __t.string(),
+  canonicalIdentity: __t.identity(),
+  createdAt: __t.timestamp(),
+});
+export type Account = __Infer<typeof Account>;
+
+export const AccountLink = __t.object("AccountLink", {
+  identity: __t.identity(),
+  accountId: __t.u64(),
+  canonicalIdentity: __t.identity(),
+  username: __t.string(),
+});
+export type AccountLink = __Infer<typeof AccountLink>;
+
 export const BannerPity = __t.object("BannerPity", {
   id: __t.u64(),
   owner: __t.identity(),

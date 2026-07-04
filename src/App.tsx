@@ -5,7 +5,8 @@ import type { Player } from './module_bindings/types';
 import { createGame, type Game, type HudState } from './game/createGame';
 import { CHARACTERS } from './game/data/characters';
 import { MAX_HEALTH } from './game/data/constants';
-import { JoinScreen } from './ui/JoinScreen';
+import { AuthScreen } from './ui/AuthScreen';
+import { deriveKey } from './auth/hash';
 import { Hud } from './ui/Hud';
 import { GachaScreen, type PityInfo, type PullView } from './ui/GachaScreen';
 
@@ -21,9 +22,12 @@ const INITIAL_HUD_STATE: HudState = {
 export default function App() {
   const { isActive, identity, getConnection } = useSpacetimeDB();
   const connection = getConnection() as DbConnection | null;
-  const myIdentityHex = identity?.toHexString() ?? null;
+  // The device identity (anonymous, per-browser). Accounts sit on top of it: an
+  // account_link row maps this device to the account's CANONICAL identity, which
+  // is what all gameplay rows are keyed by. myIdentityHex below is the canonical
+  // one, so every ownership/event filter downstream keys off the account.
+  const deviceIdentityHex = identity?.toHexString() ?? null;
   const myIdentityRef = useRef<string | null>(null);
-  myIdentityRef.current = myIdentityHex;
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
@@ -34,9 +38,11 @@ export default function App() {
   const pullBufferRef = useRef<PullView[]>([]);
   const flushTimerRef = useRef<number | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
 
   useEffect(() => {
-    if (!connection || !isActive) {
+    if (!connection || !isActive || !identity) {
       setIsSubscribed(false);
       return;
     }
@@ -44,6 +50,8 @@ export default function App() {
       .subscriptionBuilder()
       .onApplied(() => setIsSubscribed(true))
       .subscribe([
+        // Only this device's own link row — learns our canonical identity.
+        tables.accountLink.where(row => row.identity.eq(identity)),
         tables.player,
         tables.ownedCharacter,
         tables.skillCast,
@@ -62,7 +70,7 @@ export default function App() {
         // Subscription may already be gone when the connection dropped.
       }
     };
-  }, [connection, isActive]);
+  }, [connection, isActive, identity]);
 
   const [players] = useTable(tables.player);
   const [ownedCharacterRows] = useTable(tables.ownedCharacter);
@@ -70,6 +78,14 @@ export default function App() {
   const [weaponItemRows] = useTable(tables.weaponItem);
   const [gemDropRows] = useTable(tables.gemDrop);
   const [enemyCarryRows] = useTable(tables.enemyCarry);
+  const [accountLinks] = useTable(tables.accountLink);
+
+  // Resolve this device to its account's canonical identity. All downstream
+  // ownership/event filters use myIdentityHex, so they key off the account, not
+  // the per-device anonymous identity.
+  const myLink = accountLinks.find(link => link.identity.toHexString() === deviceIdentityHex);
+  const myIdentityHex = myLink?.canonicalIdentity.toHexString() ?? null;
+  myIdentityRef.current = myIdentityHex;
 
   useTable(tables.skillCast, {
     onInsert: cast => {
@@ -184,6 +200,45 @@ export default function App() {
     [connection]
   );
 
+  const handleRegister = useCallback(
+    async (username: string, email: string, password: string) => {
+      if (!connection) return;
+      setAuthError(null);
+      setAuthBusy(true);
+      try {
+        const derivedKey = deriveKey(username, password);
+        await connection.reducers.register({ username, email, derivedKey });
+      } catch (err) {
+        setAuthError(err instanceof Error ? err.message : 'Reģistrācija neizdevās');
+      } finally {
+        setAuthBusy(false);
+      }
+    },
+    [connection]
+  );
+
+  const handleLogin = useCallback(
+    async (username: string, password: string) => {
+      if (!connection) return;
+      setAuthError(null);
+      setAuthBusy(true);
+      try {
+        const derivedKey = deriveKey(username, password);
+        await connection.reducers.login({ username, derivedKey });
+      } catch (err) {
+        setAuthError(err instanceof Error ? err.message : 'Ienākšana neizdevās');
+      } finally {
+        setAuthBusy(false);
+      }
+    },
+    [connection]
+  );
+
+  const handleLogout = useCallback(() => {
+    connection?.reducers.logout({});
+  }, [connection]);
+
+  const isLoggedIn = Boolean(myLink);
   const hasJoined = Boolean(myPlayer);
 
   useEffect(() => {
@@ -259,11 +314,15 @@ export default function App() {
     gameRef.current?.setInputEnabled(!isGachaOpen);
   }, [isGachaOpen]);
 
-  if (!hasJoined) {
+  if (!isLoggedIn) {
     return (
-      <JoinScreen
+      <AuthScreen
         isConnected={isActive && isSubscribed}
-        onJoin={name => connection?.reducers.joinGame({ name })}
+        busy={authBusy}
+        error={authError}
+        onRegister={handleRegister}
+        onLogin={handleLogin}
+        onClearError={() => setAuthError(null)}
       />
     );
   }
@@ -271,6 +330,9 @@ export default function App() {
   return (
     <div className="app">
       <canvas ref={canvasRef} className="game-canvas" />
+      <button className="logout-btn" type="button" onClick={handleLogout}>
+        IZIET
+      </button>
       <Hud
         playerName={myPlayer?.name ?? ''}
         health={myPlayer?.currentHealth ?? MAX_HEALTH}
