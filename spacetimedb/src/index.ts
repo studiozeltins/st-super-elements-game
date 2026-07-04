@@ -14,6 +14,7 @@ import {
   goliathBatchForWindow,
 } from './enemyStats';
 import { damagePerTick, distanceBetween, stepToward, windowBucketFor } from './combatMath';
+import { isWalkable, nextGoliathWaypoint } from './bridges';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -1603,7 +1604,10 @@ export const worldTick = spacetimedb.reducer(
           ? playerByHex.get(goliathRow.aggroPlayer.toHexString())
           : undefined;
       if (chasedPlayer) {
-        const moved = stepToward(goliathRow.positionX, goliathRow.positionZ, chasedPlayer.positionX, chasedPlayer.positionZ, speed);
+        // Route along bridges instead of walking straight at the player (which
+        // would send the raider off the island into the void).
+        const waypoint = nextGoliathWaypoint(goliathRow.positionX, goliathRow.positionZ, chasedPlayer.positionX, chasedPlayer.positionZ);
+        const moved = stepToward(goliathRow.positionX, goliathRow.positionZ, waypoint.x, waypoint.z, speed);
         goliathTarget.set(goliathRow.goliathId, -1);
         goliathPosition.set(goliathRow.goliathId, { x: clampToWorld(moved.x), z: clampToWorld(moved.z) });
         continue;
@@ -1620,7 +1624,9 @@ export const worldTick = spacetimedb.reducer(
         goliathPosition.set(goliathRow.goliathId, { x: goliathRow.positionX, z: goliathRow.positionZ });
         continue;
       }
-      const moved = stepToward(goliathRow.positionX, goliathRow.positionZ, target.x, target.z, speed);
+      // Route along bridges toward the camp so the raider stays on walkable ground.
+      const waypoint = nextGoliathWaypoint(goliathRow.positionX, goliathRow.positionZ, target.x, target.z);
+      const moved = stepToward(goliathRow.positionX, goliathRow.positionZ, waypoint.x, waypoint.z, speed);
       goliathTarget.set(goliathRow.goliathId, target.campIndex);
       goliathPosition.set(goliathRow.goliathId, { x: clampToWorld(moved.x), z: clampToWorld(moved.z) });
     }
@@ -1648,7 +1654,15 @@ export const worldTick = spacetimedb.reducer(
       }
       const moveSpeed = ENEMY_ARCHETYPE_STATS[enemyRow.archetypeId as CampArchetypeId].moveSpeed;
       const moved = stepToward(enemyRow.positionX, enemyRow.positionZ, targetX, targetZ, moveSpeed * (Number(tick) / 1_000_000));
-      enemyPosition.set(enemyRow.enemyId, { x: clampToWorld(moved.x), z: clampToWorld(moved.z) });
+      const steppedX = clampToWorld(moved.x);
+      const steppedZ = clampToWorld(moved.z);
+      // Enemies get no bridge pathing; they just must not walk off into the void.
+      // A step that would land off all walkable ground is refused (stay put this tick).
+      const stepStaysOnGround = isWalkable(steppedX, steppedZ);
+      enemyPosition.set(enemyRow.enemyId, {
+        x: stepStaysOnGround ? steppedX : enemyRow.positionX,
+        z: stepStaysOnGround ? steppedZ : enemyRow.positionZ,
+      });
     }
 
     // Pass 3 — goliaths raid the camp. Proximity RALLIES every nearby member to
