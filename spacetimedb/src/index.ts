@@ -413,7 +413,15 @@ function accountIdentity(ctx: { db: any; sender: any }): any | null {
 }
 
 // Seeds a fresh player + starter character under the given (canonical) identity.
+// If a player row already exists for this identity (e.g. it played anonymously
+// before accounts existed), ADOPT it: keep its progress, just rename to the
+// account's username and mark it online. Avoids a PK collision on player.identity.
 function seedPlayer(ctx: { db: any; timestamp: any }, identity: any, name: string) {
+  const existing = ctx.db.player.identity.find(identity);
+  if (existing) {
+    ctx.db.player.identity.update({ ...existing, name, online: true });
+    return;
+  }
   ctx.db.player.insert({
     identity,
     name,
