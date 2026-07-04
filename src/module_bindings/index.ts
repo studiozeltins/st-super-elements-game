@@ -34,15 +34,13 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AttackEnemiesReducer from "./attack_enemies_reducer";
 import AttackPlayerReducer from "./attack_player_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
 import CollectGemReducer from "./collect_gem_reducer";
-import EnemyGrabGemReducer from "./enemy_grab_gem_reducer";
-import EnemyRaidKillReducer from "./enemy_raid_kill_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import HealPartyReducer from "./heal_party_reducer";
-import KillEnemyReducer from "./kill_enemy_reducer";
 import LoginReducer from "./login_reducer";
 import LogoutReducer from "./logout_reducer";
 import PingReducer from "./ping_reducer";
@@ -62,8 +60,9 @@ import UpdatePositionReducer from "./update_position_reducer";
 // Import all table schema definitions
 import AccountLinkRow from "./account_link_table";
 import BannerPityRow from "./banner_pity_table";
-import EnemyCarryRow from "./enemy_carry_table";
+import EnemyRow from "./enemy_table";
 import GemDropRow from "./gem_drop_table";
+import GoliathRow from "./goliath_table";
 import HealEventRow from "./heal_event_table";
 import OwnedCharacterRow from "./owned_character_table";
 import PlayerRow from "./player_table";
@@ -102,17 +101,17 @@ const tablesSchema = __schema({
       { name: 'banner_pity_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, BannerPityRow),
-  enemyCarry: __table({
-    name: 'enemy_carry',
+  enemy: __table({
+    name: 'enemy',
     indexes: [
-      { accessor: 'enemyId', name: 'enemy_carry_enemy_id_idx_btree', algorithm: 'btree', columns: [
+      { accessor: 'enemyId', name: 'enemy_enemy_id_idx_btree', algorithm: 'btree', columns: [
         'enemyId',
       ] },
     ],
     constraints: [
-      { name: 'enemy_carry_enemy_id_key', constraint: 'unique', columns: ['enemyId'] },
+      { name: 'enemy_enemy_id_key', constraint: 'unique', columns: ['enemyId'] },
     ],
-  }, EnemyCarryRow),
+  }, EnemyRow),
   gemDrop: __table({
     name: 'gem_drop',
     indexes: [
@@ -124,6 +123,17 @@ const tablesSchema = __schema({
       { name: 'gem_drop_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, GemDropRow),
+  goliath: __table({
+    name: 'goliath',
+    indexes: [
+      { accessor: 'goliathId', name: 'goliath_goliath_id_idx_btree', algorithm: 'btree', columns: [
+        'goliathId',
+      ] },
+    ],
+    constraints: [
+      { name: 'goliath_goliath_id_key', constraint: 'unique', columns: ['goliathId'] },
+    ],
+  }, GoliathRow),
   healEvent: __table({
     name: 'heal_event',
     indexes: [
@@ -199,15 +209,13 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("attack_enemies", AttackEnemiesReducer),
   __reducerSchema("attack_player", AttackPlayerReducer),
   __reducerSchema("cast_skill", CastSkillReducer),
   __reducerSchema("collect_gem", CollectGemReducer),
-  __reducerSchema("enemy_grab_gem", EnemyGrabGemReducer),
-  __reducerSchema("enemy_raid_kill", EnemyRaidKillReducer),
   __reducerSchema("fall_to_death", FallToDeathReducer),
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("heal_party", HealPartyReducer),
-  __reducerSchema("kill_enemy", KillEnemyReducer),
   __reducerSchema("login", LoginReducer),
   __reducerSchema("logout", LogoutReducer),
   __reducerSchema("ping", PingReducer),

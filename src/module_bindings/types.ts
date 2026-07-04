@@ -41,13 +41,28 @@ export const BannerPity = __t.object("BannerPity", {
 });
 export type BannerPity = __Infer<typeof BannerPity>;
 
-export const EnemyCarry = __t.object("EnemyCarry", {
+export const Enemy = __t.object("Enemy", {
   enemyId: __t.u64(),
+  campIndex: __t.u32(),
+  archetypeId: __t.string(),
+  isBoss: __t.bool(),
+  rewardTier: __t.u32(),
+  homeX: __t.f32(),
+  homeZ: __t.f32(),
+  positionX: __t.f32(),
+  positionZ: __t.f32(),
+  health: __t.u32(),
+  maxHealth: __t.u32(),
+  contactDamage: __t.u32(),
   carriedGems: __t.u32(),
-  lastGrabbedBy: __t.identity(),
-  killedAtMicros: __t.u64(),
+  aggroKind: __t.u32(),
+  aggroPlayer: __t.option(__t.identity()),
+  aggroGoliathId: __t.u64(),
+  aggroExpiresAtMicros: __t.u64(),
+  alive: __t.bool(),
+  respawnAtMicros: __t.u64(),
 });
-export type EnemyCarry = __Infer<typeof EnemyCarry>;
+export type Enemy = __Infer<typeof Enemy>;
 
 export const GemDrop = __t.object("GemDrop", {
   id: __t.u64(),
@@ -57,6 +72,25 @@ export const GemDrop = __t.object("GemDrop", {
   droppedBy: __t.identity(),
 });
 export type GemDrop = __Infer<typeof GemDrop>;
+
+export const Goliath = __t.object("Goliath", {
+  goliathId: __t.u64(),
+  sizeIndex: __t.u32(),
+  positionX: __t.f32(),
+  positionZ: __t.f32(),
+  health: __t.u32(),
+  maxHealth: __t.u32(),
+  contactDamage: __t.u32(),
+  moveSpeed: __t.f32(),
+  splashes: __t.bool(),
+  carriedGems: __t.u32(),
+  targetCampIndex: __t.i32(),
+  aggroPlayer: __t.option(__t.identity()),
+  aggroExpiresAtMicros: __t.u64(),
+  alive: __t.bool(),
+  windowBucket: __t.u64(),
+});
+export type Goliath = __Infer<typeof Goliath>;
 
 export const HealEvent = __t.object("HealEvent", {
   owner: __t.identity(),
@@ -177,4 +211,10 @@ export const WeaponItem = __t.object("WeaponItem", {
   acquiredAt: __t.timestamp(),
 });
 export type WeaponItem = __Infer<typeof WeaponItem>;
+
+export const WorldTimer = __t.object("WorldTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type WorldTimer = __Infer<typeof WorldTimer>;
 

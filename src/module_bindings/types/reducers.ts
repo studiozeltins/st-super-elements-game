@@ -6,15 +6,13 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AttackEnemiesReducer from "../attack_enemies_reducer";
 import AttackPlayerReducer from "../attack_player_reducer";
 import CastSkillReducer from "../cast_skill_reducer";
 import CollectGemReducer from "../collect_gem_reducer";
-import EnemyGrabGemReducer from "../enemy_grab_gem_reducer";
-import EnemyRaidKillReducer from "../enemy_raid_kill_reducer";
 import FallToDeathReducer from "../fall_to_death_reducer";
 import HealInSafeZoneReducer from "../heal_in_safe_zone_reducer";
 import HealPartyReducer from "../heal_party_reducer";
-import KillEnemyReducer from "../kill_enemy_reducer";
 import LoginReducer from "../login_reducer";
 import LogoutReducer from "../logout_reducer";
 import PingReducer from "../ping_reducer";
@@ -29,15 +27,13 @@ import SetPartyReducer from "../set_party_reducer";
 import TakeDamageReducer from "../take_damage_reducer";
 import UpdatePositionReducer from "../update_position_reducer";
 
+export type AttackEnemiesParams = __Infer<typeof AttackEnemiesReducer>;
 export type AttackPlayerParams = __Infer<typeof AttackPlayerReducer>;
 export type CastSkillParams = __Infer<typeof CastSkillReducer>;
 export type CollectGemParams = __Infer<typeof CollectGemReducer>;
-export type EnemyGrabGemParams = __Infer<typeof EnemyGrabGemReducer>;
-export type EnemyRaidKillParams = __Infer<typeof EnemyRaidKillReducer>;
 export type FallToDeathParams = __Infer<typeof FallToDeathReducer>;
 export type HealInSafeZoneParams = __Infer<typeof HealInSafeZoneReducer>;
 export type HealPartyParams = __Infer<typeof HealPartyReducer>;
-export type KillEnemyParams = __Infer<typeof KillEnemyReducer>;
 export type LoginParams = __Infer<typeof LoginReducer>;
 export type LogoutParams = __Infer<typeof LogoutReducer>;
 export type PingParams = __Infer<typeof PingReducer>;

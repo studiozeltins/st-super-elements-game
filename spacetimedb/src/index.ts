@@ -1,6 +1,19 @@
 import { schema, t, table, SenderError } from 'spacetimedb/server';
 import { ScheduleAt } from 'spacetimedb';
 import { sha256Hex, bytesToHex } from './sha256';
+import { createSeededRandom } from './rng';
+import { generateCampSites, type CampArchetypeId } from './worldGen';
+import {
+  ENEMY_ARCHETYPE_STATS,
+  MEMBERS_PER_CAMP,
+  enemyIdFor,
+  isBossMember,
+  enemyMaxHealth,
+  enemyContactDamage,
+  GOLIATH_SIZE_STATS,
+  goliathBatchForWindow,
+} from './enemyStats';
+import { damagePerTick, distanceBetween, stepToward, windowBucketFor } from './combatMath';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -161,10 +174,9 @@ const GOLIATH_SLOT_ID_BASE = 900000n;
 // window — unlike camp enemies, which respawn every ENEMY_RESPAWN_MICROS. Mirrors
 // client GOLIATH_BATCH_WINDOW_MICROS in src/game/systems/goliathIdentity.ts.
 const GOLIATH_BATCH_WINDOW_MICROS = 300_000_000n;
-// Enemies are client-simulated with a fixed respawn delay. The server treats an
-// enemy as "dead" (its hoard already dropped) for this window after a kill, so
-// concurrent kill calls from several clients only pay out once.
-const ENEMY_RESPAWN_MICROS = 6_000_000n; // matches client RESPAWN_DELAY_SECONDS
+// A dead camp enemy revives at full health at its home after this delay. Matches
+// the client RESPAWN_DELAY_SECONDS so the respawn cadence looks the same.
+const ENEMY_RESPAWN_MICROS = 6_000_000n;
 const GEM_SPILL_SCATTER = 2.2; // how far spilled gems scatter from the death spot
 const MAX_SPILL_GEMS = 40; // physical drop cap; overflow folds into the biggest piece
 // A hoard is spilled as many small gems in these denominations (largest first),
@@ -172,6 +184,39 @@ const MAX_SPILL_GEMS = 40; // physical drop cap; overflow folds into the biggest
 // the amount. Mirrored client-side in src/game/data/gemDrops.ts (kept in sync by
 // serverSync.test.ts).
 const GEM_DENOMINATIONS = [500, 100, 50, 20, 10, 5, 1];
+
+// ---- Server-authoritative world simulation (enemies + goliath raiders) -------
+// The camp fight runs on the server: the world tick moves every enemy/goliath,
+// resolves REAL contact damage (no dice), spills loot on death, and vacuums
+// ground gems. Clients become renderers that read the enemy/goliath tables.
+const WORLD_TICK_INTERVAL_MICROS = 150_000n; // ~6.7 ticks/sec
+// Aggro is a 5-second refreshable memory: an entity fights whoever last DAMAGED
+// it, and forgets 5s after the last hit. Walking near never flips aggro.
+const AGGRO_DURATION_MICROS = 5_000_000n;
+const AGGRO_HOME = 0; // defend the camp (enemies) / roam camps (goliaths)
+const AGGRO_PLAYER = 1;
+const AGGRO_GOLIATH = 2;
+// Enemies spawn scattered around their camp home; matches client SPAWN_SCATTER_RADIUS.
+const SPAWN_SCATTER_RADIUS = 3;
+const ENEMY_SPAWN_SEED = 0xbeef5; // matches the client enemy spawn PRNG seed
+// Contact reach for the various fights (world units).
+const ENEMY_GOLIATH_CONTACT_RANGE = 2.5; // goliath ↔ camp member (strike + bite-back)
+const GOLIATH_SPLASH_RANGE = 4.0; // the largest raider hits everything in here
+// A raider this close rallies the WHOLE camp to defend it (aggro only — the strike
+// itself is still single-target unless the raider splashes). This is what makes a
+// fresh camp gang up and eventually overpower a wounded goliath.
+const GOLIATH_ENGAGE_RANGE = 8.0;
+const ENEMY_PLAYER_CONTACT_RANGE = 1.8; // camp member ↔ player it is chasing
+// A goliath hits camp members far harder than they were authored to hit players,
+// so it clears a couple of easy camps before the accumulated counter-damage from
+// fresh, respawning camps wears it down (~2-3 slime-tier camps for a small
+// raider; a stone-golem camp overpowers it outright). Pure HP attrition.
+const GOLIATH_VS_ENEMY_DAMAGE_MULTIPLIER = 3;
+// Gem vacuum reach: goliaths sweep a wider area than slimes.
+const ENEMY_GEM_VACUUM_RANGE = 1.7; // matches client ENEMY_GEM_GRAB_RANGE
+const GOLIATH_GEM_VACUUM_RANGE = 3.0;
+// Below this many living members a camp counts as "cleared" for goliath targeting.
+const CAMP_CLEARED_MEMBER_COUNT = 0;
 
 const player = table(
   { name: 'player', public: true },
@@ -209,19 +254,56 @@ const gemDrop = table(
   }
 );
 
-// Server-authoritative gem hoard a client-simulated enemy is carrying. Enemies
-// have no server entity, but their spawns are deterministic, so each gets a
-// stable id (camp index + member index, see client enemyIdentity.ts). Any client
-// whose enemy walks over a drop credits it here; every client subscribes and
-// renders the same hoard over the same enemy. killedAtMicros stamps the last
-// kill so concurrent kill calls are idempotent within the respawn window.
-const enemyCarry = table(
-  { name: 'enemy_carry', public: true },
+// A server-authoritative camp enemy. Spawned at init (one boss + guards per camp),
+// moved and fought by the world tick. Public so clients render position, health,
+// and the gem hoard. enemyId is the stable camp+member id (enemyIdFor).
+const enemy = table(
+  { name: 'enemy', public: true },
   {
     enemyId: t.u64().primaryKey(),
+    campIndex: t.u32(),
+    archetypeId: t.string(),
+    isBoss: t.bool(),
+    rewardTier: t.u32(),
+    homeX: t.f32(),
+    homeZ: t.f32(),
+    positionX: t.f32(),
+    positionZ: t.f32(),
+    health: t.u32(),
+    maxHealth: t.u32(),
+    contactDamage: t.u32(),
     carriedGems: t.u32(),
-    lastGrabbedBy: t.identity(),
-    killedAtMicros: t.u64(),
+    // Aggro: fights whoever last DAMAGED it, for a 5s refreshable memory.
+    aggroKind: t.u32(), // 0 home / 1 player / 2 goliath
+    aggroPlayer: t.option(t.identity()),
+    aggroGoliathId: t.u64(),
+    aggroExpiresAtMicros: t.u64(),
+    alive: t.bool(),
+    respawnAtMicros: t.u64(),
+  }
+);
+
+// A roaming goliath raider. Spawned by the world tick, one seeded batch (1-3) per
+// 5-minute window; never respawns inside its window once dead. Public so clients
+// render it. goliathId is a fixed slot id (GOLIATH_SLOT_ID_BASE + 1..3).
+const goliath = table(
+  { name: 'goliath', public: true },
+  {
+    goliathId: t.u64().primaryKey(),
+    sizeIndex: t.u32(),
+    positionX: t.f32(),
+    positionZ: t.f32(),
+    health: t.u32(),
+    maxHealth: t.u32(),
+    contactDamage: t.u32(),
+    moveSpeed: t.f32(),
+    splashes: t.bool(),
+    carriedGems: t.u32(),
+    targetCampIndex: t.i32(), // -1 = no target / roaming
+    aggroPlayer: t.option(t.identity()),
+    aggroExpiresAtMicros: t.u64(),
+    alive: t.bool(),
+    windowBucket: t.u64(),
   }
 );
 
@@ -329,6 +411,17 @@ const regenTimer = table(
   }
 );
 
+const worldTimer = table(
+  {
+    name: 'world_timer',
+    scheduled: (): any => worldTick,
+  },
+  {
+    scheduled_id: t.u64().primaryKey().autoInc(),
+    scheduled_at: t.scheduleAt(),
+  }
+);
+
 // Credential store — PRIVATE (no `public: true`), readable only by reducers and
 // the DB owner. Passwords never live here: only a hash of a client-derived key,
 // salted per-account and peppered server-side (see serverHash). usernameLower /
@@ -368,7 +461,8 @@ const spacetimedb = schema({
   accountLink,
   player,
   gemDrop,
-  enemyCarry,
+  enemy,
+  goliath,
   ownedCharacter,
   skillCast,
   bannerPity,
@@ -377,6 +471,7 @@ const spacetimedb = schema({
   pvpHit,
   healEvent,
   regenTimer,
+  worldTimer,
 });
 export default spacetimedb;
 
@@ -826,49 +921,6 @@ export const fallToDeath = spacetimedb.reducer(ctx => {
   respawnPlayerAtSpawn(ctx, currentPlayer);
 });
 
-// A client's simulated enemy walked over a ground drop. The server owns the
-// hoard: it reads the drop's real amount, deletes the drop, and credits the
-// enemy's enemy_carry row (creating it on first grab). Every client subscribes
-// enemy_carry and renders the same hoard over the same enemy. If the enemy has
-// since respawned (dead window elapsed), the hoard resets before crediting.
-export const enemyGrabGem = spacetimedb.reducer(
-  { enemyId: t.u64(), dropId: t.u64() },
-  (ctx, { enemyId, dropId }) => {
-    const currentPlayer = requirePlayer(ctx);
-    const now = ctx.timestamp.microsSinceUnixEpoch;
-    const existing = ctx.db.enemyCarry.enemyId.find(enemyId);
-
-    // A goliath already killed this window is gone; ignore late grabs from other
-    // clients still simulating it alive, so it can't revive its slot or re-open a
-    // second payout. Leave the drop for a live grabber or a player. (Camp enemies
-    // respawn on their own 6s window and keep the existing grab behaviour below.)
-    if (isGoliathSlotId(enemyId) && isKillAlreadyCounted(existing, now)) return;
-
-    const drop = ctx.db.gemDrop.id.find(dropId);
-    if (!drop) return; // already grabbed by someone/something else
-    ctx.db.gemDrop.id.delete(dropId);
-
-    if (existing) {
-      const respawned =
-        existing.killedAtMicros !== 0n && now - existing.killedAtMicros >= ENEMY_RESPAWN_MICROS;
-      const base = respawned ? 0 : existing.carriedGems;
-      ctx.db.enemyCarry.enemyId.update({
-        ...existing,
-        carriedGems: Math.min(base + drop.amount, CARRY_HARD_CAP),
-        lastGrabbedBy: currentPlayer.identity,
-        killedAtMicros: respawned ? 0n : existing.killedAtMicros,
-      });
-    } else {
-      ctx.db.enemyCarry.insert({
-        enemyId,
-        carriedGems: Math.min(drop.amount, CARRY_HARD_CAP),
-        lastGrabbedBy: currentPlayer.identity,
-        killedAtMicros: 0n,
-      });
-    }
-  }
-);
-
 // Every enemy carries a virtual base gem stipend that is always present from
 // spawn — never stored, computed here so both the player-kill and enemy-raid
 // payouts agree. Regular enemies scale with reward tier (bosses ×BOSS_GEM_MULTIPLIER);
@@ -889,95 +941,142 @@ function enemyBaseGems(
   return KILL_REWARD_PRIMOGEMS * clampedTier * (isBoss ? BOSS_GEM_MULTIPLIER : 1);
 }
 
-function isGoliathSlotId(enemyId: bigint) {
-  return enemyId >= GOLIATH_SLOT_ID_BASE;
+// ---- Server-authoritative death + economy -----------------------------------
+
+// Spills a dead entity's loot (base stipend + carried hoard) onto the ground and
+// returns the total dropped. droppedBy credits a player kill (leaderboard) or is
+// the module identity for a tick/goliath kill (an uncredited drop is fine).
+function spillEnemyLoot(
+  ctx: { db: any; random: any },
+  positionX: number,
+  positionZ: number,
+  baseGems: number,
+  carriedGems: number,
+  droppedBy: any
+): number {
+  const total = baseGems + Math.min(carriedGems, CARRY_HARD_CAP);
+  spillDenominations(ctx, positionX, positionZ, total, droppedBy);
+  return total;
 }
 
-// True when a kill for this slot has already been counted, so a duplicate/late
-// call must no-op. Camp enemies respawn every ENEMY_RESPAWN_MICROS, so their
-// guard is that short real-time window. Goliaths live once per 5-minute window,
-// so theirs is the whole window (bucketed) — immune to clock skew between clients
-// and to a player kill and a scheduled camp kill landing seconds apart.
-function isKillAlreadyCounted(existingCarry: any, nowMicros: bigint) {
-  if (!existingCarry || existingCarry.killedAtMicros === 0n) return false;
-  if (isGoliathSlotId(existingCarry.enemyId)) {
-    return existingCarry.killedAtMicros / GOLIATH_BATCH_WINDOW_MICROS === nowMicros / GOLIATH_BATCH_WINDOW_MICROS;
-  }
-  return nowMicros - existingCarry.killedAtMicros < ENEMY_RESPAWN_MICROS;
+// Marks a camp enemy dead: spill its loot, clear its hoard, revert aggro to home,
+// and schedule a full-health respawn at its home.
+function killEnemyRow(
+  ctx: { db: any; random: any; sender: any },
+  enemyRow: any,
+  baseGems: number,
+  droppedBy: any,
+  nowMicros: bigint
+): number {
+  const dropped = spillEnemyLoot(ctx, enemyRow.positionX, enemyRow.positionZ, baseGems, enemyRow.carriedGems, droppedBy);
+  ctx.db.enemy.enemyId.update({
+    ...enemyRow,
+    alive: false,
+    health: 0,
+    carriedGems: 0,
+    aggroKind: AGGRO_HOME,
+    aggroPlayer: undefined,
+    aggroGoliathId: 0n,
+    aggroExpiresAtMicros: 0n,
+    respawnAtMicros: nowMicros + ENEMY_RESPAWN_MICROS,
+  });
+  return dropped;
 }
 
-// Stamps an enemy dead and clears its hoard so the respawned enemy starts empty
-// and concurrent kill calls no-op. Returns the hoard that was carried at death.
-function stampEnemyKilledAndClearHoard(ctx: any, enemyId: bigint, existingCarry: any, nowMicros: bigint, killedBy: any) {
-  const carried = existingCarry ? Math.min(existingCarry.carriedGems, CARRY_HARD_CAP) : 0;
-  if (existingCarry) {
-    ctx.db.enemyCarry.enemyId.update({ ...existingCarry, carriedGems: 0, killedAtMicros: nowMicros });
-  } else {
-    ctx.db.enemyCarry.insert({ enemyId, carriedGems: 0, lastGrabbedBy: killedBy, killedAtMicros: nowMicros });
-  }
-  return carried;
+// Marks a goliath dead: spill its loot and leave it dead for the rest of its
+// window (its row lingers so it can't respawn until the window rolls over).
+function killGoliathRow(
+  ctx: { db: any; random: any },
+  goliathRow: any,
+  droppedBy: any
+): number {
+  const base = enemyBaseGems(true, goliathRow.sizeIndex, 0, false);
+  const dropped = spillEnemyLoot(ctx, goliathRow.positionX, goliathRow.positionZ, base, goliathRow.carriedGems, droppedBy);
+  ctx.db.goliath.goliathId.update({
+    ...goliathRow,
+    alive: false,
+    health: 0,
+    carriedGems: 0,
+    aggroPlayer: undefined,
+    aggroExpiresAtMicros: 0n,
+    targetCampIndex: -1,
+  });
+  return dropped;
 }
 
-// A player killed a client-simulated enemy or goliath raider. The base stipend
-// scales with combo (bosses/tiers/goliath size baked into enemyBaseGems); the
-// enemy's server-tracked hoard is added on top. The whole total rains down as
-// many small denominated gems and credits the killer. Idempotent across clients.
-export const killEnemy = spacetimedb.reducer(
+// A player's real, authoritative attack: every alive enemy AND goliath within
+// radius of the center takes `damage` and has its aggro flipped to the caller.
+// Anything that dies pays its combo-boosted base + hoard, credited to the killer.
+// This is the one place a player can burst a goliath down before a camp does.
+export const attackEnemies = spacetimedb.reducer(
   {
-    enemyId: t.u64(),
-    positionX: t.f32(),
-    positionZ: t.f32(),
-    rewardTier: t.u32(),
+    centerX: t.f32(),
+    centerZ: t.f32(),
+    radius: t.f32(),
+    damage: t.u32(),
     comboCount: t.u32(),
-    isBoss: t.bool(),
-    isGoliath: t.bool(),
-    goliathSizeIndex: t.u32(),
   },
-  (ctx, { enemyId, positionX, positionZ, rewardTier, comboCount, isBoss, isGoliath, goliathSizeIndex }) => {
+  (ctx, { centerX, centerZ, radius, damage, comboCount }) => {
     const currentPlayer = requirePlayer(ctx);
     const now = ctx.timestamp.microsSinceUnixEpoch;
-    const existing = ctx.db.enemyCarry.enemyId.find(enemyId);
-    if (isKillAlreadyCounted(existing, now)) return;
-
+    const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
     const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
-    const base = Math.round(
-      enemyBaseGems(isGoliath, goliathSizeIndex, rewardTier, isBoss) * (1 + combo * COMBO_GEM_STEP)
-    );
-    const carried = stampEnemyKilledAndClearHoard(ctx, enemyId, existing, now, currentPlayer.identity);
-    const total = base + carried;
+    const comboScale = 1 + combo * COMBO_GEM_STEP;
+    let gemsCredited = 0;
 
-    spillDenominations(ctx, positionX, positionZ, total, currentPlayer.identity);
-    ctx.db.player.identity.update({
-      ...currentPlayer,
-      gemsFromKills: currentPlayer.gemsFromKills + total,
-      lastKillRewardAt: ctx.timestamp,
-    });
-  }
-);
+    for (const enemyRow of [...ctx.db.enemy.iter()]) {
+      if (!enemyRow.alive) continue;
+      if (distanceBetween(enemyRow.positionX, enemyRow.positionZ, centerX, centerZ) > radius) continue;
+      const remaining = enemyRow.health - Math.min(clampedDamage, enemyRow.health);
+      if (remaining > 0) {
+        ctx.db.enemy.enemyId.update({
+          ...enemyRow,
+          health: remaining,
+          aggroKind: AGGRO_PLAYER,
+          aggroPlayer: currentPlayer.identity,
+          aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
+        });
+        continue;
+      }
+      const base = Math.round(enemyBaseGems(false, 0, enemyRow.rewardTier, enemyRow.isBoss) * comboScale);
+      gemsCredited += killEnemyRow(ctx, enemyRow, base, currentPlayer.identity, now);
+    }
 
-// One enemy killed another (a goliath raiding a camp boss, or a camp defending
-// itself and killing a goliath). No player earns the kill: the victim's base
-// stipend plus its stolen hoard spill straight to the ground for anyone nearby —
-// enemies, goliaths, or players — to grab. Idempotent across clients.
-export const enemyRaidKill = spacetimedb.reducer(
-  {
-    victimEnemyId: t.u64(),
-    positionX: t.f32(),
-    positionZ: t.f32(),
-    rewardTier: t.u32(),
-    isBoss: t.bool(),
-    isGoliath: t.bool(),
-    goliathSizeIndex: t.u32(),
-  },
-  (ctx, { victimEnemyId, positionX, positionZ, rewardTier, isBoss, isGoliath, goliathSizeIndex }) => {
-    const currentPlayer = requirePlayer(ctx);
-    const now = ctx.timestamp.microsSinceUnixEpoch;
-    const existing = ctx.db.enemyCarry.enemyId.find(victimEnemyId);
-    if (isKillAlreadyCounted(existing, now)) return;
+    for (const goliathRow of [...ctx.db.goliath.iter()]) {
+      if (!goliathRow.alive) continue;
+      if (distanceBetween(goliathRow.positionX, goliathRow.positionZ, centerX, centerZ) > radius) continue;
+      const remaining = goliathRow.health - Math.min(clampedDamage, goliathRow.health);
+      if (remaining > 0) {
+        ctx.db.goliath.goliathId.update({
+          ...goliathRow,
+          health: remaining,
+          aggroPlayer: currentPlayer.identity,
+          aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
+        });
+        continue;
+      }
+      const base = Math.round(enemyBaseGems(true, goliathRow.sizeIndex, 0, false) * comboScale);
+      // Reuse the goliath death path but with the combo-boosted, player-credited base.
+      const dropped = spillEnemyLoot(ctx, goliathRow.positionX, goliathRow.positionZ, base, goliathRow.carriedGems, currentPlayer.identity);
+      ctx.db.goliath.goliathId.update({
+        ...goliathRow,
+        alive: false,
+        health: 0,
+        carriedGems: 0,
+        aggroPlayer: undefined,
+        aggroExpiresAtMicros: 0n,
+        targetCampIndex: -1,
+      });
+      gemsCredited += dropped;
+    }
 
-    const base = enemyBaseGems(isGoliath, goliathSizeIndex, rewardTier, isBoss);
-    const carried = stampEnemyKilledAndClearHoard(ctx, victimEnemyId, existing, now, currentPlayer.identity);
-    spillDenominations(ctx, positionX, positionZ, base + carried, currentPlayer.identity);
+    if (gemsCredited > 0) {
+      ctx.db.player.identity.update({
+        ...currentPlayer,
+        gemsFromKills: currentPlayer.gemsFromKills + gemsCredited,
+        lastKillRewardAt: ctx.timestamp,
+      });
+    }
   }
 );
 
@@ -1288,11 +1387,363 @@ export const regenTick = spacetimedb.reducer(
   }
 );
 
+// ---- World tick: the server-authoritative camp fight -------------------------
+
+// Spawns every camp's members: one boss (member 0, boss multipliers) plus guards,
+// scattered around the camp home via the seeded PRNG. Idempotent — only seeds
+// when the enemy table is empty, so it is safe to call from init repeatedly.
+function spawnCamps(ctx: { db: any }) {
+  if ([...ctx.db.enemy.iter()].length > 0) return;
+  const spawnRandom = createSeededRandom(ENEMY_SPAWN_SEED);
+  generateCampSites().forEach((campSite, campIndex) => {
+    const archetypeId = campSite.archetypeId;
+    const rewardTier = ENEMY_ARCHETYPE_STATS[archetypeId].rewardTier;
+    for (let memberIndex = 0; memberIndex < MEMBERS_PER_CAMP; memberIndex++) {
+      const isBoss = isBossMember(memberIndex);
+      const maxHealth = enemyMaxHealth(archetypeId, isBoss);
+      const angle = spawnRandom() * Math.PI * 2;
+      const distance = spawnRandom() * SPAWN_SCATTER_RADIUS;
+      ctx.db.enemy.insert({
+        enemyId: BigInt(enemyIdFor(campIndex, memberIndex)),
+        campIndex,
+        archetypeId,
+        isBoss,
+        rewardTier,
+        homeX: campSite.x,
+        homeZ: campSite.z,
+        positionX: clampToWorld(campSite.x + Math.cos(angle) * distance),
+        positionZ: clampToWorld(campSite.z + Math.sin(angle) * distance),
+        health: maxHealth,
+        maxHealth,
+        contactDamage: enemyContactDamage(archetypeId, isBoss),
+        carriedGems: 0,
+        aggroKind: AGGRO_HOME,
+        aggroPlayer: undefined,
+        aggroGoliathId: 0n,
+        aggroExpiresAtMicros: 0n,
+        alive: true,
+        respawnAtMicros: 0n,
+      });
+    }
+  });
+}
+
+interface CampCenter {
+  campIndex: number;
+  x: number;
+  z: number;
+  livingCount: number;
+}
+
+// Groups enemies by camp so goliaths can target the nearest camp still standing.
+function campCentersFrom(enemies: any[]): CampCenter[] {
+  const byIndex = new Map<number, CampCenter>();
+  for (const enemyRow of enemies) {
+    let center = byIndex.get(enemyRow.campIndex);
+    if (!center) {
+      center = { campIndex: enemyRow.campIndex, x: enemyRow.homeX, z: enemyRow.homeZ, livingCount: 0 };
+      byIndex.set(enemyRow.campIndex, center);
+    }
+    if (enemyRow.alive) center.livingCount++;
+  }
+  return [...byIndex.values()];
+}
+
+// Spawns one seeded batch (1-3, seeded sizes) of goliath raiders per 5-minute
+// window and retires the previous window's raiders. A raider never respawns
+// inside its window once dead: its row lingers (alive false) so the "already
+// spawned this bucket" guard keeps it from coming back.
+function runGoliathLifecycle(ctx: { db: any }, nowMicros: bigint, campCenters: CampCenter[]) {
+  const windowBucket = windowBucketFor(nowMicros, GOLIATH_BATCH_WINDOW_MICROS);
+  const existing = [...ctx.db.goliath.iter()];
+  for (const goliathRow of existing) {
+    if (goliathRow.windowBucket !== windowBucket) ctx.db.goliath.goliathId.delete(goliathRow.goliathId);
+  }
+  if (existing.some(goliathRow => goliathRow.windowBucket === windowBucket)) return;
+
+  const spawnRandom = createSeededRandom((Number(windowBucket % 0x100000000n) ^ 0x6011a7) >>> 0);
+  goliathBatchForWindow(windowBucket).forEach((sizeIndex, memberIndex) => {
+    const stats = GOLIATH_SIZE_STATS[sizeIndex];
+    const anchor = campCenters.length > 0 ? campCenters[memberIndex % campCenters.length] : { x: 0, z: 0 };
+    const angle = spawnRandom() * Math.PI * 2;
+    const distance = spawnRandom() * SPAWN_SCATTER_RADIUS;
+    ctx.db.goliath.insert({
+      goliathId: GOLIATH_SLOT_ID_BASE + BigInt(memberIndex + 1),
+      sizeIndex,
+      positionX: clampToWorld(anchor.x + Math.cos(angle) * distance),
+      positionZ: clampToWorld(anchor.z + Math.sin(angle) * distance),
+      health: stats.maxHealth,
+      maxHealth: stats.maxHealth,
+      contactDamage: stats.contactDamage,
+      moveSpeed: stats.moveSpeed,
+      splashes: stats.splashesOnAttack,
+      carriedGems: 0,
+      targetCampIndex: -1,
+      aggroPlayer: undefined,
+      aggroExpiresAtMicros: 0n,
+      alive: true,
+      windowBucket,
+    });
+  });
+}
+
+function aggroExpired(expiresAtMicros: bigint, nowMicros: bigint): boolean {
+  return expiresAtMicros !== 0n && nowMicros >= expiresAtMicros;
+}
+
+// Any alive enemy/goliath within grab range of a ground drop absorbs it into its
+// carried hoard (goliaths sweep a wider area). This is how a camp ends up holding
+// a dead goliath's loot after it spilled on the ground.
+function vacuumGems(ctx: { db: any }) {
+  for (const drop of [...ctx.db.gemDrop.iter()]) {
+    let absorbed = false;
+    for (const enemyRow of [...ctx.db.enemy.iter()]) {
+      if (!enemyRow.alive) continue;
+      if (distanceBetween(enemyRow.positionX, enemyRow.positionZ, drop.positionX, drop.positionZ) > ENEMY_GEM_VACUUM_RANGE) continue;
+      ctx.db.enemy.enemyId.update({ ...enemyRow, carriedGems: Math.min(enemyRow.carriedGems + drop.amount, CARRY_HARD_CAP) });
+      absorbed = true;
+      break;
+    }
+    if (absorbed) {
+      ctx.db.gemDrop.id.delete(drop.id);
+      continue;
+    }
+    for (const goliathRow of [...ctx.db.goliath.iter()]) {
+      if (!goliathRow.alive) continue;
+      if (distanceBetween(goliathRow.positionX, goliathRow.positionZ, drop.positionX, drop.positionZ) > GOLIATH_GEM_VACUUM_RANGE) continue;
+      ctx.db.goliath.goliathId.update({ ...goliathRow, carriedGems: Math.min(goliathRow.carriedGems + drop.amount, CARRY_HARD_CAP) });
+      ctx.db.gemDrop.id.delete(drop.id);
+      break;
+    }
+  }
+}
+
+// Revives camp enemies whose respawn delay has elapsed, at full health at home.
+function respawnEnemies(ctx: { db: any }, nowMicros: bigint) {
+  for (const enemyRow of [...ctx.db.enemy.iter()]) {
+    if (enemyRow.alive || enemyRow.respawnAtMicros === 0n || nowMicros < enemyRow.respawnAtMicros) continue;
+    ctx.db.enemy.enemyId.update({
+      ...enemyRow,
+      alive: true,
+      health: enemyRow.maxHealth,
+      carriedGems: 0,
+      positionX: enemyRow.homeX,
+      positionZ: enemyRow.homeZ,
+      aggroKind: AGGRO_HOME,
+      aggroPlayer: undefined,
+      aggroGoliathId: 0n,
+      aggroExpiresAtMicros: 0n,
+      respawnAtMicros: 0n,
+    });
+  }
+}
+
+// The heart of the server-authoritative fight. Each tick: spawn/retire goliaths,
+// move everyone, resolve REAL contact damage (goliaths grind camps, camps grind
+// back, aggroed enemies bite the player), pay out deaths, vacuum loose gems, and
+// respawn cleared camp members. No dice — outcomes are pure HP attrition.
+export const worldTick = spacetimedb.reducer(
+  { timer: worldTimer.rowType },
+  ctx => {
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    const tick = WORLD_TICK_INTERVAL_MICROS;
+
+    const enemiesBefore = [...ctx.db.enemy.iter()];
+    const campCenters = campCentersFrom(enemiesBefore);
+    runGoliathLifecycle(ctx, now, campCenters);
+
+    const enemies = [...ctx.db.enemy.iter()].filter(enemyRow => enemyRow.alive);
+    const goliaths = [...ctx.db.goliath.iter()].filter(goliathRow => goliathRow.alive);
+    const players = [...ctx.db.player.iter()].filter(playerRow => playerRow.online);
+    const playerByHex = new Map<string, any>();
+    for (const playerRow of players) playerByHex.set(playerRow.identity.toHexString(), playerRow);
+
+    // Pass 1 — goliaths move toward the nearest camp still standing.
+    const goliathTarget = new Map<bigint, number>();
+    const goliathPosition = new Map<bigint, { x: number; z: number }>();
+    for (const goliathRow of goliaths) {
+      const target = campCenters
+        .filter(center => center.livingCount > CAMP_CLEARED_MEMBER_COUNT)
+        .sort(
+          (a, b) =>
+            distanceBetween(goliathRow.positionX, goliathRow.positionZ, a.x, a.z) -
+            distanceBetween(goliathRow.positionX, goliathRow.positionZ, b.x, b.z)
+        )[0];
+      if (!target) {
+        goliathTarget.set(goliathRow.goliathId, -1);
+        goliathPosition.set(goliathRow.goliathId, { x: goliathRow.positionX, z: goliathRow.positionZ });
+        continue;
+      }
+      const moved = stepToward(goliathRow.positionX, goliathRow.positionZ, target.x, target.z, goliathRow.moveSpeed * (Number(tick) / 1_000_000));
+      goliathTarget.set(goliathRow.goliathId, target.campIndex);
+      goliathPosition.set(goliathRow.goliathId, { x: clampToWorld(moved.x), z: clampToWorld(moved.z) });
+    }
+    const goliathById = new Map<bigint, any>();
+    for (const goliathRow of goliaths) goliathById.set(goliathRow.goliathId, goliathRow);
+
+    // Pass 2 — enemies move toward whatever their aggro points at (post-decay).
+    const enemyPosition = new Map<bigint, { x: number; z: number }>();
+    for (const enemyRow of enemies) {
+      const expired = aggroExpired(enemyRow.aggroExpiresAtMicros, now);
+      let targetX = enemyRow.homeX;
+      let targetZ = enemyRow.homeZ;
+      if (!expired && enemyRow.aggroKind === AGGRO_GOLIATH) {
+        const chased = goliathPosition.get(enemyRow.aggroGoliathId);
+        if (chased) {
+          targetX = chased.x;
+          targetZ = chased.z;
+        }
+      } else if (!expired && enemyRow.aggroKind === AGGRO_PLAYER && enemyRow.aggroPlayer) {
+        const chased = playerByHex.get(enemyRow.aggroPlayer.toHexString());
+        if (chased) {
+          targetX = chased.positionX;
+          targetZ = chased.positionZ;
+        }
+      }
+      const moveSpeed = ENEMY_ARCHETYPE_STATS[enemyRow.archetypeId as CampArchetypeId].moveSpeed;
+      const moved = stepToward(enemyRow.positionX, enemyRow.positionZ, targetX, targetZ, moveSpeed * (Number(tick) / 1_000_000));
+      enemyPosition.set(enemyRow.enemyId, { x: clampToWorld(moved.x), z: clampToWorld(moved.z) });
+    }
+
+    // Pass 3 — goliaths raid the camp. Proximity RALLIES every nearby member to
+    // defend (soft aggro); the STRIKE lands on all members in splash range for the
+    // largest raider, else on its nearest member. A member that actually takes a
+    // hit gets a HARD aggro flip (a real "damaged by" event that can steal it from
+    // a player), whereas a mere rally never steals a member mid-fight with a player.
+    const enemyDamage = new Map<bigint, number>();
+    const enemyHardAggroGoliath = new Map<bigint, bigint>();
+    const enemyRallyGoliath = new Map<bigint, bigint>();
+    for (const goliathRow of goliaths) {
+      const from = goliathPosition.get(goliathRow.goliathId)!;
+      const withDistance = enemies.map(enemyRow => {
+        const to = enemyPosition.get(enemyRow.enemyId)!;
+        return { enemyRow, distance: distanceBetween(from.x, from.z, to.x, to.z) };
+      });
+      for (const { enemyRow, distance } of withDistance) {
+        if (distance <= GOLIATH_ENGAGE_RANGE) enemyRallyGoliath.set(enemyRow.enemyId, goliathRow.goliathId);
+      }
+      const dealt = damagePerTick(goliathRow.contactDamage * GOLIATH_VS_ENEMY_DAMAGE_MULTIPLIER, tick);
+      const struck = goliathRow.splashes
+        ? withDistance.filter(candidate => candidate.distance <= GOLIATH_SPLASH_RANGE)
+        : withDistance.filter(candidate => candidate.distance <= ENEMY_GOLIATH_CONTACT_RANGE).sort((a, b) => a.distance - b.distance).slice(0, 1);
+      for (const { enemyRow } of struck) {
+        enemyDamage.set(enemyRow.enemyId, (enemyDamage.get(enemyRow.enemyId) ?? 0) + dealt);
+        enemyHardAggroGoliath.set(enemyRow.enemyId, goliathRow.goliathId);
+      }
+    }
+
+    // Pass 4 — enemies bite back: an enemy aggroed to a goliath (in reach) hurts
+    // it; one aggroed to a player (in reach, player outside the safe zone) hurts
+    // the player. Player-directed damage is summed for a single apply below.
+    const goliathDamage = new Map<bigint, number>();
+    const playerDamage = new Map<string, number>();
+    for (const enemyRow of enemies) {
+      const expired = aggroExpired(enemyRow.aggroExpiresAtMicros, now);
+      if (expired) continue;
+      const from = enemyPosition.get(enemyRow.enemyId)!;
+      if (enemyRow.aggroKind === AGGRO_GOLIATH) {
+        const chased = goliathById.get(enemyRow.aggroGoliathId);
+        if (!chased) continue;
+        const chasedPos = goliathPosition.get(chased.goliathId)!;
+        if (distanceBetween(from.x, from.z, chasedPos.x, chasedPos.z) > ENEMY_GOLIATH_CONTACT_RANGE) continue;
+        goliathDamage.set(chased.goliathId, (goliathDamage.get(chased.goliathId) ?? 0) + damagePerTick(enemyRow.contactDamage, tick));
+      } else if (enemyRow.aggroKind === AGGRO_PLAYER && enemyRow.aggroPlayer) {
+        const hex = enemyRow.aggroPlayer.toHexString();
+        const chased = playerByHex.get(hex);
+        if (!chased || isInsideSafeZone(chased.positionX, chased.positionZ)) continue;
+        if (distanceBetween(from.x, from.z, chased.positionX, chased.positionZ) > ENEMY_PLAYER_CONTACT_RANGE) continue;
+        playerDamage.set(hex, (playerDamage.get(hex) ?? 0) + damagePerTick(enemyRow.contactDamage, tick));
+      }
+    }
+
+    // Apply enemy movement + damage + aggro; dead members drop loot (uncredited,
+    // droppedBy the module identity) and schedule a respawn.
+    for (const enemyRow of enemies) {
+      const position = enemyPosition.get(enemyRow.enemyId)!;
+      const moved = { ...enemyRow, positionX: position.x, positionZ: position.z };
+      const damage = Math.round(enemyDamage.get(enemyRow.enemyId) ?? 0);
+      if (damage >= enemyRow.health) {
+        killEnemyRow(ctx, moved, enemyBaseGems(false, 0, enemyRow.rewardTier, enemyRow.isBoss), ctx.sender, now);
+        continue;
+      }
+      const hardGoliath = enemyHardAggroGoliath.get(enemyRow.enemyId);
+      const rallyGoliath = enemyRallyGoliath.get(enemyRow.enemyId);
+      const expired = aggroExpired(enemyRow.aggroExpiresAtMicros, now);
+      const livePlayerAggro = enemyRow.aggroKind === AGGRO_PLAYER && !!enemyRow.aggroPlayer && !expired;
+      let aggroKind = enemyRow.aggroKind;
+      let aggroPlayer = enemyRow.aggroPlayer;
+      let aggroGoliathId = enemyRow.aggroGoliathId;
+      let aggroExpiresAtMicros = enemyRow.aggroExpiresAtMicros;
+      if (hardGoliath !== undefined) {
+        // Took a real hit → fights this goliath (last damager wins, even over a player).
+        aggroKind = AGGRO_GOLIATH;
+        aggroPlayer = undefined;
+        aggroGoliathId = hardGoliath;
+        aggroExpiresAtMicros = now + AGGRO_DURATION_MICROS;
+      } else if (livePlayerAggro) {
+        // A player hit it recently → keep chasing them; a raider's mere presence
+        // never steals a member mid-fight with a player.
+      } else if (rallyGoliath !== undefined) {
+        aggroKind = AGGRO_GOLIATH;
+        aggroPlayer = undefined;
+        aggroGoliathId = rallyGoliath;
+        aggroExpiresAtMicros = now + AGGRO_DURATION_MICROS;
+      } else if (expired) {
+        aggroKind = AGGRO_HOME;
+        aggroPlayer = undefined;
+        aggroGoliathId = 0n;
+        aggroExpiresAtMicros = 0n;
+      }
+      ctx.db.enemy.enemyId.update({ ...moved, health: enemyRow.health - damage, aggroKind, aggroPlayer, aggroGoliathId, aggroExpiresAtMicros });
+    }
+
+    // Apply goliath movement + damage; a goliath worn to 0 dies for the window.
+    for (const goliathRow of goliaths) {
+      const position = goliathPosition.get(goliathRow.goliathId)!;
+      const moved = { ...goliathRow, positionX: position.x, positionZ: position.z, targetCampIndex: goliathTarget.get(goliathRow.goliathId) ?? -1 };
+      const damage = Math.round(goliathDamage.get(goliathRow.goliathId) ?? 0);
+      if (damage >= goliathRow.health) {
+        killGoliathRow(ctx, moved, ctx.sender);
+        continue;
+      }
+      const cleared = aggroExpired(goliathRow.aggroExpiresAtMicros, now);
+      ctx.db.goliath.goliathId.update({
+        ...moved,
+        health: goliathRow.health - damage,
+        aggroPlayer: cleared ? undefined : goliathRow.aggroPlayer,
+        aggroExpiresAtMicros: cleared ? 0n : goliathRow.aggroExpiresAtMicros,
+      });
+    }
+
+    // Apply summed player damage: a killed player spills PVE loot and respawns.
+    for (const [hex, rawDamage] of playerDamage) {
+      const targetPlayer = ctx.db.player.identity.find(playerByHex.get(hex).identity);
+      if (!targetPlayer || isInsideSafeZone(targetPlayer.positionX, targetPlayer.positionZ)) continue;
+      const damage = Math.min(Math.round(rawDamage), targetPlayer.currentHealth);
+      const remaining = targetPlayer.currentHealth - damage;
+      if (remaining > 0) {
+        setActiveHealth(ctx, targetPlayer, remaining);
+        continue;
+      }
+      const spilled = spillGems(ctx, targetPlayer, PVE_DEATH_SPILL, ctx.sender);
+      respawnPlayerAtSpawn(ctx, { ...targetPlayer, primogems: targetPlayer.primogems - spilled });
+    }
+
+    vacuumGems(ctx);
+    respawnEnemies(ctx, now);
+  }
+);
+
 export const init = spacetimedb.init(ctx => {
   ctx.db.regenTimer.insert({
     scheduled_id: 0n,
     scheduled_at: ScheduleAt.interval(REGEN_INTERVAL_MICROS),
   });
+  ctx.db.worldTimer.insert({
+    scheduled_id: 0n,
+    scheduled_at: ScheduleAt.interval(WORLD_TICK_INTERVAL_MICROS),
+  });
+  spawnCamps(ctx);
 });
 
 export const onConnect = spacetimedb.clientConnected(ctx => {
