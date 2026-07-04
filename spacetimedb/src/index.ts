@@ -1,5 +1,6 @@
 import { schema, t, table, SenderError } from 'spacetimedb/server';
 import { ScheduleAt } from 'spacetimedb';
+import { sha256Hex, bytesToHex } from './sha256';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -314,7 +315,43 @@ const regenTimer = table(
   }
 );
 
+// Credential store — PRIVATE (no `public: true`), readable only by reducers and
+// the DB owner. Passwords never live here: only a hash of a client-derived key,
+// salted per-account and peppered server-side (see serverHash). usernameLower /
+// email are unique so registration collisions roll the transaction back.
+const account = table(
+  { name: 'account' },
+  {
+    accountId: t.u64().primaryKey().autoInc(),
+    username: t.string(), // original-case display name
+    usernameLower: t.string().unique(),
+    email: t.string().unique(),
+    passwordHash: t.string(),
+    salt: t.string(),
+    // The identity that registered the account keys ALL of its gameplay rows
+    // (player, owned_character, weapon_item, banner_pity). Other devices resolve
+    // to this via account_link, so one account works across devices.
+    canonicalIdentity: t.identity(),
+    createdAt: t.timestamp(),
+  }
+);
+
+// PUBLIC map of a device identity (ctx.sender) → the account's canonical identity.
+// Holds no secrets. Each client subscribes to ONLY its own row (filtered by its
+// device identity) to learn its canonical identity, then finds its player row.
+const accountLink = table(
+  { name: 'account_link', public: true },
+  {
+    identity: t.identity().primaryKey(),
+    accountId: t.u64(),
+    canonicalIdentity: t.identity(),
+    username: t.string(),
+  }
+);
+
 const spacetimedb = schema({
+  account,
+  accountLink,
   player,
   gemDrop,
   enemyCarry,
@@ -329,14 +366,89 @@ const spacetimedb = schema({
 });
 export default spacetimedb;
 
+// ---- Accounts / auth --------------------------------------------------------
+// Server pepper: a constant secret folded into every stored hash so a table-dump
+// leak alone (account.passwordHash + salt) can't be replayed without the module
+// source. Not secret from the DB owner — that's expected.
+const AUTH_PEPPER = 'super-elements:v1:pepper:6d1f9a4c2e7b';
+const USERNAME_MIN = 3;
+const USERNAME_MAX = 16;
+
+// Second-stage hash of the client-derived key (see src/auth/hash.ts). The raw
+// password never reaches the server; this re-hashes the derived key with the
+// account's random salt + pepper so the stored value differs from what the
+// client sends over the wire.
+function serverHash(derivedKey: string, salt: string): string {
+  return sha256Hex(`${derivedKey}:${salt}:${AUTH_PEPPER}`);
+}
+
+// Username: 3–16 chars, lowercase letters / digits / underscore only.
+function normalizeUsername(raw: string): string {
+  const trimmed = raw.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower.length < USERNAME_MIN) throw new SenderError(`Username must be at least ${USERNAME_MIN} characters`);
+  if (lower.length > USERNAME_MAX) throw new SenderError(`Username too long (max ${USERNAME_MAX})`);
+  for (const ch of lower) {
+    const ok = (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch === '_';
+    if (!ok) throw new SenderError('Username: letters, numbers and underscore only');
+  }
+  return trimmed;
+}
+
+function normalizeEmail(raw: string): string {
+  const email = raw.trim().toLowerCase();
+  const at = email.indexOf('@');
+  const dot = email.lastIndexOf('.');
+  if (at <= 0 || dot < at + 2 || dot >= email.length - 1 || email.includes(' ')) {
+    throw new SenderError('Invalid email address');
+  }
+  return email;
+}
+
+// Device identity (ctx.sender) → this account's canonical identity, or null if
+// the device is not logged in. All ownership resolves through here.
+function accountIdentity(ctx: { db: any; sender: any }): any | null {
+  const link = ctx.db.accountLink.identity.find(ctx.sender);
+  return link ? link.canonicalIdentity : null;
+}
+
+// Seeds a fresh player + starter character under the given (canonical) identity.
+function seedPlayer(ctx: { db: any; timestamp: any }, identity: any, name: string) {
+  ctx.db.player.insert({
+    identity,
+    name,
+    online: true,
+    positionX: SPAWN_X,
+    positionY: 0,
+    positionZ: SPAWN_Z,
+    rotationY: 0,
+    activeCharacterId: STARTER_CHARACTER_ID,
+    partyOrder: [STARTER_CHARACTER_ID],
+    primogems: STARTING_PRIMOGEMS,
+    currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
+    lastKillRewardAt: ctx.timestamp,
+    gemsFromKills: 0,
+    gemsCollected: 0,
+  });
+  ctx.db.ownedCharacter.insert({
+    id: 0n,
+    owner: identity,
+    characterId: STARTER_CHARACTER_ID,
+    currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
+    constellation: 0,
+  });
+}
+
 function requirePlayer(ctx: { db: any; sender: any }) {
-  const existingPlayer = ctx.db.player.identity.find(ctx.sender);
-  if (!existingPlayer) throw new SenderError('Join the game first');
+  const canonical = accountIdentity(ctx);
+  if (!canonical) throw new SenderError('Log in first');
+  const existingPlayer = ctx.db.player.identity.find(canonical);
+  if (!existingPlayer) throw new SenderError('Log in first');
   return existingPlayer;
 }
 
-function ownsCharacter(ctx: { db: any; sender: any }, characterId: string) {
-  const owned = [...ctx.db.ownedCharacter.owner.filter(ctx.sender)];
+function ownsCharacter(ctx: { db: any }, owner: any, characterId: string) {
+  const owned = [...ctx.db.ownedCharacter.owner.filter(owner)];
   return owned.some(row => row.characterId === characterId);
 }
 
@@ -451,42 +563,86 @@ function distanceBetweenPlayers(playerA: any, playerB: any) {
   );
 }
 
-export const joinGame = spacetimedb.reducer(
-  { name: t.string() },
-  (ctx, { name }) => {
-    if (!name.trim()) throw new SenderError('Name must not be empty');
-
-    const existingPlayer = ctx.db.player.identity.find(ctx.sender);
-    if (existingPlayer) {
-      ctx.db.player.identity.update({ ...existingPlayer, name, online: true });
-      return;
+// Creates a new account: validates + reserves username/email, stores the salted
+// server hash of the client-derived key, links this device, and seeds the player.
+// The registering device's identity becomes the account's canonical data key.
+export const register = spacetimedb.reducer(
+  { username: t.string(), email: t.string(), derivedKey: t.string() },
+  (ctx, { username, email, derivedKey }) => {
+    if (ctx.db.accountLink.identity.find(ctx.sender)) {
+      throw new SenderError('This device is already logged in');
     }
+    const displayName = normalizeUsername(username);
+    const usernameLower = displayName.toLowerCase();
+    const emailNorm = normalizeEmail(email);
+    if (!derivedKey) throw new SenderError('Missing credentials');
+    if (ctx.db.account.usernameLower.find(usernameLower)) throw new SenderError('Username already taken');
+    if (ctx.db.account.email.find(emailNorm)) throw new SenderError('Email already registered');
 
-    ctx.db.player.insert({
+    const salt = bytesToHex(ctx.random.fill(new Uint8Array(16)));
+    const acct = ctx.db.account.insert({
+      accountId: 0n,
+      username: displayName,
+      usernameLower,
+      email: emailNorm,
+      passwordHash: serverHash(derivedKey, salt),
+      salt,
+      canonicalIdentity: ctx.sender,
+      createdAt: ctx.timestamp,
+    });
+    ctx.db.accountLink.insert({
       identity: ctx.sender,
-      name,
-      online: true,
-      positionX: SPAWN_X,
-      positionY: 0,
-      positionZ: SPAWN_Z,
-      rotationY: 0,
-      activeCharacterId: STARTER_CHARACTER_ID,
-      partyOrder: [STARTER_CHARACTER_ID],
-      primogems: STARTING_PRIMOGEMS,
-      currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
-      lastKillRewardAt: ctx.timestamp,
-      gemsFromKills: 0,
-      gemsCollected: 0,
+      accountId: acct.accountId,
+      canonicalIdentity: ctx.sender,
+      username: displayName,
     });
-    ctx.db.ownedCharacter.insert({
-      id: 0n,
-      owner: ctx.sender,
-      characterId: STARTER_CHARACTER_ID,
-      currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
-      constellation: 0,
-    });
+    seedPlayer(ctx, ctx.sender, displayName);
   }
 );
+
+// Logs this device into an existing account, linking its identity to the
+// account's canonical identity so it reaches the same player data.
+export const login = spacetimedb.reducer(
+  { username: t.string(), derivedKey: t.string() },
+  (ctx, { username, derivedKey }) => {
+    const usernameLower = username.trim().toLowerCase();
+    const acct = ctx.db.account.usernameLower.find(usernameLower);
+    // Identical error for unknown user vs bad password to avoid enumeration.
+    if (!acct || serverHash(derivedKey, acct.salt) !== acct.passwordHash) {
+      throw new SenderError('Invalid username or password');
+    }
+    const existing = ctx.db.accountLink.identity.find(ctx.sender);
+    if (existing) {
+      if (existing.accountId !== acct.accountId) {
+        throw new SenderError('This device is already logged into another account');
+      }
+      return; // already linked to this account
+    }
+    ctx.db.accountLink.insert({
+      identity: ctx.sender,
+      accountId: acct.accountId,
+      canonicalIdentity: acct.canonicalIdentity,
+      username: acct.username,
+    });
+    // Mark the account's player online (it may have been created on another device).
+    const existingPlayer = ctx.db.player.identity.find(acct.canonicalIdentity);
+    if (existingPlayer && !existingPlayer.online) {
+      ctx.db.player.identity.update({ ...existingPlayer, online: true });
+    }
+  }
+);
+
+// Unlinks this device from its account (player data stays under the canonical
+// identity). The client returns to the auth screen.
+export const logout = spacetimedb.reducer(ctx => {
+  const link = ctx.db.accountLink.identity.find(ctx.sender);
+  if (!link) return;
+  ctx.db.accountLink.identity.delete(ctx.sender);
+  const existingPlayer = ctx.db.player.identity.find(link.canonicalIdentity);
+  if (existingPlayer && existingPlayer.online) {
+    ctx.db.player.identity.update({ ...existingPlayer, online: false });
+  }
+});
 
 export const updatePosition = spacetimedb.reducer(
   { positionX: t.f32(), positionY: t.f32(), positionZ: t.f32(), rotationY: t.f32() },
@@ -518,7 +674,7 @@ export const attackPlayer = spacetimedb.reducer(
     const attacker = requirePlayer(ctx);
     const target = ctx.db.player.identity.find(targetIdentity);
     if (!target) throw new SenderError('Target not found');
-    if (target.identity.equals(ctx.sender)) throw new SenderError('Cannot attack yourself');
+    if (target.identity.equals(attacker.identity)) throw new SenderError('Cannot attack yourself');
     if (isInsideSafeZone(attacker.positionX, attacker.positionZ)) {
       throw new SenderError('No PVP inside the safe zone');
     }
@@ -540,7 +696,7 @@ export const attackPlayer = spacetimedb.reducer(
     }
     // Kill: a third of the loser's primogems spill onto the ground. The winner
     // earns credit but must collect it (as can anyone).
-    const stolen = spillGems(ctx, target, PVP_DEATH_SPILL, ctx.sender);
+    const stolen = spillGems(ctx, target, PVP_DEATH_SPILL, attacker.identity);
     if (stolen > 0) {
       ctx.db.player.identity.update({
         ...attacker,
@@ -583,7 +739,7 @@ export const setParty = spacetimedb.reducer(
     for (const characterId of characterIds) {
       if (cleaned.length >= PARTY_SIZE) break;
       if (cleaned.includes(characterId)) continue;
-      if (!ownsCharacter(ctx, characterId)) continue;
+      if (!ownsCharacter(ctx, currentPlayer.identity, characterId)) continue;
       cleaned.push(characterId);
     }
     if (cleaned.length === 0) throw new SenderError('Party cannot be empty');
@@ -605,7 +761,7 @@ export const castSkill = spacetimedb.reducer(
   (ctx, { skillId, originX, originZ, directionX, directionZ }) => {
     const currentPlayer = requirePlayer(ctx);
     ctx.db.skillCast.insert({
-      caster: ctx.sender,
+      caster: currentPlayer.identity,
       characterId: currentPlayer.activeCharacterId,
       skillId,
       originX,
@@ -652,7 +808,7 @@ export const fallToDeath = spacetimedb.reducer(ctx => {
 export const enemyGrabGem = spacetimedb.reducer(
   { enemyId: t.u64(), dropId: t.u64() },
   (ctx, { enemyId, dropId }) => {
-    requirePlayer(ctx);
+    const currentPlayer = requirePlayer(ctx);
     const drop = ctx.db.gemDrop.id.find(dropId);
     if (!drop) return; // already grabbed by someone/something else
     ctx.db.gemDrop.id.delete(dropId);
@@ -666,14 +822,14 @@ export const enemyGrabGem = spacetimedb.reducer(
       ctx.db.enemyCarry.enemyId.update({
         ...existing,
         carriedGems: Math.min(base + drop.amount, CARRY_HARD_CAP),
-        lastGrabbedBy: ctx.sender,
+        lastGrabbedBy: currentPlayer.identity,
         killedAtMicros: respawned ? 0n : existing.killedAtMicros,
       });
     } else {
       ctx.db.enemyCarry.insert({
         enemyId,
         carriedGems: Math.min(drop.amount, CARRY_HARD_CAP),
-        lastGrabbedBy: ctx.sender,
+        lastGrabbedBy: currentPlayer.identity,
         killedAtMicros: 0n,
       });
     }
@@ -718,10 +874,10 @@ export const killEnemy = spacetimedb.reducer(
     if (existing) {
       ctx.db.enemyCarry.enemyId.update({ ...existing, carriedGems: 0, killedAtMicros: now });
     } else {
-      ctx.db.enemyCarry.insert({ enemyId, carriedGems: 0, lastGrabbedBy: ctx.sender, killedAtMicros: now });
+      ctx.db.enemyCarry.insert({ enemyId, carriedGems: 0, lastGrabbedBy: currentPlayer.identity, killedAtMicros: now });
     }
 
-    spillDenominations(ctx, positionX, positionZ, total, ctx.sender);
+    spillDenominations(ctx, positionX, positionZ, total, currentPlayer.identity);
     ctx.db.player.identity.update({
       ...currentPlayer,
       gemsFromKills: currentPlayer.gemsFromKills + total,
@@ -857,7 +1013,7 @@ export const healParty = spacetimedb.reducer(
     const stats = statsFor(currentPlayer.activeCharacterId);
     if (stats.healType === 'none') return;
 
-    const ownedList = [...ctx.db.ownedCharacter.owner.filter(ctx.sender)];
+    const ownedList = [...ctx.db.ownedCharacter.owner.filter(currentPlayer.identity)];
     const healer = ownedList.find(row => row.characterId === currentPlayer.activeCharacterId);
     const healMultiplier = 1 + (healer?.constellation ?? 0) * HEAL_CONSTELLATION_STEP;
 
@@ -869,7 +1025,7 @@ export const healParty = spacetimedb.reducer(
       const healed = Math.min(targetMax, owned.currentHealth + amount);
       ctx.db.ownedCharacter.id.update({ ...owned, currentHealth: healed });
       ctx.db.healEvent.insert({
-        owner: ctx.sender,
+        owner: currentPlayer.identity,
         characterId: owned.characterId,
         amount: healed - owned.currentHealth,
       });
@@ -884,14 +1040,14 @@ export const healParty = spacetimedb.reducer(
 
 // Grants a character. New → added at C0. Duplicate → +1 constellation up to
 // C6. Returns the outcome so the pull can show C-level and refund at max.
-function grantCharacter(ctx: { db: any; sender: any }, characterId: string) {
-  const owned = [...ctx.db.ownedCharacter.owner.filter(ctx.sender)].find(
+function grantCharacter(ctx: { db: any }, owner: any, characterId: string) {
+  const owned = [...ctx.db.ownedCharacter.owner.filter(owner)].find(
     (row: any) => row.characterId === characterId
   );
   if (!owned) {
     ctx.db.ownedCharacter.insert({
       id: 0n,
-      owner: ctx.sender,
+      owner,
       characterId,
       currentHealth: statsFor(characterId).maxHealth,
       constellation: 0,
@@ -906,10 +1062,10 @@ function grantCharacter(ctx: { db: any; sender: any }, characterId: string) {
   return { isNew: false, constellation: MAX_CONSTELLATION, maxed: true };
 }
 
-function grantWeapon(ctx: { db: any; sender: any; timestamp: any }, weaponId: string, rarity: number) {
+function grantWeapon(ctx: { db: any; timestamp: any }, owner: any, weaponId: string, rarity: number) {
   ctx.db.weaponItem.insert({
     id: 0n,
-    owner: ctx.sender,
+    owner,
     weaponId,
     rarity,
     acquiredAt: ctx.timestamp,
@@ -928,11 +1084,11 @@ export const pullBanner = spacetimedb.reducer(
     if (currentPlayer.primogems < totalCost) throw new SenderError('Not enough primogems');
 
     // Load (or create) this banner's pity row for the player.
-    let pity = [...ctx.db.bannerPity.by_owner_banner.filter([ctx.sender, bannerId])][0];
+    let pity = [...ctx.db.bannerPity.by_owner_banner.filter([currentPlayer.identity, bannerId])][0];
     if (!pity) {
       pity = ctx.db.bannerPity.insert({
         id: 0n,
-        owner: ctx.sender,
+        owner: currentPlayer.identity,
         bannerId,
         pullsSinceFiveStar: 0,
         pullsSinceFourStar: 0,
@@ -967,7 +1123,7 @@ export const pullBanner = spacetimedb.reducer(
           kind = 'character';
           itemId = banner.featuredCharacterId;
           isFeatured = true;
-          const result = grantCharacter(ctx, itemId);
+          const result = grantCharacter(ctx, currentPlayer.identity, itemId);
           isNew = result.isNew;
           constellation = result.constellation;
           if (result.maxed) refund += DUPLICATE_REFUND;
@@ -975,7 +1131,7 @@ export const pullBanner = spacetimedb.reducer(
           // Lost the 50/50 → a 5★ weapon, and the next 5★ is guaranteed featured.
           guaranteed = true;
           itemId = pickWeaponId(ctx, 5);
-          grantWeapon(ctx, itemId, 5);
+          grantWeapon(ctx, currentPlayer.identity, itemId, 5);
         }
       } else if (sinceFour >= FOUR_STAR_PITY || ctx.random() < FOUR_STAR_RATE) {
         sinceFour = 0;
@@ -983,22 +1139,22 @@ export const pullBanner = spacetimedb.reducer(
         if (ctx.random() < FOUR_STAR_CHARACTER_SHARE) {
           kind = 'character';
           itemId = pickFourStarCharacterId(ctx);
-          const result = grantCharacter(ctx, itemId);
+          const result = grantCharacter(ctx, currentPlayer.identity, itemId);
           isNew = result.isNew;
           constellation = result.constellation;
           if (result.maxed) refund += DUPLICATE_REFUND;
         } else {
           itemId = pickWeaponId(ctx, 4);
-          grantWeapon(ctx, itemId, 4);
+          grantWeapon(ctx, currentPlayer.identity, itemId, 4);
         }
       } else {
         rarity = 3;
         itemId = pickWeaponId(ctx, 3);
-        grantWeapon(ctx, itemId, 3);
+        grantWeapon(ctx, currentPlayer.identity, itemId, 3);
       }
 
       ctx.db.pullResult.insert({
-        owner: ctx.sender,
+        owner: currentPlayer.identity,
         bannerId,
         slot,
         kind,
@@ -1045,13 +1201,17 @@ export const init = spacetimedb.init(ctx => {
 });
 
 export const onConnect = spacetimedb.clientConnected(ctx => {
-  const existingPlayer = ctx.db.player.identity.find(ctx.sender);
+  const canonical = accountIdentity(ctx);
+  if (!canonical) return; // anonymous device, not logged in yet
+  const existingPlayer = ctx.db.player.identity.find(canonical);
   if (!existingPlayer) return;
   ctx.db.player.identity.update({ ...existingPlayer, online: true });
 });
 
 export const onDisconnect = spacetimedb.clientDisconnected(ctx => {
-  const existingPlayer = ctx.db.player.identity.find(ctx.sender);
+  const canonical = accountIdentity(ctx);
+  if (!canonical) return;
+  const existingPlayer = ctx.db.player.identity.find(canonical);
   if (!existingPlayer) return;
   ctx.db.player.identity.update({ ...existingPlayer, online: false });
 });
