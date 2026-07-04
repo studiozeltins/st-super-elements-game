@@ -262,7 +262,7 @@ export default function App() {
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
         sendHealParty: comboCount => connection.reducers.healParty({ comboCount }),
-        sendKillEnemy: (enemyId, x, z, rewardTier, comboCount, isBoss) =>
+        sendKillEnemy: (enemyId, x, z, rewardTier, comboCount, isBoss, isGoliath, goliathSizeIndex) =>
           connection.reducers.killEnemy({
             enemyId: BigInt(enemyId),
             positionX: x,
@@ -270,6 +270,18 @@ export default function App() {
             rewardTier,
             comboCount,
             isBoss,
+            isGoliath,
+            goliathSizeIndex,
+          }),
+        sendEnemyRaidKill: (victimEnemyId, x, z, rewardTier, isBoss, isGoliath, goliathSizeIndex) =>
+          connection.reducers.enemyRaidKill({
+            victimEnemyId: BigInt(victimEnemyId),
+            positionX: x,
+            positionZ: z,
+            rewardTier,
+            isBoss,
+            isGoliath,
+            goliathSizeIndex,
           }),
         sendCollectGem: dropId => connection.reducers.collectGem({ dropId }),
         sendEnemyGrabGem: (enemyId, dropId) =>
@@ -301,9 +313,16 @@ export default function App() {
   }, [gemDropRows]);
 
   useEffect(() => {
+    // enemy_carry holds both camp enemies and goliath raiders (same table, keyed
+    // by id). Feed enemies a number-keyed map and goliaths a bigint slot-keyed one.
     const carriedByEnemyId = new Map<number, number>();
-    for (const row of enemyCarryRows) carriedByEnemyId.set(Number(row.enemyId), row.carriedGems);
+    const carriedBySlotId = new Map<bigint, number>();
+    for (const row of enemyCarryRows) {
+      carriedByEnemyId.set(Number(row.enemyId), row.carriedGems);
+      carriedBySlotId.set(row.enemyId, row.carriedGems);
+    }
     gameRef.current?.syncEnemyCarry(carriedByEnemyId);
+    gameRef.current?.syncGoliathCarry(carriedBySlotId);
   }, [enemyCarryRows]);
 
   useEffect(() => {

@@ -21,6 +21,7 @@ import { createCharacterModel, createNameSprite, type CharacterModel } from './e
 import { createInputSystem } from './systems/createInputSystem';
 import { createEffectSystem, type DamageApplier } from './systems/createEffectSystem';
 import { createEnemySystem } from './systems/createEnemySystem';
+import { createGoliathSystem } from './systems/createGoliathSystem';
 import { createDamageNumbers } from './systems/createDamageNumbers';
 import {
   comboWindowSeconds,
@@ -61,16 +62,32 @@ export interface GameNetworkActions {
    * base reward plus the enemy's server-tracked hoard, spilled as small gems.
    */
   sendKillEnemy(
-    enemyId: number,
+    enemyId: number | bigint,
     x: number,
     z: number,
     rewardTier: number,
     comboCount: number,
-    isBoss: boolean
+    isBoss: boolean,
+    isGoliath: boolean,
+    goliathSizeIndex: number
+  ): void;
+  /**
+   * One simulated enemy killed another (a goliath sacking a camp boss, or a camp
+   * felling a goliath). The victim's base plus stolen hoard spill to the ground;
+   * no player is credited. Fired identically on every client, deduped server-side.
+   */
+  sendEnemyRaidKill(
+    victimEnemyId: number | bigint,
+    x: number,
+    z: number,
+    rewardTier: number,
+    isBoss: boolean,
+    isGoliath: boolean,
+    goliathSizeIndex: number
   ): void;
   sendCollectGem(dropId: bigint): void;
   /** A simulated enemy grabbed a ground drop — the server credits its hoard. */
-  sendEnemyGrabGem(enemyId: number, dropId: bigint): void;
+  sendEnemyGrabGem(enemyId: number | bigint, dropId: bigint): void;
   sendFallToDeath(): void;
 }
 
@@ -91,6 +108,8 @@ export interface Game {
   syncGemDrops(drops: readonly GemDrop[]): void;
   /** Syncs the server-tracked hoard each enemy is carrying, by enemy id. */
   syncEnemyCarry(carriedByEnemyId: ReadonlyMap<number, number>): void;
+  /** Syncs the server-tracked hoard each goliath raider is carrying, by slot id. */
+  syncGoliathCarry(carriedBySlotId: ReadonlyMap<bigint, number>): void;
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
@@ -182,9 +201,26 @@ export function createGame(
     effectSystem,
     world.getGroundHeight,
     (enemyId, rewardTier, position, isBoss) =>
-      network.sendKillEnemy(enemyId, position.x, position.z, rewardTier, combo, isBoss),
+      network.sendKillEnemy(enemyId, position.x, position.z, rewardTier, combo, isBoss, false, 0),
     (position, amount, kind, color) => damageNumbers.spawn(position, amount, kind, color)
   );
+  const goliathSystem = createGoliathSystem({
+    scene,
+    getGroundHeight: world.getGroundHeight,
+    getSharedTimeMicros: () => BigInt(Date.now()) * 1000n,
+    getLocalPlayerPosition: () => playerPosition,
+    getComboCount: () => combo,
+    network,
+    onPlayerHit: (damage, isCrit) => {
+      network.sendTakeDamage(damage);
+      damageNumbers.spawn(
+        playerPosition.clone().setY(playerPosition.y + 1.4),
+        damage,
+        isCrit ? 'takenCrit' : 'taken'
+      );
+    },
+    reportDamage: (position, amount, kind, color) => damageNumbers.spawn(position, amount, kind, color),
+  });
   const inputSystem = createInputSystem(canvas);
 
   let activeCharacter: CharacterDefinition = CHARACTERS.zibo;
@@ -247,8 +283,9 @@ export function createGame(
     kind: DamageKind
   ): boolean {
     const hitEnemy = enemySystem.applyDamageInRadius(center, radius, damage, element, kind);
+    const hitGoliath = goliathSystem.applyDamageInRadius(center, radius, damage, element, kind);
     const hitPlayer = applyPvpDamage(center, radius, damage, kind);
-    return hitEnemy || hitPlayer;
+    return hitEnemy || hitGoliath || hitPlayer;
   }
 
   // Only regular attacks build the combo (once per landed attack, even across
@@ -319,7 +356,8 @@ export function createGame(
   function findNearestEnemyPosition(maxRange: number): THREE.Vector3 | null {
     let nearestPosition: THREE.Vector3 | null = null;
     let nearestDistance = maxRange;
-    for (const candidate of enemySystem.getAlivePositions()) {
+    const targetPositions = [...enemySystem.getAlivePositions(), ...goliathSystem.getAlivePositions()];
+    for (const candidate of targetPositions) {
       const distance = playerPosition.distanceTo(candidate);
       if (distance < nearestDistance) {
         nearestDistance = distance;
@@ -656,6 +694,7 @@ export function createGame(
     collisionBodies.length = 0;
     collisionBodies.push(playerCollisionBody);
     enemySystem.collectCollisionBodies(collisionBodies);
+    goliathSystem.collectCollisionBodies(collisionBodies);
 
     const playerBeforeX = playerPosition.x;
     const playerBeforeZ = playerPosition.z;
@@ -701,11 +740,13 @@ export function createGame(
           z: gem.mesh.position.z,
           amount: gem.amount,
         })),
-      onGrab: (enemyId: number, dropId: string) => {
+      // A grabber is an enemy (number id) or a goliath raider (bigint slot id);
+      // the server reducer takes a u64 either way.
+      onGrab: (grabberId: number | bigint, dropId: string) => {
         const gem = gemDrops.get(dropId);
         if (!gem || requestedGemPickups.has(dropId)) return false;
         requestedGemPickups.add(dropId);
-        network.sendEnemyGrabGem(enemyId, gem.rawId);
+        network.sendEnemyGrabGem(grabberId, gem.rawId);
         return true;
       },
     };
@@ -722,6 +763,7 @@ export function createGame(
       },
       gemField
     );
+    goliathSystem.update(deltaSeconds, gemField);
     updateGemDrops(deltaSeconds);
     resolveAllCollisions();
     damageNumbers.update(deltaSeconds);
@@ -760,6 +802,7 @@ export function createGame(
       effectSystem.dispose();
       damageNumbers.dispose();
       enemySystem.dispose();
+      goliathSystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
       playerModel.dispose();
@@ -888,6 +931,9 @@ export function createGame(
     },
     syncEnemyCarry(carriedByEnemyId) {
       enemySystem.syncEnemyCarry(carriedByEnemyId);
+    },
+    syncGoliathCarry(carriedBySlotId) {
+      goliathSystem.syncGoliathCarry(carriedBySlotId);
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];
