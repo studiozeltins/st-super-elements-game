@@ -43,11 +43,13 @@ export function Hud({
 
   // Low-HP screen border: appears below 40%, blinks faster the lower it gets,
   // and at <=5% locks solid red at double thickness (see .hud__lowhp CSS).
-  const lowHp = healthFraction < 0.4;
-  const criticalHp = healthFraction <= 0.05;
-  // Ramp to super-fast by 10% HP (stays there down to the 5% solid lock).
-  const blinkProgress = Math.max(0, Math.min(1, (0.4 - healthFraction) / (0.4 - 0.1)));
-  const blinkMs = Math.round(700 - blinkProgress * (700 - 130)); // 700ms @40% → 130ms @10%
+  // Low-HP screen border: orange @50% → red by 40%, blinking faster as HP drops
+  // (500ms @50% → 50ms @10%), then locking solid + double-thick at <=10%.
+  const lowHp = healthFraction < 0.5;
+  const criticalHp = healthFraction <= 0.1;
+  const blinkProgress = Math.max(0, Math.min(1, (0.5 - healthFraction) / (0.5 - 0.1)));
+  const blinkMs = Math.round(500 - blinkProgress * (500 - 50)); // 500ms @50% → 50ms @10%
+  const lowHpColor = healthFraction >= 0.4 ? '#f5a623' : 'var(--danger)';
 
   return (
     <div className="hud">
@@ -153,7 +155,7 @@ export function Hud({
       </div>
 
       <div
-        className={`hud__health ${healthFraction <= 0.05 ? 'hud__health--critical' : ''}`}
+        className={`hud__health ${criticalHp ? 'hud__health--critical' : ''}`}
         role="progressbar"
         aria-label="Veselība"
         aria-valuemin={0}
@@ -172,7 +174,7 @@ export function Hud({
       {lowHp && (
         <div
           className={`hud__lowhp ${criticalHp ? 'hud__lowhp--critical' : ''}`}
-          style={{ animationDuration: `${blinkMs}ms` }}
+          style={{ animationDuration: `${blinkMs}ms`, borderColor: lowHpColor }}
           aria-hidden="true"
         />
       )}

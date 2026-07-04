@@ -612,10 +612,10 @@ button {
   }
 }
 
+/* Below 10% HP: keep blinking (now ~50ms, super fast) but double the frame
+   thickness for extra urgency. */
 .hud__lowhp--critical {
   border-width: 20px;
-  opacity: 0.92;
-  animation: none;
 }
 
 .hud__zone {
