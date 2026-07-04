@@ -565,7 +565,9 @@ button {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: env(safe-area-inset-bottom, 0px);
+  /* Flush to the very bottom edge in both orientations (the safe-area inset made
+     it float up on landscape). */
+  bottom: 0;
   height: 13px;
   background: rgba(0, 0, 0, 0.5);
   border-top: 1px solid var(--line);
