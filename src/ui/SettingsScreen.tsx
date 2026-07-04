@@ -1,43 +1,38 @@
+import { Modal } from './Modal';
+import { Toggle } from './Toggle';
+import { Button } from './Button';
+
 interface SettingsScreenProps {
+  open: boolean;
+  onOpenChange(open: boolean): void;
   showFps: boolean;
   showPing: boolean;
   onToggleFps(next: boolean): void;
   onTogglePing(next: boolean): void;
-  onClose(): void;
+  onLogout(): void;
 }
 
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange(next: boolean): void }) {
+export function SettingsScreen({
+  open,
+  onOpenChange,
+  showFps,
+  showPing,
+  onToggleFps,
+  onTogglePing,
+  onLogout,
+}: SettingsScreenProps) {
   return (
-    <button
-      type="button"
-      className={`settings__row${checked ? ' settings__row--on' : ''}`}
-      onClick={() => onChange(!checked)}
-    >
-      <span className="settings__label">{label}</span>
-      <span className={`settings__switch${checked ? ' settings__switch--on' : ''}`}>
-        <span className="settings__knob" />
-      </span>
-    </button>
-  );
-}
+    <Modal open={open} onOpenChange={onOpenChange} title="IESTATĪJUMI">
+      <p className="settings__section">ATTĒLOŠANA</p>
+      <Toggle label="Rādīt FPS" checked={showFps} onChange={onToggleFps} />
+      <Toggle label="Rādīt ping" checked={showPing} onChange={onTogglePing} />
 
-export function SettingsScreen({ showFps, showPing, onToggleFps, onTogglePing, onClose }: SettingsScreenProps) {
-  return (
-    <div className="settings" onClick={onClose}>
-      <div className="settings__panel" onClick={event => event.stopPropagation()}>
-        <div className="settings__header">
-          <h2 className="settings__title">IESTATĪJUMI</h2>
-          <button type="button" className="settings__close" onClick={onClose} aria-label="Aizvērt">
-            ✕
-          </button>
-        </div>
+      <p className="settings__section">KONTS</p>
+      <Button variant="danger" block onClick={onLogout}>
+        IZIET NO KONTA
+      </Button>
 
-        <p className="settings__section">ATTĒLOŠANA</p>
-        <Toggle label="Rādīt FPS" checked={showFps} onChange={onToggleFps} />
-        <Toggle label="Rādīt ping" checked={showPing} onChange={onTogglePing} />
-
-        <p className="settings__hint">ESC — atvērt / aizvērt iestatījumus</p>
-      </div>
-    </div>
+      <p className="settings__hint">ESC — atvērt / aizvērt iestatījumus</p>
+    </Modal>
   );
 }

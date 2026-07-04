@@ -21,12 +21,25 @@ interface HudProps {
   onTouchButtonRelease(button: 'attack'): void;
 }
 
+// iOS Safari does not support the Fullscreen API on regular elements (only
+// <video>), so requestFullscreen is undefined there. We gate the button on
+// support and fall back to the webkit-prefixed call where it exists.
+const el = typeof document !== 'undefined' ? document.documentElement : null;
+const fullscreenSupported = Boolean(
+  el && (el.requestFullscreen || (el as unknown as { webkitRequestFullscreen?: unknown }).webkitRequestFullscreen)
+);
+
 function toggleFullscreen() {
-  if (document.fullscreenElement) {
-    void document.exitFullscreen();
+  const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => void };
+  const root = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
+  const isFullscreen = doc.fullscreenElement || doc.webkitFullscreenElement;
+  if (isFullscreen) {
+    if (doc.exitFullscreen) void doc.exitFullscreen();
+    else doc.webkitExitFullscreen?.();
     return;
   }
-  void document.documentElement.requestFullscreen();
+  if (root.requestFullscreen) void root.requestFullscreen();
+  else root.webkitRequestFullscreen?.();
 }
 
 export function Hud({
@@ -52,7 +65,7 @@ export function Hud({
   return (
     <div className="hud">
       <div className="hud__top-left">
-        <button className="hud__gear" onClick={onOpenSettings} aria-label="Iestatījumi">
+        <button className="icon-btn hud__gear" onClick={onOpenSettings} aria-label="Iestatījumi">
           ⚙
         </button>
         <div className="hud__name-row">
@@ -92,9 +105,11 @@ export function Hud({
         <button className="hud__chip" onClick={onOpenGacha}>
           VĒLĒŠANĀS
         </button>
-        <button className="hud__chip" onClick={toggleFullscreen}>
-          ⛶
-        </button>
+        {fullscreenSupported && (
+          <button className="hud__chip" onClick={toggleFullscreen} aria-label="Pilnekrāns">
+            ⛶
+          </button>
+        )}
       </div>
 
       <div className="hud__party">
@@ -110,6 +125,8 @@ export function Hud({
               className={`party-slot ${isActive ? 'party-slot--active' : ''}`}
               style={{ '--element-color': element.cssColor } as React.CSSProperties}
               onClick={() => onSelectPartySlot(slotIndex)}
+              aria-label={`${character.displayName} (${slotIndex + 1})`}
+              aria-pressed={isActive}
             >
               <span className="party-slot__inner">
                 <span className="party-slot__initial">{character.displayName[0]}</span>
@@ -135,6 +152,7 @@ export function Hud({
           <button
             className="action-button action-button--jump"
             onPointerDown={() => onTouchButton('jump')}
+            aria-label="Lēkt"
           >
             ↥
           </button>
@@ -142,6 +160,7 @@ export function Hud({
             className="action-button action-button--skill"
             style={{ '--cooldown': hudState.skillCooldownFraction } as React.CSSProperties}
             onPointerDown={() => onTouchButton('skill')}
+            aria-label="Prasme"
           >
             E
           </button>
@@ -151,6 +170,7 @@ export function Hud({
             onPointerDown={() => onTouchButton('attack')}
             onPointerUp={() => onTouchButtonRelease('attack')}
             onPointerLeave={() => onTouchButtonRelease('attack')}
+            aria-label="Uzbrukt"
           >
             ⚔
           </button>

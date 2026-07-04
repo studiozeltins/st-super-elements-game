@@ -326,20 +326,24 @@ export default function App() {
     localStorage.setItem('settings.showPing', showPing ? '1' : '0');
   }, [showPing]);
 
-  // ESC toggles settings (closes the gacha screen first if it's open).
+  // ESC opens settings (closes the gacha screen first if it's open). The Radix
+  // dialog handles ESC-to-close itself, so here we only need the open path.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      event.preventDefault();
       if (isGachaOpen) {
+        event.preventDefault();
         setIsGachaOpen(false);
         return;
       }
-      setIsSettingsOpen(open => !open);
+      if (!isSettingsOpen) {
+        event.preventDefault();
+        setIsSettingsOpen(true);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isGachaOpen]);
+  }, [isGachaOpen, isSettingsOpen]);
 
   if (!isLoggedIn) {
     return (
@@ -357,9 +361,6 @@ export default function App() {
   return (
     <div className="app">
       <canvas ref={canvasRef} className="game-canvas" />
-      <button className="logout-btn" type="button" onClick={handleLogout}>
-        IZIET
-      </button>
       <Hud
         playerName={myPlayer?.name ?? ''}
         health={myPlayer?.currentHealth ?? MAX_HEALTH}
@@ -399,15 +400,18 @@ export default function App() {
         />
       )}
       <StatsOverlay connection={connection} showFps={showFps} showPing={showPing} />
-      {isSettingsOpen && (
-        <SettingsScreen
-          showFps={showFps}
-          showPing={showPing}
-          onToggleFps={setShowFps}
-          onTogglePing={setShowPing}
-          onClose={() => setIsSettingsOpen(false)}
-        />
-      )}
+      <SettingsScreen
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        showFps={showFps}
+        showPing={showPing}
+        onToggleFps={setShowFps}
+        onTogglePing={setShowPing}
+        onLogout={() => {
+          setIsSettingsOpen(false);
+          handleLogout();
+        }}
+      />
     </div>
   );
 }
