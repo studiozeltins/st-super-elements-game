@@ -650,3 +650,12 @@ So `.env.local`'s `VITE_SPACETIMEDB_HOST` only affects a browser opened at `loca
 ## Common failure: "no such reducer"
 
 Client calls a reducer the connected server lacks → the client build is newer than that server's module. Fix by publishing the module to the server that client actually connects to (see routing above), not just the other environment.
+
+## Backup / restore (post-wipe seeding)
+
+No native seeder. Durable tables (`player`, `owned_character`, `weapon_item`, `banner_pity`) are backed up/restored with a dump→restore pair; ephemeral tables (`gem_drop`, `enemy_carry`, `regen_timer`) are skipped (they regenerate).
+
+- **Before a wipe:** `npm run backup` (default local; `-- --server maincloud --token <bearer>` for cloud) → writes `backup/restore_*.json` (gitignored — contains identities).
+- **After republish (empty DB):** `npm run restore` → calls the `restore*` reducers over HTTP.
+- Server reducers `restorePlayers/restoreOwnedCharacters/restoreWeaponItems/restoreBannerPity` each refuse a non-empty table, so restore is safe only on a fresh DB. Identities are restored verbatim (returning players keep their data); autoInc ids + timestamps are re-minted.
+- Scripts are pure HTTP (`scripts/*.mjs`) against `/v1/database/<db>/sql` and `/call/<reducer>` — no extra deps. Reducer-call arg encoding: identity = 1-element tuple `["0x<hex>"]`, field keys are snake_case, args wrapped as `[rowsArray]`.
