@@ -125,9 +125,12 @@ button {
 
 .join__title {
   font-family: var(--font-display);
-  font-size: clamp(34px, 7vw, 56px);
+  /* Capped so the widest word ("ELEMENTS", 8 chars) always fits inside the
+     card at every width instead of spilling past its edge. */
+  font-size: clamp(24px, 8vw, 42px);
   line-height: 0.95;
   letter-spacing: 0.02em;
+  word-break: break-word;
 }
 
 .join__title span {
@@ -183,8 +186,16 @@ button {
 
 /* ---------- Auth (login / register) ---------- */
 .auth__panel {
-  min-width: 320px;
-  max-width: 380px;
+  /* Adaptive width: never wider than 400px, never wider than the viewport. */
+  width: min(400px, 92vw);
+  min-width: 0;
+  max-width: 400px;
+}
+
+@media (max-width: 480px) {
+  .join__panel {
+    padding: 32px 22px;
+  }
 }
 
 .auth__tabs {
