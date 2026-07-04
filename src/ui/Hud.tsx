@@ -43,14 +43,16 @@ export function Hud({
 
   // Low-HP screen border: appears below 40%, blinks faster the lower it gets,
   // and at <=5% locks solid red at double thickness (see .hud__lowhp CSS).
-  // Low-HP screen border (top/left/right): appears below 50%, blinks faster as
-  // HP drops (500ms @50% → 50ms @10%) and thickens 10px → 35px over the same
-  // range. Colour is an orange→red gradient (see .hud__lowhp CSS).
+  // Low-HP screen glow (top/left/right edges): a shadow-like gradient fading
+  // from the colour at the edge to transparent inward. Appears below 50%,
+  // blinks faster as HP drops (500ms @50% → 50ms @10%) and grows 24px → 72px.
+  // Colour is orange near 50%, red below 40%.
   const lowHp = healthFraction < 0.5;
   const criticalHp = healthFraction <= 0.1;
   const blinkProgress = Math.max(0, Math.min(1, (0.5 - healthFraction) / (0.5 - 0.1)));
   const blinkMs = Math.round(500 - blinkProgress * (500 - 50)); // 500ms @50% → 50ms @10%
-  const lowHpBorderPx = Math.round(10 + blinkProgress * (35 - 10)); // 10px @50% → 35px @10%
+  const lowHpGlowPx = Math.round(24 + blinkProgress * (72 - 24)); // 24px @50% → 72px @10%
+  const lowHpColor = healthFraction >= 0.4 ? '#f7b733' : '#e5484d';
 
   // Health-bar fill: green ≥50%, orange 40–50%, red below 40%.
   const healthColor =
@@ -179,12 +181,13 @@ export function Hud({
       {lowHp && (
         <div
           className="hud__lowhp"
-          style={{
-            animationDuration: `${blinkMs}ms`,
-            borderTopWidth: `${lowHpBorderPx}px`,
-            borderLeftWidth: `${lowHpBorderPx}px`,
-            borderRightWidth: `${lowHpBorderPx}px`,
-          }}
+          style={
+            {
+              animationDuration: `${blinkMs}ms`,
+              '--lowhp-size': `${lowHpGlowPx}px`,
+              '--lowhp-color': lowHpColor,
+            } as React.CSSProperties
+          }
           aria-hidden="true"
         />
       )}

@@ -583,21 +583,20 @@ button {
   transition: transform 0.25s ease-out, background 0.25s ease-out;
 }
 
-/* Low-HP screen border. Gradient frame that blinks; blink duration and per-side
-   widths are set inline (faster + thicker the lower the HP). */
+/* Low-HP screen glow. Not a hard border — three gradients fade from the colour
+   at the top/left/right edges to transparent inward (shadow/emboss feel). Size
+   and colour are set inline (bigger + redder the lower the HP); it blinks. No
+   bottom edge so it never covers the health bar. */
 .hud__lowhp {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  box-sizing: border-box;
-  border: 10px solid var(--danger);
-  /* Orange→red gradient frame (cooler than a flat colour). Per-side widths are
-     set inline (they thicken as HP drops). */
-  border-image: linear-gradient(135deg, #f7b733 0%, #e5484d 55%, #b3121a 100%) 1;
-  /* No bottom edge — it would cover the bottom health bar when it blinks. */
-  border-bottom-width: 0;
   z-index: 8;
   animation: lowhp-blink 1s infinite;
+  background:
+    linear-gradient(to bottom, var(--lowhp-color), transparent) top / 100% var(--lowhp-size) no-repeat,
+    linear-gradient(to right, var(--lowhp-color), transparent) left / var(--lowhp-size) 100% no-repeat,
+    linear-gradient(to left, var(--lowhp-color), transparent) right / var(--lowhp-size) 100% no-repeat;
 }
 
 /* Hold each state, then flip over a 1% sliver so the blink reads as hard on/off
