@@ -730,6 +730,89 @@ export const killEnemy = spacetimedb.reducer(
   }
 );
 
+// --- Snapshot restore (post-wipe seeding) -------------------------------------
+// SpacetimeDB has no Laravel-style seeder/import. These batch reducers re-insert
+// a backup of the durable tables after a wipe (see scripts/backup.mjs +
+// scripts/restore.mjs). Each is guarded to run ONLY into an empty table, so it
+// can't be used to overwrite a live database or spoof other players' rows.
+// Auto-increment ids and timestamps are re-minted (order is preserved by insert
+// order); identities are restored verbatim so a returning player keeps their data.
+
+const RestorePlayerRow = t.object('RestorePlayerRow', {
+  identity: t.identity(),
+  name: t.string(),
+  positionX: t.f32(),
+  positionY: t.f32(),
+  positionZ: t.f32(),
+  rotationY: t.f32(),
+  activeCharacterId: t.string(),
+  partyOrder: t.array(t.string()),
+  primogems: t.u32(),
+  currentHealth: t.u32(),
+  gemsFromKills: t.u32(),
+  gemsCollected: t.u32(),
+});
+
+const RestoreOwnedCharacterRow = t.object('RestoreOwnedCharacterRow', {
+  owner: t.identity(),
+  characterId: t.string(),
+  currentHealth: t.u32(),
+  constellation: t.u32(),
+});
+
+const RestoreWeaponItemRow = t.object('RestoreWeaponItemRow', {
+  owner: t.identity(),
+  weaponId: t.string(),
+  rarity: t.u32(),
+});
+
+const RestoreBannerPityRow = t.object('RestoreBannerPityRow', {
+  owner: t.identity(),
+  bannerId: t.string(),
+  pullsSinceFiveStar: t.u32(),
+  pullsSinceFourStar: t.u32(),
+  guaranteedFeatured: t.bool(),
+  totalPulls: t.u32(),
+});
+
+function requireEmpty(rows: Iterable<unknown>, name: string) {
+  if ([...rows].length > 0) throw new SenderError(`${name} table is not empty; refusing to restore`);
+}
+
+export const restorePlayers = spacetimedb.reducer(
+  { rows: t.array(RestorePlayerRow) },
+  (ctx, { rows }) => {
+    requireEmpty(ctx.db.player.iter(), 'player');
+    for (const row of rows) {
+      ctx.db.player.insert({ ...row, online: false, lastKillRewardAt: ctx.timestamp });
+    }
+  }
+);
+
+export const restoreOwnedCharacters = spacetimedb.reducer(
+  { rows: t.array(RestoreOwnedCharacterRow) },
+  (ctx, { rows }) => {
+    requireEmpty(ctx.db.ownedCharacter.iter(), 'owned_character');
+    for (const row of rows) ctx.db.ownedCharacter.insert({ id: 0n, ...row });
+  }
+);
+
+export const restoreWeaponItems = spacetimedb.reducer(
+  { rows: t.array(RestoreWeaponItemRow) },
+  (ctx, { rows }) => {
+    requireEmpty(ctx.db.weaponItem.iter(), 'weapon_item');
+    for (const row of rows) ctx.db.weaponItem.insert({ id: 0n, ...row, acquiredAt: ctx.timestamp });
+  }
+);
+
+export const restoreBannerPity = spacetimedb.reducer(
+  { rows: t.array(RestoreBannerPityRow) },
+  (ctx, { rows }) => {
+    requireEmpty(ctx.db.bannerPity.iter(), 'banner_pity');
+    for (const row of rows) ctx.db.bannerPity.insert({ id: 0n, ...row });
+  }
+);
+
 // Any player who walks over a drop grabs it. First one there wins the race.
 // The client only requests this once a drop has magneted to the player, so the
 // pickup proximity is gated client-side (same trust model as the sim enemies) —

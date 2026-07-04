@@ -12,6 +12,8 @@
     "test": "vitest run",
     "generate": "cargo run -p gen-bindings -- --out-dir src/module_bindings --module-path spacetimedb && prettier --write src/module_bindings",
     "spacetime:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path spacetimedb",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs",
     "spacetime:publish:local": "spacetime publish --module-path server --server local",
     "spacetime:publish": "spacetime publish --module-path server --server maincloud"
   },

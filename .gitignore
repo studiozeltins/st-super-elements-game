@@ -6,3 +6,6 @@ dist
 
 spacetime.local.json
 image.png
+
+# Snapshot dumps (contain player identities) — do not commit
+backup/

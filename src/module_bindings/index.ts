@@ -44,6 +44,10 @@ import HealPartyReducer from "./heal_party_reducer";
 import JoinGameReducer from "./join_game_reducer";
 import KillEnemyReducer from "./kill_enemy_reducer";
 import PullBannerReducer from "./pull_banner_reducer";
+import RestoreBannerPityReducer from "./restore_banner_pity_reducer";
+import RestoreOwnedCharactersReducer from "./restore_owned_characters_reducer";
+import RestorePlayersReducer from "./restore_players_reducer";
+import RestoreWeaponItemsReducer from "./restore_weapon_items_reducer";
 import SetActiveCharacterReducer from "./set_active_character_reducer";
 import SetPartyReducer from "./set_party_reducer";
 import TakeDamageReducer from "./take_damage_reducer";
@@ -189,6 +193,10 @@ const reducersSchema = __reducers(
   __reducerSchema("join_game", JoinGameReducer),
   __reducerSchema("kill_enemy", KillEnemyReducer),
   __reducerSchema("pull_banner", PullBannerReducer),
+  __reducerSchema("restore_banner_pity", RestoreBannerPityReducer),
+  __reducerSchema("restore_owned_characters", RestoreOwnedCharactersReducer),
+  __reducerSchema("restore_players", RestorePlayersReducer),
+  __reducerSchema("restore_weapon_items", RestoreWeaponItemsReducer),
   __reducerSchema("set_active_character", SetActiveCharacterReducer),
   __reducerSchema("set_party", SetPartyReducer),
   __reducerSchema("take_damage", TakeDamageReducer),

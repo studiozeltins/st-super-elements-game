@@ -97,6 +97,47 @@ export const RegenTimer = __t.object("RegenTimer", {
 });
 export type RegenTimer = __Infer<typeof RegenTimer>;
 
+export const RestoreBannerPityRow = __t.object("RestoreBannerPityRow", {
+  owner: __t.identity(),
+  bannerId: __t.string(),
+  pullsSinceFiveStar: __t.u32(),
+  pullsSinceFourStar: __t.u32(),
+  guaranteedFeatured: __t.bool(),
+  totalPulls: __t.u32(),
+});
+export type RestoreBannerPityRow = __Infer<typeof RestoreBannerPityRow>;
+
+export const RestoreOwnedCharacterRow = __t.object("RestoreOwnedCharacterRow", {
+  owner: __t.identity(),
+  characterId: __t.string(),
+  currentHealth: __t.u32(),
+  constellation: __t.u32(),
+});
+export type RestoreOwnedCharacterRow = __Infer<typeof RestoreOwnedCharacterRow>;
+
+export const RestorePlayerRow = __t.object("RestorePlayerRow", {
+  identity: __t.identity(),
+  name: __t.string(),
+  positionX: __t.f32(),
+  positionY: __t.f32(),
+  positionZ: __t.f32(),
+  rotationY: __t.f32(),
+  activeCharacterId: __t.string(),
+  partyOrder: __t.array(__t.string()),
+  primogems: __t.u32(),
+  currentHealth: __t.u32(),
+  gemsFromKills: __t.u32(),
+  gemsCollected: __t.u32(),
+});
+export type RestorePlayerRow = __Infer<typeof RestorePlayerRow>;
+
+export const RestoreWeaponItemRow = __t.object("RestoreWeaponItemRow", {
+  owner: __t.identity(),
+  weaponId: __t.string(),
+  rarity: __t.u32(),
+});
+export type RestoreWeaponItemRow = __Infer<typeof RestoreWeaponItemRow>;
+
 export const SkillCast = __t.object("SkillCast", {
   caster: __t.identity(),
   characterId: __t.string(),
