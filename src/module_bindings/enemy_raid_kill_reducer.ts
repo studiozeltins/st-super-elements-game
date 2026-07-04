@@ -11,11 +11,10 @@ import {
 } from "spacetimedb";
 
 export default {
-  enemyId: __t.u64(),
+  victimEnemyId: __t.u64(),
   positionX: __t.f32(),
   positionZ: __t.f32(),
   rewardTier: __t.u32(),
-  comboCount: __t.u32(),
   isBoss: __t.bool(),
   isGoliath: __t.bool(),
   goliathSizeIndex: __t.u32(),

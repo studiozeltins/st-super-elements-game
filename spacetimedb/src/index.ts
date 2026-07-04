@@ -147,6 +147,11 @@ const PVP_DEATH_SPILL = 1 / 3; // fraction of primogems a PVP loser drops
 const PVE_DEATH_SPILL = 1 / 4; // fraction a player drops when an enemy kills them
 const CARRY_HARD_CAP = 20000; // server sanity cap on enemy-carried gems per kill
 const BOSS_GEM_MULTIPLIER = 3; // a boss kill pays triple the base reward
+// A goliath raider's own base gem stipend, indexed by its size tier
+// (0 = small, 1 = medium, 2 = large). Steal-able and paid on kill on top of any
+// hoard it grabbed. Mirrored client-side in src/game/data/goliathArchetypes.ts
+// (kept in sync by serverSync.test.ts).
+const GOLIATH_BASE_GEMS_BY_SIZE = [500, 1000, 2000];
 // Enemies are client-simulated with a fixed respawn delay. The server treats an
 // enemy as "dead" (its hoard already dropped) for this window after a kill, so
 // concurrent kill calls from several clients only pay out once.
@@ -848,11 +853,53 @@ export const enemyGrabGem = spacetimedb.reducer(
   }
 );
 
-// A player killed a client-simulated enemy. The base reward scales with the
-// combo and reward tier (bosses ×BOSS_GEM_MULTIPLIER); the enemy's server-tracked
-// hoard is added on top. The whole total rains down as many small denominated
-// gems. Idempotent across clients: an enemy already inside its dead window has
-// already paid out, so duplicate kill calls are ignored.
+// Every enemy carries a virtual base gem stipend that is always present from
+// spawn — never stored, computed here so both the player-kill and enemy-raid
+// payouts agree. Regular enemies scale with reward tier (bosses ×BOSS_GEM_MULTIPLIER);
+// goliath raiders use their size-indexed stipend. Mirrored client-side for display
+// in src/game/data/goliathArchetypes.ts + enemyArchetypes.ts (serverSync.test.ts).
+function enemyBaseGems(
+  isGoliath: boolean,
+  goliathSizeIndex: number,
+  rewardTier: number,
+  isBoss: boolean
+) {
+  if (isGoliath) {
+    const lastIndex = GOLIATH_BASE_GEMS_BY_SIZE.length - 1;
+    const clampedSizeIndex = Math.max(0, Math.min(lastIndex, goliathSizeIndex));
+    return GOLIATH_BASE_GEMS_BY_SIZE[clampedSizeIndex];
+  }
+  const clampedTier = Math.max(1, Math.min(MAX_KILL_REWARD_TIER, rewardTier));
+  return KILL_REWARD_PRIMOGEMS * clampedTier * (isBoss ? BOSS_GEM_MULTIPLIER : 1);
+}
+
+// True while the enemy is inside its post-kill dead window, meaning another
+// client's kill already paid its hoard out. Guards every payout against
+// concurrent/duplicate calls across clients.
+function isWithinDeadWindow(existingCarry: any, nowMicros: bigint) {
+  return (
+    existingCarry &&
+    existingCarry.killedAtMicros !== 0n &&
+    nowMicros - existingCarry.killedAtMicros < ENEMY_RESPAWN_MICROS
+  );
+}
+
+// Stamps an enemy dead and clears its hoard so the respawned enemy starts empty
+// and concurrent kill calls no-op. Returns the hoard that was carried at death.
+function stampEnemyKilledAndClearHoard(ctx: any, enemyId: bigint, existingCarry: any, nowMicros: bigint, killedBy: any) {
+  const carried = existingCarry ? Math.min(existingCarry.carriedGems, CARRY_HARD_CAP) : 0;
+  if (existingCarry) {
+    ctx.db.enemyCarry.enemyId.update({ ...existingCarry, carriedGems: 0, killedAtMicros: nowMicros });
+  } else {
+    ctx.db.enemyCarry.insert({ enemyId, carriedGems: 0, lastGrabbedBy: killedBy, killedAtMicros: nowMicros });
+  }
+  return carried;
+}
+
+// A player killed a client-simulated enemy or goliath raider. The base stipend
+// scales with combo (bosses/tiers/goliath size baked into enemyBaseGems); the
+// enemy's server-tracked hoard is added on top. The whole total rains down as
+// many small denominated gems and credits the killer. Idempotent across clients.
 export const killEnemy = spacetimedb.reducer(
   {
     enemyId: t.u64(),
@@ -861,33 +908,21 @@ export const killEnemy = spacetimedb.reducer(
     rewardTier: t.u32(),
     comboCount: t.u32(),
     isBoss: t.bool(),
+    isGoliath: t.bool(),
+    goliathSizeIndex: t.u32(),
   },
-  (ctx, { enemyId, positionX, positionZ, rewardTier, comboCount, isBoss }) => {
+  (ctx, { enemyId, positionX, positionZ, rewardTier, comboCount, isBoss, isGoliath, goliathSizeIndex }) => {
     const currentPlayer = requirePlayer(ctx);
     const now = ctx.timestamp.microsSinceUnixEpoch;
     const existing = ctx.db.enemyCarry.enemyId.find(enemyId);
+    if (isWithinDeadWindow(existing, now)) return;
 
-    // Already dead & within the respawn window → another client's kill paid out.
-    if (existing && existing.killedAtMicros !== 0n && now - existing.killedAtMicros < ENEMY_RESPAWN_MICROS) {
-      return;
-    }
-
-    const carried = existing ? Math.min(existing.carriedGems, CARRY_HARD_CAP) : 0;
-    const clampedTier = Math.max(1, Math.min(MAX_KILL_REWARD_TIER, rewardTier));
     const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
-    const bossMultiplier = isBoss ? BOSS_GEM_MULTIPLIER : 1;
     const base = Math.round(
-      KILL_REWARD_PRIMOGEMS * clampedTier * (1 + combo * COMBO_GEM_STEP) * bossMultiplier
+      enemyBaseGems(isGoliath, goliathSizeIndex, rewardTier, isBoss) * (1 + combo * COMBO_GEM_STEP)
     );
+    const carried = stampEnemyKilledAndClearHoard(ctx, enemyId, existing, now, currentPlayer.identity);
     const total = base + carried;
-
-    // Stamp the kill and clear the hoard so concurrent/duplicate kills no-op and
-    // the respawned enemy starts empty.
-    if (existing) {
-      ctx.db.enemyCarry.enemyId.update({ ...existing, carriedGems: 0, killedAtMicros: now });
-    } else {
-      ctx.db.enemyCarry.insert({ enemyId, carriedGems: 0, lastGrabbedBy: currentPlayer.identity, killedAtMicros: now });
-    }
 
     spillDenominations(ctx, positionX, positionZ, total, currentPlayer.identity);
     ctx.db.player.identity.update({
@@ -895,6 +930,32 @@ export const killEnemy = spacetimedb.reducer(
       gemsFromKills: currentPlayer.gemsFromKills + total,
       lastKillRewardAt: ctx.timestamp,
     });
+  }
+);
+
+// One enemy killed another (a goliath raiding a camp boss, or a camp defending
+// itself and killing a goliath). No player earns the kill: the victim's base
+// stipend plus its stolen hoard spill straight to the ground for anyone nearby —
+// enemies, goliaths, or players — to grab. Idempotent across clients.
+export const enemyRaidKill = spacetimedb.reducer(
+  {
+    victimEnemyId: t.u64(),
+    positionX: t.f32(),
+    positionZ: t.f32(),
+    rewardTier: t.u32(),
+    isBoss: t.bool(),
+    isGoliath: t.bool(),
+    goliathSizeIndex: t.u32(),
+  },
+  (ctx, { victimEnemyId, positionX, positionZ, rewardTier, isBoss, isGoliath, goliathSizeIndex }) => {
+    const currentPlayer = requirePlayer(ctx);
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    const existing = ctx.db.enemyCarry.enemyId.find(victimEnemyId);
+    if (isWithinDeadWindow(existing, now)) return;
+
+    const base = enemyBaseGems(isGoliath, goliathSizeIndex, rewardTier, isBoss);
+    const carried = stampEnemyKilledAndClearHoard(ctx, victimEnemyId, existing, now, currentPlayer.identity);
+    spillDenominations(ctx, positionX, positionZ, base + carried, currentPlayer.identity);
   }
 );
 

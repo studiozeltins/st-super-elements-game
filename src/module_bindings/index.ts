@@ -38,6 +38,7 @@ import AttackPlayerReducer from "./attack_player_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
 import CollectGemReducer from "./collect_gem_reducer";
 import EnemyGrabGemReducer from "./enemy_grab_gem_reducer";
+import EnemyRaidKillReducer from "./enemy_raid_kill_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import HealPartyReducer from "./heal_party_reducer";
@@ -202,6 +203,7 @@ const reducersSchema = __reducers(
   __reducerSchema("cast_skill", CastSkillReducer),
   __reducerSchema("collect_gem", CollectGemReducer),
   __reducerSchema("enemy_grab_gem", EnemyGrabGemReducer),
+  __reducerSchema("enemy_raid_kill", EnemyRaidKillReducer),
   __reducerSchema("fall_to_death", FallToDeathReducer),
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("heal_party", HealPartyReducer),
