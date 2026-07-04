@@ -1403,6 +1403,16 @@ export const regenTick = spacetimedb.reducer(
 // Spawns every camp's members: one boss (member 0, boss multipliers) plus guards,
 // scattered around the camp home via the seeded PRNG. Idempotent — only seeds
 // when the enemy table is empty, so it is safe to call from init repeatedly.
+// Schedules the world tick once. Guarded so it is safe to call on an existing
+// database (via seedWorld) as well as from init on a fresh one.
+function ensureWorldTickScheduled(ctx: { db: any }) {
+  if ([...ctx.db.worldTimer.iter()].length > 0) return;
+  ctx.db.worldTimer.insert({
+    scheduled_id: 0n,
+    scheduled_at: ScheduleAt.interval(WORLD_TICK_INTERVAL_MICROS),
+  });
+}
+
 function spawnCamps(ctx: { db: any }) {
   if ([...ctx.db.enemy.iter()].length > 0) return;
   const spawnRandom = createSeededRandom(ENEMY_SPAWN_SEED);
@@ -1808,10 +1818,16 @@ export const init = spacetimedb.init(ctx => {
     scheduled_id: 0n,
     scheduled_at: ScheduleAt.interval(REGEN_INTERVAL_MICROS),
   });
-  ctx.db.worldTimer.insert({
-    scheduled_id: 0n,
-    scheduled_at: ScheduleAt.interval(WORLD_TICK_INTERVAL_MICROS),
-  });
+  ensureWorldTickScheduled(ctx);
+  spawnCamps(ctx);
+});
+
+// Activates the world sim on an EXISTING database where init won't re-run
+// (e.g. publishing new tables to maincloud without wiping player data).
+// Idempotent: schedules the tick only if unscheduled and seeds camps only if
+// the enemy table is empty, so it is safe to call more than once.
+export const seedWorld = spacetimedb.reducer(ctx => {
+  ensureWorldTickScheduled(ctx);
   spawnCamps(ctx);
 });
 

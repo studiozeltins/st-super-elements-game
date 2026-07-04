@@ -50,6 +50,7 @@ import RestoreBannerPityReducer from "./restore_banner_pity_reducer";
 import RestoreOwnedCharactersReducer from "./restore_owned_characters_reducer";
 import RestorePlayersReducer from "./restore_players_reducer";
 import RestoreWeaponItemsReducer from "./restore_weapon_items_reducer";
+import SeedWorldReducer from "./seed_world_reducer";
 import SetActiveCharacterReducer from "./set_active_character_reducer";
 import SetPartyReducer from "./set_party_reducer";
 import TakeDamageReducer from "./take_damage_reducer";
@@ -225,6 +226,7 @@ const reducersSchema = __reducers(
   __reducerSchema("restore_owned_characters", RestoreOwnedCharactersReducer),
   __reducerSchema("restore_players", RestorePlayersReducer),
   __reducerSchema("restore_weapon_items", RestoreWeaponItemsReducer),
+  __reducerSchema("seed_world", SeedWorldReducer),
   __reducerSchema("set_active_character", SetActiveCharacterReducer),
   __reducerSchema("set_party", SetPartyReducer),
   __reducerSchema("take_damage", TakeDamageReducer),
