@@ -38,6 +38,8 @@ function skillDamage(options: SkillEffectOptions): number {
 export interface EffectSystem {
   update(deltaSeconds: number): void;
   spawnBurst(position: THREE.Vector3, color: number, particleCount?: number): void;
+  /** A few pixel motes that drift up slowly and fade — a gentle, slow-burn glint. */
+  spawnSparkle(position: THREE.Vector3, color: number, particleCount?: number): void;
   spawnProjectile(options: {
     origin: THREE.Vector3;
     direction: { x: number; z: number };
@@ -112,6 +114,45 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
         positionAttribute.needsUpdate = true;
         (points.material as THREE.PointsMaterial).opacity = 1 - ageSeconds / 0.6;
         return ageSeconds < 0.6;
+      },
+    });
+  }
+
+  // A slow, gentle sparkle: a handful of pixel motes that rise a little and fade
+  // over ~1.4s. Chunky point size keeps it reading as pixels, not smoke.
+  function spawnSparkle(position: THREE.Vector3, color: number, particleCount = 5) {
+    const points = createBurstPoints(color, particleCount);
+    (points.material as THREE.PointsMaterial).size = 0.22;
+    points.position.copy(position);
+    const velocities = Array.from({ length: particleCount }, () =>
+      new THREE.Vector3(
+        (Math.random() - 0.5) * 0.9,
+        0.4 + Math.random() * 0.7,
+        (Math.random() - 0.5) * 0.9
+      )
+    );
+    const lifetimeSeconds = 1.4;
+    let ageSeconds = 0;
+    addEffect({
+      object: points,
+      update(deltaSeconds) {
+        ageSeconds += deltaSeconds;
+        const positionAttribute = points.geometry.getAttribute('position') as THREE.BufferAttribute;
+        for (let particleIndex = 0; particleIndex < particleCount; particleIndex++) {
+          const velocity = velocities[particleIndex];
+          velocity.y -= 0.4 * deltaSeconds; // faint gravity so motes hang, then settle
+          positionAttribute.setXYZ(
+            particleIndex,
+            positionAttribute.getX(particleIndex) + velocity.x * deltaSeconds,
+            positionAttribute.getY(particleIndex) + velocity.y * deltaSeconds,
+            positionAttribute.getZ(particleIndex) + velocity.z * deltaSeconds
+          );
+        }
+        positionAttribute.needsUpdate = true;
+        // Ease-out fade so it lingers dim near the end (the "slow burn").
+        const progress = ageSeconds / lifetimeSeconds;
+        (points.material as THREE.PointsMaterial).opacity = Math.max(0, 1 - progress * progress);
+        return ageSeconds < lifetimeSeconds;
       },
     });
   }
@@ -310,6 +351,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
       }
     },
     spawnBurst,
+    spawnSparkle,
     spawnProjectile,
     spawnMeleeSlash,
     spawnSkillEffect,

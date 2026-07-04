@@ -208,7 +208,15 @@ export function createGame(
   const remotePlayers = new Map<string, RemotePlayerView>();
   const gemDrops = new Map<
     string,
-    { mesh: THREE.Mesh; rawId: bigint; age: number; baseY: number; amount: number }
+    {
+      mesh: THREE.Mesh;
+      rawId: bigint;
+      age: number;
+      baseY: number;
+      amount: number;
+      sparkle: boolean;
+      sparkleAt: number;
+    }
   >();
   const requestedGemPickups = new Set<string>();
   // Drops are un-grabbable for a moment so they are clearly visible before the
@@ -217,6 +225,13 @@ export function createGame(
   const GEM_PICKUP_DELAY = 1.2;
   const GEM_MAGNET_RADIUS = 5.5;
   const GEM_COLLECT_RADIUS = 1.1;
+  // Gems also pool toward nearby enemies (which hoard them) — a bit shorter reach
+  // than the player magnet so the player still wins a tug near the same gem.
+  const GEM_ENEMY_MAGNET_RADIUS = 4;
+  // Uniform gem look: all the smallest size, only color differs by denomination.
+  const GEM_RADIUS = 0.3;
+  const GEM_EMISSIVE_INTENSITY = 0.4;
+  const GEM_SPARKLE_INTERVAL = 0.8;
   let animationFrameHandle = 0;
   let lastFrameTime = 0;
   let lastSentPosition = new THREE.Vector3(Infinity, 0, 0);
@@ -503,27 +518,36 @@ export function createGame(
   }
 
   function createGemMesh(drop: GemDrop): { mesh: THREE.Mesh; baseY: number } {
-    // Bigger denominations render larger, brighter, and a different hue so the
-    // shower of gems from a kill reads as a mix of values at a glance.
+    // All gems are the same small size; only the color reads the denomination.
+    // No halo and a low emissive keep the glow subtle.
     const visual = gemVisual(drop.amount);
     const material = new THREE.MeshLambertMaterial({
       color: visual.color,
       emissive: visual.color,
-      emissiveIntensity: visual.emissiveIntensity,
+      emissiveIntensity: GEM_EMISSIVE_INTENSITY,
     });
-    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(visual.radius), material);
+    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(GEM_RADIUS), material);
     const baseY = world.getGroundHeight(drop.positionX, drop.positionZ) + 0.9;
     mesh.position.set(drop.positionX, baseY, drop.positionZ);
-    // A soft halo so drops read from a distance; scales with the gem.
-    const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(visual.radius * 1.8, 12, 12),
-      new THREE.MeshBasicMaterial({ color: visual.color, transparent: true, opacity: visual.haloOpacity })
-    );
-    mesh.add(halo);
     scene.add(mesh);
-    // Sparkle burst on landing.
-    effectSystem.spawnBurst(mesh.position.clone(), 0xffe08a, 18);
+    // Small sparkle on landing (color-matched for the rarer tiers).
+    effectSystem.spawnBurst(mesh.position.clone(), visual.sparkle ? visual.color : 0xffe08a, 10);
     return { mesh, baseY };
+  }
+
+  function nearestEnemyWithin(
+    x: number,
+    z: number,
+    radius: number
+  ): { position: THREE.Vector3; distance: number } | null {
+    let best: { position: THREE.Vector3; distance: number } | null = null;
+    for (const position of enemySystem.getAlivePositions()) {
+      const distance = Math.hypot(position.x - x, position.z - z);
+      if (distance <= radius && (!best || distance < best.distance)) {
+        best = { position, distance };
+      }
+    }
+    return best;
   }
 
   function updateGemDrops(deltaSeconds: number) {
@@ -531,18 +555,39 @@ export function createGame(
       gem.age += deltaSeconds;
       gem.mesh.rotation.y += deltaSeconds * 2.4;
       gem.mesh.position.y = gem.baseY + Math.sin(elapsedSeconds * 3) * 0.12;
+
+      // Rarer tiers emit a gentle, slow-burn pixel sparkle on a throttle.
+      if (gem.sparkle && elapsedSeconds >= gem.sparkleAt) {
+        gem.sparkleAt = elapsedSeconds + GEM_SPARKLE_INTERVAL;
+        const material = gem.mesh.material as THREE.MeshLambertMaterial;
+        effectSystem.spawnSparkle(gem.mesh.position.clone(), material.color.getHex(), 4);
+      }
+
       if (gem.age < GEM_PICKUP_DELAY) continue;
 
-      const dx = playerPosition.x - gem.mesh.position.x;
-      const dz = playerPosition.z - gem.mesh.position.z;
-      const distance = Math.hypot(dx, dz);
-      // Pull loose gems toward the player so none are left stranded.
-      if (distance < GEM_MAGNET_RADIUS && distance > 0.001) {
-        const pull = Math.min(1, deltaSeconds * (3 + (GEM_MAGNET_RADIUS - distance)));
+      const playerDx = playerPosition.x - gem.mesh.position.x;
+      const playerDz = playerPosition.z - gem.mesh.position.z;
+      const playerDistance = Math.hypot(playerDx, playerDz);
+
+      // Gems pool toward whichever attractor is nearest and in range — the player
+      // (to collect) or an enemy (to hoard). Player wins ties within its radius.
+      const enemy = nearestEnemyWithin(gem.mesh.position.x, gem.mesh.position.z, GEM_ENEMY_MAGNET_RADIUS);
+      const playerInRange = playerDistance < GEM_MAGNET_RADIUS && playerDistance > 0.001;
+      const pullToEnemy = enemy !== null && (!playerInRange || enemy.distance < playerDistance);
+
+      if (pullToEnemy && enemy) {
+        const dx = enemy.position.x - gem.mesh.position.x;
+        const dz = enemy.position.z - gem.mesh.position.z;
+        const pull = Math.min(1, deltaSeconds * (3 + (GEM_ENEMY_MAGNET_RADIUS - enemy.distance)));
         gem.mesh.position.x += dx * pull;
         gem.mesh.position.z += dz * pull;
+      } else if (playerInRange) {
+        const pull = Math.min(1, deltaSeconds * (3 + (GEM_MAGNET_RADIUS - playerDistance)));
+        gem.mesh.position.x += playerDx * pull;
+        gem.mesh.position.z += playerDz * pull;
       }
-      if (distance <= GEM_COLLECT_RADIUS && !requestedGemPickups.has(key)) {
+
+      if (playerDistance <= GEM_COLLECT_RADIUS && !requestedGemPickups.has(key)) {
         requestedGemPickups.add(key);
         network.sendCollectGem(gem.rawId);
       }
@@ -817,7 +862,15 @@ export function createGame(
         seen.add(key);
         if (!gemDrops.has(key)) {
           const { mesh, baseY } = createGemMesh(drop);
-          gemDrops.set(key, { mesh, rawId: drop.id, age: 0, baseY, amount: drop.amount });
+          gemDrops.set(key, {
+            mesh,
+            rawId: drop.id,
+            age: 0,
+            baseY,
+            amount: drop.amount,
+            sparkle: gemVisual(drop.amount).sparkle,
+            sparkleAt: 0,
+          });
         }
       }
       for (const [key, gem] of gemDrops) {

@@ -12,28 +12,28 @@ export const GEM_DENOMINATIONS = [500, 100, 50, 20, 10, 5, 1] as const;
 /** A boss kill pays this multiple of the base reward. Mirrors the server. */
 export const BOSS_GEM_MULTIPLIER = 3;
 
-/** How a single ground gem looks, chosen by its value. */
+/**
+ * How a single ground gem looks, chosen by its value. Every gem is the same
+ * (smallest) size; only the color tells denominations apart, and the rarer
+ * non-gold tiers get a slow-burn pixel sparkle.
+ */
 export interface GemVisual {
-  /** Octahedron radius. */
-  radius: number;
   /** Core + emissive color. */
   color: number;
-  /** Emissive strength (brightness). */
-  emissiveIntensity: number;
-  /** Halo sphere opacity — bigger gems glow more. */
-  haloOpacity: number;
+  /** Rarer tiers emit a gentle, slow pixel sparkle. */
+  sparkle: boolean;
 }
 
-// One visual per denomination tier. Higher value = larger, brighter, and shifts
-// hue up through gold into cyan/magenta so tiers read apart at a glance.
+// One color per denomination tier: gold family for the common tiers, shifting to
+// cyan then magenta for the rare ones (which also sparkle).
 const GEM_VISUALS: Record<number, GemVisual> = {
-  1: { radius: 0.28, color: 0xbfa24a, emissiveIntensity: 0.45, haloOpacity: 0.1 },
-  5: { radius: 0.34, color: 0xd8b24e, emissiveIntensity: 0.55, haloOpacity: 0.12 },
-  10: { radius: 0.4, color: 0xf2c14e, emissiveIntensity: 0.65, haloOpacity: 0.14 },
-  20: { radius: 0.48, color: 0xffd15c, emissiveIntensity: 0.75, haloOpacity: 0.17 },
-  50: { radius: 0.58, color: 0xffe08a, emissiveIntensity: 0.9, haloOpacity: 0.2 },
-  100: { radius: 0.7, color: 0x9fe8ff, emissiveIntensity: 1.05, haloOpacity: 0.24 },
-  500: { radius: 0.9, color: 0xff8af0, emissiveIntensity: 1.25, haloOpacity: 0.3 },
+  1: { color: 0xbfa24a, sparkle: false },
+  5: { color: 0xd8b24e, sparkle: false },
+  10: { color: 0xf2c14e, sparkle: false },
+  20: { color: 0xffd15c, sparkle: false },
+  50: { color: 0xffe08a, sparkle: false },
+  100: { color: 0x9fe8ff, sparkle: true },
+  500: { color: 0xff8af0, sparkle: true },
 };
 
 /** The largest denomination not exceeding the amount (amounts always ≥ 1). */
