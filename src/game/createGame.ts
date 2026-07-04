@@ -63,6 +63,8 @@ export interface Game {
   start(): void;
   dispose(): void;
   setActiveCharacter(characterId: string): void;
+  /** Active character's constellation level, scaling its damage. */
+  setActiveConstellation(constellation: number): void;
   syncRemotePlayers(players: readonly Player[], myIdentityHex: string | null): void;
   syncMyServerRow(row: Player): void;
   handleRemoteSkillCast(cast: SkillCast): void;
@@ -248,6 +250,9 @@ export function createGame(
 
   const CRIT_CHANCE = 0.22;
   const CRIT_MULTIPLIER = 1.9;
+  const CONSTELLATION_DAMAGE_STEP = 0.08; // +8% damage per constellation (C6 = +48%)
+  let activeConstellation = 0;
+  const constellationDamageMultiplier = () => 1 + activeConstellation * CONSTELLATION_DAMAGE_STEP;
 
   /** Client-only visual crit roll (no shared state, so plain randomness is fine). */
   function rollDamage(baseDamage: number): { amount: number; kind: DamageKind } {
@@ -270,7 +275,8 @@ export function createGame(
     const direction = facingDirection();
     const elementColor = ELEMENTS[activeCharacter.element].color;
     // Regular attacks get only a small combo boost — the payoff is the skill.
-    const baseDamage = weapon.damage * regularAttackMultiplier(combo);
+    const baseDamage =
+      weapon.damage * regularAttackMultiplier(combo) * constellationDamageMultiplier();
     const { amount, kind } = rollDamage(baseDamage);
 
     if (profile.isFlourish) {
@@ -323,7 +329,7 @@ export function createGame(
       direction,
       applyDamage: applySkillDamage,
       // The combo's real payoff: the skill scales strongly and uncapped.
-      damageMultiplier: skillAttackMultiplier(combo),
+      damageMultiplier: skillAttackMultiplier(combo) * constellationDamageMultiplier(),
       followPosition: () => playerPosition,
     });
     network.sendCastSkill(skill.id, playerPosition.x, playerPosition.z, direction.x, direction.z);
@@ -583,6 +589,9 @@ export function createGame(
         ELEMENTS[nextCharacter.element].color,
         22
       );
+    },
+    setActiveConstellation(constellation) {
+      activeConstellation = constellation;
     },
     syncRemotePlayers(players, myIdentityHex) {
       const seenIdentities = new Set<string>();

@@ -19,6 +19,7 @@ export interface PullView {
   rarity: number;
   isNew: boolean;
   isFeatured: boolean;
+  constellation: number;
 }
 interface WeaponRow {
   weaponId: string;
@@ -31,6 +32,7 @@ interface GachaScreenProps {
   activeCharacterId: string;
   weaponItems: WeaponRow[];
   partyCharacterIds: string[];
+  constellationById: Record<string, number>;
   pityByBanner: Record<string, PityInfo>;
   pullResults: PullView[] | null;
   onPull(bannerId: string, count: number): void;
@@ -52,6 +54,7 @@ export function GachaScreen({
   activeCharacterId,
   weaponItems,
   partyCharacterIds,
+  constellationById,
   pityByBanner,
   pullResults,
   onPull,
@@ -342,6 +345,9 @@ export function GachaScreen({
                     </span>
                     <span className="inv-card__name">{character.displayName}</span>
                     <span className="inv-card__sub">{element.displayName}</span>
+                    {isOwned && (constellationById[character.id] ?? 0) > 0 && (
+                      <span className="inv-card__con">C{constellationById[character.id]}</span>
+                    )}
                     {isActive && <span className="inv-card__badge">AKTĪVS</span>}
                     {!isOwned && <span className="inv-card__lock">◈</span>}
                   </button>

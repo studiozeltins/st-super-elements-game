@@ -204,6 +204,9 @@ export function PullAnimation({ results, onClose }: { results: PullView[]; onClo
             {item.kind === 'character' && item.isNew && (
               <span className="splash__tag splash__tag--new">JAUNS</span>
             )}
+            {item.kind === 'character' && !item.isNew && item.constellation > 0 && (
+              <span className="splash__tag">C{item.constellation}</span>
+            )}
           </span>
         </div>
         {sorted.length > 1 && (
@@ -244,6 +247,9 @@ export function PullAnimation({ results, onClose }: { results: PullView[]; onClo
             {view.isFeatured && <span className="reveal-card__tag">PASTIPRINĀTS</span>}
             {view.kind === 'character' && view.isNew && (
               <span className="reveal-card__tag reveal-card__tag--new">JAUNS</span>
+            )}
+            {view.kind === 'character' && !view.isNew && view.constellation > 0 && (
+              <span className="reveal-card__tag">C{view.constellation}</span>
             )}
           </div>
         ))}

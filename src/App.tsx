@@ -88,6 +88,7 @@ export default function App() {
         rarity: row.rarity,
         isNew: row.isNew,
         isFeatured: row.isFeatured,
+        constellation: row.constellation,
       });
       if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current);
       flushTimerRef.current = window.setTimeout(() => {
@@ -128,6 +129,12 @@ export default function App() {
     if (row.owner.toHexString() !== myIdentityHex) continue;
     const maxHealth = CHARACTERS[row.characterId]?.maxHealth ?? MAX_HEALTH;
     partyHealthById[row.characterId] = maxHealth > 0 ? row.currentHealth / maxHealth : 1;
+  }
+
+  const constellationById: Record<string, number> = {};
+  for (const row of ownedCharacterRows) {
+    if (row.owner.toHexString() !== myIdentityHex) continue;
+    constellationById[row.characterId] = row.constellation;
   }
 
   const pityByBanner: Record<string, PityInfo> = {};
@@ -210,6 +217,15 @@ export default function App() {
   }, [players, myPlayer, myIdentityHex]);
 
   useEffect(() => {
+    const active = myPlayer?.activeCharacterId;
+    if (!active) return;
+    const row = ownedCharacterRows.find(
+      r => r.owner.toHexString() === myIdentityHex && r.characterId === active
+    );
+    gameRef.current?.setActiveConstellation(row?.constellation ?? 0);
+  }, [myPlayer, ownedCharacterRows, myIdentityHex]);
+
+  useEffect(() => {
     gameRef.current?.setInputEnabled(!isGachaOpen);
   }, [isGachaOpen]);
 
@@ -249,6 +265,7 @@ export default function App() {
           activeCharacterId={myPlayer?.activeCharacterId ?? ''}
           weaponItems={myWeaponItems}
           partyCharacterIds={partyCharacterIds}
+          constellationById={constellationById}
           pityByBanner={pityByBanner}
           pullResults={pullResults}
           onPull={pullBanner}

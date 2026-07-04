@@ -44,6 +44,8 @@ const CHARACTER_POOL = Object.entries(CHARACTER_STATS).map(([characterId, s]) =>
 
 const STARTER_CHARACTER_ID = 'zibo';
 const PARTY_SIZE = 4;
+const MAX_CONSTELLATION = 6; // C6 is the cap; duplicates past it refund gems
+const HEAL_CONSTELLATION_STEP = 0.15; // healers heal +15% per constellation
 const STARTING_PRIMOGEMS = 16000;
 const GACHA_PULL_COST = 160;
 const DUPLICATE_REFUND = 800;
@@ -168,6 +170,9 @@ const ownedCharacter = table(
     // Each character keeps its own HP; only the active one is in the world, so
     // benched characters stay wounded until a healer tops them up.
     currentHealth: t.u32(),
+    // Constellation level 0..6; duplicate pulls raise it and make the character
+    // stronger (more damage, and stronger heals for healers).
+    constellation: t.u32(),
   }
 );
 
@@ -226,6 +231,7 @@ const pullResult = table(
     rarity: t.u32(),
     isNew: t.bool(),
     isFeatured: t.bool(),
+    constellation: t.u32(), // character constellation after this pull (0 for weapons)
   }
 );
 
@@ -370,6 +376,7 @@ export const joinGame = spacetimedb.reducer(
       owner: ctx.sender,
       characterId: STARTER_CHARACTER_ID,
       currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
+      constellation: 0,
     });
   }
 );
@@ -567,10 +574,14 @@ export const healParty = spacetimedb.reducer(
     const stats = statsFor(currentPlayer.activeCharacterId);
     if (stats.healType === 'none') return;
 
+    const ownedList = [...ctx.db.ownedCharacter.owner.filter(ctx.sender)];
+    const healer = ownedList.find(row => row.characterId === currentPlayer.activeCharacterId);
+    const healMultiplier = 1 + (healer?.constellation ?? 0) * HEAL_CONSTELLATION_STEP;
+
     let activeHealth = currentPlayer.currentHealth;
-    for (const owned of [...ctx.db.ownedCharacter.owner.filter(ctx.sender)]) {
+    for (const owned of ownedList) {
       const targetMax = statsFor(owned.characterId).maxHealth;
-      const amount = healAmountFor(stats, targetMax, comboCount);
+      const amount = Math.round(healAmountFor(stats, targetMax, comboCount) * healMultiplier);
       if (amount <= 0 || owned.currentHealth >= targetMax) continue;
       const healed = Math.min(targetMax, owned.currentHealth + amount);
       ctx.db.ownedCharacter.id.update({ ...owned, currentHealth: healed });
@@ -588,16 +599,28 @@ export const healParty = spacetimedb.reducer(
   }
 );
 
-// Adds a character to the roster if unowned; returns whether it was new.
+// Grants a character. New → added at C0. Duplicate → +1 constellation up to
+// C6. Returns the outcome so the pull can show C-level and refund at max.
 function grantCharacter(ctx: { db: any; sender: any }, characterId: string) {
-  if (ownsCharacter(ctx, characterId)) return false;
-  ctx.db.ownedCharacter.insert({
-    id: 0n,
-    owner: ctx.sender,
-    characterId,
-    currentHealth: statsFor(characterId).maxHealth,
-  });
-  return true;
+  const owned = [...ctx.db.ownedCharacter.owner.filter(ctx.sender)].find(
+    (row: any) => row.characterId === characterId
+  );
+  if (!owned) {
+    ctx.db.ownedCharacter.insert({
+      id: 0n,
+      owner: ctx.sender,
+      characterId,
+      currentHealth: statsFor(characterId).maxHealth,
+      constellation: 0,
+    });
+    return { isNew: true, constellation: 0, maxed: false };
+  }
+  if (owned.constellation < MAX_CONSTELLATION) {
+    const constellation = owned.constellation + 1;
+    ctx.db.ownedCharacter.id.update({ ...owned, constellation });
+    return { isNew: false, constellation, maxed: false };
+  }
+  return { isNew: false, constellation: MAX_CONSTELLATION, maxed: true };
 }
 
 function grantWeapon(ctx: { db: any; sender: any; timestamp: any }, weaponId: string, rarity: number) {
@@ -650,6 +673,7 @@ export const pullBanner = spacetimedb.reducer(
       let rarity = 3;
       let isNew = false;
       let isFeatured = false;
+      let constellation = 0;
 
       if (ctx.random() < fiveStarChance(sinceFive)) {
         sinceFive = 0;
@@ -660,8 +684,10 @@ export const pullBanner = spacetimedb.reducer(
           kind = 'character';
           itemId = banner.featuredCharacterId;
           isFeatured = true;
-          isNew = grantCharacter(ctx, itemId);
-          if (!isNew) refund += DUPLICATE_REFUND;
+          const result = grantCharacter(ctx, itemId);
+          isNew = result.isNew;
+          constellation = result.constellation;
+          if (result.maxed) refund += DUPLICATE_REFUND;
         } else {
           // Lost the 50/50 → a 5★ weapon, and the next 5★ is guaranteed featured.
           guaranteed = true;
@@ -674,8 +700,10 @@ export const pullBanner = spacetimedb.reducer(
         if (ctx.random() < FOUR_STAR_CHARACTER_SHARE) {
           kind = 'character';
           itemId = pickFourStarCharacterId(ctx);
-          isNew = grantCharacter(ctx, itemId);
-          if (!isNew) refund += DUPLICATE_REFUND;
+          const result = grantCharacter(ctx, itemId);
+          isNew = result.isNew;
+          constellation = result.constellation;
+          if (result.maxed) refund += DUPLICATE_REFUND;
         } else {
           itemId = pickWeaponId(ctx, 4);
           grantWeapon(ctx, itemId, 4);
@@ -695,6 +723,7 @@ export const pullBanner = spacetimedb.reducer(
         rarity,
         isNew,
         isFeatured,
+        constellation,
       });
     }
 

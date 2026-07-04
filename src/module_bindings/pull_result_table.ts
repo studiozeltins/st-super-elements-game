@@ -19,4 +19,5 @@ export default __t.row({
   rarity: __t.u32(),
   isNew: __t.bool().name("is_new"),
   isFeatured: __t.bool().name("is_featured"),
+  constellation: __t.u32(),
 });

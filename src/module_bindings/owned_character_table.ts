@@ -15,4 +15,5 @@ export default __t.row({
   owner: __t.identity(),
   characterId: __t.string().name("character_id"),
   currentHealth: __t.u32().name("current_health"),
+  constellation: __t.u32(),
 });

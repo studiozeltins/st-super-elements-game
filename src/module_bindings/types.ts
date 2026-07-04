@@ -33,6 +33,7 @@ export const OwnedCharacter = __t.object("OwnedCharacter", {
   owner: __t.identity(),
   characterId: __t.string(),
   currentHealth: __t.u32(),
+  constellation: __t.u32(),
 });
 export type OwnedCharacter = __Infer<typeof OwnedCharacter>;
 
@@ -61,6 +62,7 @@ export const PullResult = __t.object("PullResult", {
   rarity: __t.u32(),
   isNew: __t.bool(),
   isFeatured: __t.bool(),
+  constellation: __t.u32(),
 });
 export type PullResult = __Infer<typeof PullResult>;
 

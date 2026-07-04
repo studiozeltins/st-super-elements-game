@@ -902,6 +902,17 @@ button {
   color: var(--muted);
 }
 
+.inv-card__con {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.06em;
+  color: var(--gold);
+  border: 1px solid currentColor;
+  padding: 1px 5px;
+}
+
 /* ---------- Rarity accents ---------- */
 
 .rarity-3 {
