@@ -1315,3 +1315,238 @@ button {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ---------- Character sheet (constellations) ---------- */
+
+.sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 14;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 7, 5, 0.82);
+  cursor: pointer;
+  animation: gacha-fade 0.22s ease-out both;
+}
+
+.sheet__card {
+  position: relative;
+  width: min(680px, 96vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  cursor: default;
+  padding: 26px 28px 22px;
+  border: 1px solid var(--element-color);
+  background:
+    radial-gradient(120% 90% at 100% 0%, color-mix(in srgb, var(--element-color) 16%, transparent), transparent 55%),
+    rgba(8, 12, 9, 0.96);
+  box-shadow: 0 0 60px -20px var(--element-color);
+}
+
+.sheet__close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font-size: 18px;
+  color: var(--muted);
+}
+
+.sheet__close:hover {
+  color: var(--text);
+}
+
+.sheet__element {
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--element-color);
+}
+
+.sheet__name {
+  font: 700 32px var(--font-display);
+  letter-spacing: 0.02em;
+  margin-top: 2px;
+}
+
+.sheet__title {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.sheet__meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.sheet__stars {
+  letter-spacing: 0.14em;
+}
+
+.sheet__weapon {
+  color: var(--muted);
+}
+
+.sheet__level {
+  margin-left: auto;
+  font: 700 13px var(--font-display);
+  color: var(--gold);
+}
+
+.sheet__lore {
+  margin: 14px 0 18px;
+  font-size: 13px;
+  line-height: 1.65;
+  font-style: italic;
+  color: var(--text);
+  opacity: 0.9;
+}
+
+.sheet__body {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 22px;
+  align-items: center;
+}
+
+.sheet__diagram {
+  width: 100%;
+  height: auto;
+}
+
+.sheet__spoke {
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+
+.sheet__spoke--on {
+  stroke: var(--element-color);
+  stroke-width: 2;
+}
+
+.sheet__core {
+  fill: rgba(12, 17, 14, 0.9);
+  stroke: var(--element-color);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px var(--element-color));
+}
+
+.sheet__core-text {
+  fill: var(--element-color);
+  font: 700 20px var(--font-display);
+}
+
+.sheet__node {
+  fill: rgba(12, 17, 14, 0.95);
+  stroke: var(--line);
+  stroke-width: 1.5;
+  transition: fill 0.2s, stroke 0.2s;
+}
+
+.sheet__node--on {
+  fill: var(--element-color);
+  stroke: var(--gold);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--element-color) 70%, transparent));
+}
+
+.sheet__node-text {
+  fill: var(--muted);
+  font: 700 13px var(--font-display);
+}
+
+.sheet__node--on + .sheet__node-text,
+.sheet__node--on ~ .sheet__node-text {
+  fill: var(--ink);
+}
+
+.sheet__list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sheet__con {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--element-color);
+}
+
+.sheet__con--off {
+  opacity: 0.4;
+  border-left-color: var(--line);
+}
+
+.sheet__con-badge {
+  flex-shrink: 0;
+  width: 34px;
+  text-align: center;
+  font: 700 12px var(--font-display);
+  color: var(--gold);
+}
+
+.sheet__con--off .sheet__con-badge {
+  color: var(--muted);
+}
+
+.sheet__con-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sheet__con-title {
+  font: 700 11px var(--font-display);
+  letter-spacing: 0.08em;
+}
+
+.sheet__con-effect {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sheet__actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.sheet__set {
+  padding: 12px 30px;
+  font: 700 13px var(--font-display);
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  background: var(--element-color);
+  transition: transform 0.12s;
+}
+
+.sheet__set:hover {
+  transform: translateY(-2px);
+}
+
+.sheet__active-tag {
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  border: 1px solid currentColor;
+  padding: 9px 20px;
+}
+
+@media (max-width: 560px) {
+  .sheet__body {
+    grid-template-columns: 1fr;
+    justify-items: center;
+  }
+
+  .sheet__diagram {
+    width: 220px;
+  }
+}

@@ -6,6 +6,7 @@ import { BANNERS, WEAPONS_BY_ID, fiveStarChanceForNextPull, HARD_PITY } from '..
 import { GACHA_PULL_COST } from '../game/data/constants';
 import { CharacterPreview } from './CharacterPreview';
 import { PullAnimation } from './PullAnimation';
+import { CharacterSheet } from './CharacterSheet';
 
 export interface PityInfo {
   pullsSinceFiveStar: number;
@@ -69,6 +70,7 @@ export function GachaScreen({
     { from: 'roster'; id: string } | { from: 'slot'; index: number } | null
   >(null);
   const [overSlot, setOverSlot] = useState<number | null>(null);
+  const [sheetCharacterId, setSheetCharacterId] = useState<string | null>(null);
 
   const dropOnSlot = (slotIndex: number) => {
     setOverSlot(null);
@@ -258,7 +260,7 @@ export function GachaScreen({
                     }}
                     onDragLeave={() => setOverSlot(prev => (prev === slotIndex ? null : prev))}
                     onDrop={() => dropOnSlot(slotIndex)}
-                    onClick={() => characterId && onSelectCharacter(characterId)}
+                    onClick={() => characterId && setSheetCharacterId(characterId)}
                   >
                     <span className="party-drop__index">{slotIndex + 1}</span>
                     {character && element ? (
@@ -301,6 +303,7 @@ export function GachaScreen({
                     className="inv-card inv-card--draggable"
                     style={{ '--element-color': element.cssColor } as React.CSSProperties}
                     draggable
+                    onClick={() => setSheetCharacterId(character.id)}
                     onDragStart={event => {
                       event.dataTransfer.setData('text/plain', character.id);
                       setDragItem({ from: 'roster', id: character.id });
@@ -376,6 +379,16 @@ export function GachaScreen({
             )}
           </section>
         </div>
+      )}
+
+      {sheetCharacterId && (
+        <CharacterSheet
+          characterId={sheetCharacterId}
+          constellation={constellationById[sheetCharacterId] ?? 0}
+          isActive={sheetCharacterId === activeCharacterId}
+          onSetActive={onSelectCharacter}
+          onClose={() => setSheetCharacterId(null)}
+        />
       )}
 
       {pullResults && pullResults.length > 0 && (
