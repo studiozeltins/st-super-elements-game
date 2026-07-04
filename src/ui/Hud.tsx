@@ -45,8 +45,9 @@ export function Hud({
   // and at <=5% locks solid red at double thickness (see .hud__lowhp CSS).
   const lowHp = healthFraction < 0.4;
   const criticalHp = healthFraction <= 0.05;
-  const blinkProgress = Math.max(0, Math.min(1, (0.4 - healthFraction) / (0.4 - 0.05)));
-  const blinkMs = Math.round(1100 - blinkProgress * (1100 - 260)); // 1100ms @40% → 260ms @5%
+  // Ramp to super-fast by 10% HP (stays there down to the 5% solid lock).
+  const blinkProgress = Math.max(0, Math.min(1, (0.4 - healthFraction) / (0.4 - 0.1)));
+  const blinkMs = Math.round(700 - blinkProgress * (700 - 130)); // 700ms @40% → 130ms @10%
 
   return (
     <div className="hud">

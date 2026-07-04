@@ -559,23 +559,22 @@ button {
   text-transform: uppercase;
 }
 
-/* Health bar lives at the bottom-center of the screen, thick enough to read
-   at a glance during combat. */
+/* Health bar sticks to the very bottom edge as a full-width strip (sits under
+   the touch buttons), thick enough to read at a glance during combat. */
 .hud__health {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: max(80px, calc(env(safe-area-inset-bottom) + 80px));
-  width: min(440px, 76vw);
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
   height: 13px;
   background: rgba(0, 0, 0, 0.5);
-  border: 1px solid var(--line);
+  border-top: 1px solid var(--line);
   overflow: hidden;
   z-index: 6;
 }
 
 .hud__health--critical {
-  border-color: var(--danger);
+  border-top-color: var(--danger);
 }
 
 .hud__health-fill {
@@ -773,11 +772,6 @@ button {
     place-items: center;
   }
 
-  /* Raise the health bar above the joystick / action buttons on touch layouts. */
-  .hud__health {
-    bottom: max(168px, calc(env(safe-area-inset-bottom) + 168px));
-    width: min(340px, 52vw);
-  }
 }
 
 /* Narrow screens: keep the id/meta stack compact next to the gems wallet. */
