@@ -153,6 +153,9 @@ function pickFourStarCharacterId(ctx: { random: any }) {
 }
 // Bow projectiles fly up to ~45 units; server range check must cover them.
 const MAX_HIT_RANGE = 45;
+// Hard cap on a player's attack blast radius, so attackEnemies can't be spoofed
+// into a map-wide sweep. Generously above any real melee/skill area.
+const MAX_ATTACK_RADIUS = 20;
 const MAX_STEP_DISTANCE = 12;
 const MAX_COMBO_FOR_GEMS = 100;
 const COMBO_GEM_STEP = 0.03; // +3% dropped gems per combo point (capped)
@@ -207,6 +210,7 @@ const GOLIATH_SPLASH_RANGE = 4.0; // the largest raider hits everything in here
 // fresh camp gang up and eventually overpower a wounded goliath.
 const GOLIATH_ENGAGE_RANGE = 8.0;
 const ENEMY_PLAYER_CONTACT_RANGE = 1.8; // camp member ↔ player it is chasing
+const GOLIATH_PLAYER_CONTACT_RANGE = 2.6; // goliath ↔ a player who provoked it (bigger reach)
 // A goliath hits camp members far harder than they were authored to hit players,
 // so it clears a couple of easy camps before the accumulated counter-damage from
 // fresh, respawning camps wears it down (~2-3 slime-tier camps for a small
@@ -1018,6 +1022,13 @@ export const attackEnemies = spacetimedb.reducer(
   },
   (ctx, { centerX, centerZ, radius, damage, comboCount }) => {
     const currentPlayer = requirePlayer(ctx);
+    // Reject implausible strikes so a client can't sweep the whole map risk-free
+    // from the safe zone: the strike centre must be within weapon range of the
+    // attacker (as attackPlayer enforces) and the blast radius is capped. Guard
+    // non-finite inputs, which would otherwise bypass the distance check.
+    if (!Number.isFinite(centerX) || !Number.isFinite(centerZ) || !Number.isFinite(radius)) return;
+    if (distanceBetween(currentPlayer.positionX, currentPlayer.positionZ, centerX, centerZ) > MAX_HIT_RANGE) return;
+    const boundedRadius = Math.max(0, Math.min(radius, MAX_ATTACK_RADIUS));
     const now = ctx.timestamp.microsSinceUnixEpoch;
     const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
     const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
@@ -1026,7 +1037,7 @@ export const attackEnemies = spacetimedb.reducer(
 
     for (const enemyRow of [...ctx.db.enemy.iter()]) {
       if (!enemyRow.alive) continue;
-      if (distanceBetween(enemyRow.positionX, enemyRow.positionZ, centerX, centerZ) > radius) continue;
+      if (distanceBetween(enemyRow.positionX, enemyRow.positionZ, centerX, centerZ) > boundedRadius) continue;
       const remaining = enemyRow.health - Math.min(clampedDamage, enemyRow.health);
       if (remaining > 0) {
         ctx.db.enemy.enemyId.update({
@@ -1044,7 +1055,7 @@ export const attackEnemies = spacetimedb.reducer(
 
     for (const goliathRow of [...ctx.db.goliath.iter()]) {
       if (!goliathRow.alive) continue;
-      if (distanceBetween(goliathRow.positionX, goliathRow.positionZ, centerX, centerZ) > radius) continue;
+      if (distanceBetween(goliathRow.positionX, goliathRow.positionZ, centerX, centerZ) > boundedRadius) continue;
       const remaining = goliathRow.health - Math.min(clampedDamage, goliathRow.health);
       if (remaining > 0) {
         ctx.db.goliath.goliathId.update({
@@ -1453,11 +1464,17 @@ function campCentersFrom(enemies: any[]): CampCenter[] {
 // window and retires the previous window's raiders. A raider never respawns
 // inside its window once dead: its row lingers (alive false) so the "already
 // spawned this bucket" guard keeps it from coming back.
-function runGoliathLifecycle(ctx: { db: any }, nowMicros: bigint, campCenters: CampCenter[]) {
+function runGoliathLifecycle(ctx: { db: any; random: any; sender: any }, nowMicros: bigint, campCenters: CampCenter[]) {
   const windowBucket = windowBucketFor(nowMicros, GOLIATH_BATCH_WINDOW_MICROS);
   const existing = [...ctx.db.goliath.iter()];
   for (const goliathRow of existing) {
-    if (goliathRow.windowBucket !== windowBucket) ctx.db.goliath.goliathId.delete(goliathRow.goliathId);
+    if (goliathRow.windowBucket === windowBucket) continue;
+    // A raider still alive at the window boundary drops the gems it stole back onto
+    // the ground (no minted base — it wasn't killed) so its hoard is never destroyed.
+    if (goliathRow.alive && goliathRow.carriedGems > 0) {
+      spillDenominations(ctx, goliathRow.positionX, goliathRow.positionZ, goliathRow.carriedGems, ctx.sender);
+    }
+    ctx.db.goliath.goliathId.delete(goliathRow.goliathId);
   }
   if (existing.some(goliathRow => goliathRow.windowBucket === windowBucket)) return;
 
@@ -1489,6 +1506,13 @@ function runGoliathLifecycle(ctx: { db: any }, nowMicros: bigint, campCenters: C
 
 function aggroExpired(expiresAtMicros: bigint, nowMicros: bigint): boolean {
   return expiresAtMicros !== 0n && nowMicros >= expiresAtMicros;
+}
+
+// Two optional identities are equal when both are absent or share a hex.
+function sameOptionalIdentity(a: any, b: any): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return a.toHexString() === b.toHexString();
 }
 
 // Any alive enemy/goliath within grab range of a ground drop absorbs it into its
@@ -1562,6 +1586,18 @@ export const worldTick = spacetimedb.reducer(
     const goliathTarget = new Map<bigint, number>();
     const goliathPosition = new Map<bigint, { x: number; z: number }>();
     for (const goliathRow of goliaths) {
+      const speed = goliathRow.moveSpeed * (Number(tick) / 1_000_000);
+      // Provoked → drop the raid and chase the player who hit it for the 5s aggro.
+      const chasedPlayer =
+        !aggroExpired(goliathRow.aggroExpiresAtMicros, now) && goliathRow.aggroPlayer
+          ? playerByHex.get(goliathRow.aggroPlayer.toHexString())
+          : undefined;
+      if (chasedPlayer) {
+        const moved = stepToward(goliathRow.positionX, goliathRow.positionZ, chasedPlayer.positionX, chasedPlayer.positionZ, speed);
+        goliathTarget.set(goliathRow.goliathId, -1);
+        goliathPosition.set(goliathRow.goliathId, { x: clampToWorld(moved.x), z: clampToWorld(moved.z) });
+        continue;
+      }
       const target = campCenters
         .filter(center => center.livingCount > CAMP_CLEARED_MEMBER_COUNT)
         .sort(
@@ -1574,7 +1610,7 @@ export const worldTick = spacetimedb.reducer(
         goliathPosition.set(goliathRow.goliathId, { x: goliathRow.positionX, z: goliathRow.positionZ });
         continue;
       }
-      const moved = stepToward(goliathRow.positionX, goliathRow.positionZ, target.x, target.z, goliathRow.moveSpeed * (Number(tick) / 1_000_000));
+      const moved = stepToward(goliathRow.positionX, goliathRow.positionZ, target.x, target.z, speed);
       goliathTarget.set(goliathRow.goliathId, target.campIndex);
       goliathPosition.set(goliathRow.goliathId, { x: clampToWorld(moved.x), z: clampToWorld(moved.z) });
     }
@@ -1656,6 +1692,18 @@ export const worldTick = spacetimedb.reducer(
       }
     }
 
+    // Pass 4b — a provoked goliath hammers the player who hit it (brutal), as long
+    // as the aggro is live and that player is out in the open (not the safe zone).
+    for (const goliathRow of goliaths) {
+      if (aggroExpired(goliathRow.aggroExpiresAtMicros, now) || !goliathRow.aggroPlayer) continue;
+      const hex = goliathRow.aggroPlayer.toHexString();
+      const chased = playerByHex.get(hex);
+      if (!chased || isInsideSafeZone(chased.positionX, chased.positionZ)) continue;
+      const from = goliathPosition.get(goliathRow.goliathId)!;
+      if (distanceBetween(from.x, from.z, chased.positionX, chased.positionZ) > GOLIATH_PLAYER_CONTACT_RANGE) continue;
+      playerDamage.set(hex, (playerDamage.get(hex) ?? 0) + damagePerTick(goliathRow.contactDamage, tick));
+    }
+
     // Apply enemy movement + damage + aggro; dead members drop loot (uncredited,
     // droppedBy the module identity) and schedule a respawn.
     for (const enemyRow of enemies) {
@@ -1694,7 +1742,17 @@ export const worldTick = spacetimedb.reducer(
         aggroGoliathId = 0n;
         aggroExpiresAtMicros = 0n;
       }
-      ctx.db.enemy.enemyId.update({ ...moved, health: enemyRow.health - damage, aggroKind, aggroPlayer, aggroGoliathId, aggroExpiresAtMicros });
+      const newHealth = enemyRow.health - damage;
+      const unchanged =
+        moved.positionX === enemyRow.positionX &&
+        moved.positionZ === enemyRow.positionZ &&
+        newHealth === enemyRow.health &&
+        aggroKind === enemyRow.aggroKind &&
+        aggroGoliathId === enemyRow.aggroGoliathId &&
+        aggroExpiresAtMicros === enemyRow.aggroExpiresAtMicros &&
+        sameOptionalIdentity(aggroPlayer, enemyRow.aggroPlayer);
+      if (unchanged) continue;
+      ctx.db.enemy.enemyId.update({ ...moved, health: newHealth, aggroKind, aggroPlayer, aggroGoliathId, aggroExpiresAtMicros });
     }
 
     // Apply goliath movement + damage; a goliath worn to 0 dies for the window.
@@ -1707,11 +1765,22 @@ export const worldTick = spacetimedb.reducer(
         continue;
       }
       const cleared = aggroExpired(goliathRow.aggroExpiresAtMicros, now);
+      const newHealth = goliathRow.health - damage;
+      const newAggroPlayer = cleared ? undefined : goliathRow.aggroPlayer;
+      const newExpires = cleared ? 0n : goliathRow.aggroExpiresAtMicros;
+      const unchanged =
+        moved.positionX === goliathRow.positionX &&
+        moved.positionZ === goliathRow.positionZ &&
+        moved.targetCampIndex === goliathRow.targetCampIndex &&
+        newHealth === goliathRow.health &&
+        newExpires === goliathRow.aggroExpiresAtMicros &&
+        sameOptionalIdentity(newAggroPlayer, goliathRow.aggroPlayer);
+      if (unchanged) continue;
       ctx.db.goliath.goliathId.update({
         ...moved,
-        health: goliathRow.health - damage,
-        aggroPlayer: cleared ? undefined : goliathRow.aggroPlayer,
-        aggroExpiresAtMicros: cleared ? 0n : goliathRow.aggroExpiresAtMicros,
+        health: newHealth,
+        aggroPlayer: newAggroPlayer,
+        aggroExpiresAtMicros: newExpires,
       });
     }
 

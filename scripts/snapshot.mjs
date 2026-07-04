@@ -3,8 +3,8 @@
 // SpacetimeDB HTTP API: /sql to read, /call/<reducer> to write. Local needs no
 // auth; maincloud needs --token <bearer> (from `spacetime login`).
 //
-// Durable tables preserved. Ephemeral tables (gem_drop, enemy_carry, regen_timer)
-// are intentionally skipped — they regenerate.
+// Durable tables preserved. Ephemeral tables (gem_drop, enemy, goliath, regen_timer,
+// world_timer) are intentionally skipped — they regenerate from init/worldTick.
 
 export const TABLES = [
   {
