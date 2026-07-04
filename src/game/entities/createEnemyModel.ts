@@ -110,7 +110,7 @@ function formatGemCount(amount: number): string {
   return `${thousands >= 10 ? Math.round(thousands) : thousands.toFixed(1)}k`;
 }
 
-function createEnemyOverlay(scale: number, barHeight: number): EnemyOverlay {
+export function createEnemyOverlay(scale: number, barHeight: number): EnemyOverlay {
   const canvas = document.createElement('canvas');
   canvas.width = OVERLAY_CANVAS_WIDTH;
   canvas.height = OVERLAY_CANVAS_HEIGHT;
