@@ -44,6 +44,7 @@ import HealPartyReducer from "./heal_party_reducer";
 import KillEnemyReducer from "./kill_enemy_reducer";
 import LoginReducer from "./login_reducer";
 import LogoutReducer from "./logout_reducer";
+import PingReducer from "./ping_reducer";
 import PullBannerReducer from "./pull_banner_reducer";
 import RegisterReducer from "./register_reducer";
 import RestoreBannerPityReducer from "./restore_banner_pity_reducer";
@@ -207,6 +208,7 @@ const reducersSchema = __reducers(
   __reducerSchema("kill_enemy", KillEnemyReducer),
   __reducerSchema("login", LoginReducer),
   __reducerSchema("logout", LogoutReducer),
+  __reducerSchema("ping", PingReducer),
   __reducerSchema("pull_banner", PullBannerReducer),
   __reducerSchema("register", RegisterReducer),
   __reducerSchema("restore_banner_pity", RestoreBannerPityReducer),

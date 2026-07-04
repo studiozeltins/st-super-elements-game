@@ -652,6 +652,10 @@ export const logout = spacetimedb.reducer(ctx => {
   }
 });
 
+// No-op reducer. The client measures the round-trip time of this call (client →
+// server → confirmation) to display network latency in the ping overlay.
+export const ping = spacetimedb.reducer(() => {});
+
 export const updatePosition = spacetimedb.reducer(
   { positionX: t.f32(), positionY: t.f32(), positionZ: t.f32(), rotationY: t.f32() },
   (ctx, { positionX, positionY, positionZ, rotationY }) => {

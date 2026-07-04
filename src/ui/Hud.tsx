@@ -14,6 +14,7 @@ interface HudProps {
   activeCharacterId: string;
   hudState: HudState;
   onSelectPartySlot(slotIndex: number): void;
+  onOpenSettings(): void;
   onOpenGacha(): void;
   onJoystickMove(x: number, z: number): void;
   onTouchButton(button: 'attack' | 'skill' | 'jump'): void;
@@ -37,6 +38,7 @@ export function Hud({
   activeCharacterId,
   hudState,
   onSelectPartySlot,
+  onOpenSettings,
   onOpenGacha,
   onJoystickMove,
   onTouchButton,
@@ -50,6 +52,9 @@ export function Hud({
   return (
     <div className="hud">
       <div className="hud__top-left">
+        <button className="hud__gear" onClick={onOpenSettings} aria-label="Iestatījumi">
+          ⚙
+        </button>
         <div className="hud__name-row">
           <span className="hud__player-name">{playerName}</span>
           {activeCharacter && activeElement && (

@@ -8,6 +8,8 @@ import { MAX_HEALTH } from './game/data/constants';
 import { AuthScreen } from './ui/AuthScreen';
 import { deriveKey } from './auth/hash';
 import { Hud } from './ui/Hud';
+import { SettingsScreen } from './ui/SettingsScreen';
+import { StatsOverlay } from './ui/StatsOverlay';
 import { GachaScreen, type PityInfo, type PullView } from './ui/GachaScreen';
 
 const PARTY_SIZE = 4;
@@ -34,6 +36,9 @@ export default function App() {
   const partyRef = useRef<string[]>([]);
   const [hudState, setHudState] = useState<HudState>(INITIAL_HUD_STATE);
   const [isGachaOpen, setIsGachaOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showFps, setShowFps] = useState(() => localStorage.getItem('settings.showFps') === '1');
+  const [showPing, setShowPing] = useState(() => localStorage.getItem('settings.showPing') === '1');
   const [pullResults, setPullResults] = useState<PullView[] | null>(null);
   const pullBufferRef = useRef<PullView[]>([]);
   const flushTimerRef = useRef<number | null>(null);
@@ -311,7 +316,29 @@ export default function App() {
   }, [myPlayer, ownedCharacterRows, myIdentityHex]);
 
   useEffect(() => {
-    gameRef.current?.setInputEnabled(!isGachaOpen);
+    gameRef.current?.setInputEnabled(!isGachaOpen && !isSettingsOpen);
+  }, [isGachaOpen, isSettingsOpen]);
+
+  useEffect(() => {
+    localStorage.setItem('settings.showFps', showFps ? '1' : '0');
+  }, [showFps]);
+  useEffect(() => {
+    localStorage.setItem('settings.showPing', showPing ? '1' : '0');
+  }, [showPing]);
+
+  // ESC toggles settings (closes the gacha screen first if it's open).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      if (isGachaOpen) {
+        setIsGachaOpen(false);
+        return;
+      }
+      setIsSettingsOpen(open => !open);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, [isGachaOpen]);
 
   if (!isLoggedIn) {
@@ -345,6 +372,7 @@ export default function App() {
           const characterId = partyCharacterIds[slotIndex];
           if (characterId) selectCharacter(characterId);
         }}
+        onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenGacha={() => setIsGachaOpen(true)}
         onJoystickMove={(x, z) => gameRef.current?.setTouchMove(x, z)}
         onTouchButton={button => gameRef.current?.pressTouchButton(button)}
@@ -368,6 +396,16 @@ export default function App() {
             setIsGachaOpen(false);
             setPullResults(null);
           }}
+        />
+      )}
+      <StatsOverlay connection={connection} showFps={showFps} showPing={showPing} />
+      {isSettingsOpen && (
+        <SettingsScreen
+          showFps={showFps}
+          showPing={showPing}
+          onToggleFps={setShowFps}
+          onTogglePing={setShowPing}
+          onClose={() => setIsSettingsOpen(false)}
         />
       )}
     </div>
