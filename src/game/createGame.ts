@@ -31,6 +31,7 @@ import {
   type SwingProfile,
 } from './combat/comboSystem';
 import type { DamageKind } from './combat/damageKind';
+import { gemVisual } from './data/gemDrops';
 import type { GemDrop, Player, SkillCast } from '../module_bindings/types';
 
 export interface HudState {
@@ -55,11 +56,21 @@ export interface GameNetworkActions {
   sendHeal(amount: number): void;
   /** Trigger a healer character's party heal (combo only matters for combo-mode). */
   sendHealParty(comboCount: number): void;
-  /** A kill drops gems at a spot; amount scales with combo, plus enemy-carried. */
-  sendGemDrop(x: number, z: number, rewardTier: number, comboCount: number, carriedGems: number): void;
+  /**
+   * A player killed a simulated enemy. The server pays out its combo/tier/boss
+   * base reward plus the enemy's server-tracked hoard, spilled as small gems.
+   */
+  sendKillEnemy(
+    enemyId: number,
+    x: number,
+    z: number,
+    rewardTier: number,
+    comboCount: number,
+    isBoss: boolean
+  ): void;
   sendCollectGem(dropId: bigint): void;
-  /** A simulated enemy grabbed a ground drop — remove it from the world. */
-  sendEnemyTakeGem(dropId: bigint): void;
+  /** A simulated enemy grabbed a ground drop — the server credits its hoard. */
+  sendEnemyGrabGem(enemyId: number, dropId: bigint): void;
   sendFallToDeath(): void;
 }
 
@@ -78,6 +89,8 @@ export interface Game {
   flashRemoteHealth(identityHex: string): void;
   /** Syncs the primogem drops lying in the world (walk over to collect). */
   syncGemDrops(drops: readonly GemDrop[]): void;
+  /** Syncs the server-tracked hoard each enemy is carrying, by enemy id. */
+  syncEnemyCarry(carriedByEnemyId: ReadonlyMap<number, number>): void;
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
@@ -168,8 +181,8 @@ export function createGame(
     scene,
     effectSystem,
     world.getGroundHeight,
-    (rewardTier, position, carriedGems) =>
-      network.sendGemDrop(position.x, position.z, rewardTier, combo, carriedGems),
+    (enemyId, rewardTier, position, isBoss) =>
+      network.sendKillEnemy(enemyId, position.x, position.z, rewardTier, combo, isBoss),
     (position, amount, kind, color) => damageNumbers.spawn(position, amount, kind, color)
   );
   const inputSystem = createInputSystem(canvas);
@@ -490,18 +503,21 @@ export function createGame(
   }
 
   function createGemMesh(drop: GemDrop): { mesh: THREE.Mesh; baseY: number } {
+    // Bigger denominations render larger, brighter, and a different hue so the
+    // shower of gems from a kill reads as a mix of values at a glance.
+    const visual = gemVisual(drop.amount);
     const material = new THREE.MeshLambertMaterial({
-      color: 0xf2c14e,
-      emissive: 0xf2c14e,
-      emissiveIntensity: 0.7,
+      color: visual.color,
+      emissive: visual.color,
+      emissiveIntensity: visual.emissiveIntensity,
     });
-    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.5), material);
+    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(visual.radius), material);
     const baseY = world.getGroundHeight(drop.positionX, drop.positionZ) + 0.9;
     mesh.position.set(drop.positionX, baseY, drop.positionZ);
-    // A soft golden halo so drops read from a distance.
+    // A soft halo so drops read from a distance; scales with the gem.
     const halo = new THREE.Mesh(
-      new THREE.SphereGeometry(0.9, 12, 12),
-      new THREE.MeshBasicMaterial({ color: 0xf2c14e, transparent: true, opacity: 0.16 })
+      new THREE.SphereGeometry(visual.radius * 1.8, 12, 12),
+      new THREE.MeshBasicMaterial({ color: visual.color, transparent: true, opacity: visual.haloOpacity })
     );
     mesh.add(halo);
     scene.add(mesh);
@@ -640,11 +656,11 @@ export function createGame(
           z: gem.mesh.position.z,
           amount: gem.amount,
         })),
-      onGrab: (dropId: string, _amount: number) => {
+      onGrab: (enemyId: number, dropId: string) => {
         const gem = gemDrops.get(dropId);
         if (!gem || requestedGemPickups.has(dropId)) return false;
         requestedGemPickups.add(dropId);
-        network.sendEnemyTakeGem(gem.rawId);
+        network.sendEnemyGrabGem(enemyId, gem.rawId);
         return true;
       },
     };
@@ -816,6 +832,9 @@ export function createGame(
         gemDrops.delete(key);
         requestedGemPickups.delete(key);
       }
+    },
+    syncEnemyCarry(carriedByEnemyId) {
+      enemySystem.syncEnemyCarry(carriedByEnemyId);
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];

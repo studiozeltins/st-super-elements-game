@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CHARACTERS, healSpecFor } from '../characters';
 import { BANNERS, GACHA_WEAPONS } from '../gacha';
+import { BOSS_GEM_MULTIPLIER, GEM_DENOMINATIONS } from '../gemDrops';
 import {
   GACHA_PULL_COST,
   MAX_HEALTH,
@@ -117,5 +118,21 @@ describe('server constants stay in sync with client constants', () => {
     ['GACHA_PULL_COST', GACHA_PULL_COST],
   ] as const)('%s matches', (name, clientValue) => {
     expect(extractServerConstant(name)).toBe(clientValue);
+  });
+});
+
+describe('server gem-drop economy stays in sync with client gemDrops', () => {
+  it('BOSS_GEM_MULTIPLIER matches', () => {
+    expect(extractServerConstant('BOSS_GEM_MULTIPLIER')).toBe(BOSS_GEM_MULTIPLIER);
+  });
+
+  it('GEM_DENOMINATIONS match (same values, same order)', () => {
+    const match = /const GEM_DENOMINATIONS = \[([^\]]*)\]/.exec(SERVER_SOURCE);
+    expect(match, 'GEM_DENOMINATIONS not found in server source').not.toBeNull();
+    const serverDenominations = match![1]
+      .split(',')
+      .map(part => Number(part.trim()))
+      .filter(value => !Number.isNaN(value));
+    expect(serverDenominations).toEqual([...GEM_DENOMINATIONS]);
   });
 });

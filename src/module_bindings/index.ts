@@ -37,12 +37,12 @@ import {
 import AttackPlayerReducer from "./attack_player_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
 import CollectGemReducer from "./collect_gem_reducer";
-import DropGemsReducer from "./drop_gems_reducer";
-import EnemyTakeGemReducer from "./enemy_take_gem_reducer";
+import EnemyGrabGemReducer from "./enemy_grab_gem_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import HealPartyReducer from "./heal_party_reducer";
 import JoinGameReducer from "./join_game_reducer";
+import KillEnemyReducer from "./kill_enemy_reducer";
 import PullBannerReducer from "./pull_banner_reducer";
 import SetActiveCharacterReducer from "./set_active_character_reducer";
 import SetPartyReducer from "./set_party_reducer";
@@ -53,6 +53,7 @@ import UpdatePositionReducer from "./update_position_reducer";
 
 // Import all table schema definitions
 import BannerPityRow from "./banner_pity_table";
+import EnemyCarryRow from "./enemy_carry_table";
 import GemDropRow from "./gem_drop_table";
 import HealEventRow from "./heal_event_table";
 import OwnedCharacterRow from "./owned_character_table";
@@ -81,6 +82,17 @@ const tablesSchema = __schema({
       { name: 'banner_pity_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, BannerPityRow),
+  enemyCarry: __table({
+    name: 'enemy_carry',
+    indexes: [
+      { accessor: 'enemyId', name: 'enemy_carry_enemy_id_idx_btree', algorithm: 'btree', columns: [
+        'enemyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'enemy_carry_enemy_id_key', constraint: 'unique', columns: ['enemyId'] },
+    ],
+  }, EnemyCarryRow),
   gemDrop: __table({
     name: 'gem_drop',
     indexes: [
@@ -170,12 +182,12 @@ const reducersSchema = __reducers(
   __reducerSchema("attack_player", AttackPlayerReducer),
   __reducerSchema("cast_skill", CastSkillReducer),
   __reducerSchema("collect_gem", CollectGemReducer),
-  __reducerSchema("drop_gems", DropGemsReducer),
-  __reducerSchema("enemy_take_gem", EnemyTakeGemReducer),
+  __reducerSchema("enemy_grab_gem", EnemyGrabGemReducer),
   __reducerSchema("fall_to_death", FallToDeathReducer),
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("heal_party", HealPartyReducer),
   __reducerSchema("join_game", JoinGameReducer),
+  __reducerSchema("kill_enemy", KillEnemyReducer),
   __reducerSchema("pull_banner", PullBannerReducer),
   __reducerSchema("set_active_character", SetActiveCharacterReducer),
   __reducerSchema("set_party", SetPartyReducer),

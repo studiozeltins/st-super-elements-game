@@ -21,6 +21,14 @@ export const BannerPity = __t.object("BannerPity", {
 });
 export type BannerPity = __Infer<typeof BannerPity>;
 
+export const EnemyCarry = __t.object("EnemyCarry", {
+  enemyId: __t.u64(),
+  carriedGems: __t.u32(),
+  lastGrabbedBy: __t.identity(),
+  killedAtMicros: __t.u64(),
+});
+export type EnemyCarry = __Infer<typeof EnemyCarry>;
+
 export const GemDrop = __t.object("GemDrop", {
   id: __t.u64(),
   positionX: __t.f32(),

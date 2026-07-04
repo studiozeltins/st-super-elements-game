@@ -10,6 +10,9 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  dropId: __t.u64(),
-};
+export default __t.row({
+  enemyId: __t.u64().primaryKey().name("enemy_id"),
+  carriedGems: __t.u32().name("carried_gems"),
+  lastGrabbedBy: __t.identity().name("last_grabbed_by"),
+  killedAtMicros: __t.u64().name("killed_at_micros"),
+});

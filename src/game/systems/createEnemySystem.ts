@@ -13,6 +13,7 @@ import type { CollisionBody } from '../physics/resolveCollisions';
 import { createEnemyModel, disposeEnemyModel, type EnemyModel } from '../entities/createEnemyModel';
 import { getCampSites } from '../world/camps';
 import { createSeededRandom } from '../world/rng';
+import { enemyIdFor, isBossMember, MEMBERS_PER_CAMP } from './enemyIdentity';
 import type { DamageKind } from '../combat/damageKind';
 import type { EffectSystem } from './createEffectSystem';
 
@@ -31,6 +32,9 @@ interface ElementalHitResult {
 }
 
 interface Enemy {
+  /** Stable, cross-client id (camp + member) tying this enemy to its server hoard. */
+  enemyId: number;
+  isBoss: boolean;
   model: EnemyModel;
   archetype: EnemyArchetype;
   collisionBody: CollisionBody;
@@ -51,15 +55,18 @@ interface Enemy {
   nextContactHitAt: number;
   respawnAt: number;
   isAlive: boolean;
+  /** Server-authoritative hoard for display only; fed by syncEnemyCarry. */
   carriedGems: number;
-  carryCapacity: number;
 }
 
 /** Ground drops the enemies can wander over and pick up. */
 export interface EnemyGemField {
   drops: ReadonlyArray<{ id: string; x: number; z: number; amount: number }>;
-  /** Claims a drop for an enemy; returns false if another already took it. */
-  onGrab(dropId: string, amount: number): boolean;
+  /**
+   * Claims a drop for the given enemy; returns false if another already took it.
+   * The server credits the enemy's hoard authoritatively from the drop's amount.
+   */
+  onGrab(enemyId: number, dropId: string): boolean;
 }
 
 export interface EnemySystem {
@@ -69,6 +76,8 @@ export interface EnemySystem {
     onPlayerHit: (damage: number, isCrit: boolean) => void,
     gemField: EnemyGemField
   ): void;
+  /** Feeds the server-tracked hoard per enemy id so overlays show it consistently. */
+  syncEnemyCarry(carriedByEnemyId: ReadonlyMap<number, number>): void;
   applyDamageInRadius(
     center: { x: number; y: number; z: number },
     radius: number,
@@ -82,7 +91,6 @@ export interface EnemySystem {
   dispose(): void;
 }
 
-const PACK_SIZE_PER_CAMP = 4;
 const ENEMY_AGGRO_RANGE = 13;
 const ENEMY_LEASH_RANGE = 22;
 const ENEMY_CONTACT_RANGE = 1.4;
@@ -90,7 +98,6 @@ const ENEMY_CONTACT_COOLDOWN_SECONDS = 1;
 const ENEMY_CRIT_CHANCE = 0.25;
 const ENEMY_CRIT_MULTIPLIER = 1.8;
 const ENEMY_GEM_GRAB_RANGE = 1.7;
-const ENEMY_CARRY_CAPACITY = 800; // gems a normal enemy can hold; bosses hold more
 const AURA_DURATION_SECONDS = 8;
 // A reaction deals bonus damage over a fixed number of ticks (framerate
 // independent). Per-tick scales with the reaction's own strength.
@@ -121,7 +128,12 @@ export function createEnemySystem(
   scene: THREE.Scene,
   effectSystem: EffectSystem,
   getGroundHeight: (x: number, z: number, maxSurfaceY?: number) => number,
-  onEnemyKilled: (rewardTier: number, worldPosition: THREE.Vector3, carriedGems: number) => void,
+  onEnemyKilled: (
+    enemyId: number,
+    rewardTier: number,
+    worldPosition: THREE.Vector3,
+    isBoss: boolean
+  ) => void,
   reportDamage: DamageReporter
 ): EnemySystem {
   let elapsedSeconds = 0;
@@ -136,17 +148,18 @@ export function createEnemySystem(
     return new THREE.Vector3(x, getGroundHeight(x, z), z);
   }
 
-  for (const campSite of getCampSites()) {
+  getCampSites().forEach((campSite, campIndex) => {
     const archetype = ENEMY_ARCHETYPES[campSite.archetypeId];
-    const packSize = PACK_SIZE_PER_CAMP + 1; // pack + one boss
-    for (let memberIndex = 0; memberIndex < packSize; memberIndex++) {
-      const isBoss = memberIndex === 0;
+    for (let memberIndex = 0; memberIndex < MEMBERS_PER_CAMP; memberIndex++) {
+      const isBoss = isBossMember(memberIndex);
       const model = createEnemyModel(archetype, isBoss ? BOSS_SCALE : 1);
       const maxHealth = Math.round(
         archetype.maxHealth * (isBoss ? BOSS_HEALTH_MULTIPLIER : 1)
       );
       const scale = isBoss ? BOSS_SCALE : 1;
       const enemy: Enemy = {
+        enemyId: enemyIdFor(campIndex, memberIndex),
+        isBoss,
         model,
         archetype,
         collisionBody: {
@@ -174,13 +187,16 @@ export function createEnemySystem(
         respawnAt: 0,
         isAlive: true,
         carriedGems: 0,
-        carryCapacity: isBoss ? ENEMY_CARRY_CAPACITY * 3 : ENEMY_CARRY_CAPACITY,
       };
       enemy.model.group.position.copy(spawnPositionNearHome(enemy));
       scene.add(enemy.model.group);
       enemies.push(enemy);
     }
-  }
+  });
+
+  // Server-authoritative hoard per enemy id, refreshed from the enemy_carry
+  // subscription. Read into each enemy's overlay every frame.
+  const carriedByEnemyId = new Map<number, number>();
 
   function refreshAuraVisual(enemy: Enemy) {
     const material = enemy.model.body.material as THREE.MeshLambertMaterial;
@@ -198,6 +214,7 @@ export function createEnemySystem(
   function updateOverlay(enemy: Enemy) {
     enemy.model.overlay.update({
       healthFraction: Math.max(0, enemy.health / enemy.maxHealth),
+      carriedGems: enemy.carriedGems,
       aura: enemy.auraElement
         ? {
             colorHex: ELEMENTS[enemy.auraElement].color,
@@ -243,7 +260,12 @@ export function createEnemySystem(
       0xffffff,
       26
     );
-    onEnemyKilled(enemy.archetype.rewardTier, enemy.model.group.position.clone(), enemy.carriedGems);
+    onEnemyKilled(
+      enemy.enemyId,
+      enemy.archetype.rewardTier,
+      enemy.model.group.position.clone(),
+      enemy.isBoss
+    );
   }
 
   function respawnEnemy(enemy: Enemy) {
@@ -364,6 +386,7 @@ export function createEnemySystem(
         }
         tickReactionDot(enemy);
         if (!enemy.isAlive) continue; // a DoT tick may have killed it
+        enemy.carriedGems = carriedByEnemyId.get(enemy.enemyId) ?? 0;
         updateOverlay(enemy);
         if (elapsedSeconds < enemy.frozenUntil) continue;
 
@@ -382,18 +405,15 @@ export function createEnemySystem(
           onPlayerHit(damageDealt, isCrit);
         }
 
-        // Enemies wander over loose gems and pocket them (up to capacity); the
-        // hoard drops again when the player kills the enemy.
-        if (enemy.carriedGems < enemy.carryCapacity) {
-          const enemyPosition = enemy.model.group.position;
-          for (const drop of gemField.drops) {
-            if (
-              Math.hypot(enemyPosition.x - drop.x, enemyPosition.z - drop.z) <= ENEMY_GEM_GRAB_RANGE &&
-              gemField.onGrab(drop.id, drop.amount)
-            ) {
-              enemy.carriedGems += drop.amount;
-              break;
-            }
+        // Enemies wander over loose gems and pocket them (unlimited); the server
+        // owns the hoard and it rains back down when a player kills the enemy.
+        const enemyPosition = enemy.model.group.position;
+        for (const drop of gemField.drops) {
+          if (
+            Math.hypot(enemyPosition.x - drop.x, enemyPosition.z - drop.z) <= ENEMY_GEM_GRAB_RANGE &&
+            gemField.onGrab(enemy.enemyId, drop.id)
+          ) {
+            break;
           }
         }
       }
@@ -422,6 +442,10 @@ export function createEnemySystem(
         if (enemy.health <= 0) killEnemy(enemy);
       }
       return hitSomething;
+    },
+    syncEnemyCarry(next) {
+      carriedByEnemyId.clear();
+      for (const [enemyId, carriedGems] of next) carriedByEnemyId.set(enemyId, carriedGems);
     },
     getAlivePositions() {
       return enemies.filter(enemy => enemy.isAlive).map(enemy => enemy.model.group.position);

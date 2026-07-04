@@ -140,12 +140,23 @@ function pickFourStarCharacterId(ctx: { random: any }) {
 // Bow projectiles fly up to ~45 units; server range check must cover them.
 const MAX_HIT_RANGE = 45;
 const MAX_STEP_DISTANCE = 12;
-const KILL_REWARD_COOLDOWN_MICROS = 1_500_000n;
 const MAX_COMBO_FOR_GEMS = 100;
 const COMBO_GEM_STEP = 0.03; // +3% dropped gems per combo point (capped)
 const PVP_DEATH_SPILL = 1 / 3; // fraction of primogems a PVP loser drops
 const PVE_DEATH_SPILL = 1 / 4; // fraction a player drops when an enemy kills them
 const CARRY_HARD_CAP = 20000; // server sanity cap on enemy-carried gems per kill
+const BOSS_GEM_MULTIPLIER = 3; // a boss kill pays triple the base reward
+// Enemies are client-simulated with a fixed respawn delay. The server treats an
+// enemy as "dead" (its hoard already dropped) for this window after a kill, so
+// concurrent kill calls from several clients only pay out once.
+const ENEMY_RESPAWN_MICROS = 6_000_000n; // matches client RESPAWN_DELAY_SECONDS
+const GEM_SPILL_SCATTER = 2.2; // how far spilled gems scatter from the death spot
+const MAX_SPILL_GEMS = 40; // physical drop cap; overflow folds into the biggest piece
+// A hoard is spilled as many small gems in these denominations (largest first),
+// so a kill rains lots of pickups instead of one fat gem. Client visuals key off
+// the amount. Mirrored client-side in src/game/data/gemDrops.ts (kept in sync by
+// serverSync.test.ts).
+const GEM_DENOMINATIONS = [500, 100, 50, 20, 10, 5, 1];
 
 const player = table(
   { name: 'player', public: true },
@@ -180,6 +191,22 @@ const gemDrop = table(
     positionZ: t.f32(),
     amount: t.u32(),
     droppedBy: t.identity(),
+  }
+);
+
+// Server-authoritative gem hoard a client-simulated enemy is carrying. Enemies
+// have no server entity, but their spawns are deterministic, so each gets a
+// stable id (camp index + member index, see client enemyIdentity.ts). Any client
+// whose enemy walks over a drop credits it here; every client subscribes and
+// renders the same hoard over the same enemy. killedAtMicros stamps the last
+// kill so concurrent kill calls are idempotent within the respawn window.
+const enemyCarry = table(
+  { name: 'enemy_carry', public: true },
+  {
+    enemyId: t.u64().primaryKey(),
+    carriedGems: t.u32(),
+    lastGrabbedBy: t.identity(),
+    killedAtMicros: t.u64(),
   }
 );
 
@@ -290,6 +317,7 @@ const regenTimer = table(
 const spacetimedb = schema({
   player,
   gemDrop,
+  enemyCarry,
   ownedCharacter,
   skillCast,
   bannerPity,
@@ -358,18 +386,57 @@ function respawnPlayerAtSpawn(ctx: { db: any }, targetPlayer: any) {
   }
 }
 
-// Spills a fraction of a victim's primogems onto the ground at their location.
-// Returns how much was dropped (the caller deducts it from the victim).
-function spillGems(ctx: { db: any }, victim: any, fraction: number, droppedBy: any) {
+// Breaks a total into a scattered shower of small denominated gem drops (largest
+// first) so a kill rains lots of pickups. Positions are jittered deterministically
+// via ctx.random. Caps the number of physical drops; any overflow folds into the
+// biggest piece so no gems ever vanish.
+function spillDenominations(
+  ctx: { db: any; random: any },
+  centerX: number,
+  centerZ: number,
+  total: number,
+  droppedBy: any
+) {
+  if (total <= 0) return;
+  const pieces: number[] = [];
+  let remaining = total;
+  for (const denom of GEM_DENOMINATIONS) {
+    while (remaining >= denom && pieces.length < MAX_SPILL_GEMS) {
+      pieces.push(denom);
+      remaining -= denom;
+    }
+    if (pieces.length >= MAX_SPILL_GEMS) break;
+  }
+  // Leftover only survives if the piece cap was hit — fold it into the biggest
+  // (first) piece rather than dropping it. If total < 1 we never get here.
+  if (remaining > 0) {
+    if (pieces.length > 0) pieces[0] += remaining;
+    else pieces.push(remaining);
+  }
+  for (const amount of pieces) {
+    const angle = ctx.random() * Math.PI * 2;
+    const radius = ctx.random() * GEM_SPILL_SCATTER;
+    ctx.db.gemDrop.insert({
+      id: 0n,
+      positionX: clampToWorld(centerX + Math.cos(angle) * radius),
+      positionZ: clampToWorld(centerZ + Math.sin(angle) * radius),
+      amount,
+      droppedBy,
+    });
+  }
+}
+
+// Spills a fraction of a victim's primogems onto the ground at their location as
+// a shower of small gems. Returns how much was dropped (caller deducts it).
+function spillGems(
+  ctx: { db: any; random: any },
+  victim: any,
+  fraction: number,
+  droppedBy: any
+) {
   const amount = Math.floor(victim.primogems * fraction);
   if (amount <= 0) return 0;
-  ctx.db.gemDrop.insert({
-    id: 0n,
-    positionX: clampToWorld(victim.positionX),
-    positionZ: clampToWorld(victim.positionZ),
-    amount,
-    droppedBy,
-  });
+  spillDenominations(ctx, victim.positionX, victim.positionZ, amount, droppedBy);
   return amount;
 }
 
@@ -577,59 +644,89 @@ export const fallToDeath = spacetimedb.reducer(ctx => {
   respawnPlayerAtSpawn(ctx, currentPlayer);
 });
 
-// A kill drops gems on the ground instead of paying the killer directly. The
-// amount scales with the combo. PVE enemies are client-simulated, so the
-// cooldown caps farm rate and the tier is clamped against spoofing.
-export const dropGems = spacetimedb.reducer(
+// A client's simulated enemy walked over a ground drop. The server owns the
+// hoard: it reads the drop's real amount, deletes the drop, and credits the
+// enemy's enemy_carry row (creating it on first grab). Every client subscribes
+// enemy_carry and renders the same hoard over the same enemy. If the enemy has
+// since respawned (dead window elapsed), the hoard resets before crediting.
+export const enemyGrabGem = spacetimedb.reducer(
+  { enemyId: t.u64(), dropId: t.u64() },
+  (ctx, { enemyId, dropId }) => {
+    requirePlayer(ctx);
+    const drop = ctx.db.gemDrop.id.find(dropId);
+    if (!drop) return; // already grabbed by someone/something else
+    ctx.db.gemDrop.id.delete(dropId);
+
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    const existing = ctx.db.enemyCarry.enemyId.find(enemyId);
+    if (existing) {
+      const respawned =
+        existing.killedAtMicros !== 0n && now - existing.killedAtMicros >= ENEMY_RESPAWN_MICROS;
+      const base = respawned ? 0 : existing.carriedGems;
+      ctx.db.enemyCarry.enemyId.update({
+        ...existing,
+        carriedGems: Math.min(base + drop.amount, CARRY_HARD_CAP),
+        lastGrabbedBy: ctx.sender,
+        killedAtMicros: respawned ? 0n : existing.killedAtMicros,
+      });
+    } else {
+      ctx.db.enemyCarry.insert({
+        enemyId,
+        carriedGems: Math.min(drop.amount, CARRY_HARD_CAP),
+        lastGrabbedBy: ctx.sender,
+        killedAtMicros: 0n,
+      });
+    }
+  }
+);
+
+// A player killed a client-simulated enemy. The base reward scales with the
+// combo and reward tier (bosses ×BOSS_GEM_MULTIPLIER); the enemy's server-tracked
+// hoard is added on top. The whole total rains down as many small denominated
+// gems. Idempotent across clients: an enemy already inside its dead window has
+// already paid out, so duplicate kill calls are ignored.
+export const killEnemy = spacetimedb.reducer(
   {
+    enemyId: t.u64(),
     positionX: t.f32(),
     positionZ: t.f32(),
     rewardTier: t.u32(),
     comboCount: t.u32(),
-    // Gems this enemy had picked up off the ground; always re-dropped on death.
-    carriedGems: t.u32(),
+    isBoss: t.bool(),
   },
-  (ctx, { positionX, positionZ, rewardTier, comboCount, carriedGems }) => {
+  (ctx, { enemyId, positionX, positionZ, rewardTier, comboCount, isBoss }) => {
     const currentPlayer = requirePlayer(ctx);
-    const carried = Math.min(carriedGems, CARRY_HARD_CAP);
-    const dropX = clampToWorld(positionX);
-    const dropZ = clampToWorld(positionZ);
-    const microsSinceLastReward =
-      ctx.timestamp.microsSinceUnixEpoch - currentPlayer.lastKillRewardAt.microsSinceUnixEpoch;
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    const existing = ctx.db.enemyCarry.enemyId.find(enemyId);
 
-    // Cooldown gates the base reward (anti-farm), but carried gems always fall.
-    if (microsSinceLastReward < KILL_REWARD_COOLDOWN_MICROS) {
-      if (carried > 0) {
-        ctx.db.gemDrop.insert({ id: 0n, positionX: dropX, positionZ: dropZ, amount: carried, droppedBy: ctx.sender });
-      }
+    // Already dead & within the respawn window → another client's kill paid out.
+    if (existing && existing.killedAtMicros !== 0n && now - existing.killedAtMicros < ENEMY_RESPAWN_MICROS) {
       return;
     }
+
+    const carried = existing ? Math.min(existing.carriedGems, CARRY_HARD_CAP) : 0;
     const clampedTier = Math.max(1, Math.min(MAX_KILL_REWARD_TIER, rewardTier));
     const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
-    const amount =
-      Math.round(KILL_REWARD_PRIMOGEMS * clampedTier * (1 + combo * COMBO_GEM_STEP)) + carried;
-    ctx.db.gemDrop.insert({
-      id: 0n,
-      positionX: dropX,
-      positionZ: dropZ,
-      amount,
-      droppedBy: ctx.sender,
-    });
+    const bossMultiplier = isBoss ? BOSS_GEM_MULTIPLIER : 1;
+    const base = Math.round(
+      KILL_REWARD_PRIMOGEMS * clampedTier * (1 + combo * COMBO_GEM_STEP) * bossMultiplier
+    );
+    const total = base + carried;
+
+    // Stamp the kill and clear the hoard so concurrent/duplicate kills no-op and
+    // the respawned enemy starts empty.
+    if (existing) {
+      ctx.db.enemyCarry.enemyId.update({ ...existing, carriedGems: 0, killedAtMicros: now });
+    } else {
+      ctx.db.enemyCarry.insert({ enemyId, carriedGems: 0, lastGrabbedBy: ctx.sender, killedAtMicros: now });
+    }
+
+    spillDenominations(ctx, positionX, positionZ, total, ctx.sender);
     ctx.db.player.identity.update({
       ...currentPlayer,
-      gemsFromKills: currentPlayer.gemsFromKills + amount,
+      gemsFromKills: currentPlayer.gemsFromKills + total,
       lastKillRewardAt: ctx.timestamp,
     });
-  }
-);
-
-// A client's simulated enemy walked over a ground drop. Remove it; the client
-// tracks the amount and re-drops it (via dropGems carriedGems) when it dies.
-export const enemyTakeGem = spacetimedb.reducer(
-  { dropId: t.u64() },
-  (ctx, { dropId }) => {
-    requirePlayer(ctx);
-    ctx.db.gemDrop.id.delete(dropId);
   }
 );
 

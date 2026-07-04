@@ -53,6 +53,7 @@ export default function App() {
         tables.pvpHit,
         tables.healEvent,
         tables.gemDrop,
+        tables.enemyCarry,
       ]);
     return () => {
       try {
@@ -68,6 +69,7 @@ export default function App() {
   const [bannerPityRows] = useTable(tables.bannerPity);
   const [weaponItemRows] = useTable(tables.weaponItem);
   const [gemDropRows] = useTable(tables.gemDrop);
+  const [enemyCarryRows] = useTable(tables.enemyCarry);
 
   useTable(tables.skillCast, {
     onInsert: cast => {
@@ -200,16 +202,18 @@ export default function App() {
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
         sendHealParty: comboCount => connection.reducers.healParty({ comboCount }),
-        sendGemDrop: (x, z, rewardTier, comboCount, carriedGems) =>
-          connection.reducers.dropGems({
+        sendKillEnemy: (enemyId, x, z, rewardTier, comboCount, isBoss) =>
+          connection.reducers.killEnemy({
+            enemyId: BigInt(enemyId),
             positionX: x,
             positionZ: z,
             rewardTier,
             comboCount,
-            carriedGems,
+            isBoss,
           }),
         sendCollectGem: dropId => connection.reducers.collectGem({ dropId }),
-        sendEnemyTakeGem: dropId => connection.reducers.enemyTakeGem({ dropId }),
+        sendEnemyGrabGem: (enemyId, dropId) =>
+          connection.reducers.enemyGrabGem({ enemyId: BigInt(enemyId), dropId }),
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
       setHudState
@@ -235,6 +239,12 @@ export default function App() {
   useEffect(() => {
     gameRef.current?.syncGemDrops(gemDropRows);
   }, [gemDropRows]);
+
+  useEffect(() => {
+    const carriedByEnemyId = new Map<number, number>();
+    for (const row of enemyCarryRows) carriedByEnemyId.set(Number(row.enemyId), row.carriedGems);
+    gameRef.current?.syncEnemyCarry(carriedByEnemyId);
+  }, [enemyCarryRows]);
 
   useEffect(() => {
     const active = myPlayer?.activeCharacterId;

@@ -9,6 +9,8 @@ export interface StatusDot {
 
 export interface OverlayState {
   healthFraction: number;
+  /** Server-tracked gems this enemy is hoarding; a gold pill shows when > 0. */
+  carriedGems: number;
   aura: StatusDot | null;
   reaction: StatusDot | null;
 }
@@ -26,7 +28,8 @@ export interface EnemyOverlay {
 }
 
 const OVERLAY_CANVAS_WIDTH = 256;
-const OVERLAY_CANVAS_HEIGHT = 96;
+// Tall enough for the status dots, health bar, and the carried-gem pill below it.
+const OVERLAY_CANVAS_HEIGHT = 128;
 const OVERLAY_WORLD_WIDTH = 1.7;
 // Redraw only when a value crosses one of this many buckets.
 const OVERLAY_BUCKETS = 40;
@@ -74,6 +77,39 @@ function drawDot(ctx: CanvasRenderingContext2D, centerX: number, dot: StatusDot)
   ctx.stroke();
 }
 
+const GEM_PILL_Y = 84;
+const GEM_PILL_HEIGHT = 22;
+
+/** A rounded gold badge with a gem glyph + count, centered under the bar. */
+function drawGemPill(ctx: CanvasRenderingContext2D, carriedGems: number) {
+  const label = `◆ ${formatGemCount(carriedGems)}`;
+  ctx.font = 'bold 16px sans-serif';
+  ctx.textBaseline = 'middle';
+  const textWidth = ctx.measureText(label).width;
+  const pillWidth = textWidth + 22;
+  const pillX = (OVERLAY_CANVAS_WIDTH - pillWidth) / 2;
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(8, 12, 9, 0.72)';
+  ctx.beginPath();
+  ctx.roundRect(pillX - 2, GEM_PILL_Y - 2, pillWidth + 4, GEM_PILL_HEIGHT + 4, 12);
+  ctx.fill();
+  ctx.fillStyle = '#f2c14e';
+  ctx.beginPath();
+  ctx.roundRect(pillX, GEM_PILL_Y, pillWidth, GEM_PILL_HEIGHT, 10);
+  ctx.fill();
+  ctx.fillStyle = '#2a1e06';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, OVERLAY_CANVAS_WIDTH / 2, GEM_PILL_Y + GEM_PILL_HEIGHT / 2 + 1);
+  ctx.textAlign = 'start';
+}
+
+/** Compact hoard count: 12, 1.2k, 15k. */
+function formatGemCount(amount: number): string {
+  if (amount < 1000) return String(amount);
+  const thousands = amount / 1000;
+  return `${thousands >= 10 ? Math.round(thousands) : thousands.toFixed(1)}k`;
+}
+
 function createEnemyOverlay(scale: number, barHeight: number): EnemyOverlay {
   const canvas = document.createElement('canvas');
   canvas.width = OVERLAY_CANVAS_WIDTH;
@@ -117,6 +153,10 @@ function createEnemyOverlay(scale: number, barHeight: number): EnemyOverlay {
     if (state.aura) drawDot(ctx, DOT_LEFT_X, state.aura);
     if (state.reaction) drawDot(ctx, state.reaction && state.aura ? DOT_RIGHT_X : DOT_LEFT_X, state.reaction);
 
+    // Carried-gem pill under the bar — a gold badge with the hoard count so the
+    // loot an enemy is holding reads at a glance (consistent for every client).
+    if (state.carriedGems > 0) drawGemPill(ctx, state.carriedGems);
+
     ctx.globalAlpha = 1;
     texture.needsUpdate = true;
   }
@@ -130,6 +170,7 @@ function createEnemyOverlay(scale: number, barHeight: number): EnemyOverlay {
     update(state) {
       const key = [
         bucket(state.healthFraction),
+        state.carriedGems,
         state.aura ? `${state.aura.colorHex}:${bucket(state.aura.remaining)}` : '-',
         state.reaction ? `${state.reaction.colorHex}:${bucket(state.reaction.remaining)}` : '-',
       ].join('|');
