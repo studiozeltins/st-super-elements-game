@@ -583,15 +583,17 @@ button {
   transition: transform 0.25s ease-out, background 0.25s ease-out;
 }
 
-/* Low-HP screen border. Solid red pixel frame that blinks; the blink duration
-   is set inline (faster the lower the HP). At <=5% it locks solid + double
-   thickness via .hud__lowhp--critical. */
+/* Low-HP screen border. Gradient frame that blinks; blink duration and per-side
+   widths are set inline (faster + thicker the lower the HP). */
 .hud__lowhp {
   position: absolute;
   inset: 0;
   pointer-events: none;
   box-sizing: border-box;
   border: 10px solid var(--danger);
+  /* Orange→red gradient frame (cooler than a flat colour). Per-side widths are
+     set inline (they thicken as HP drops). */
+  border-image: linear-gradient(135deg, #f7b733 0%, #e5484d 55%, #b3121a 100%) 1;
   /* No bottom edge — it would cover the bottom health bar when it blinks. */
   border-bottom-width: 0;
   z-index: 8;
@@ -612,13 +614,6 @@ button {
   100% {
     opacity: 0.92;
   }
-}
-
-/* Below 10% HP: keep blinking (now ~50ms, super fast) but double the frame
-   thickness for extra urgency. */
-.hud__lowhp--critical {
-  border-width: 20px;
-  border-bottom-width: 0;
 }
 
 .hud__zone {

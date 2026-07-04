@@ -43,13 +43,18 @@ export function Hud({
 
   // Low-HP screen border: appears below 40%, blinks faster the lower it gets,
   // and at <=5% locks solid red at double thickness (see .hud__lowhp CSS).
-  // Low-HP screen border: orange @50% → red by 40%, blinking faster as HP drops
-  // (500ms @50% → 50ms @10%), then locking solid + double-thick at <=10%.
+  // Low-HP screen border (top/left/right): appears below 50%, blinks faster as
+  // HP drops (500ms @50% → 50ms @10%) and thickens 10px → 35px over the same
+  // range. Colour is an orange→red gradient (see .hud__lowhp CSS).
   const lowHp = healthFraction < 0.5;
   const criticalHp = healthFraction <= 0.1;
   const blinkProgress = Math.max(0, Math.min(1, (0.5 - healthFraction) / (0.5 - 0.1)));
   const blinkMs = Math.round(500 - blinkProgress * (500 - 50)); // 500ms @50% → 50ms @10%
-  const lowHpColor = healthFraction >= 0.4 ? '#f5a623' : 'var(--danger)';
+  const lowHpBorderPx = Math.round(10 + blinkProgress * (35 - 10)); // 10px @50% → 35px @10%
+
+  // Health-bar fill: green ≥50%, orange 40–50%, red below 40%.
+  const healthColor =
+    healthFraction >= 0.5 ? 'var(--accent)' : healthFraction >= 0.4 ? '#f5a623' : 'var(--danger)';
 
   return (
     <div className="hud">
@@ -166,15 +171,20 @@ export function Hud({
           className="hud__health-fill"
           style={{
             transform: `scaleX(${healthFraction})`,
-            background: healthFraction > 0.4 ? 'var(--accent)' : 'var(--danger)',
+            background: healthColor,
           }}
         />
       </div>
 
       {lowHp && (
         <div
-          className={`hud__lowhp ${criticalHp ? 'hud__lowhp--critical' : ''}`}
-          style={{ animationDuration: `${blinkMs}ms`, borderColor: lowHpColor }}
+          className="hud__lowhp"
+          style={{
+            animationDuration: `${blinkMs}ms`,
+            borderTopWidth: `${lowHpBorderPx}px`,
+            borderLeftWidth: `${lowHpBorderPx}px`,
+            borderRightWidth: `${lowHpBorderPx}px`,
+          }}
           aria-hidden="true"
         />
       )}
