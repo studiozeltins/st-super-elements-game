@@ -609,3 +609,44 @@ conn.db.user.onInsert((ctx, user) => console.log('Joined:', user.name));
 conn.db.user.onDelete((ctx, user) => console.log('Left:', user.name));
 conn.db.user.onUpdate((ctx, oldUser, newUser) => console.log('Updated:', newUser.name));
 ```
+
+---
+
+# This Project: Environments & Deployment (super-elements)
+
+## The two environments
+
+| | Local (LAN dev) | Prod (cloud) |
+|---|---|---|
+| SpacetimeDB | `spacetimedb-standalone.exe` on `http://127.0.0.1:3000` | `wss://maincloud.spacetimedb.com` |
+| Database name | `2d-impact-game-fr9ti` | `2d-impact-game-fr9ti` (same name) |
+| Frontend | laragon serves built `dist/` over LAN at `http://<host-LAN-ip>/` (e.g. `http://192.168.1.32/`) | deployed `dist/` (host = wherever it's served) |
+| How the client picks its socket | `src/config.ts` `resolveSpacetimedbUri()` — see below | same code, different page host |
+
+## How the client chooses which server to hit (`src/config.ts`)
+
+Runtime-derived from `window.location`, so **one build works in both** environments:
+1. `hostname === localhost/127.0.0.1` → `VITE_SPACETIMEDB_HOST` env override (default `ws://127.0.0.1:3000`). This is the ONLY case the `.env.local` host matters.
+2. `https:` page → `wss://<same-origin>` (nginx proxy → :3000).
+3. LAN over `http` (e.g. `192.168.1.32`) → `ws://<page-hostname>:3000` — hits the host PC's local SpacetimeDB. **This is how LAN players connect.**
+
+So `.env.local`'s `VITE_SPACETIMEDB_HOST` only affects a browser opened at `localhost` (the vite dev server / same machine). LAN and prod ignore it.
+
+## Synergy / workflow
+
+- **Server module** lives in `./spacetimedb` (NOT `./server` — the `spacetime:publish` npm scripts have the wrong `--module-path server` and fail; ignore them).
+- Publish (additive schema = no data wipe): `spacetime publish 2d-impact-game-fr9ti --module-path spacetimedb --server local|maincloud --yes`
+- Regenerate client bindings after schema changes: `npm run spacetime:generate` (→ `src/module_bindings/`).
+- Client visual/logic-only change → just `npm run build` (laragon serves fresh `dist/`); no republish.
+- Server schema/reducer change → publish to **both** `local` and `maincloud`, regenerate bindings, then `npm run build`.
+- Vite dev server (`npm run dev`, localhost:5173) serves unbundled `/src/...` and uses `.env.local`. A hashed `index-<hash>.js` in an error means the browser is on the **built `dist/`** (laragon), NOT the dev server.
+
+## Ownership gotcha (important)
+
+`spacetime login` (maincloud) switches the CLI's identity. A local database published under a **prior** identity then returns **403 Forbidden** on republish/delete ("not authorized ... update database"). No owner recovery once the old token is gone.
+- Workaround used 2026-07-04: `spacetime server clear -y` (wipes ALL local DBs) → kill & restart `spacetimedb-standalone` → republish (creates fresh DB, current identity becomes owner). **This wipes local game progress.**
+- To avoid: keep a dedicated identity per server; don't `spacetime login` between local publishes.
+
+## Common failure: "no such reducer"
+
+Client calls a reducer the connected server lacks → the client build is newer than that server's module. Fix by publishing the module to the server that client actually connects to (see routing above), not just the other environment.
