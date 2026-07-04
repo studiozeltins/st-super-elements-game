@@ -20,8 +20,8 @@ import {
 import { createCharacterModel, createNameSprite, type CharacterModel } from './entities/createCharacterModel';
 import { createInputSystem } from './systems/createInputSystem';
 import { createEffectSystem, type DamageApplier } from './systems/createEffectSystem';
-import { createEnemySystem } from './systems/createEnemySystem';
-import { createGoliathSystem } from './systems/createGoliathSystem';
+import { createEnemyRenderer } from './systems/createEnemyRenderer';
+import { createGoliathRenderer } from './systems/createGoliathRenderer';
 import { createDamageNumbers } from './systems/createDamageNumbers';
 import {
   comboWindowSeconds,
@@ -33,7 +33,7 @@ import {
 } from './combat/comboSystem';
 import type { DamageKind } from './combat/damageKind';
 import { gemVisual } from './data/gemDrops';
-import type { GemDrop, Player, SkillCast } from '../module_bindings/types';
+import type { Enemy, GemDrop, Goliath, Player, SkillCast } from '../module_bindings/types';
 
 export interface HudState {
   attackCooldownFraction: number;
@@ -58,36 +58,18 @@ export interface GameNetworkActions {
   /** Trigger a healer character's party heal (combo only matters for combo-mode). */
   sendHealParty(comboCount: number): void;
   /**
-   * A player killed a simulated enemy. The server pays out its combo/tier/boss
-   * base reward plus the enemy's server-tracked hoard, spilled as small gems.
+   * The local player swung within a radius. The server owns enemy/goliath HP,
+   * combat, and payouts — this reports the swing so it can apply authoritative
+   * damage to every server entity caught in the circle.
    */
-  sendKillEnemy(
-    enemyId: number | bigint,
-    x: number,
-    z: number,
-    rewardTier: number,
-    comboCount: number,
-    isBoss: boolean,
-    isGoliath: boolean,
-    goliathSizeIndex: number
-  ): void;
-  /**
-   * One simulated enemy killed another (a goliath sacking a camp boss, or a camp
-   * felling a goliath). The victim's base plus stolen hoard spill to the ground;
-   * no player is credited. Fired identically on every client, deduped server-side.
-   */
-  sendEnemyRaidKill(
-    victimEnemyId: number | bigint,
-    x: number,
-    z: number,
-    rewardTier: number,
-    isBoss: boolean,
-    isGoliath: boolean,
-    goliathSizeIndex: number
+  sendAttackEnemies(
+    centerX: number,
+    centerZ: number,
+    radius: number,
+    damage: number,
+    comboCount: number
   ): void;
   sendCollectGem(dropId: bigint): void;
-  /** A simulated enemy grabbed a ground drop — the server credits its hoard. */
-  sendEnemyGrabGem(enemyId: number | bigint, dropId: bigint): void;
   sendFallToDeath(): void;
 }
 
@@ -106,15 +88,10 @@ export interface Game {
   flashRemoteHealth(identityHex: string): void;
   /** Syncs the primogem drops lying in the world (walk over to collect). */
   syncGemDrops(drops: readonly GemDrop[]): void;
-  /** Syncs the server-tracked hoard each enemy is carrying, by enemy id. */
-  syncEnemyCarry(carriedByEnemyId: ReadonlyMap<number, number>): void;
-  /** Syncs the server-tracked hoard each goliath raider is carrying, by slot id. */
-  syncGoliathCarry(carriedBySlotId: ReadonlyMap<bigint, number>): void;
-  /**
-   * Corrects the local wall clock toward server time (micros). Fed from
-   * reducer-event timestamps so goliath raid events fire on a shared clock.
-   */
-  syncServerClockOffset(offsetMicros: bigint): void;
+  /** Reconciles the rendered camp enemies against the server `enemy` table. */
+  syncEnemies(rows: readonly Enemy[]): void;
+  /** Reconciles the rendered goliath raiders against the server `goliath` table. */
+  syncGoliaths(rows: readonly Goliath[]): void;
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
@@ -201,36 +178,16 @@ export function createGame(
   const world = createMondstadtWorld(scene);
   const effectSystem = createEffectSystem(scene);
   const damageNumbers = createDamageNumbers(scene);
-  // Offset added to the local wall clock to estimate SERVER time, sampled from
-  // reducer-event timestamps (see App.tsx). Goliath raid events fire off this
-  // shared clock so every client triggers them within the server's dedup window,
-  // instead of drifting apart by each machine's unsynchronized system clock.
-  let serverClockOffsetMicros = 0n;
-  const enemySystem = createEnemySystem(
-    scene,
-    effectSystem,
-    world.getGroundHeight,
-    (enemyId, rewardTier, position, isBoss) =>
-      network.sendKillEnemy(enemyId, position.x, position.z, rewardTier, combo, isBoss, false, 0),
-    (position, amount, kind, color) => damageNumbers.spawn(position, amount, kind, color)
+  // Enemies and goliaths are now server-authoritative: these renderers only draw
+  // the `enemy`/`goliath` table rows and interpolate them. Damage/HP/economy all
+  // live on the server, reached through network.sendAttackEnemies. Floating
+  // numbers come from the accurate server-driven health drop in syncRows.
+  const enemyRenderer = createEnemyRenderer(scene, effectSystem, (position, amount) =>
+    damageNumbers.spawn(position, amount, 'normal')
   );
-  const goliathSystem = createGoliathSystem({
-    scene,
-    getGroundHeight: world.getGroundHeight,
-    getSharedTimeMicros: () => BigInt(Date.now()) * 1000n + serverClockOffsetMicros,
-    getLocalPlayerPosition: () => playerPosition,
-    getComboCount: () => combo,
-    network,
-    onPlayerHit: (damage, isCrit) => {
-      network.sendTakeDamage(damage);
-      damageNumbers.spawn(
-        playerPosition.clone().setY(playerPosition.y + 1.4),
-        damage,
-        isCrit ? 'takenCrit' : 'taken'
-      );
-    },
-    reportDamage: (position, amount, kind, color) => damageNumbers.spawn(position, amount, kind, color),
-  });
+  const goliathRenderer = createGoliathRenderer(scene, (position, amount) =>
+    damageNumbers.spawn(position, amount, 'normal')
+  );
   const inputSystem = createInputSystem(canvas);
 
   let activeCharacter: CharacterDefinition = CHARACTERS.zibo;
@@ -259,7 +216,6 @@ export function createGame(
       rawId: bigint;
       age: number;
       baseY: number;
-      amount: number;
       sparkle: boolean;
       sparkleAt: number;
     }
@@ -271,9 +227,6 @@ export function createGame(
   const GEM_PICKUP_DELAY = 1.2;
   const GEM_MAGNET_RADIUS = 5.5;
   const GEM_COLLECT_RADIUS = 1.1;
-  // Gems also pool toward nearby enemies (which hoard them) — a bit shorter reach
-  // than the player magnet so the player still wins a tug near the same gem.
-  const GEM_ENEMY_MAGNET_RADIUS = 4;
   // Uniform gem look: all the smallest size, only color differs by denomination.
   const GEM_RADIUS = 0.3;
   const GEM_EMISSIVE_INTENSITY = 0.4;
@@ -285,17 +238,32 @@ export function createGame(
   let fallPeakY = 0;
   let hasReportedVoidDeath = false;
 
+  /** True if any rendered enemy/goliath sits inside the swing (drives combo + facing). */
+  function anyEntityWithinRadius(
+    center: { x: number; y: number; z: number },
+    radius: number
+  ): boolean {
+    const positions = [...enemyRenderer.getAlivePositions(), ...goliathRenderer.getAlivePositions()];
+    for (const position of positions) {
+      if (Math.abs(position.y + 0.6 - center.y) > VERTICAL_HIT_GATE) continue;
+      if (Math.hypot(position.x - center.x, position.z - center.z) <= radius + 0.8) return true;
+    }
+    return false;
+  }
+
   function dealDamage(
     center: { x: number; y: number; z: number },
     radius: number,
     damage: number,
-    element: ElementId,
+    _element: ElementId,
     kind: DamageKind
   ): boolean {
-    const hitEnemy = enemySystem.applyDamageInRadius(center, radius, damage, element, kind);
-    const hitGoliath = goliathSystem.applyDamageInRadius(center, radius, damage, element, kind);
+    // The server owns enemy/goliath HP and payouts — report the swing and let it
+    // apply authoritative damage. Local hit detection only drives combo + facing.
+    network.sendAttackEnemies(center.x, center.z, radius, Math.round(damage), combo);
+    const hitEntity = anyEntityWithinRadius(center, radius);
     const hitPlayer = applyPvpDamage(center, radius, damage, kind);
-    return hitEnemy || hitGoliath || hitPlayer;
+    return hitEntity || hitPlayer;
   }
 
   // Only regular attacks build the combo (once per landed attack, even across
@@ -366,7 +334,7 @@ export function createGame(
   function findNearestEnemyPosition(maxRange: number): THREE.Vector3 | null {
     let nearestPosition: THREE.Vector3 | null = null;
     let nearestDistance = maxRange;
-    const targetPositions = [...enemySystem.getAlivePositions(), ...goliathSystem.getAlivePositions()];
+    const targetPositions = [...enemyRenderer.getAlivePositions(), ...goliathRenderer.getAlivePositions()];
     for (const candidate of targetPositions) {
       const distance = playerPosition.distanceTo(candidate);
       if (distance < nearestDistance) {
@@ -583,21 +551,6 @@ export function createGame(
     return { mesh, baseY };
   }
 
-  function nearestEnemyWithin(
-    x: number,
-    z: number,
-    radius: number
-  ): { position: THREE.Vector3; distance: number } | null {
-    let best: { position: THREE.Vector3; distance: number } | null = null;
-    for (const position of enemySystem.getAlivePositions()) {
-      const distance = Math.hypot(position.x - x, position.z - z);
-      if (distance <= radius && (!best || distance < best.distance)) {
-        best = { position, distance };
-      }
-    }
-    return best;
-  }
-
   function updateGemDrops(deltaSeconds: number) {
     for (const [key, gem] of gemDrops) {
       gem.age += deltaSeconds;
@@ -617,19 +570,10 @@ export function createGame(
       const playerDz = playerPosition.z - gem.mesh.position.z;
       const playerDistance = Math.hypot(playerDx, playerDz);
 
-      // Gems pool toward whichever attractor is nearest and in range — the player
-      // (to collect) or an enemy (to hoard). Player wins ties within its radius.
-      const enemy = nearestEnemyWithin(gem.mesh.position.x, gem.mesh.position.z, GEM_ENEMY_MAGNET_RADIUS);
-      const playerInRange = playerDistance < GEM_MAGNET_RADIUS && playerDistance > 0.001;
-      const pullToEnemy = enemy !== null && (!playerInRange || enemy.distance < playerDistance);
-
-      if (pullToEnemy && enemy) {
-        const dx = enemy.position.x - gem.mesh.position.x;
-        const dz = enemy.position.z - gem.mesh.position.z;
-        const pull = Math.min(1, deltaSeconds * (3 + (GEM_ENEMY_MAGNET_RADIUS - enemy.distance)));
-        gem.mesh.position.x += dx * pull;
-        gem.mesh.position.z += dz * pull;
-      } else if (playerInRange) {
+      // Gems magnet toward the local player to collect. Enemies/goliaths vacuum
+      // gems server-side now, so their row simply vanishes from syncGemDrops when
+      // the server claims it — no client-side enemy pull needed.
+      if (playerDistance < GEM_MAGNET_RADIUS && playerDistance > 0.001) {
         const pull = Math.min(1, deltaSeconds * (3 + (GEM_MAGNET_RADIUS - playerDistance)));
         gem.mesh.position.x += playerDx * pull;
         gem.mesh.position.z += playerDz * pull;
@@ -703,8 +647,8 @@ export function createGame(
   function resolveAllCollisions() {
     collisionBodies.length = 0;
     collisionBodies.push(playerCollisionBody);
-    enemySystem.collectCollisionBodies(collisionBodies);
-    goliathSystem.collectCollisionBodies(collisionBodies);
+    enemyRenderer.collectCollisionBodies(collisionBodies);
+    goliathRenderer.collectCollisionBodies(collisionBodies);
 
     const playerBeforeX = playerPosition.x;
     const playerBeforeZ = playerPosition.z;
@@ -738,42 +682,12 @@ export function createGame(
     }
 
     updateLocalPlayer(deltaSeconds);
-    // Effects tick first so projectile/skill reactions this frame are already
-    // flagged when the enemy update refreshes their status icons.
     effectSystem.update(deltaSeconds);
-    const gemField = {
-      drops: [...gemDrops.entries()]
-        .filter(([, gem]) => gem.age >= GEM_PICKUP_DELAY)
-        .map(([key, gem]) => ({
-          id: key,
-          x: gem.mesh.position.x,
-          z: gem.mesh.position.z,
-          amount: gem.amount,
-        })),
-      // A grabber is an enemy (number id) or a goliath raider (bigint slot id);
-      // the server reducer takes a u64 either way.
-      onGrab: (grabberId: number | bigint, dropId: string) => {
-        const gem = gemDrops.get(dropId);
-        if (!gem || requestedGemPickups.has(dropId)) return false;
-        requestedGemPickups.add(dropId);
-        network.sendEnemyGrabGem(grabberId, gem.rawId);
-        return true;
-      },
-    };
-    enemySystem.update(
-      deltaSeconds,
-      playerPosition,
-      (damage, isCrit) => {
-        network.sendTakeDamage(damage);
-        damageNumbers.spawn(
-          playerPosition.clone().setY(playerPosition.y + 1.4),
-          damage,
-          isCrit ? 'takenCrit' : 'taken'
-        );
-      },
-      gemField
-    );
-    goliathSystem.update(deltaSeconds, gemField);
+    // Enemies/goliaths are drawn straight from the server tables and interpolated;
+    // the server tick owns their combat and damages players (reflected through
+    // syncMyServerRow), so there is no local contact-damage path here anymore.
+    enemyRenderer.update(deltaSeconds, world.getGroundHeight);
+    goliathRenderer.update(deltaSeconds, world.getGroundHeight);
     updateGemDrops(deltaSeconds);
     resolveAllCollisions();
     damageNumbers.update(deltaSeconds);
@@ -811,8 +725,8 @@ export function createGame(
       inputSystem.dispose();
       effectSystem.dispose();
       damageNumbers.dispose();
-      enemySystem.dispose();
-      goliathSystem.dispose();
+      enemyRenderer.dispose();
+      goliathRenderer.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
       playerModel.dispose();
@@ -920,7 +834,6 @@ export function createGame(
             rawId: drop.id,
             age: 0,
             baseY,
-            amount: drop.amount,
             sparkle: gemVisual(drop.amount).sparkle,
             sparkleAt: 0,
           });
@@ -939,14 +852,11 @@ export function createGame(
         requestedGemPickups.delete(key);
       }
     },
-    syncEnemyCarry(carriedByEnemyId) {
-      enemySystem.syncEnemyCarry(carriedByEnemyId);
+    syncEnemies(rows) {
+      enemyRenderer.syncRows(rows);
     },
-    syncGoliathCarry(carriedBySlotId) {
-      goliathSystem.syncGoliathCarry(carriedBySlotId);
-    },
-    syncServerClockOffset(offsetMicros) {
-      serverClockOffsetMicros = offsetMicros;
+    syncGoliaths(rows) {
+      goliathRenderer.syncRows(rows);
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];

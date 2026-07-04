@@ -12,11 +12,6 @@ import {
 } from '../gemRewards';
 import { GOLIATH_ARCHETYPES_BY_SIZE } from '../goliathArchetypes';
 import {
-  GOLIATH_BATCH_WINDOW_MICROS,
-  GOLIATH_SLOT_IDS,
-  goliathBatchForTime,
-} from '../../systems/goliathIdentity';
-import {
   GACHA_PULL_COST,
   MAX_HEALTH,
   SAFE_ZONE_RADIUS,
@@ -149,13 +144,6 @@ describe('server gem-drop economy stays in sync with client gemDrops', () => {
   });
 });
 
-function extractServerBigInt(name: string): bigint {
-  // Server bigint literals carry a trailing `n` and may use `_` digit separators.
-  const match = new RegExp(`const ${name} = ([\\d_]+)n;`).exec(SERVER_SOURCE);
-  expect(match, `${name} not found in server source`).not.toBeNull();
-  return BigInt(match![1].replace(/_/g, ''));
-}
-
 function extractServerNumberArray(name: string): number[] {
   const match = new RegExp(`const ${name} = \\[([^\\]]*)\\]`).exec(SERVER_SOURCE);
   expect(match, `${name} not found in server source`).not.toBeNull();
@@ -227,61 +215,5 @@ describe('client goliath archetypes derive gems and splash from size', () => {
       false,
       true,
     ]);
-  });
-});
-
-describe('goliathBatchForTime is deterministic across clients', () => {
-  const WINDOW = 300_000_000n;
-
-  const isValidBatch = (batch: ReturnType<typeof goliathBatchForTime>): void => {
-    expect(batch.length).toBeGreaterThanOrEqual(1);
-    expect(batch.length).toBeLessThanOrEqual(GOLIATH_SLOT_IDS.length);
-
-    const slotIds = batch.map(member => member.slotId);
-    // Unique slot ids, each drawn from GOLIATH_SLOT_IDS, assigned in order.
-    expect(new Set(slotIds).size).toBe(slotIds.length);
-    expect(slotIds).toEqual(GOLIATH_SLOT_IDS.slice(0, slotIds.length));
-
-    for (const member of batch) {
-      expect(GOLIATH_SLOT_IDS).toContain(member.slotId);
-      expect(GOLIATH_ARCHETYPES_BY_SIZE).toContain(member.archetype);
-    }
-  };
-
-  it('returns deep-equal output for repeated calls with the same input', () => {
-    const time = 42_000_000_000n;
-    expect(goliathBatchForTime(time)).toEqual(goliathBatchForTime(time));
-  });
-
-  it('produces the identical batch anywhere inside one 5-minute window', () => {
-    const windowStart = 137n * WINDOW;
-    const early = goliathBatchForTime(windowStart);
-    const late = goliathBatchForTime(windowStart + WINDOW - 1n);
-    expect(late).toEqual(early);
-  });
-
-  it('yields a valid batch for many windows (length 1..3, unique in-order slots)', () => {
-    for (let bucket = 0n; bucket < 50n; bucket++) {
-      isValidBatch(goliathBatchForTime(bucket * WINDOW + 1n));
-    }
-  });
-});
-
-describe('server goliath id/window constants stay in sync with client goliathIdentity', () => {
-  it('every client GOLIATH_SLOT_IDS value sits in the server id range (>= GOLIATH_SLOT_ID_BASE)', () => {
-    // The server's isGoliathSlotId gate is `enemyId >= GOLIATH_SLOT_ID_BASE`, so
-    // every client slot id must clear that base or the server would misclassify it.
-    const slotIdBase = extractServerBigInt('GOLIATH_SLOT_ID_BASE');
-    expect(slotIdBase).toBe(900000n);
-    for (const slotId of GOLIATH_SLOT_IDS) {
-      expect(slotId).toBeGreaterThanOrEqual(slotIdBase);
-    }
-  });
-
-  it('GOLIATH_BATCH_WINDOW_MICROS matches the server literal (300_000_000n)', () => {
-    const serverWindow = extractServerBigInt('GOLIATH_BATCH_WINDOW_MICROS');
-    expect(GOLIATH_BATCH_WINDOW_MICROS).toBe(300_000_000n);
-    expect(serverWindow).toBe(300_000_000n);
-    expect(GOLIATH_BATCH_WINDOW_MICROS).toBe(serverWindow);
   });
 });

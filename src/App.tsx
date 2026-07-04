@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSpacetimeDB, useTable } from 'spacetimedb/react';
-import { tables, type DbConnection, type EventContext } from './module_bindings';
+import { tables, type DbConnection } from './module_bindings';
 import type { Player } from './module_bindings/types';
 import { createGame, type Game, type HudState } from './game/createGame';
-import { serverClockOffsetFromEvent } from './game/net/serverClock';
 import { CHARACTERS } from './game/data/characters';
 import { MAX_HEALTH } from './game/data/constants';
 import { AuthScreen } from './ui/AuthScreen';
@@ -67,7 +66,8 @@ export default function App() {
         tables.pvpHit,
         tables.healEvent,
         tables.gemDrop,
-        tables.enemyCarry,
+        tables.enemy,
+        tables.goliath,
       ]);
     return () => {
       try {
@@ -83,7 +83,8 @@ export default function App() {
   const [bannerPityRows] = useTable(tables.bannerPity);
   const [weaponItemRows] = useTable(tables.weaponItem);
   const [gemDropRows] = useTable(tables.gemDrop);
-  const [enemyCarryRows] = useTable(tables.enemyCarry);
+  const [enemyRows] = useTable(tables.enemy);
+  const [goliathRows] = useTable(tables.goliath);
   const [accountLinks] = useTable(tables.accountLink);
 
   // Resolve this device to its account's canonical identity. All downstream
@@ -263,30 +264,9 @@ export default function App() {
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
         sendHealParty: comboCount => connection.reducers.healParty({ comboCount }),
-        sendKillEnemy: (enemyId, x, z, rewardTier, comboCount, isBoss, isGoliath, goliathSizeIndex) =>
-          connection.reducers.killEnemy({
-            enemyId: BigInt(enemyId),
-            positionX: x,
-            positionZ: z,
-            rewardTier,
-            comboCount,
-            isBoss,
-            isGoliath,
-            goliathSizeIndex,
-          }),
-        sendEnemyRaidKill: (victimEnemyId, x, z, rewardTier, isBoss, isGoliath, goliathSizeIndex) =>
-          connection.reducers.enemyRaidKill({
-            victimEnemyId: BigInt(victimEnemyId),
-            positionX: x,
-            positionZ: z,
-            rewardTier,
-            isBoss,
-            isGoliath,
-            goliathSizeIndex,
-          }),
+        sendAttackEnemies: (centerX, centerZ, radius, damage, comboCount) =>
+          connection.reducers.attackEnemies({ centerX, centerZ, radius, damage, comboCount }),
         sendCollectGem: dropId => connection.reducers.collectGem({ dropId }),
-        sendEnemyGrabGem: (enemyId, dropId) =>
-          connection.reducers.enemyGrabGem({ enemyId: BigInt(enemyId), dropId }),
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
       setHudState
@@ -298,16 +278,7 @@ export default function App() {
     game.start();
     gameRef.current = game;
 
-    // Sample server time off reducer-driven player-row updates (~10x/sec from
-    // position syncs) so goliath raid events fire on a clock shared across clients.
-    const sampleServerClock = (ctx: EventContext) => {
-      const offset = serverClockOffsetFromEvent(ctx.event, BigInt(Date.now()) * 1000n);
-      if (offset !== null) gameRef.current?.syncServerClockOffset(offset);
-    };
-    connection.db.player.onUpdate(sampleServerClock);
-
     return () => {
-      connection.db.player.removeOnUpdate(sampleServerClock);
       game.dispose();
       gameRef.current = null;
     };
@@ -323,17 +294,12 @@ export default function App() {
   }, [gemDropRows]);
 
   useEffect(() => {
-    // enemy_carry holds both camp enemies and goliath raiders (same table, keyed
-    // by id). Feed enemies a number-keyed map and goliaths a bigint slot-keyed one.
-    const carriedByEnemyId = new Map<number, number>();
-    const carriedBySlotId = new Map<bigint, number>();
-    for (const row of enemyCarryRows) {
-      carriedByEnemyId.set(Number(row.enemyId), row.carriedGems);
-      carriedBySlotId.set(row.enemyId, row.carriedGems);
-    }
-    gameRef.current?.syncEnemyCarry(carriedByEnemyId);
-    gameRef.current?.syncGoliathCarry(carriedBySlotId);
-  }, [enemyCarryRows]);
+    gameRef.current?.syncEnemies(enemyRows);
+  }, [enemyRows]);
+
+  useEffect(() => {
+    gameRef.current?.syncGoliaths(goliathRows);
+  }, [goliathRows]);
 
   useEffect(() => {
     const active = myPlayer?.activeCharacterId;

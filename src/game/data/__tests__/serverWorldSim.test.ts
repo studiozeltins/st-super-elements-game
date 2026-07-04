@@ -9,11 +9,11 @@ import { describe, expect, it } from 'vitest';
 // Client (source of truth) generators.
 import { createSeededRandom as clientSeededRandom } from '../../world/rng';
 import { getCampSites } from '../../world/camps';
-import {
-  GOLIATH_BATCH_WINDOW_MICROS,
-  goliathBatchForTime,
-} from '../../systems/goliathIdentity';
 import { GOLIATH_ARCHETYPES_BY_SIZE } from '../goliathArchetypes';
+
+// The 5-minute raider window, owned by the server now (client no longer schedules
+// goliaths). Kept as a literal here purely to drive windowBucketFor's math test.
+const GOLIATH_BATCH_WINDOW_MICROS = 300_000_000n;
 import {
   BOSS_DAMAGE_MULTIPLIER,
   BOSS_HEALTH_MULTIPLIER,
@@ -123,15 +123,6 @@ describe('server goliathBatchForWindow is a seeded, deterministic 1-3 wave', () 
         expect(sizeIndex).toBeLessThan(GOLIATH_SIZE_STATS.length);
       }
       expect(goliathBatchForWindow(bucket)).toEqual(sizes);
-    }
-  });
-
-  it('rolls the identical sizes the client rolls for the same window bucket', () => {
-    for (let bucket = 0n; bucket < 60n; bucket++) {
-      const clientSizes = goliathBatchForTime(bucket * GOLIATH_BATCH_WINDOW_MICROS).map(
-        member => member.archetype.sizeIndex
-      );
-      expect(goliathBatchForWindow(bucket)).toEqual(clientSizes);
     }
   });
 });
