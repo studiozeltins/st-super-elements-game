@@ -592,6 +592,8 @@ button {
   pointer-events: none;
   box-sizing: border-box;
   border: 10px solid var(--danger);
+  /* No bottom edge — it would cover the bottom health bar when it blinks. */
+  border-bottom-width: 0;
   z-index: 8;
   animation: lowhp-blink 1s infinite;
 }
@@ -616,6 +618,7 @@ button {
    thickness for extra urgency. */
 .hud__lowhp--critical {
   border-width: 20px;
+  border-bottom-width: 0;
 }
 
 .hud__zone {
