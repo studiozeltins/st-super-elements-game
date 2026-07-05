@@ -162,6 +162,10 @@ const POSITION_EPSILON = 0.01;
 const ROTATION_EPSILON = 0.02;
 const SERVER_TELEPORT_THRESHOLD = 20;
 const RESPAWN_HEALTH_JUMP = 100;
+/** Ignore tiny health dips (regen jitter) so they don't spam damage numbers. */
+const TAKEN_DAMAGE_FLOOR = 3;
+/** A single drop this large reads as a heavy hit and floats a bigger crit number. */
+const TAKEN_DAMAGE_CRIT_THRESHOLD = 120;
 /** Falls up to ~2 terraces are free; longer drops hurt. */
 const SAFE_FALL_DISTANCE = 4.5;
 const FALL_DAMAGE_PER_UNIT = 50;
@@ -201,6 +205,8 @@ export function createGame(
   let playerVelocityY = 0;
   let playerRotationY = 0;
   let myServerHealth = MAX_HEALTH;
+  let lastSyncedCharacterId = '';
+  let pvpDamageSinceSync = 0;
   let elapsedSeconds = 0;
   let positionSyncTimer = 0;
   let healTimer = 0;
@@ -805,6 +811,22 @@ export function createGame(
     syncMyServerRow(row) {
       // A big health jump only happens on death respawn (heals are +60/s).
       const wasRespawned = row.currentHealth > myServerHealth + RESPAWN_HEALTH_JUMP;
+      // Contact damage from worldTick only reaches us via this synced HP drop, so
+      // float a "taken" number for it. Skip respawns (up-jump) and character
+      // switches (different HP pool = false drop), and net out PvP already shown.
+      const sameCharacter = row.activeCharacterId === lastSyncedCharacterId;
+      const drop = myServerHealth - row.currentHealth;
+      if (!wasRespawned && sameCharacter && drop > 0) {
+        const enemyDamage = drop - pvpDamageSinceSync;
+        if (enemyDamage >= TAKEN_DAMAGE_FLOOR) {
+          game.spawnSelfNumber(
+            enemyDamage,
+            enemyDamage >= TAKEN_DAMAGE_CRIT_THRESHOLD ? 'takenCrit' : 'taken'
+          );
+        }
+      }
+      pvpDamageSinceSync = 0;
+      lastSyncedCharacterId = row.activeCharacterId;
       myServerHealth = row.currentHealth;
       const serverPosition = new THREE.Vector3(row.positionX, row.positionY, row.positionZ);
       const isFarFromServer =
@@ -820,6 +842,8 @@ export function createGame(
       game.setActiveCharacter(row.activeCharacterId);
     },
     spawnSelfNumber(amount, kind) {
+      // Account PvP damage so the synced HP drop isn't re-floated as a "taken" number.
+      if (kind === 'pvp') pvpDamageSinceSync += amount;
       damageNumbers.spawn(playerPosition.clone().setY(playerPosition.y + 1.4), amount, kind);
     },
     flashRemoteHealth(identityHex) {
