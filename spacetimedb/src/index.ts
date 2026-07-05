@@ -1,5 +1,5 @@
 import { schema, t, table, SenderError } from 'spacetimedb/server';
-import { ScheduleAt } from 'spacetimedb';
+import { ScheduleAt, Identity } from 'spacetimedb';
 import { sha256Hex, bytesToHex } from './sha256';
 import { createSeededRandom } from './rng';
 import { generateCampSites, type CampArchetypeId } from './worldGen';
@@ -697,7 +697,8 @@ function distanceBetweenPlayers(playerA: any, playerB: any) {
 
 // Creates a new account: validates + reserves username/email, stores the salted
 // server hash of the client-derived key, links this device, and seeds the player.
-// The registering device's identity becomes the account's canonical data key.
+// Each account gets its own freshly minted canonical identity (see below), so the
+// same device can hold several independent accounts without sharing player data.
 export const register = spacetimedb.reducer(
   { username: t.string(), email: t.string(), derivedKey: t.string() },
   (ctx, { username, email, derivedKey }) => {
@@ -712,6 +713,11 @@ export const register = spacetimedb.reducer(
     if (ctx.db.account.email.find(emailNorm)) throw new SenderError('Email already registered');
 
     const salt = bytesToHex(ctx.random.fill(new Uint8Array(16)));
+    // Mint a fresh, account-unique canonical identity (random 32 bytes) to key
+    // this account's data — NOT the device identity. Otherwise a second account
+    // registered on the same device (logout → register) would reuse the device
+    // identity as its canonical and inherit the first account's player + inventory.
+    const canonicalIdentity = Identity.fromString('0x' + bytesToHex(ctx.random.fill(new Uint8Array(32))));
     const acct = ctx.db.account.insert({
       accountId: 0n,
       username: displayName,
@@ -719,16 +725,16 @@ export const register = spacetimedb.reducer(
       email: emailNorm,
       passwordHash: serverHash(derivedKey, salt),
       salt,
-      canonicalIdentity: ctx.sender,
+      canonicalIdentity,
       createdAt: ctx.timestamp,
     });
     ctx.db.accountLink.insert({
       identity: ctx.sender,
       accountId: acct.accountId,
-      canonicalIdentity: ctx.sender,
+      canonicalIdentity,
       username: displayName,
     });
-    seedPlayer(ctx, ctx.sender, displayName);
+    seedPlayer(ctx, canonicalIdentity, displayName);
   }
 );
 
