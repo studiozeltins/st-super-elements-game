@@ -32,6 +32,7 @@ import {
   type SwingProfile,
 } from './combat/comboSystem';
 import type { DamageKind } from './combat/damageKind';
+import { attackHitsEntity } from './combat/hitTest';
 import { gemVisual } from './data/gemDrops';
 import type { Enemy, GemDrop, Goliath, Player, SkillCast } from '../module_bindings/types';
 
@@ -239,16 +240,17 @@ export function createGame(
   let hasReportedVoidDeath = false;
 
   /** True if any rendered enemy/goliath sits inside the swing (drives combo + facing). */
+  // Uses the SAME geometry the server's attackEnemies reducer damages with
+  // (attackHitsEntity), so combo + projectile despawn agree with actual damage.
+  // A previously wider client radius (radius + 0.8, plus a vertical gate the
+  // server does not apply) counted combo and burst projectiles on hits the
+  // server never dealt — the "combo climbs but no damage" bug.
   function anyEntityWithinRadius(
     center: { x: number; y: number; z: number },
     radius: number
   ): boolean {
     const positions = [...enemyRenderer.getAlivePositions(), ...goliathRenderer.getAlivePositions()];
-    for (const position of positions) {
-      if (Math.abs(position.y + 0.6 - center.y) > VERTICAL_HIT_GATE) continue;
-      if (Math.hypot(position.x - center.x, position.z - center.z) <= radius + 0.8) return true;
-    }
-    return false;
+    return positions.some(position => attackHitsEntity(position.x, position.z, center.x, center.z, radius));
   }
 
   function dealDamage(
