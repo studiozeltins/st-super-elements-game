@@ -19,7 +19,7 @@ import {
 } from './physics/resolveCollisions';
 import { createCharacterModel, createNameSprite, type CharacterModel } from './entities/createCharacterModel';
 import { createInputSystem } from './systems/createInputSystem';
-import { createEffectSystem, type DamageApplier } from './systems/createEffectSystem';
+import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
 import { createGoliathRenderer } from './systems/createGoliathRenderer';
 import { createDamageNumbers } from './systems/createDamageNumbers';
@@ -67,6 +67,22 @@ export interface GameNetworkActions {
     centerX: number,
     centerZ: number,
     radius: number,
+    damage: number,
+    comboCount: number
+  ): void;
+  /**
+   * Server-authoritative ranged (bow) hitscan. Fired ONCE when a projectile
+   * launches, not per frame: the server picks the first enemy/goliath the ray
+   * passes through using authoritative positions, so a shot lands the same at any
+   * range. The visual projectile no longer deals enemy damage (only combo + PvP).
+   */
+  sendAttackRay(
+    originX: number,
+    originZ: number,
+    directionX: number,
+    directionZ: number,
+    range: number,
+    hitRadius: number,
     damage: number,
     comboCount: number
   ): void;
@@ -155,7 +171,9 @@ const MAX_STEP_UP = 0.9;
  */
 const PLATFORM_REACH = 2.6;
 const PVP_HIT_COOLDOWN_SECONDS = 0.3;
-const PVP_MAX_HIT_RANGE = 45; // server MAX_HIT_RANGE
+const PVP_MAX_HIT_RANGE = 45; // server MAX_HIT_RANGE (also caps the ranged hitscan)
+/** Forgiveness radius of a bow projectile's server hitscan ray (server caps at 3). */
+const RANGED_HIT_RADIUS = 2;
 /** Attacks only connect within this vertical gap — no hitting across cliffs. */
 const VERTICAL_HIT_GATE = 3;
 const POSITION_EPSILON = 0.01;
@@ -283,6 +301,18 @@ export function createGame(
   };
   const applySkillDamage: DamageApplier = dealDamage;
 
+  // Ranged (bow) projectiles are now purely visual for enemy damage — the server
+  // hitscan (sendAttackRay, fired once at launch) owns enemy/goliath HP. This
+  // local applier keeps the projectile driving combo feel (ticks when the visual
+  // reaches a target) and ranged PvP, WITHOUT re-sending enemy damage per frame.
+  const applyRangedProjectileHit: DamageApplier = (center, radius, damage, _element, kind) => {
+    const hitEntity = anyEntityWithinRadius(center, radius);
+    const hitPlayer = applyPvpDamage(center, radius, damage, kind);
+    const hit = hitEntity || hitPlayer;
+    if (hit) registerComboHit();
+    return hit;
+  };
+
   function registerComboHit() {
     combo++;
     lastComboHitAt = elapsedSeconds;
@@ -389,16 +419,29 @@ export function createGame(
     }
 
     if (weapon.isRanged) {
+      // Fire ONE server hitscan at launch: the server picks the first enemy/goliath
+      // the ray reaches using authoritative positions, so a shot lands the same at
+      // any range. The projectile below is purely visual for enemy damage.
+      const projectileTravel = PROJECTILE_LIFETIME_SECONDS * weapon.projectileSpeed;
+      const rangedRange = Math.min(PVP_MAX_HIT_RANGE, projectileTravel);
+      network.sendAttackRay(
+        playerPosition.x,
+        playerPosition.z,
+        direction.x,
+        direction.z,
+        rangedRange,
+        RANGED_HIT_RADIUS,
+        Math.round(amount),
+        combo
+      );
       effectSystem.spawnProjectile({
         origin: playerPosition.clone().setY(playerPosition.y + 1.2),
         direction,
         speed: weapon.projectileSpeed,
         damage: amount,
         element: activeCharacter.element,
-        // Wide enough that the server's authoritative hit check still lands
-        // despite the client aim/interpolation gap (a tight radius silently missed).
-        hitRadius: 2,
-        applyDamage: applyAttackDamage,
+        hitRadius: RANGED_HIT_RADIUS,
+        applyDamage: applyRangedProjectileHit,
         damageKind: kind,
       });
       return;

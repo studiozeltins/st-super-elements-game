@@ -36,6 +36,7 @@ import {
 // Import all reducer arg schemas
 import AttackEnemiesReducer from "./attack_enemies_reducer";
 import AttackPlayerReducer from "./attack_player_reducer";
+import AttackRayReducer from "./attack_ray_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
 import CollectGemReducer from "./collect_gem_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
@@ -212,6 +213,7 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("attack_enemies", AttackEnemiesReducer),
   __reducerSchema("attack_player", AttackPlayerReducer),
+  __reducerSchema("attack_ray", AttackRayReducer),
   __reducerSchema("cast_skill", CastSkillReducer),
   __reducerSchema("collect_gem", CollectGemReducer),
   __reducerSchema("fall_to_death", FallToDeathReducer),

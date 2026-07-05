@@ -55,7 +55,9 @@ export interface EffectSystem {
   dispose(): void;
 }
 
-const PROJECTILE_LIFETIME_SECONDS = 2.5;
+// Seconds a visual projectile flies before it despawns. Exported so the ranged
+// hitscan reducer can be fired with the projectile's real max travel distance.
+export const PROJECTILE_LIFETIME_SECONDS = 2.5;
 const RING_TICK_SECONDS = 0.5;
 
 function createBurstPoints(color: number, particleCount: number): THREE.Points {

@@ -266,6 +266,8 @@ export default function App() {
         sendHealParty: comboCount => connection.reducers.healParty({ comboCount }),
         sendAttackEnemies: (centerX, centerZ, radius, damage, comboCount) =>
           connection.reducers.attackEnemies({ centerX, centerZ, radius, damage, comboCount }),
+        sendAttackRay: (originX, originZ, directionX, directionZ, range, hitRadius, damage, comboCount) =>
+          connection.reducers.attackRay({ originX, originZ, dirX: directionX, dirZ: directionZ, range, hitRadius, damage, comboCount }),
         sendCollectGem: dropId => connection.reducers.collectGem({ dropId }),
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },

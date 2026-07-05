@@ -14,6 +14,7 @@ import {
   goliathBatchForWindow,
 } from './enemyStats';
 import { damagePerTick, distanceBetween, gemIsCollectible, stepToward, windowBucketFor } from './combatMath';
+import { pickRayHit } from './hitscan';
 import { isWalkable, nextGoliathWaypoint } from './bridges';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
@@ -157,6 +158,9 @@ const MAX_HIT_RANGE = 45;
 // Hard cap on a player's attack blast radius, so attackEnemies can't be spoofed
 // into a map-wide sweep. Generously above any real melee/skill area.
 const MAX_ATTACK_RADIUS = 20;
+// A ranged hitscan ray is a thin line, not a blast — cap its forgiveness radius
+// tightly so it can't be spoofed into a wide sweep along the ray.
+const MAX_RANGED_HIT_RADIUS = 3;
 const MAX_STEP_DISTANCE = 12;
 const MAX_COMBO_FOR_GEMS = 100;
 const COMBO_GEM_STEP = 0.03; // +3% dropped gems per combo point (capped)
@@ -1104,6 +1108,124 @@ export const attackEnemies = spacetimedb.reducer(
         targetCampIndex: -1,
       });
       gemsCredited += dropped;
+    }
+
+    if (gemsCredited > 0) {
+      ctx.db.player.identity.update({
+        ...currentPlayer,
+        gemsFromKills: currentPlayer.gemsFromKills + gemsCredited,
+        lastKillRewardAt: ctx.timestamp,
+      });
+    }
+  }
+);
+
+// A player's ranged (bow) hitscan: fired ONCE when a projectile launches, not per
+// frame. The server picks the first alive enemy/goliath the ray passes through
+// using authoritative positions, so a shot lands the same at any range — a
+// per-frame client projectile whiffed on far, moving targets because it damaged
+// against a position the enemy had already drifted away from. Only the single
+// entity the ray reaches first takes damage (a projectile strikes one thing).
+export const attackRay = spacetimedb.reducer(
+  {
+    originX: t.f32(),
+    originZ: t.f32(),
+    dirX: t.f32(),
+    dirZ: t.f32(),
+    range: t.f32(),
+    hitRadius: t.f32(),
+    damage: t.u32(),
+    comboCount: t.u32(),
+  },
+  (ctx, { originX, originZ, dirX, dirZ, range, hitRadius, damage, comboCount }) => {
+    const currentPlayer = requirePlayer(ctx);
+    if (
+      !Number.isFinite(originX) ||
+      !Number.isFinite(originZ) ||
+      !Number.isFinite(dirX) ||
+      !Number.isFinite(dirZ) ||
+      !Number.isFinite(range) ||
+      !Number.isFinite(hitRadius)
+    ) {
+      return;
+    }
+    // Anti-cheat: the shot must originate within weapon range of the attacker, so
+    // a client can't fire hitscans from across the map (mirrors attackEnemies).
+    if (distanceBetween(currentPlayer.positionX, currentPlayer.positionZ, originX, originZ) > MAX_HIT_RANGE) return;
+
+    const boundedRange = Math.max(0, Math.min(range, MAX_HIT_RANGE));
+    const boundedRadius = Math.max(0, Math.min(hitRadius, MAX_RANGED_HIT_RADIUS));
+    const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
+    const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
+    const comboScale = 1 + combo * COMBO_GEM_STEP;
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+
+    const aliveEnemies = [...ctx.db.enemy.iter()].filter(row => row.alive);
+    const aliveGoliaths = [...ctx.db.goliath.iter()].filter(row => row.alive);
+    const enemyHit = pickRayHit(
+      aliveEnemies.map(row => ({ x: row.positionX, z: row.positionZ })),
+      originX,
+      originZ,
+      dirX,
+      dirZ,
+      boundedRange,
+      boundedRadius
+    );
+    const goliathHit = pickRayHit(
+      aliveGoliaths.map(row => ({ x: row.positionX, z: row.positionZ })),
+      originX,
+      originZ,
+      dirX,
+      dirZ,
+      boundedRange,
+      boundedRadius
+    );
+    const enemyReached = enemyHit.index !== -1;
+    const goliathReached = goliathHit.index !== -1;
+    if (!enemyReached && !goliathReached) return;
+    // The projectile strikes whichever entity it reaches first, regardless of type.
+    const strikeGoliath = goliathReached && (!enemyReached || goliathHit.alongRay < enemyHit.alongRay);
+
+    let gemsCredited = 0;
+    if (strikeGoliath) {
+      const goliathRow = aliveGoliaths[goliathHit.index];
+      const remaining = goliathRow.health - Math.min(clampedDamage, goliathRow.health);
+      if (remaining > 0) {
+        ctx.db.goliath.goliathId.update({
+          ...goliathRow,
+          health: remaining,
+          aggroPlayer: currentPlayer.identity,
+          aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
+        });
+      } else {
+        const base = Math.round(enemyBaseGems(true, goliathRow.sizeIndex, 0, false) * comboScale);
+        const dropped = spillEnemyLoot(ctx, goliathRow.positionX, goliathRow.positionZ, base, goliathRow.carriedGems, currentPlayer.identity);
+        ctx.db.goliath.goliathId.update({
+          ...goliathRow,
+          alive: false,
+          health: 0,
+          carriedGems: 0,
+          aggroPlayer: undefined,
+          aggroExpiresAtMicros: 0n,
+          targetCampIndex: -1,
+        });
+        gemsCredited += dropped;
+      }
+    } else {
+      const enemyRow = aliveEnemies[enemyHit.index];
+      const remaining = enemyRow.health - Math.min(clampedDamage, enemyRow.health);
+      if (remaining > 0) {
+        ctx.db.enemy.enemyId.update({
+          ...enemyRow,
+          health: remaining,
+          aggroKind: AGGRO_PLAYER,
+          aggroPlayer: currentPlayer.identity,
+          aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
+        });
+      } else {
+        const base = Math.round(enemyBaseGems(false, 0, enemyRow.rewardTier, enemyRow.isBoss) * comboScale);
+        gemsCredited += killEnemyRow(ctx, enemyRow, base, currentPlayer.identity, now);
+      }
     }
 
     if (gemsCredited > 0) {

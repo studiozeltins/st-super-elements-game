@@ -8,6 +8,7 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all reducer arg schemas
 import AttackEnemiesReducer from "../attack_enemies_reducer";
 import AttackPlayerReducer from "../attack_player_reducer";
+import AttackRayReducer from "../attack_ray_reducer";
 import CastSkillReducer from "../cast_skill_reducer";
 import CollectGemReducer from "../collect_gem_reducer";
 import FallToDeathReducer from "../fall_to_death_reducer";
@@ -30,6 +31,7 @@ import UpdatePositionReducer from "../update_position_reducer";
 
 export type AttackEnemiesParams = __Infer<typeof AttackEnemiesReducer>;
 export type AttackPlayerParams = __Infer<typeof AttackPlayerReducer>;
+export type AttackRayParams = __Infer<typeof AttackRayReducer>;
 export type CastSkillParams = __Infer<typeof CastSkillReducer>;
 export type CollectGemParams = __Infer<typeof CollectGemReducer>;
 export type FallToDeathParams = __Infer<typeof FallToDeathReducer>;
