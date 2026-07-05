@@ -16,6 +16,7 @@ import {
 import { damagePerTick, distanceBetween, gemIsCollectible, stepToward, windowBucketFor } from './combatMath';
 import { pickRayHit } from './hitscan';
 import { isWalkable, nextGoliathWaypoint } from './bridges';
+import { chooseGoliathTargetCamp, headingFromStep, hasReachedCamp } from './goliathAI';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -238,8 +239,11 @@ const GOLIATH_VS_ENEMY_DAMAGE_MULTIPLIER = 3;
 // Gem vacuum reach: goliaths sweep a wider area than slimes.
 const ENEMY_GEM_VACUUM_RANGE = 1.7; // matches client ENEMY_GEM_GRAB_RANGE
 const GOLIATH_GEM_VACUUM_RANGE = 3.0;
-// Below this many living members a camp counts as "cleared" for goliath targeting.
-const CAMP_CLEARED_MEMBER_COUNT = 0;
+// A raider stops stepping once within this of its target camp center, so it stands
+// among the scattered members instead of orbiting the exact point forever.
+const GOLIATH_STOP_RADIUS = 3.0;
+// It raids a camp for this long after arriving, then advances to the next camp.
+const GOLIATH_ENGAGE_DURATION_MICROS = 12_000_000n;
 
 const player = table(
   { name: 'player', public: true },
@@ -330,6 +334,18 @@ const goliath = table(
     aggroExpiresAtMicros: t.u64(),
     alive: t.bool(),
     windowBucket: t.u64(),
+    // NOTE: appended (not reordered) so the schema diff stays additive. STDB
+    // rejects inserting a column mid-table on an existing DB (manual migration).
+    // When the raider has stood in its current camp long enough and should move
+    // on (0 = not engaged / not yet arrived). Set on arrival, cleared on leave.
+    engageEndsAtMicros: t.u64().default(0n),
+    // The camp it just finished raiding, excluded from the very next target pick
+    // so it doesn't immediately re-lock the camp it just left (-1 = none).
+    lastRaidedCampIndex: t.i32().default(-1),
+    // Unit facing from the latest movement step (Issue 5 gates camp engagement by
+    // this forward arc); kept pointing at the camp it walked into while stopped.
+    headingX: t.f32().default(0),
+    headingZ: t.f32().default(0),
   }
 );
 
@@ -1661,6 +1677,10 @@ function runGoliathLifecycle(ctx: { db: any; random: any; sender: any; timestamp
       splashes: stats.splashesOnAttack,
       carriedGems: 0,
       targetCampIndex: -1,
+      engageEndsAtMicros: 0n,
+      lastRaidedCampIndex: -1,
+      headingX: 0,
+      headingZ: 0,
       aggroPlayer: undefined,
       aggroExpiresAtMicros: 0n,
       alive: true,
@@ -1750,11 +1770,16 @@ export const worldTick = spacetimedb.reducer(
     const playerByHex = new Map<string, any>();
     for (const playerRow of players) playerByHex.set(playerRow.identity.toHexString(), playerRow);
 
-    // Pass 1 — goliaths move toward the nearest camp still standing.
+    // Pass 1 — goliaths raid a STABLE camp target (chasing a provoker takes over).
     const goliathTarget = new Map<bigint, number>();
     const goliathPosition = new Map<bigint, { x: number; z: number }>();
+    const goliathEngageEnds = new Map<bigint, bigint>();
+    const goliathLastRaided = new Map<bigint, number>();
+    const goliathHeading = new Map<bigint, { x: number; z: number }>();
     for (const goliathRow of goliaths) {
       const speed = goliathRow.moveSpeed * (Number(tick) / 1_000_000);
+      const fromX = goliathRow.positionX;
+      const fromZ = goliathRow.positionZ;
       // Provoked → drop the raid and chase the player who hit it for the 5s aggro.
       const chasedPlayer =
         !aggroExpired(goliathRow.aggroExpiresAtMicros, now) && goliathRow.aggroPlayer
@@ -1762,30 +1787,66 @@ export const worldTick = spacetimedb.reducer(
           : undefined;
       if (chasedPlayer) {
         // Route along bridges instead of walking straight at the player (which
-        // would send the raider off the island into the void).
-        const waypoint = nextGoliathWaypoint(goliathRow.positionX, goliathRow.positionZ, chasedPlayer.positionX, chasedPlayer.positionZ);
-        const moved = stepToward(goliathRow.positionX, goliathRow.positionZ, waypoint.x, waypoint.z, speed);
+        // would send the raider off the island into the void). The raid timer is
+        // paused (engage 0, target -1) but heading still tracks the real step.
+        const waypoint = nextGoliathWaypoint(fromX, fromZ, chasedPlayer.positionX, chasedPlayer.positionZ);
+        const moved = stepToward(fromX, fromZ, waypoint.x, waypoint.z, speed);
+        const toX = clampToWorld(moved.x);
+        const toZ = clampToWorld(moved.z);
         goliathTarget.set(goliathRow.goliathId, -1);
-        goliathPosition.set(goliathRow.goliathId, { x: clampToWorld(moved.x), z: clampToWorld(moved.z) });
+        goliathPosition.set(goliathRow.goliathId, { x: toX, z: toZ });
+        goliathEngageEnds.set(goliathRow.goliathId, 0n);
+        goliathLastRaided.set(goliathRow.goliathId, goliathRow.lastRaidedCampIndex);
+        goliathHeading.set(goliathRow.goliathId, headingFromStep(fromX, fromZ, toX, toZ, goliathRow.headingX, goliathRow.headingZ));
         continue;
       }
-      const target = campCenters
-        .filter(center => center.livingCount > CAMP_CLEARED_MEMBER_COUNT)
-        .sort(
-          (a, b) =>
-            distanceBetween(goliathRow.positionX, goliathRow.positionZ, a.x, a.z) -
-            distanceBetween(goliathRow.positionX, goliathRow.positionZ, b.x, b.z)
-        )[0];
-      if (!target) {
+
+      // Hold the current camp until it is cleared or the raid timer elapses; only
+      // then re-pick, excluding the camp just left so it moves on instead of
+      // re-locking a respawning camp it already raided.
+      const previousTarget = goliathRow.targetCampIndex;
+      const target = chooseGoliathTargetCamp(previousTarget, goliathRow.lastRaidedCampIndex, campCenters, fromX, fromZ);
+      let lastRaided = goliathRow.lastRaidedCampIndex;
+      // The timer only starts on arrival at a NEW camp, so reset it on any switch.
+      let engageEnds = target === previousTarget ? goliathRow.engageEndsAtMicros : 0n;
+
+      if (target === -1) {
+        // No living camp left: stand still, keep facing where it last walked.
         goliathTarget.set(goliathRow.goliathId, -1);
-        goliathPosition.set(goliathRow.goliathId, { x: goliathRow.positionX, z: goliathRow.positionZ });
+        goliathPosition.set(goliathRow.goliathId, { x: fromX, z: fromZ });
+        goliathEngageEnds.set(goliathRow.goliathId, engageEnds);
+        goliathLastRaided.set(goliathRow.goliathId, lastRaided);
+        goliathHeading.set(goliathRow.goliathId, { x: goliathRow.headingX, z: goliathRow.headingZ });
         continue;
       }
-      // Route along bridges toward the camp so the raider stays on walkable ground.
-      const waypoint = nextGoliathWaypoint(goliathRow.positionX, goliathRow.positionZ, target.x, target.z);
-      const moved = stepToward(goliathRow.positionX, goliathRow.positionZ, waypoint.x, waypoint.z, speed);
-      goliathTarget.set(goliathRow.goliathId, target.campIndex);
-      goliathPosition.set(goliathRow.goliathId, { x: clampToWorld(moved.x), z: clampToWorld(moved.z) });
+
+      const center = campCenters.find(camp => camp.campIndex === target)!;
+      const reached = hasReachedCamp(distanceBetween(fromX, fromZ, center.x, center.z), GOLIATH_STOP_RADIUS);
+      let toX = fromX;
+      let toZ = fromZ;
+      if (!reached) {
+        // Route along bridges toward the camp so the raider stays on walkable ground.
+        const waypoint = nextGoliathWaypoint(fromX, fromZ, center.x, center.z);
+        const moved = stepToward(fromX, fromZ, waypoint.x, waypoint.z, speed);
+        toX = clampToWorld(moved.x);
+        toZ = clampToWorld(moved.z);
+      }
+
+      // Arrived → start the raid timer; timer elapsed → this camp is done, drop the
+      // target and remember it so the next pick skips it.
+      if (reached && engageEnds === 0n) engageEnds = now + GOLIATH_ENGAGE_DURATION_MICROS;
+      let appliedTarget = target;
+      if (engageEnds !== 0n && now >= engageEnds) {
+        lastRaided = target;
+        appliedTarget = -1;
+        engageEnds = 0n;
+      }
+
+      goliathTarget.set(goliathRow.goliathId, appliedTarget);
+      goliathPosition.set(goliathRow.goliathId, { x: toX, z: toZ });
+      goliathEngageEnds.set(goliathRow.goliathId, engageEnds);
+      goliathLastRaided.set(goliathRow.goliathId, lastRaided);
+      goliathHeading.set(goliathRow.goliathId, headingFromStep(fromX, fromZ, toX, toZ, goliathRow.headingX, goliathRow.headingZ));
     }
     const goliathById = new Map<bigint, any>();
     for (const goliathRow of goliaths) goliathById.set(goliathRow.goliathId, goliathRow);
@@ -1991,7 +2052,17 @@ export const worldTick = spacetimedb.reducer(
     // Apply goliath movement + damage; a goliath worn to 0 dies for the window.
     for (const goliathRow of goliaths) {
       const position = goliathPosition.get(goliathRow.goliathId)!;
-      const moved = { ...goliathRow, positionX: position.x, positionZ: position.z, targetCampIndex: goliathTarget.get(goliathRow.goliathId) ?? -1 };
+      const heading = goliathHeading.get(goliathRow.goliathId)!;
+      const moved = {
+        ...goliathRow,
+        positionX: position.x,
+        positionZ: position.z,
+        targetCampIndex: goliathTarget.get(goliathRow.goliathId) ?? -1,
+        engageEndsAtMicros: goliathEngageEnds.get(goliathRow.goliathId) ?? 0n,
+        lastRaidedCampIndex: goliathLastRaided.get(goliathRow.goliathId) ?? -1,
+        headingX: heading.x,
+        headingZ: heading.z,
+      };
       const damage = Math.round(goliathDamage.get(goliathRow.goliathId) ?? 0);
       if (damage >= goliathRow.health) {
         killGoliathRow(ctx, moved, ctx.sender);
@@ -2005,6 +2076,10 @@ export const worldTick = spacetimedb.reducer(
         moved.positionX === goliathRow.positionX &&
         moved.positionZ === goliathRow.positionZ &&
         moved.targetCampIndex === goliathRow.targetCampIndex &&
+        moved.engageEndsAtMicros === goliathRow.engageEndsAtMicros &&
+        moved.lastRaidedCampIndex === goliathRow.lastRaidedCampIndex &&
+        moved.headingX === goliathRow.headingX &&
+        moved.headingZ === goliathRow.headingZ &&
         newHealth === goliathRow.health &&
         newExpires === goliathRow.aggroExpiresAtMicros &&
         sameOptionalIdentity(newAggroPlayer, goliathRow.aggroPlayer);

@@ -41,6 +41,12 @@ import {
   stepToward,
   windowBucketFor,
 } from '../../../../spacetimedb/src/combatMath';
+import {
+  chooseGoliathTargetCamp,
+  headingFromStep,
+  hasReachedCamp,
+  type GoliathTargetCamp,
+} from '../../../../spacetimedb/src/goliathAI';
 
 describe('server createSeededRandom is a verbatim mulberry32 port', () => {
   it('draws the identical sequence to the client for the same seed', () => {
@@ -182,5 +188,60 @@ describe('combat math helpers', () => {
     expect(stepToward(0, 0, 1, 0, 5)).toEqual({ x: 1, z: 0 });
     // Already there: stays put.
     expect(stepToward(4, 4, 4, 4, 3)).toEqual({ x: 4, z: 4 });
+  });
+});
+
+describe('goliath raiding AI keeps a stable camp target', () => {
+  const camps: GoliathTargetCamp[] = [
+    { campIndex: 0, x: 0, z: 0, livingCount: 3 },
+    { campIndex: 1, x: 5, z: 0, livingCount: 3 },
+    { campIndex: 2, x: 20, z: 0, livingCount: 3 },
+  ];
+
+  it('keeps a still-living current target even when another camp is nearer (no flip)', () => {
+    // Standing at camp 1 but currently locked on the farther camp 2: it must hold.
+    const target = chooseGoliathTargetCamp(2, -1, camps, 5, 0);
+    expect(target).toBe(2);
+  });
+
+  it('re-picks the nearest living camp when the current target is cleared', () => {
+    const cleared: GoliathTargetCamp[] = [
+      { campIndex: 0, x: 0, z: 0, livingCount: 0 }, // current target, now dead
+      { campIndex: 1, x: 5, z: 0, livingCount: 3 },
+      { campIndex: 2, x: 20, z: 0, livingCount: 3 },
+    ];
+    expect(chooseGoliathTargetCamp(0, -1, cleared, 0, 0)).toBe(1);
+  });
+
+  it('excludes the just-raided camp when another living camp exists', () => {
+    // No live target (-1); nearest is camp 0 but it was just raided, so pick camp 1.
+    expect(chooseGoliathTargetCamp(-1, 0, camps, 0, 0)).toBe(1);
+  });
+
+  it('targets the just-raided camp when it is the only one living', () => {
+    const onlyOne: GoliathTargetCamp[] = [
+      { campIndex: 0, x: 0, z: 0, livingCount: 3 },
+      { campIndex: 1, x: 5, z: 0, livingCount: 0 },
+      { campIndex: 2, x: 20, z: 0, livingCount: 0 },
+    ];
+    expect(chooseGoliathTargetCamp(-1, 0, onlyOne, 0, 0)).toBe(0);
+  });
+
+  it('returns -1 when no camp is living', () => {
+    const dead = camps.map(camp => ({ ...camp, livingCount: 0 }));
+    expect(chooseGoliathTargetCamp(1, -1, dead, 0, 0)).toBe(-1);
+  });
+
+  it('hasReachedCamp is true only within the stop radius', () => {
+    expect(hasReachedCamp(2.9, 3)).toBe(true);
+    expect(hasReachedCamp(3, 3)).toBe(true);
+    expect(hasReachedCamp(3.1, 3)).toBe(false);
+  });
+
+  it('headingFromStep normalizes an actual step and falls back on no move', () => {
+    // Moved +3 x, +4 z → the 3-4-5 unit vector.
+    expect(headingFromStep(0, 0, 3, 4, 1, 0)).toEqual({ x: 0.6, z: 0.8 });
+    // No movement → keeps the previous heading (raider stays facing the camp).
+    expect(headingFromStep(5, 5, 5, 5, 0, -1)).toEqual({ x: 0, z: -1 });
   });
 });

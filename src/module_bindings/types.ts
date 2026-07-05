@@ -90,6 +90,10 @@ export const Goliath = __t.object("Goliath", {
   aggroExpiresAtMicros: __t.u64(),
   alive: __t.bool(),
   windowBucket: __t.u64(),
+  engageEndsAtMicros: __t.u64(),
+  lastRaidedCampIndex: __t.i32(),
+  headingX: __t.f32(),
+  headingZ: __t.f32(),
 });
 export type Goliath = __Infer<typeof Goliath>;
 

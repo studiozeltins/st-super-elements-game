@@ -26,4 +26,8 @@ export default __t.row({
   aggroExpiresAtMicros: __t.u64().name("aggro_expires_at_micros"),
   alive: __t.bool(),
   windowBucket: __t.u64().name("window_bucket"),
+  engageEndsAtMicros: __t.u64().name("engage_ends_at_micros"),
+  lastRaidedCampIndex: __t.i32().name("last_raided_camp_index"),
+  headingX: __t.f32().name("heading_x"),
+  headingZ: __t.f32().name("heading_z"),
 });
