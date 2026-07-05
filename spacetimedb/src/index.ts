@@ -212,6 +212,11 @@ const GOLIATH_SPLASH_RANGE = 4.0; // the largest raider hits everything in here
 const GOLIATH_ENGAGE_RANGE = 8.0;
 const ENEMY_PLAYER_CONTACT_RANGE = 1.8; // camp member ↔ player it is chasing
 const GOLIATH_PLAYER_CONTACT_RANGE = 2.6; // goliath ↔ a player who provoked it (bigger reach)
+// A camp member notices an open-field player within this range and MIGHT turn
+// aggressive — rolled per tick so a camp feels alive (some members lock on fast,
+// some hang back) rather than every member snapping on the instant you arrive.
+const ENEMY_AGGRO_RANGE = 12;
+const ENEMY_PROXIMITY_AGGRO_CHANCE = 0.08;
 // A goliath hits camp members far harder than they were authored to hit players,
 // so it clears a couple of easy camps before the accumulated counter-damage from
 // fresh, respawning camps wears it down (~2-3 slime-tier camps for a small
@@ -1425,16 +1430,21 @@ function spawnCamps(ctx: { db: any }) {
       const maxHealth = enemyMaxHealth(archetypeId, isBoss);
       const angle = spawnRandom() * Math.PI * 2;
       const distance = spawnRandom() * SPAWN_SCATTER_RADIUS;
+      // Each member gets its OWN scattered home so members hold a spread-out
+      // formation instead of all converging on the camp centre (which stacked
+      // them into one blob that a single AoE wiped out together).
+      const spawnX = clampToWorld(campSite.x + Math.cos(angle) * distance);
+      const spawnZ = clampToWorld(campSite.z + Math.sin(angle) * distance);
       ctx.db.enemy.insert({
         enemyId: BigInt(enemyIdFor(campIndex, memberIndex)),
         campIndex,
         archetypeId,
         isBoss,
         rewardTier,
-        homeX: campSite.x,
-        homeZ: campSite.z,
-        positionX: clampToWorld(campSite.x + Math.cos(angle) * distance),
-        positionZ: clampToWorld(campSite.z + Math.sin(angle) * distance),
+        homeX: spawnX,
+        homeZ: spawnZ,
+        positionX: spawnX,
+        positionZ: spawnZ,
         health: maxHealth,
         maxHealth,
         contactDamage: enemyContactDamage(archetypeId, isBoss),
@@ -1728,6 +1738,21 @@ export const worldTick = spacetimedb.reducer(
       playerDamage.set(hex, (playerDamage.get(hex) ?? 0) + damagePerTick(goliathRow.contactDamage, tick));
     }
 
+    // Nearest open-field (non-safe-zone) player within aggro range, or null.
+    const nearestOpenPlayer = (x: number, z: number) => {
+      let best: any = null;
+      let bestDistance = ENEMY_AGGRO_RANGE;
+      for (const playerRow of players) {
+        if (isInsideSafeZone(playerRow.positionX, playerRow.positionZ)) continue;
+        const distance = distanceBetween(x, z, playerRow.positionX, playerRow.positionZ);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = playerRow;
+        }
+      }
+      return best;
+    };
+
     // Apply enemy movement + damage + aggro; dead members drop loot (uncredited,
     // droppedBy the module identity) and schedule a respawn.
     for (const enemyRow of enemies) {
@@ -1760,11 +1785,22 @@ export const worldTick = spacetimedb.reducer(
         aggroPlayer = undefined;
         aggroGoliathId = rallyGoliath;
         aggroExpiresAtMicros = now + AGGRO_DURATION_MICROS;
-      } else if (expired) {
-        aggroKind = AGGRO_HOME;
-        aggroPlayer = undefined;
-        aggroGoliathId = 0n;
-        aggroExpiresAtMicros = 0n;
+      } else {
+        // No goliath fight and no live player aggro: a nearby open-field player
+        // MIGHT provoke this member (rolled per tick, so a camp reacts unevenly).
+        // Otherwise, if the previous aggro has expired, drift back home.
+        const provoker = nearestOpenPlayer(moved.positionX, moved.positionZ);
+        if (provoker && ctx.random() < ENEMY_PROXIMITY_AGGRO_CHANCE) {
+          aggroKind = AGGRO_PLAYER;
+          aggroPlayer = provoker.identity;
+          aggroGoliathId = 0n;
+          aggroExpiresAtMicros = now + AGGRO_DURATION_MICROS;
+        } else if (expired) {
+          aggroKind = AGGRO_HOME;
+          aggroPlayer = undefined;
+          aggroGoliathId = 0n;
+          aggroExpiresAtMicros = 0n;
+        }
       }
       const newHealth = enemyRow.health - damage;
       const unchanged =

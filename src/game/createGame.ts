@@ -387,7 +387,9 @@ export function createGame(
         speed: weapon.projectileSpeed,
         damage: amount,
         element: activeCharacter.element,
-        hitRadius: 0.9,
+        // Wide enough that the server's authoritative hit check still lands
+        // despite the client aim/interpolation gap (a tight radius silently missed).
+        hitRadius: 2,
         applyDamage: applyAttackDamage,
         damageKind: kind,
       });
