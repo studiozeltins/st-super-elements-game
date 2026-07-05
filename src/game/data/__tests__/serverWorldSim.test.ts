@@ -37,6 +37,7 @@ import {
 import {
   damagePerTick,
   distanceBetween,
+  gemIsCollectible,
   stepToward,
   windowBucketFor,
 } from '../../../../spacetimedb/src/combatMath';
@@ -159,6 +160,18 @@ describe('combat math helpers', () => {
   it('distanceBetween is planar euclidean', () => {
     expect(distanceBetween(0, 0, 3, 4)).toBe(5);
     expect(distanceBetween(1, 1, 1, 1)).toBe(0);
+  });
+
+  it('gemIsCollectible enforces the drop grace period', () => {
+    const delay = 1_200_000n; // GEM_PICKUP_DELAY_MICROS
+    const droppedAt = 5_000_000n;
+    // Fresh drop: still inside the grace period, not yet collectible.
+    expect(gemIsCollectible(droppedAt, droppedAt, delay)).toBe(false);
+    expect(gemIsCollectible(droppedAt, droppedAt + delay - 1n, delay)).toBe(false);
+    // Exactly at the delay boundary: collectible.
+    expect(gemIsCollectible(droppedAt, droppedAt + delay, delay)).toBe(true);
+    // Well past the delay: collectible.
+    expect(gemIsCollectible(droppedAt, droppedAt + delay * 10n, delay)).toBe(true);
   });
 
   it('stepToward never overshoots the target', () => {

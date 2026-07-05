@@ -17,6 +17,12 @@ export function distanceBetween(ax: number, az: number, bx: number, bz: number):
   return Math.hypot(ax - bx, az - bz);
 }
 
+// A ground gem is collectible only after its grace period has elapsed, so a fresh
+// drop visibly falls and rests before any enemy, goliath, or player can take it.
+export function gemIsCollectible(droppedAtMicros: bigint, nowMicros: bigint, delayMicros: bigint): boolean {
+  return nowMicros - droppedAtMicros >= delayMicros;
+}
+
 // Moves a point toward a target by at most `step`, returning the new x/z. Never
 // overshoots; returns the target when already within one step.
 export function stepToward(

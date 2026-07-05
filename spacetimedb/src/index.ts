@@ -13,7 +13,7 @@ import {
   GOLIATH_SIZE_STATS,
   goliathBatchForWindow,
 } from './enemyStats';
-import { damagePerTick, distanceBetween, stepToward, windowBucketFor } from './combatMath';
+import { damagePerTick, distanceBetween, gemIsCollectible, stepToward, windowBucketFor } from './combatMath';
 import { isWalkable, nextGoliathWaypoint } from './bridges';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
@@ -188,6 +188,10 @@ const MAX_SPILL_GEMS = 40; // physical drop cap; overflow folds into the biggest
 // the amount. Mirrored client-side in src/game/data/gemDrops.ts (kept in sync by
 // serverSync.test.ts).
 const GEM_DENOMINATIONS = [500, 100, 50, 20, 10, 5, 1];
+// A fresh ground drop can't be vacuumed or picked up until this grace period has
+// elapsed. Mirrors the client GEM_PICKUP_DELAY (1.2s) so server and client agree
+// on when a drop becomes collectible — gems visibly fall and rest first.
+const GEM_PICKUP_DELAY_MICROS = 1_200_000n;
 
 // ---- Server-authoritative world simulation (enemies + goliath raiders) -------
 // The camp fight runs on the server: the world tick moves every enemy/goliath,
@@ -266,6 +270,9 @@ const gemDrop = table(
     positionZ: t.f32(),
     amount: t.u32(),
     droppedBy: t.identity(),
+    // .default(0n) makes adding this column an additive migration (STDB backfills
+    // any pre-existing row with 0n, which reads as long-elapsed → collectible).
+    droppedAtMicros: t.u64().default(0n),
   }
 );
 
@@ -635,7 +642,7 @@ function respawnPlayerAtSpawn(ctx: { db: any }, targetPlayer: any) {
 // via ctx.random. Caps the number of physical drops; any overflow folds into the
 // biggest piece so no gems ever vanish.
 function spillDenominations(
-  ctx: { db: any; random: any },
+  ctx: { db: any; random: any; timestamp: any },
   centerX: number,
   centerZ: number,
   total: number,
@@ -666,6 +673,7 @@ function spillDenominations(
       positionZ: clampToWorld(centerZ + Math.sin(angle) * radius),
       amount,
       droppedBy,
+      droppedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
     });
   }
 }
@@ -673,7 +681,7 @@ function spillDenominations(
 // Spills a fraction of a victim's primogems onto the ground at their location as
 // a shower of small gems. Returns how much was dropped (caller deducts it).
 function spillGems(
-  ctx: { db: any; random: any },
+  ctx: { db: any; random: any; timestamp: any },
   victim: any,
   fraction: number,
   droppedBy: any
@@ -968,7 +976,7 @@ function enemyBaseGems(
 // returns the total dropped. droppedBy credits a player kill (leaderboard) or is
 // the module identity for a tick/goliath kill (an uncredited drop is fine).
 function spillEnemyLoot(
-  ctx: { db: any; random: any },
+  ctx: { db: any; random: any; timestamp: any },
   positionX: number,
   positionZ: number,
   baseGems: number,
@@ -983,7 +991,7 @@ function spillEnemyLoot(
 // Marks a camp enemy dead: spill its loot, clear its hoard, revert aggro to home,
 // and schedule a full-health respawn at its home.
 function killEnemyRow(
-  ctx: { db: any; random: any; sender: any },
+  ctx: { db: any; random: any; sender: any; timestamp: any },
   enemyRow: any,
   baseGems: number,
   droppedBy: any,
@@ -1007,7 +1015,7 @@ function killEnemyRow(
 // Marks a goliath dead: spill its loot and leave it dead for the rest of its
 // window (its row lingers so it can't respawn until the window rolls over).
 function killGoliathRow(
-  ctx: { db: any; random: any },
+  ctx: { db: any; random: any; timestamp: any },
   goliathRow: any,
   droppedBy: any
 ): number {
@@ -1202,6 +1210,9 @@ export const collectGem = spacetimedb.reducer(
     const currentPlayer = requirePlayer(ctx);
     const drop = ctx.db.gemDrop.id.find(dropId);
     if (!drop) return;
+    // Anti-cheat parity with the client's 1.2s pickup delay: refuse a grab until the
+    // grace period has elapsed. Legit pickups wait 1.2s + sub latency, so unaffected.
+    if (!gemIsCollectible(drop.droppedAtMicros, ctx.timestamp.microsSinceUnixEpoch, GEM_PICKUP_DELAY_MICROS)) return;
     ctx.db.gemDrop.id.delete(dropId);
     ctx.db.player.identity.update({
       ...currentPlayer,
@@ -1496,7 +1507,7 @@ function campCentersFrom(enemies: any[]): CampCenter[] {
 // window and retires the previous window's raiders. A raider never respawns
 // inside its window once dead: its row lingers (alive false) so the "already
 // spawned this bucket" guard keeps it from coming back.
-function runGoliathLifecycle(ctx: { db: any; random: any; sender: any }, nowMicros: bigint, campCenters: CampCenter[]) {
+function runGoliathLifecycle(ctx: { db: any; random: any; sender: any; timestamp: any }, nowMicros: bigint, campCenters: CampCenter[]) {
   const windowBucket = windowBucketFor(nowMicros, GOLIATH_BATCH_WINDOW_MICROS);
   const existing = [...ctx.db.goliath.iter()];
   for (const goliathRow of existing) {
@@ -1550,8 +1561,11 @@ function sameOptionalIdentity(a: any, b: any): boolean {
 // Any alive enemy/goliath within grab range of a ground drop absorbs it into its
 // carried hoard (goliaths sweep a wider area). This is how a camp ends up holding
 // a dead goliath's loot after it spilled on the ground.
-function vacuumGems(ctx: { db: any }) {
+function vacuumGems(ctx: { db: any }, nowMicros: bigint) {
   for (const drop of [...ctx.db.gemDrop.iter()]) {
+    // Fresh drops are untouchable during their grace period so a kill's gems
+    // visibly fall and rest before any enemy or goliath can absorb them.
+    if (!gemIsCollectible(drop.droppedAtMicros, nowMicros, GEM_PICKUP_DELAY_MICROS)) continue;
     let absorbed = false;
     for (const enemyRow of [...ctx.db.enemy.iter()]) {
       if (!enemyRow.alive) continue;
@@ -1895,7 +1909,7 @@ export const worldTick = spacetimedb.reducer(
       respawnPlayerAtSpawn(ctx, { ...targetPlayer, primogems: targetPlayer.primogems - spilled });
     }
 
-    vacuumGems(ctx);
+    vacuumGems(ctx, now);
     respawnEnemies(ctx, now);
   }
 );

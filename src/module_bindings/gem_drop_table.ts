@@ -16,4 +16,5 @@ export default __t.row({
   positionZ: __t.f32().name("position_z"),
   amount: __t.u32(),
   droppedBy: __t.identity().name("dropped_by"),
+  droppedAtMicros: __t.u64().name("dropped_at_micros"),
 });

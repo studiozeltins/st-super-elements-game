@@ -70,6 +70,7 @@ export const GemDrop = __t.object("GemDrop", {
   positionZ: __t.f32(),
   amount: __t.u32(),
   droppedBy: __t.identity(),
+  droppedAtMicros: __t.u64(),
 });
 export type GemDrop = __Infer<typeof GemDrop>;
 
