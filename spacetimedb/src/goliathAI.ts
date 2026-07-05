@@ -61,3 +61,28 @@ export function headingFromStep(
 export function hasReachedCamp(distanceToCamp: number, stopRadius: number): boolean {
   return distanceToCamp <= stopRadius;
 }
+
+// True if a camp member at (targetX,targetZ) lies within the goliath's forward
+// arc — i.e. the goliath (at fromX,fromZ, unit heading headingX/headingZ) is
+// facing it. A near-zero heading means "no facing info yet" → returns true so a
+// stationary/just-spawned raider still fights. minDot = cos(half-arc).
+export function isWithinForwardArc(
+  headingX: number,
+  headingZ: number,
+  fromX: number,
+  fromZ: number,
+  targetX: number,
+  targetZ: number,
+  minDot: number
+): boolean {
+  const headingLength = Math.hypot(headingX, headingZ);
+  if (headingLength < 1e-6) return true;
+  const directionX = targetX - fromX;
+  const directionZ = targetZ - fromZ;
+  const directionLength = Math.hypot(directionX, directionZ);
+  if (directionLength < 1e-6) return true;
+  const dot =
+    (headingX / headingLength) * (directionX / directionLength) +
+    (headingZ / headingLength) * (directionZ / directionLength);
+  return dot >= minDot;
+}

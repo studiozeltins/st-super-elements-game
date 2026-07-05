@@ -16,7 +16,7 @@ import {
 import { damagePerTick, distanceBetween, gemIsCollectible, stepToward, windowBucketFor } from './combatMath';
 import { pickRayHit } from './hitscan';
 import { isWalkable, nextGoliathWaypoint } from './bridges';
-import { chooseGoliathTargetCamp, headingFromStep, hasReachedCamp } from './goliathAI';
+import { chooseGoliathTargetCamp, headingFromStep, hasReachedCamp, isWithinForwardArc } from './goliathAI';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -244,6 +244,10 @@ const GOLIATH_GEM_VACUUM_RANGE = 3.0;
 const GOLIATH_STOP_RADIUS = 3.0;
 // It raids a camp for this long after arriving, then advances to the next camp.
 const GOLIATH_ENGAGE_DURATION_MICROS = 12_000_000n;
+// A raider only rallies + strikes members inside a frontal cone of its movement
+// heading (dot ≥ this). ≈156° arc: it commits to the camp it walks into and drops
+// the one behind it once it turns to walk on.
+const GOLIATH_FACING_ARC_MIN_DOT = 0.25;
 
 const player = table(
   { name: 'player', public: true },
@@ -1893,17 +1897,24 @@ export const worldTick = spacetimedb.reducer(
     const enemyRallyGoliath = new Map<bigint, bigint>();
     for (const goliathRow of goliaths) {
       const from = goliathPosition.get(goliathRow.goliathId)!;
+      const heading = goliathHeading.get(goliathRow.goliathId)!;
       const withDistance = enemies.map(enemyRow => {
         const to = enemyPosition.get(enemyRow.enemyId)!;
-        return { enemyRow, distance: distanceBetween(from.x, from.z, to.x, to.z) };
+        return { enemyRow, to, distance: distanceBetween(from.x, from.z, to.x, to.z) };
       });
-      for (const { enemyRow, distance } of withDistance) {
+      // The raider only engages the camp it is FACING: gate both rally and strike
+      // on a frontal arc of its heading so a camp it has turned its back on (while
+      // walking to the next one) stops being fought and simply loses interest.
+      const facing = withDistance.filter(candidate =>
+        isWithinForwardArc(heading.x, heading.z, from.x, from.z, candidate.to.x, candidate.to.z, GOLIATH_FACING_ARC_MIN_DOT)
+      );
+      for (const { enemyRow, distance } of facing) {
         if (distance <= GOLIATH_ENGAGE_RANGE) enemyRallyGoliath.set(enemyRow.enemyId, goliathRow.goliathId);
       }
       const dealt = damagePerTick(goliathRow.contactDamage * GOLIATH_VS_ENEMY_DAMAGE_MULTIPLIER, tick);
       const struck = goliathRow.splashes
-        ? withDistance.filter(candidate => candidate.distance <= GOLIATH_SPLASH_RANGE)
-        : withDistance.filter(candidate => candidate.distance <= ENEMY_GOLIATH_CONTACT_RANGE).sort((a, b) => a.distance - b.distance).slice(0, 1);
+        ? facing.filter(candidate => candidate.distance <= GOLIATH_SPLASH_RANGE)
+        : facing.filter(candidate => candidate.distance <= ENEMY_GOLIATH_CONTACT_RANGE).sort((a, b) => a.distance - b.distance).slice(0, 1);
       for (const { enemyRow } of struck) {
         enemyDamage.set(enemyRow.enemyId, (enemyDamage.get(enemyRow.enemyId) ?? 0) + dealt);
         enemyHardAggroGoliath.set(enemyRow.enemyId, goliathRow.goliathId);

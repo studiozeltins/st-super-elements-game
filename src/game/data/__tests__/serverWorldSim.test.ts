@@ -45,6 +45,7 @@ import {
   chooseGoliathTargetCamp,
   headingFromStep,
   hasReachedCamp,
+  isWithinForwardArc,
   type GoliathTargetCamp,
 } from '../../../../spacetimedb/src/goliathAI';
 
@@ -243,5 +244,18 @@ describe('goliath raiding AI keeps a stable camp target', () => {
     expect(headingFromStep(0, 0, 3, 4, 1, 0)).toEqual({ x: 0.6, z: 0.8 });
     // No movement → keeps the previous heading (raider stays facing the camp).
     expect(headingFromStep(5, 5, 5, 5, 0, -1)).toEqual({ x: 0, z: -1 });
+  });
+
+  it('isWithinForwardArc only engages members inside the goliath forward cone', () => {
+    // Member dead ahead (heading +x, member further along +x) → dot 1.
+    expect(isWithinForwardArc(1, 0, 0, 0, 5, 0, 0.25)).toBe(true);
+    // Member directly behind → dot -1, dropped.
+    expect(isWithinForwardArc(1, 0, 0, 0, -5, 0, 0.25)).toBe(false);
+    // Member at 90° → dot 0, below the 0.25 threshold, dropped.
+    expect(isWithinForwardArc(1, 0, 0, 0, 0, 5, 0.25)).toBe(false);
+    // Zero heading → no facing info, fights regardless of member position.
+    expect(isWithinForwardArc(0, 0, 0, 0, -5, -5, 0.25)).toBe(true);
+    // Member coincident with the goliath → treated as facing.
+    expect(isWithinForwardArc(1, 0, 3, 3, 3, 3, 0.25)).toBe(true);
   });
 });
