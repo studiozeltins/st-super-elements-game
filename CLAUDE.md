@@ -653,9 +653,20 @@ Client calls a reducer the connected server lacks → the client build is newer 
 
 ## Backup / restore (post-wipe seeding)
 
-No native seeder. Durable tables (`player`, `owned_character`, `weapon_item`, `banner_pity`) are backed up/restored with a dump→restore pair; ephemeral tables (`gem_drop`, `enemy_carry`, `regen_timer`) are skipped (they regenerate).
+No native seeder. Durable tables (`player`, `owned_character`, `weapon_item`, `banner_pity`) are backed up/restored with a dump→restore pair; ephemeral tables (`gem_drop`, `enemy`, `goliath`, `regen_timer`, `world_timer`) are skipped (they regenerate from `init`/`worldTick`).
+
+> **WARNING — `account`/`account_link` are NOT in the backup set.** A `--delete-data` wipe destroys all logins (username/password) with no restore path. Never wipe a DB that has real accounts; migrate instead (see below).
 
 - **Before a wipe:** `npm run backup` (default local; `-- --server maincloud --token <bearer>` for cloud) → writes `backup/restore_*.json` (gitignored — contains identities).
 - **After republish (empty DB):** `npm run restore` → calls the `restore*` reducers over HTTP.
 - Server reducers `restorePlayers/restoreOwnedCharacters/restoreWeaponItems/restoreBannerPity` each refuse a non-empty table, so restore is safe only on a fresh DB. Identities are restored verbatim (returning players keep their data); autoInc ids + timestamps are re-minted.
 - Scripts are pure HTTP (`scripts/*.mjs`) against `/v1/database/<db>/sql` and `/call/<reducer>` — no extra deps. Reducer-call arg encoding: identity = 1-element tuple `["0x<hex>"]`, field keys are snake_case, args wrapped as `[rowsArray]`.
+
+## Server-authoritative enemies + goliaths (deploy notes)
+
+Enemies and goliath raiders are SERVER-authoritative: public `enemy`/`goliath` tables + a ~150ms scheduled `worldTick` run real combat; clients only render (subscribe + interpolate). Player damage goes through the `attackEnemies` reducer. See the `goliath-raiders` memory for the full model.
+
+Deploying schema changes to a DB that has real accounts/players (i.e. maincloud) WITHOUT losing data:
+1. `init` (which seeds camps + schedules the tick) only runs on a FRESH DB, so a plain migrate-publish leaves the new tables empty. Publish with `spacetime publish <db> --module-path spacetimedb --server <env> --yes` (migrate, NO `--delete-data`), then activate the sim with `spacetime call <db> seed_world --server <env>` (idempotent).
+2. STDB refuses to DROP a table that still has rows. If a removed table (e.g. the old `enemy_carry`) has data, clear it first: `spacetime sql <db> --server <env> "DELETE FROM <table>"`, then republish.
+3. Only use `--delete-data` on `local` when you knowingly accept losing local accounts/players.
