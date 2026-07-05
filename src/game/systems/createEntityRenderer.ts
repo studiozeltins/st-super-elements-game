@@ -216,9 +216,15 @@ export function createEntityRenderer<Row>(
     syncRows,
     update,
     getAlivePositions() {
+      // Return the AUTHORITATIVE server position (targetX/Z), not the lerped
+      // display mesh, so the player's aim and client hit-detection agree with the
+      // server's damage check. The mesh lags a moving enemy, which made shots
+      // land visually but miss server-side ("hitting them but no damage").
       const positions: THREE.Vector3[] = [];
       for (const entity of entities.values()) {
-        if (entity.alive) positions.push(entity.model.group.position);
+        if (entity.alive) {
+          positions.push(new THREE.Vector3(entity.targetX, entity.model.group.position.y, entity.targetZ));
+        }
       }
       return positions;
     },

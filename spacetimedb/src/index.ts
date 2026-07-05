@@ -217,6 +217,11 @@ const GOLIATH_PLAYER_CONTACT_RANGE = 2.6; // goliath ↔ a player who provoked i
 // some hang back) rather than every member snapping on the instant you arrive.
 const ENEMY_AGGRO_RANGE = 12;
 const ENEMY_PROXIMITY_AGGRO_CHANCE = 0.08;
+// Aggro is contagious: a camp member already fighting a player infects nearby
+// camp-mates, so hitting one enemy wakes the camp gradually (one, then another),
+// spreading like a virus rather than the whole camp snapping on at once.
+const ENEMY_AGGRO_SPREAD_RANGE = 8;
+const ENEMY_AGGRO_SPREAD_CHANCE = 0.16;
 // A goliath hits camp members far harder than they were authored to hit players,
 // so it clears a couple of easy camps before the accumulated counter-damage from
 // fresh, respawning camps wears it down (~2-3 slime-tier camps for a small
@@ -1753,6 +1758,22 @@ export const worldTick = spacetimedb.reducer(
       return best;
     };
 
+    // The player a nearby same-camp member is already fighting, so its aggro can
+    // jump to this member (contagion). Reads tick-start aggro from `enemies`, so
+    // the infection spreads one hop per tick — a virus, not an instant camp-wide flip.
+    const aggroInfectorTarget = (x: number, z: number, campIndex: number) => {
+      for (const other of enemies) {
+        if (other.campIndex !== campIndex) continue;
+        if (other.aggroKind !== AGGRO_PLAYER || !other.aggroPlayer) continue;
+        if (aggroExpired(other.aggroExpiresAtMicros, now)) continue;
+        const otherPosition = enemyPosition.get(other.enemyId) ?? { x: other.positionX, z: other.positionZ };
+        if (distanceBetween(x, z, otherPosition.x, otherPosition.z) <= ENEMY_AGGRO_SPREAD_RANGE) {
+          return other.aggroPlayer;
+        }
+      }
+      return undefined;
+    };
+
     // Apply enemy movement + damage + aggro; dead members drop loot (uncredited,
     // droppedBy the module identity) and schedule a respawn.
     for (const enemyRow of enemies) {
@@ -1786,13 +1807,23 @@ export const worldTick = spacetimedb.reducer(
         aggroGoliathId = rallyGoliath;
         aggroExpiresAtMicros = now + AGGRO_DURATION_MICROS;
       } else {
-        // No goliath fight and no live player aggro: a nearby open-field player
-        // MIGHT provoke this member (rolled per tick, so a camp reacts unevenly).
-        // Otherwise, if the previous aggro has expired, drift back home.
+        // No goliath fight and no live player aggro. Two ways a member turns
+        // hostile: a nearby open-field player provokes it directly (rolled per
+        // tick), or the aggro spreads from a same-camp member already fighting
+        // someone (contagion). Otherwise, if the old aggro expired, drift home.
         const provoker = nearestOpenPlayer(moved.positionX, moved.positionZ);
-        if (provoker && ctx.random() < ENEMY_PROXIMITY_AGGRO_CHANCE) {
+        const infectorTarget = provoker
+          ? undefined
+          : aggroInfectorTarget(moved.positionX, moved.positionZ, enemyRow.campIndex);
+        const caughtPlayer =
+          provoker && ctx.random() < ENEMY_PROXIMITY_AGGRO_CHANCE
+            ? provoker.identity
+            : infectorTarget && ctx.random() < ENEMY_AGGRO_SPREAD_CHANCE
+              ? infectorTarget
+              : undefined;
+        if (caughtPlayer) {
           aggroKind = AGGRO_PLAYER;
-          aggroPlayer = provoker.identity;
+          aggroPlayer = caughtPlayer;
           aggroGoliathId = 0n;
           aggroExpiresAtMicros = now + AGGRO_DURATION_MICROS;
         } else if (expired) {
