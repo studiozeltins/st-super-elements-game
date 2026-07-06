@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { CHARACTERS } from '../game/data/characters';
 import { WEAPONS_BY_ID, RARITY_CSS } from '../game/data/gacha';
 import { SplashModel } from './SplashModel';
@@ -22,17 +21,6 @@ interface Sparkle {
   vy: number;
   life: number;
   max: number;
-}
-
-/** A flying "+N ◈" shard token tweening from a minted card to the wallet chip. */
-interface Fly {
-  id: number;
-  x: number;
-  y: number;
-  dx: number;
-  dy: number;
-  n: number;
-  arrived: boolean;
 }
 
 /** Full-screen canvas of 1 or 3 rarity-colored shooting stars with glowing tails. */
@@ -161,57 +149,57 @@ function StarField({ colors, onDone }: { colors: string[]; onDone: () => void })
 
 type Phase = 'stars' | 'splash' | 'summary';
 
-export function PullAnimation({ results, onClose }: { results: PullView[]; onClose: () => void }) {
+interface PullWalletInfo {
+  /** Post-pull (live) shard balance. The pre-pull value is derived from results. */
+  transcendShards: number;
+}
+
+export function PullAnimation({
+  results,
+  wallet,
+  onClose,
+}: {
+  results: PullView[];
+  wallet: PullWalletInfo;
+  onClose: () => void;
+}) {
   const sorted = useMemo(() => [...results].sort((a, b) => a.slot - b.slot), [results]);
   const [phase, setPhase] = useState<Phase>('stars');
   const [index, setIndex] = useState(0);
-  const gridRef = useRef<HTMLDivElement>(null);
-  const [flies, setFlies] = useState<Fly[]>([]);
 
-  // Reveal juice: each C6-overflow dupe card (shardMinted > 0) ember-burns, then
-  // flings a purple "+N ◈" token that flies to the wallet shard counter.
+  // Only C6-overflow dupes mint shards. The counter is shown ONLY when this pull
+  // gained shards, and it ticks up one-by-one (dopamine) from the pre-pull total.
+  const mintedShards = useMemo(
+    () => sorted.reduce((sum, v) => sum + (v.kind === 'character' ? v.shardMinted : 0), 0),
+    [sorted]
+  );
+  const shardsBefore = wallet.transcendShards - mintedShards;
+  const [displayShards, setDisplayShards] = useState(shardsBefore);
+  // Bumps on every +1 so the value's pop animation re-runs each tick.
+  const [tick, setTick] = useState(0);
+
   useEffect(() => {
-    if (phase !== 'summary') return;
-    const grid = gridRef.current;
-    if (!grid) return;
-    const anchor = document.querySelector('[data-shard-anchor]') as HTMLElement | null;
-    const aRect = anchor?.getBoundingClientRect();
-    const minted = sorted.filter(view => view.kind === 'character' && view.shardMinted > 0);
-    const timers: number[] = [];
-    minted.forEach(view => {
-      // Fire after the card's staggered reveal-pop lands, plus a short beat.
-      timers.push(
-        window.setTimeout(() => {
-          const card = grid.querySelector<HTMLElement>(`[data-slot="${view.slot}"]`);
-          if (!card) return;
-          const cRect = card.getBoundingClientRect();
-          const startX = cRect.left + cRect.width / 2;
-          const startY = cRect.top + cRect.height / 2;
-          const targetX = aRect ? aRect.left + aRect.width / 2 : startX;
-          const targetY = aRect ? aRect.top + aRect.height / 2 : 40;
-          const id = view.slot;
-          setFlies(list => [
-            ...list,
-            { id, x: startX, y: startY, dx: targetX - startX, dy: targetY - startY, n: view.shardMinted, arrived: false },
-          ]);
-          // Two rAFs so the initial transform paints before we tween to target.
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() =>
-              setFlies(list => list.map(fl => (fl.id === id ? { ...fl, arrived: true } : fl)))
-            )
-          );
-          timers.push(
-            window.setTimeout(() => {
-              anchor?.classList.add('wallet-chip--pulse');
-              window.setTimeout(() => anchor?.classList.remove('wallet-chip--pulse'), 500);
-              setFlies(list => list.filter(fl => fl.id !== id));
-            }, 740)
-          );
-        }, view.slot * 50 + 520)
-      );
-    });
-    return () => timers.forEach(t => window.clearTimeout(t));
-  }, [phase, sorted]);
+    if (phase !== 'summary' || mintedShards <= 0) return;
+    setDisplayShards(shardsBefore);
+    setTick(0);
+    // Kick off once the cards have landed, then count up one shard per step.
+    const startDelay = sorted.length * 50 + 700;
+    const stepMs = mintedShards > 6 ? 130 : 300;
+    let current = shardsBefore;
+    let interval = 0;
+    const kickoff = window.setTimeout(() => {
+      interval = window.setInterval(() => {
+        current += 1;
+        setDisplayShards(current);
+        setTick(t => t + 1);
+        if (current >= wallet.transcendShards) window.clearInterval(interval);
+      }, stepMs);
+    }, startDelay);
+    return () => {
+      window.clearTimeout(kickoff);
+      window.clearInterval(interval);
+    };
+  }, [phase, mintedShards, shardsBefore, wallet.transcendShards, sorted.length]);
 
   const starColors = useMemo(() => {
     const rarities = results.map(view => view.rarity).sort((a, b) => b - a);
@@ -290,7 +278,6 @@ export function PullAnimation({ results, onClose }: { results: PullView[]; onClo
   return (
     <div className="pull-reveal" onClick={onClose}>
       <div
-        ref={gridRef}
         className={`pull-reveal__grid ${sorted.length > 1 ? 'pull-reveal__grid--ten' : ''}`}
       >
         {sorted.map(view => {
@@ -323,26 +310,24 @@ export function PullAnimation({ results, onClose }: { results: PullView[]; onClo
           );
         })}
       </div>
-      <span className="pull-reveal__hint">Pieskaries, lai aizvērtu</span>
-      {createPortal(
-        flies.map(fl => (
-          <span
-            key={fl.id}
-            className="shard-fly"
-            style={{
-              left: fl.x,
-              top: fl.y,
-              transform: fl.arrived
-                ? `translate(calc(-50% + ${fl.dx}px), calc(-50% + ${fl.dy}px)) scale(0.55)`
-                : 'translate(-50%, -50%) scale(1)',
-              opacity: fl.arrived ? 0.15 : 1,
-            }}
-          >
-            +{fl.n} ◈
+
+      {/* Shard payoff: only shown when this pull actually minted shards. The
+          number ticks up one-by-one, popping on each +1. */}
+      {mintedShards > 0 && (
+        <div className={`pull-shards ${tick > 0 ? 'pull-shards--live' : ''}`}>
+          <span className="pull-shards__icon">◈</span>
+          <span key={tick} className="pull-shards__val">
+            {displayShards}
           </span>
-        )),
-        document.body
+          {tick > 0 && (
+            <span key={`float-${tick}`} className="pull-shards__float" aria-hidden="true">
+              +1
+            </span>
+          )}
+        </div>
       )}
+
+      <span className="pull-reveal__hint">Pieskaries, lai aizvērtu</span>
     </div>
   );
 }

@@ -140,6 +140,18 @@ export function GachaScreen({
   const canPullOne = gems >= GACHA_PULL_COST;
   const canPullTen = gems >= GACHA_PULL_COST * 10;
 
+  // Freeze the wallet the instant a pull starts: the server updates gems (spent)
+  // and shards (C6-dupe overflow) immediately, but we don't want the header to
+  // visibly tick before the reveal animation has played. Snapshot on click, show
+  // the snapshot until the reveal is dismissed.
+  const [pullSnapshot, setPullSnapshot] = useState<{ gems: number; shards: number } | null>(null);
+  const startPull = (id: string, count: number) => {
+    setPullSnapshot({ gems, shards: transcendShards });
+    onPull(id, count);
+  };
+  const shownGems = pullSnapshot?.gems ?? gems;
+  const shownShards = pullSnapshot?.shards ?? transcendShards;
+
   const weaponInventory = useMemo(() => {
     const counts = new Map<string, number>();
     for (const item of weaponItems) counts.set(item.weaponId, (counts.get(item.weaponId) ?? 0) + 1);
@@ -225,9 +237,9 @@ export function GachaScreen({
           <span
             className="wallet-chip"
             data-shard-anchor
-            aria-label={`Zvaigžņu šķembas: ${transcendShards}`}
+            aria-label={`Zvaigžņu šķembas: ${shownShards}`}
           >
-            <span className="gacha__gem">◈</span> {transcendShards}
+            <span className="gacha__gem">◈</span> {shownShards}
           </span>
           {tab === 'characters' ? (
             <>
@@ -236,7 +248,7 @@ export function GachaScreen({
             </>
           ) : (
             <>
-              <span className="gacha__gem">✦</span> {gems}
+              <span className="gacha__gem">✦</span> {shownGems}
             </>
           )}
         </div>
@@ -299,7 +311,7 @@ export function GachaScreen({
                 <button
                   className="pull-btn"
                   disabled={!canPullOne}
-                  onClick={() => onPull(banner.id, 1)}
+                  onClick={() => startPull(banner.id, 1)}
                 >
                   <span className="pull-btn__count">VĒLĒTIES ×1</span>
                   <span className="pull-btn__cost">✦ {GACHA_PULL_COST}</span>
@@ -307,7 +319,7 @@ export function GachaScreen({
                 <button
                   className="pull-btn pull-btn--ten"
                   disabled={!canPullTen}
-                  onClick={() => onPull(banner.id, 10)}
+                  onClick={() => startPull(banner.id, 10)}
                 >
                   <span className="pull-btn__count">VĒLĒTIES ×10</span>
                   <span className="pull-btn__cost">✦ {GACHA_PULL_COST * 10}</span>
@@ -498,7 +510,14 @@ export function GachaScreen({
         )}
 
       {pullResults && pullResults.length > 0 && (
-        <PullAnimation results={pullResults} onClose={onDismissResults} />
+        <PullAnimation
+          results={pullResults}
+          wallet={{ transcendShards }}
+          onClose={() => {
+            onDismissResults();
+            setPullSnapshot(null);
+          }}
+        />
       )}
     </div>
   );
