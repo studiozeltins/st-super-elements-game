@@ -1,0 +1,63 @@
+/* ============================================================
+   HUD THEME SWITCHER — the dropdown in the settings modal.
+   The settings modal renders in a Radix portal OUTSIDE .app, so this
+   control is theme-agnostic and styled with the base tokens.
+   ============================================================ */
+
+.settings__field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0 4px;
+}
+
+.settings__field > span {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+}
+
+.settings__select {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 176px;
+  padding: 9px 32px 9px 12px;
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.06em;
+  color: var(--text);
+  /* Custom chevron drawn with a rotated gradient square, so no SVG/asset. */
+  background:
+    linear-gradient(45deg, transparent 50%, var(--accent) 50%) calc(100% - 16px) 46% / 6px 6px no-repeat,
+    linear-gradient(-45deg, transparent 50%, var(--accent) 50%) calc(100% - 12px) 46% / 6px 6px no-repeat,
+    var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.settings__select:hover {
+  border-color: var(--accent);
+}
+
+.settings__select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* Native option list can't inherit glass; give it a solid readable panel. */
+.settings__select option {
+  background: #0c110e;
+  color: var(--text);
+}
+
+.settings__theme-blurb {
+  margin: 6px 0 2px;
+  min-height: 30px;
+  font-size: 11px;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}

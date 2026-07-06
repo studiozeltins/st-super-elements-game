@@ -1,0 +1,145 @@
+/* ============================================================
+   HUD THEME · ABYSS
+   Dark spaceship console: cyan primary, magenta danger, panels
+   with bevel-notched corners (clip-path), neon edge-glow, and a
+   faint scanline wash over the whole HUD. Pixel display face.
+   ============================================================ */
+
+[data-hud-theme='abyss'] .hud {
+  --panel: rgba(6, 13, 22, 0.68);
+  --line: rgba(70, 224, 255, 0.42);
+  --text: #d6f7ff;
+  --muted: #6f96a6;
+  --accent: #35e6ff;
+  --gold: #57e0ff;
+  --danger: #ff2e88;
+  --notch: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+}
+
+/* faint scanlines + cyan vignette painted over the HUD (never blocks input) */
+[data-hud-theme='abyss'] .hud::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(rgba(120, 240, 255, 0.05) 0 1px, transparent 1px 3px),
+    radial-gradient(120% 80% at 50% 0%, transparent 60%, rgba(0, 20, 30, 0.35) 100%);
+  mix-blend-mode: screen;
+  opacity: 0.5;
+}
+
+/* ---- shared notched-console panel ---- */
+[data-hud-theme='abyss'] .hud__id-row,
+[data-hud-theme='abyss'] .hud__gems,
+[data-hud-theme='abyss'] .hud__zone,
+[data-hud-theme='abyss'] .hud__quick-btn,
+[data-hud-theme='abyss'] .icon-btn {
+  clip-path: var(--notch);
+  border-radius: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 0 14px rgba(53, 230, 255, 0.18), inset 0 0 10px rgba(53, 230, 255, 0.08);
+}
+
+[data-hud-theme='abyss'] .hud__id-row {
+  padding: 6px 14px 6px 6px;
+}
+[data-hud-theme='abyss'] .hud__player-name,
+[data-hud-theme='abyss'] .hud__character {
+  text-transform: uppercase;
+  text-shadow: 0 0 8px color-mix(in srgb, currentColor 60%, transparent);
+}
+[data-hud-theme='abyss'] .hud__gear {
+  color: var(--accent);
+}
+
+[data-hud-theme='abyss'] .hud__gems {
+  color: var(--accent);
+  text-shadow: 0 0 10px var(--accent);
+}
+[data-hud-theme='abyss'] .hud__quick-btn {
+  width: 38px;
+  height: 38px;
+}
+[data-hud-theme='abyss'] .hud__quick-btn:hover {
+  color: #fff;
+  border-color: #fff;
+  box-shadow: 0 0 16px var(--accent);
+}
+[data-hud-theme='abyss'] .hud__zone--pvp {
+  color: var(--danger);
+  text-shadow: 0 0 10px var(--danger);
+}
+
+/* ---- party: octagon data-cells with cyan glow ---- */
+[data-hud-theme='abyss'] .party-slot {
+  border-radius: 0;
+  clip-path: polygon(28% 0, 72% 0, 100% 28%, 100% 72%, 72% 100%, 28% 100%, 0 72%, 0 28%);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 0 12px rgba(53, 230, 255, 0.2);
+}
+[data-hud-theme='abyss'] .party-slot--active {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 2px var(--element-color),
+    0 0 20px color-mix(in srgb, var(--element-color) 70%, transparent);
+}
+[data-hud-theme='abyss'] .party-slot__initial {
+  text-shadow: 0 0 8px currentColor;
+}
+
+/* ---- action buttons: octagonal command keys ---- */
+[data-hud-theme='abyss'] .action-button {
+  border-radius: 0;
+  clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
+  color: var(--accent);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 0 18px rgba(53, 230, 255, 0.25), inset 0 0 14px rgba(53, 230, 255, 0.1);
+  text-shadow: 0 0 8px currentColor;
+}
+[data-hud-theme='abyss'] .action-button--attack {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 70%, var(--line));
+  box-shadow: 0 0 22px rgba(255, 46, 136, 0.3), inset 0 0 16px rgba(255, 46, 136, 0.12);
+}
+[data-hud-theme='abyss'] .joystick {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 0 18px rgba(53, 230, 255, 0.2), inset 0 0 20px rgba(53, 230, 255, 0.06);
+}
+[data-hud-theme='abyss'] .joystick__knob {
+  background: radial-gradient(circle at 40% 35%, #bff6ff, var(--accent));
+  box-shadow: 0 0 16px var(--accent);
+}
+
+/* ---- health: thin neon reactor bar ---- */
+[data-hud-theme='abyss'] .hud__health {
+  height: 12px;
+  background: rgba(2, 8, 14, 0.7);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 18px rgba(53, 230, 255, 0.16);
+}
+[data-hud-theme='abyss'] .hud__health-fill {
+  box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+[data-hud-theme='abyss'] .hud__health--critical {
+  border-top-color: var(--danger);
+}
+
+/* ---- combo: holographic ---- */
+[data-hud-theme='abyss'] .hud__combo-count {
+  color: var(--accent);
+  text-shadow: 0 0 22px var(--accent), 0 0 6px #fff;
+}
+[data-hud-theme='abyss'] .hud__combo-label {
+  color: var(--text);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+[data-hud-theme='abyss'] .hud__combo--hot .hud__combo-count {
+  color: var(--danger);
+  text-shadow: 0 0 24px var(--danger), 0 0 8px #fff;
+}

@@ -9,6 +9,9 @@ import '@fontsource/chakra-petch/400.css';
 import '@fontsource/chakra-petch/600.css';
 import '@fontsource/chakra-petch/700.css';
 import './index.css';
+// Runtime-swappable gameplay-HUD skins (Alfa default + 5 themes). Loads after
+// index.css so its `[data-hud-theme] .hud` rules layer over the base HUD.
+import './styles/hud/index.css';
 import App from './App.tsx';
 import { SpacetimeDBProvider } from 'spacetimedb/react';
 import { DbConnection } from './module_bindings/index.ts';

@@ -12,6 +12,7 @@ import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
 import { GachaScreen, type GachaTab, type PityInfo, type PullView } from './ui/GachaScreen';
 import { CharacterScreen } from './ui/CharacterScreen';
+import { DEFAULT_HUD_THEME, isHudTheme } from './styles/hud/themes';
 
 const PARTY_SIZE = 4;
 
@@ -50,6 +51,12 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showFps, setShowFps] = useState(() => localStorage.getItem('settings.showFps') === '1');
   const [showPing, setShowPing] = useState(() => localStorage.getItem('settings.showPing') === '1');
+  // Which gameplay-HUD skin is active. Drives `data-hud-theme` on the .app root;
+  // the CSS in src/styles/hud/ reskins the HUD accordingly. Persisted per device.
+  const [hudTheme, setHudTheme] = useState(() => {
+    const saved = localStorage.getItem('settings.hudTheme');
+    return isHudTheme(saved) ? saved : DEFAULT_HUD_THEME;
+  });
   const [pullResults, setPullResults] = useState<PullView[] | null>(null);
   const pullBufferRef = useRef<PullView[]>([]);
   const flushTimerRef = useRef<number | null>(null);
@@ -391,6 +398,9 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('settings.showPing', showPing ? '1' : '0');
   }, [showPing]);
+  useEffect(() => {
+    localStorage.setItem('settings.hudTheme', hudTheme);
+  }, [hudTheme]);
 
   // ESC opens settings (closes the gacha screen first if it's open). The Radix
   // dialog handles ESC-to-close itself, so here we only need the open path.
@@ -430,7 +440,7 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" data-hud-theme={hudTheme}>
       <canvas ref={canvasRef} className="game-canvas" />
       <Hud
         playerName={myPlayer?.name ?? ''}
@@ -510,6 +520,8 @@ export default function App() {
         showPing={showPing}
         onToggleFps={setShowFps}
         onTogglePing={setShowPing}
+        hudTheme={hudTheme}
+        onHudThemeChange={setHudTheme}
         onLogout={() => {
           setIsSettingsOpen(false);
           handleLogout();

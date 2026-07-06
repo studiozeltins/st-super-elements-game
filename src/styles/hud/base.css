@@ -1,0 +1,41 @@
+/* ============================================================
+   HUD THEME · SHARED STRUCTURAL DEFAULTS
+   Extra HUD elements that some markup always renders but only
+   certain themes opt into. Hidden by default so the base HUD and
+   every other theme look exactly as before. Kept out of index.css
+   so the base stylesheet stays put. Loaded first by ./index.css.
+   ============================================================ */
+
+/* Bench: name + skill glyph + labelled health bar, shown left of the avatar
+   (Frost opts in; other themes keep the plain disc). */
+.party-slot__meta {
+  display: none;
+}
+
+/* ---- Action-button SVG icons (jump / skill / attack), all themes ---- */
+.ab-icon {
+  width: 26px;
+  height: 26px;
+  display: block;
+}
+.action-button--attack .ab-icon {
+  width: 32px;
+  height: 32px;
+}
+.action-button__key {
+  display: grid;
+  place-items: center;
+}
+
+/* ---- Mobile: keep the party column clear of the bottom action cluster.
+   The bench is centred by default, so on short screens its lowest member can
+   sit under the attack button — anchor it above that zone with breathing room. */
+@media (pointer: coarse) {
+  .hud__party {
+    top: auto;
+    /* Clear the bottom-right action cluster: attack button (76px) sits at ~26px,
+       so its top edge is ~102px up — anchor just above it. */
+    bottom: calc(108px + env(safe-area-inset-bottom));
+    transform: none;
+  }
+}

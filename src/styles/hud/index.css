@@ -1,0 +1,16 @@
+/* ============================================================
+   HUD THEME BARREL
+   Runtime-swappable gameplay-HUD skins. Each theme scopes all of
+   its rules under `[data-hud-theme="<id>"] .hud`, so switching the
+   attribute on the .app root (App.tsx) reskins ONLY the gameplay
+   HUD — the base index.css stays the `alfa` default (no attribute
+   rules), and the gacha/character overlays keep the base tokens.
+   Registry + labels: ./themes.ts.  Picker control: ./switcher.css.
+   ============================================================ */
+@import './base.css';
+@import './switcher.css';
+@import './celestia.css';
+@import './abyss.css';
+@import './verdant.css';
+@import './synth.css';
+@import './frost.css';

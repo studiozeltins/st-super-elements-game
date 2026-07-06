@@ -1,0 +1,138 @@
+/* ============================================================
+   HUD THEME · SYNTHWAVE
+   Loud retro-arcade: magenta + cyan neon, chunky 2px borders,
+   sharp corners, hard outer glow, uppercase pixel display, and an
+   animated shine sweeping the health bar. Maximalist by design.
+   ============================================================ */
+
+[data-hud-theme='synth'] .hud {
+  --panel: rgba(26, 10, 42, 0.66);
+  --line: rgba(255, 60, 175, 0.6);
+  --text: #ffe9ff;
+  --muted: #b98fd0;
+  --accent: #ff3caf;
+  --gold: #33e1ff;
+  --danger: #ff4d5e;
+}
+
+/* Shared neon-slab: sharp corners, magenta edge, cyan inner bloom. */
+[data-hud-theme='synth'] .hud__id-row,
+[data-hud-theme='synth'] .hud__gems,
+[data-hud-theme='synth'] .hud__zone,
+[data-hud-theme='synth'] .hud__quick-btn,
+[data-hud-theme='synth'] .icon-btn {
+  border-radius: 2px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: 0 0 16px rgba(255, 60, 175, 0.35), inset 0 0 12px rgba(51, 225, 255, 0.12);
+}
+
+[data-hud-theme='synth'] .hud__id-row {
+  padding: 6px 14px 6px 6px;
+}
+[data-hud-theme='synth'] .hud__player-name,
+[data-hud-theme='synth'] .hud__character {
+  text-transform: uppercase;
+  text-shadow: 0 0 10px color-mix(in srgb, currentColor 70%, transparent);
+}
+[data-hud-theme='synth'] .hud__gear {
+  color: var(--gold);
+}
+[data-hud-theme='synth'] .hud__gems {
+  color: var(--gold);
+  text-shadow: 0 0 12px var(--gold);
+}
+[data-hud-theme='synth'] .hud__quick-btn {
+  width: 38px;
+  height: 38px;
+  color: var(--accent);
+}
+[data-hud-theme='synth'] .hud__quick-btn:hover {
+  color: #fff;
+  border-color: #fff;
+  box-shadow: 0 0 18px var(--accent);
+}
+
+/* ---- party: neon cassette tiles ---- */
+[data-hud-theme='synth'] .party-slot {
+  border-radius: 3px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+  box-shadow: 0 0 14px rgba(255, 60, 175, 0.3), inset 0 0 10px rgba(51, 225, 255, 0.12);
+}
+[data-hud-theme='synth'] .party-slot--active {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 2px var(--element-color),
+    0 0 22px color-mix(in srgb, var(--element-color) 75%, transparent);
+}
+[data-hud-theme='synth'] .party-slot__initial {
+  text-shadow: 0 0 10px currentColor;
+}
+[data-hud-theme='synth'] .party-slot__key {
+  color: var(--gold);
+}
+
+/* ---- action buttons: arcade cabinet keys ---- */
+[data-hud-theme='synth'] .action-button {
+  border-radius: 4px;
+  color: var(--accent);
+  background: linear-gradient(160deg, rgba(51, 225, 255, 0.12), var(--panel));
+  border: 2px solid var(--line);
+  box-shadow: 0 0 20px rgba(255, 60, 175, 0.4), inset 0 0 16px rgba(51, 225, 255, 0.14);
+  text-shadow: 0 0 10px currentColor;
+}
+[data-hud-theme='synth'] .action-button--attack {
+  color: var(--gold);
+  border-color: color-mix(in srgb, var(--gold) 75%, transparent);
+  box-shadow: 0 0 24px rgba(51, 225, 255, 0.45), inset 0 0 18px rgba(255, 60, 175, 0.16);
+}
+[data-hud-theme='synth'] .joystick {
+  border: 2px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 0 18px rgba(255, 60, 175, 0.3), inset 0 0 20px rgba(51, 225, 255, 0.1);
+}
+[data-hud-theme='synth'] .joystick__knob {
+  background: radial-gradient(circle at 40% 35%, #ffd0f2, var(--accent));
+  box-shadow: 0 0 18px var(--accent);
+}
+
+/* ---- health: magenta→cyan strip with a sweeping shine ---- */
+[data-hud-theme='synth'] .hud__health {
+  height: 14px;
+  background: rgba(12, 4, 20, 0.72);
+  border-top: 2px solid var(--line);
+  box-shadow: 0 -4px 20px rgba(255, 60, 175, 0.28);
+  overflow: hidden;
+}
+[data-hud-theme='synth'] .hud__health-fill {
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 85%, transparent);
+}
+[data-hud-theme='synth'] .hud__health::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  width: 40%;
+  animation: synth-shine 2.4s linear infinite;
+}
+@keyframes synth-shine {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(360%);
+  }
+}
+
+/* ---- combo: chrome arcade score ---- */
+[data-hud-theme='synth'] .hud__combo-count {
+  color: var(--gold);
+  text-shadow: 0 0 24px var(--gold), 0 0 8px #fff, 3px 3px 0 var(--accent);
+}
+[data-hud-theme='synth'] .hud__combo-label {
+  color: var(--accent);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px var(--accent);
+}

@@ -1,0 +1,142 @@
+/* ============================================================
+   HUD THEME · CELESTIA
+   Genshin-faithful: warm cream frosted glass, gold hairlines,
+   soft rounded everything, generous lift-shadows. The elemental
+   colour is kept on the active party ring so identity survives.
+   Scope: every rule lives under `.hud`, tokens set on `.hud`.
+   ============================================================ */
+
+[data-hud-theme='celestia'] .hud {
+  --panel: rgba(248, 243, 231, 0.1);
+  --line: rgba(240, 214, 150, 0.4);
+  --text: #f7f0de;
+  --muted: #cdbc93;
+  --accent: #ecca79;
+  --gold: #f4d585;
+  --danger: #ff7d6c;
+  /* Sleeker display face than the pixel default — Genshin reads clean, not blocky. */
+  --font-display: 'Chakra Petch', sans-serif;
+}
+
+/* ---- shared frosted-panel language ---- */
+[data-hud-theme='celestia'] .hud__id-row,
+[data-hud-theme='celestia'] .hud__gems,
+[data-hud-theme='celestia'] .hud__zone,
+[data-hud-theme='celestia'] .hud__quick-btn,
+[data-hud-theme='celestia'] .icon-btn {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  backdrop-filter: blur(9px) saturate(1.15);
+  -webkit-backdrop-filter: blur(9px) saturate(1.15);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+/* ---- top-left identity: name + active char in one frosted pill ---- */
+[data-hud-theme='celestia'] .hud__id-row {
+  padding: 5px 14px 5px 5px;
+  border-radius: 40px;
+}
+[data-hud-theme='celestia'] .hud__gear {
+  border-radius: 50%;
+  color: var(--gold);
+}
+[data-hud-theme='celestia'] .hud__gear:hover {
+  color: #fff;
+  border-color: var(--gold);
+}
+[data-hud-theme='celestia'] .hud__player-name {
+  color: var(--text);
+  letter-spacing: 0.05em;
+}
+[data-hud-theme='celestia'] .hud__character {
+  text-shadow: 0 0 10px color-mix(in srgb, currentColor 55%, transparent);
+}
+
+[data-hud-theme='celestia'] .hud__zone {
+  border-radius: 40px;
+  padding: 4px 12px;
+}
+
+/* ---- wallet + quick nav ---- */
+[data-hud-theme='celestia'] .hud__gems {
+  border-radius: 40px;
+  color: var(--gold);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--gold) 45%, transparent);
+}
+[data-hud-theme='celestia'] .hud__quick-btn {
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+}
+[data-hud-theme='celestia'] .hud__quick-btn:hover {
+  color: #fff;
+  border-color: var(--gold);
+  transform: translateY(-2px);
+}
+
+/* ---- party: rounded-square avatar tiles with a gold frame ---- */
+[data-hud-theme='celestia'] .party-slot {
+  border-radius: 16px;
+  background: radial-gradient(circle at 50% 30%, rgba(255, 246, 224, 0.14), var(--panel));
+  border: 1px solid var(--line);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+[data-hud-theme='celestia'] .party-slot--active {
+  transform: scale(1.16);
+  box-shadow: 0 0 0 2px var(--element-color),
+    0 8px 22px color-mix(in srgb, var(--element-color) 42%, transparent);
+}
+[data-hud-theme='celestia'] .party-slot__initial {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+[data-hud-theme='celestia'] .party-slot__key {
+  color: var(--gold);
+}
+
+/* ---- action buttons: soft convex gold discs ---- */
+[data-hud-theme='celestia'] .action-button {
+  color: #fff;
+  background: radial-gradient(circle at 50% 32%, rgba(255, 247, 226, 0.22), var(--panel));
+  border: 1px solid var(--line);
+  box-shadow: 0 7px 20px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+[data-hud-theme='celestia'] .action-button--attack {
+  border-color: color-mix(in srgb, var(--gold) 65%, var(--line));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4),
+    inset 0 0 18px color-mix(in srgb, var(--gold) 22%, transparent);
+}
+[data-hud-theme='celestia'] .joystick {
+  border: 1px solid var(--line);
+  background: radial-gradient(circle at 50% 40%, rgba(255, 247, 226, 0.1), var(--panel));
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+[data-hud-theme='celestia'] .joystick__knob {
+  background: radial-gradient(circle at 40% 35%, #fff6df, var(--gold));
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- health: taller warm strip with a soft top glow ---- */
+[data-hud-theme='celestia'] .hud__health {
+  height: 16px;
+  background: linear-gradient(rgba(28, 22, 10, 0.5), rgba(28, 22, 10, 0.72));
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -8px 22px rgba(0, 0, 0, 0.32);
+}
+[data-hud-theme='celestia'] .hud__health-fill {
+  box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* ---- combo: gilded ---- */
+[data-hud-theme='celestia'] .hud__combo-count {
+  color: var(--gold);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--gold) 55%, transparent),
+    0 3px 0 rgba(40, 26, 8, 0.55);
+}
+[data-hud-theme='celestia'] .hud__combo-label {
+  color: var(--text);
+  letter-spacing: 0.22em;
+}

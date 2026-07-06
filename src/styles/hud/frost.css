@@ -1,0 +1,332 @@
+/* ============================================================
+   HUD THEME · FROST
+   Brutally minimal: monochrome frostglass, single icy-cyan accent,
+   hairline borders, no fills, no shadows. Tiny uppercase labels on
+   wide tracking, maximal negative space. Restraint is the point.
+   ============================================================ */
+
+[data-hud-theme='frost'] .hud {
+  --panel: rgba(255, 255, 255, 0.04);
+  --line: rgba(255, 255, 255, 0.16);
+  --text: #f4fbff;
+  --muted: #8aa0ab;
+  --accent: #86e2ff;
+  --gold: #f4fbff;
+  --danger: #ff6b6b;
+}
+
+/* Only the wallet + round buttons wear glass. The id-row and zone are bare
+   text over the world (see below), so they stay out of this group. */
+[data-hud-theme='frost'] .hud__gems,
+[data-hud-theme='frost'] .hud__quick-btn,
+[data-hud-theme='frost'] .icon-btn {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: none;
+}
+
+/* Identity: gear circle + bare name/character text — no card behind them. */
+[data-hud-theme='frost'] .hud__id-row {
+  padding: 0;
+  background: none;
+  border: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+[data-hud-theme='frost'] .hud__gear {
+  border-radius: 50%;
+  color: var(--muted);
+}
+[data-hud-theme='frost'] .hud__gear:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+[data-hud-theme='frost'] .hud__player-name {
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+[data-hud-theme='frost'] .hud__character {
+  letter-spacing: 0.28em;
+  font-size: 11px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+/* Zone: bare label, no glass, tighter tracking so it stops eating the screen. */
+[data-hud-theme='frost'] .hud__zone {
+  padding: 0;
+  background: none;
+  border: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  border-radius: 0;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}
+[data-hud-theme='frost'] .hud__zone--safe {
+  color: var(--accent);
+}
+[data-hud-theme='frost'] .hud__gems {
+  border-radius: 40px;
+  color: var(--text);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+[data-hud-theme='frost'] .hud__quick-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--muted);
+}
+[data-hud-theme='frost'] .hud__quick-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  transform: none;
+}
+
+/* ---- press feedback across the frost HUD ---- */
+[data-hud-theme='frost'] .party-slot,
+[data-hud-theme='frost'] .action-button,
+[data-hud-theme='frost'] .hud__quick-btn,
+[data-hud-theme='frost'] .icon-btn {
+  transition: transform 0.14s ease, background 0.14s ease, border-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+[data-hud-theme='frost'] .hud__quick-btn:active,
+[data-hud-theme='frost'] .icon-btn:active {
+  transform: scale(0.88);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+/* ---- party: NO card. Bare name + skill glyph + health bar sit to the LEFT of
+   the (P) avatar; the ONLY frosted element in this section is the disc itself. ---- */
+[data-hud-theme='frost'] .hud__party {
+  align-items: flex-end; /* avatars line up on the edge, names run inward */
+  gap: 14px;
+}
+[data-hud-theme='frost'] .party-slot {
+  width: auto;
+  height: auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 2px;
+  border: none;
+  border-radius: 0;
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+[data-hud-theme='frost'] .party-slot:active {
+  transform: scale(0.95);
+}
+
+/* name (+ element glyph) then health bar — plain over the world, no panel */
+[data-hud-theme='frost'] .party-slot__meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  min-width: 0;
+}
+[data-hud-theme='frost'] .party-slot__nameline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+[data-hud-theme='frost'] .party-slot__name {
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 600 11px var(--font-body);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+/* skill-type glyph after the name, in the hero's element colour */
+[data-hud-theme='frost'] .party-slot__type {
+  flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--element-color);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--element-color) 60%, transparent),
+    0 1px 2px rgba(0, 0, 0, 0.7);
+}
+[data-hud-theme='frost'] .party-slot__meta-hp {
+  width: 96px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+[data-hud-theme='frost'] .party-slot__meta-hp-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  transform-origin: left center;
+  transition: transform 0.25s ease-out, background 0.25s ease-out;
+}
+
+/* the (P) avatar disc — the single frosted circle here, kept uncrowded */
+[data-hud-theme='frost'] .party-slot__inner {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+[data-hud-theme='frost'] .party-slot__initial {
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+/* type glyph moved next to the name; slot number dropped (1–4 keys are intuitive) */
+[data-hud-theme='frost'] .party-slot__skill,
+[data-hud-theme='frost'] .party-slot__key {
+  display: none;
+}
+/* base bottom mini-bar replaced by the labelled meta bar */
+[data-hud-theme='frost'] .party-slot__hp {
+  display: none;
+}
+
+/* ---- cooldown as a ring that FILLS around the disc; full element ring = ready.
+   No ticking seconds — the hero's colour reads at a glance (like a constellation
+   ring). ---- */
+[data-hud-theme='frost'] .party-slot__cd {
+  display: none; /* no dark pie wipe */
+}
+/* ready: a full element-colour ring hugs the disc — skill is up */
+[data-hud-theme='frost'] .party-slot:not(.party-slot--cooling) .party-slot__inner {
+  box-shadow: 0 0 0 2px var(--element-color),
+    0 0 12px color-mix(in srgb, var(--element-color) 45%, transparent),
+    0 2px 8px rgba(0, 0, 0, 0.4);
+}
+/* cooling: faint full track on the disc; the arc fills over it as it cools */
+[data-hud-theme='frost'] .party-slot--cooling .party-slot__inner {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+[data-hud-theme='frost'] .party-slot__ring {
+  display: block;
+  width: 46px;
+  height: 46px;
+  /* fill grows as the remaining cooldown (--cooldown) drains toward 0 */
+  background: conic-gradient(var(--element-color) calc((1 - var(--cooldown)) * 360deg), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px));
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--element-color) 65%, transparent));
+}
+
+/* ---- action buttons: hairline outlines + tactile press ripple ---- */
+[data-hud-theme='frost'] .action-button {
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: none;
+}
+[data-hud-theme='frost'] .action-button--attack {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+/* expanding ripple, contained by the button's overflow:hidden */
+[data-hud-theme='frost'] .action-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 45%, transparent), transparent 62%);
+  opacity: 0;
+  transform: scale(0.4);
+  pointer-events: none;
+}
+[data-hud-theme='frost'] .action-button:active:not(:disabled) {
+  transform: scale(0.9);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+[data-hud-theme='frost'] .action-button:active:not(:disabled)::before {
+  animation: frost-ripple 0.42s ease-out;
+}
+@keyframes frost-ripple {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
+/* cooldown: the base conic ::after becomes a filling ELEMENT ring around the
+   button (skill AND attack) — full ring when ready, arc while cooling. No pie. */
+[data-hud-theme='frost'] .action-button--skill::after,
+[data-hud-theme='frost'] .action-button--attack::after {
+  background: conic-gradient(
+    var(--element-color) calc((1 - var(--cooldown, 0)) * 360deg),
+    transparent 0
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+}
+/* while cooling, dim the E — the ring carries the progress */
+[data-hud-theme='frost'] .action-button--skill.action-button--cooling {
+  background: rgba(255, 255, 255, 0.02);
+  cursor: default;
+}
+[data-hud-theme='frost'] .action-button--skill.action-button--cooling .action-button__key {
+  opacity: 0.4;
+}
+
+[data-hud-theme='frost'] .joystick {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+[data-hud-theme='frost'] .joystick__knob {
+  background: rgba(244, 251, 255, 0.85);
+}
+
+/* ---- health: 4px hairline strip ---- */
+[data-hud-theme='frost'] .hud__health {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-top: none;
+}
+[data-hud-theme='frost'] .hud__health--critical {
+  height: 5px;
+}
+
+/* ---- combo: quiet, letter-spaced ---- */
+[data-hud-theme='frost'] .hud__combo-count {
+  font-weight: 300;
+  color: var(--text);
+  text-shadow: none;
+}
+[data-hud-theme='frost'] .hud__combo-label {
+  color: var(--muted);
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+}
+[data-hud-theme='frost'] .hud__combo--hot .hud__combo-count {
+  color: var(--accent);
+}

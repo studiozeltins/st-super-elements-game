@@ -14,6 +14,60 @@ const SKILL_GLYPH: Record<string, string> = {
   volley: '⁘',
 };
 
+// Bench health-bar colour ramp for themes that show a labelled member bar
+// (e.g. Frost): green when healthy, amber at half, red when low. Kept
+// independent of the theme accent so "health = green" always reads true.
+function benchHpColor(fraction: number): string {
+  if (fraction > 0.5) return '#7ec843';
+  if (fraction > 0.25) return '#f5a623';
+  return '#ff5c3c';
+}
+
+// Action-button glyphs, drawn as inline SVG (Genshin-style, crisp at any size)
+// so they inherit the button's colour via currentColor across every theme.
+function JumpIcon() {
+  // Solid up-arrow lifting off a ground bar.
+  return (
+    <svg className="ab-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 3.4 4.9 10.5a1 1 0 0 0 .71 1.71H8.7V16a1 1 0 0 0 1 1h4.6a1 1 0 0 0 1-1v-3.79h3.09a1 1 0 0 0 .71-1.71z" />
+      <rect x="7.2" y="19.2" width="9.6" height="2.2" rx="1.1" />
+    </svg>
+  );
+}
+
+function SkillIcon() {
+  // Four-point elemental burst.
+  return (
+    <svg className="ab-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2c.65 4.6 1.75 5.7 6.3 6.3-4.55.65-5.65 1.75-6.3 6.3-.65-4.55-1.75-5.65-6.3-6.3C10.25 7.7 11.35 6.6 12 2Z" />
+      <circle cx="18.5" cy="17" r="1.6" opacity="0.85" />
+      <circle cx="5.5" cy="18.5" r="1" opacity="0.7" />
+    </svg>
+  );
+}
+
+function AttackIcon() {
+  // Clean single sword (Lucide geometry): blade to the top-right, guard + grip
+  // bottom-left. Line art with round joins — reads sharp, not sketchy.
+  return (
+    <svg
+      className="ab-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 3v3l-11 11-3-3L18 3z" />
+      <path d="m5 13 6 6" />
+      <path d="m4 17 3 3" />
+      <path d="M2 22l3-1" />
+    </svg>
+  );
+}
+
 interface HudProps {
   playerName: string;
   health: number;
@@ -164,6 +218,23 @@ export function Hud({
               onClick={() => onSelectPartySlot(slotIndex)}
               aria-label={`${character.displayName} (${slotIndex + 1})`}
             >
+              {/* Name (+ skill-type glyph) and health readout shown left of the
+                  avatar. Hidden by default (styles/hud/base.css); themes like Frost
+                  opt in. The glyph sits after the name so the avatar disc stays clean. */}
+              <span className="party-slot__meta" aria-hidden="true">
+                <span className="party-slot__nameline">
+                  <span className="party-slot__name">{character.displayName}</span>
+                  <span className="party-slot__type" title={character.skill.displayName}>
+                    {skillGlyph}
+                  </span>
+                </span>
+                <span className="party-slot__meta-hp">
+                  <span
+                    className="party-slot__meta-hp-fill"
+                    style={{ transform: `scaleX(${hpFraction})`, background: benchHpColor(hpFraction) }}
+                  />
+                </span>
+              </span>
               <span className="party-slot__inner">
                 <span className="party-slot__initial">{character.displayName[0]}</span>
                 <span className="party-slot__skill" title={character.skill.displayName}>
@@ -175,7 +246,8 @@ export function Hud({
                       className="party-slot__cd"
                       style={{ '--cooldown': cooldown } as React.CSSProperties}
                     />
-                    {/* The "line that runs around" — a colored ring arc shrinking as the skill cools. */}
+                    {/* The "line that runs around" — a colored ring arc. Base themes
+                        shrink it as the skill cools; Frost fills it up (see frost.css). */}
                     <span
                       className="party-slot__ring"
                       style={{ '--cooldown': cooldown } as React.CSSProperties}
@@ -209,25 +281,41 @@ export function Hud({
             onPointerDown={() => onTouchButton('jump')}
             aria-label="Lēkt"
           >
-            ↥
+            <JumpIcon />
           </button>
           <button
-            className="action-button action-button--skill"
-            style={{ '--cooldown': hudState.skillCooldownFraction } as React.CSSProperties}
+            className={`action-button action-button--skill ${
+              hudState.skillCooldownFraction > 0.001 ? 'action-button--cooling' : ''
+            }`}
+            style={
+              {
+                '--cooldown': hudState.skillCooldownFraction,
+                // Drives the Frost fill-ring + ready glow in the active hero's colour.
+                '--element-color': activeElement?.cssColor ?? 'var(--accent)',
+              } as React.CSSProperties
+            }
             onPointerDown={() => onTouchButton('skill')}
+            disabled={hudState.skillCooldownFraction > 0.001}
             aria-label="Prasme"
           >
-            E
+            <span className="action-button__key">
+              <SkillIcon />
+            </span>
           </button>
           <button
             className="action-button action-button--attack"
-            style={{ '--cooldown': hudState.attackCooldownFraction } as React.CSSProperties}
+            style={
+              {
+                '--cooldown': hudState.attackCooldownFraction,
+                '--element-color': activeElement?.cssColor ?? 'var(--accent)',
+              } as React.CSSProperties
+            }
             onPointerDown={() => onTouchButton('attack')}
             onPointerUp={() => onTouchButtonRelease('attack')}
             onPointerLeave={() => onTouchButtonRelease('attack')}
             aria-label="Uzbrukt"
           >
-            ⚔
+            <AttackIcon />
           </button>
         </div>
       </div>
