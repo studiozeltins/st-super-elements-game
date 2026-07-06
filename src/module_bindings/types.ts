@@ -219,6 +219,16 @@ export const RestoreWeaponItemRow = __t.object("RestoreWeaponItemRow", {
 });
 export type RestoreWeaponItemRow = __Infer<typeof RestoreWeaponItemRow>;
 
+export const ShardDrop = __t.object("ShardDrop", {
+  id: __t.u64(),
+  positionX: __t.f32(),
+  positionZ: __t.f32(),
+  amount: __t.u32(),
+  droppedBy: __t.identity(),
+  droppedAtMicros: __t.u64(),
+});
+export type ShardDrop = __Infer<typeof ShardDrop>;
+
 export const SkillCast = __t.object("SkillCast", {
   caster: __t.identity(),
   characterId: __t.string(),

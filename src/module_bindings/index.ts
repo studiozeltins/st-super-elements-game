@@ -39,6 +39,7 @@ import AttackPlayerReducer from "./attack_player_reducer";
 import AttackRayReducer from "./attack_ray_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
 import CollectGemReducer from "./collect_gem_reducer";
+import CollectShardReducer from "./collect_shard_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import HealPartyReducer from "./heal_party_reducer";
@@ -74,6 +75,7 @@ import PlayerRow from "./player_table";
 import PullResultRow from "./pull_result_table";
 import PvpHitRow from "./pvp_hit_table";
 import RangedAttackRow from "./ranged_attack_table";
+import ShardDropRow from "./shard_drop_table";
 import SkillCastRow from "./skill_cast_table";
 import WeaponItemRow from "./weapon_item_table";
 
@@ -215,6 +217,17 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, RangedAttackRow),
+  shardDrop: __table({
+    name: 'shard_drop',
+    indexes: [
+      { accessor: 'id', name: 'shard_drop_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'shard_drop_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, ShardDropRow),
   skillCast: __table({
     name: 'skill_cast',
     indexes: [
@@ -246,6 +259,7 @@ const reducersSchema = __reducers(
   __reducerSchema("attack_ray", AttackRayReducer),
   __reducerSchema("cast_skill", CastSkillReducer),
   __reducerSchema("collect_gem", CollectGemReducer),
+  __reducerSchema("collect_shard", CollectShardReducer),
   __reducerSchema("fall_to_death", FallToDeathReducer),
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("heal_party", HealPartyReducer),
