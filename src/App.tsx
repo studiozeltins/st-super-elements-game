@@ -63,6 +63,18 @@ export default function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
+  // Shard loss/gain feedback: a --pulse (gain) / --drain (loss) flash on the shard
+  // counter and a self-facing toast on a real shard MOVEMENT. Disambiguated purely
+  // client-side (no new broadcast table): a recent pvpHit on me marks a DOWN as a
+  // theft (else a PVE drop); a recent local collectShard request marks an UP as a
+  // plain pickup (pulse only, no toast) vs. a kill-steal.
+  const prevShardsRef = useRef<number | null>(null);
+  const lastPvpHitOnMeAtRef = useRef(-Infinity);
+  const lastShardPickupAtRef = useRef(-Infinity);
+  const [shardFlash, setShardFlash] = useState<{ kind: 'pulse' | 'drain'; key: number } | null>(
+    null
+  );
+  const [shardToast, setShardToast] = useState<{ text: string; key: number } | null>(null);
 
   useEffect(() => {
     if (!connection || !isActive || !identity) {
@@ -160,6 +172,10 @@ export default function App() {
     onInsert: row => {
       const targetHex = row.target.toHexString();
       if (targetHex === myIdentityRef.current) {
+        // Mark the PVP context so a coinciding shard DOWN reads as a theft, not a
+        // PVE drop (the shard only actually leaves on a fatal hit; a non-fatal hit
+        // simply produces no shard diff, so no false toast fires).
+        lastPvpHitOnMeAtRef.current = performance.now();
         gameRef.current?.spawnSelfNumber(row.amount, 'pvp');
       } else {
         // Someone else got hit — show their health bar (I'm the attacker/bystander).
@@ -348,7 +364,13 @@ export default function App() {
         sendAttackRay: (originX, originZ, directionX, directionZ, range, hitRadius, damage, comboCount) =>
           connection.reducers.attackRay({ originX, originZ, dirX: directionX, dirZ: directionZ, range, hitRadius, damage, comboCount }),
         sendCollectGem: dropId => connection.reducers.collectGem({ dropId }),
-        sendCollectShard: dropId => connection.reducers.collectShard({ dropId }),
+        sendCollectShard: dropId => {
+          // A pickup is the only shard GAIN the client itself initiates — record it
+          // so the diff effect can tell a plain walk-over (pulse only) from a
+          // kill-steal (which fires the "Nozagi" toast).
+          lastShardPickupAtRef.current = performance.now();
+          connection.reducers.collectShard({ dropId });
+        },
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
       setHudState
@@ -386,6 +408,48 @@ export default function App() {
   useEffect(() => {
     gameRef.current?.syncGoliaths(goliathRows);
   }, [goliathRows]);
+
+  // Shard counter flash + movement toast, driven by the reactive transcendShards diff.
+  useEffect(() => {
+    const shards = myPlayer?.transcendShards;
+    if (shards === undefined) return;
+    const prev = prevShardsRef.current;
+    prevShardsRef.current = shards;
+    // Skip the first observed value (mount / login) so we don't flash on hydrate.
+    if (prev === null || shards === prev) return;
+    const now = performance.now();
+    const RECENT_MS = 2500;
+    if (shards > prev) {
+      // Gain: always pulse. A plain ground pickup (recent local collect request) is
+      // pulse-only; a gain with no pickup is a kill-steal → killer toast.
+      setShardFlash({ kind: 'pulse', key: now });
+      const wasPickup = now - lastShardPickupAtRef.current < RECENT_MS;
+      if (!wasPickup) setShardToast({ text: 'Nozagi zvaigžņu šķembu!', key: now });
+    } else {
+      // Loss: drain (shrink, never --danger). A recent fatal pvpHit on me → stolen
+      // (victim); otherwise the shard spilled to the ground on a PVE death.
+      setShardFlash({ kind: 'drain', key: now });
+      const wasPvpKill = now - lastPvpHitOnMeAtRef.current < RECENT_MS;
+      setShardToast({
+        text: wasPvpKill ? 'Zvaigžņu šķemba nozagta!' : 'Zvaigžņu šķemba nokrita',
+        key: now,
+      });
+    }
+  }, [myPlayer?.transcendShards]);
+
+  // Self-clear the counter flash after one animation cycle.
+  useEffect(() => {
+    if (!shardFlash) return;
+    const timer = window.setTimeout(() => setShardFlash(null), 520);
+    return () => window.clearTimeout(timer);
+  }, [shardFlash]);
+
+  // Auto-dismiss the shard toast (~1.5s); it never blocks.
+  useEffect(() => {
+    if (!shardToast) return;
+    const timer = window.setTimeout(() => setShardToast(null), 1500);
+    return () => window.clearTimeout(timer);
+  }, [shardToast]);
 
   useEffect(() => {
     const active = myPlayer?.activeCharacterId;
@@ -446,9 +510,16 @@ export default function App() {
     );
   }
 
+  const shardFlashClass = shardFlash ? `wallet-chip--${shardFlash.kind}` : '';
+
   return (
     <div className="app" data-hud-theme={hudTheme}>
       <canvas ref={canvasRef} className="game-canvas" />
+      {shardToast && (
+        <div className="shard-toast" role="status" key={shardToast.key}>
+          <span className="shard-toast__glyph">◈</span> {shardToast.text}
+        </div>
+      )}
       <Hud
         playerName={myPlayer?.name ?? ''}
         health={myPlayer?.currentHealth ?? MAX_HEALTH}
@@ -479,6 +550,7 @@ export default function App() {
         <GachaScreen
           gems={myPlayer?.gems ?? 0}
           transcendShards={myPlayer?.transcendShards ?? 0}
+          shardFlashClass={shardFlashClass}
           ownedCharacterIds={new Set(myCharacterIds)}
           activeCharacterId={myPlayer?.activeCharacterId ?? ''}
           weaponItems={myWeaponItems}
@@ -503,6 +575,7 @@ export default function App() {
         <CharacterScreen
           characterId={characterPageId}
           transcendShards={myPlayer?.transcendShards ?? 0}
+          shardFlashClass={shardFlashClass}
           ownedCharacterIds={new Set(myCharacterIds)}
           activeCharacterId={myPlayer?.activeCharacterId ?? ''}
           constellationById={constellationById}

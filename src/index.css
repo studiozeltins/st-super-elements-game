@@ -1134,6 +1134,55 @@ button {
   100% { transform: scale(1); }
 }
 
+/* Loss flash: a quick shrink (motion, NOT hue) — a shard lost/stolen is real, but
+   --danger stays reserved for destructive user actions, so the loss reads by MOTION
+   while staying in the --shard purple family. Mirrors the pulse keyframe shape,
+   inverted to a dip with a dimmed glow. */
+.wallet-chip--drain {
+  animation: shard-chip-drain 0.5s ease;
+}
+@keyframes shard-chip-drain {
+  0% { transform: scale(1); }
+  35% {
+    transform: scale(0.82);
+    text-shadow: 0 0 4px color-mix(in srgb, var(--shard) 30%, transparent);
+  }
+  100% { transform: scale(1); }
+}
+
+/* Self-facing shard-movement toast (lost / stolen / stole). Non-blocking, auto-dismiss,
+   pinned near the top of the HUD; reuses the panel backing + --shard purple + ◈ glyph. */
+.shard-toast {
+  position: absolute;
+  top: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--shard);
+  background: var(--panel);
+  border: 1px solid color-mix(in srgb, var(--shard) 40%, var(--line));
+  border-radius: 8px;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--shard) 55%, transparent);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: shard-toast-in 1.5s ease forwards;
+}
+.shard-toast__glyph {
+  font-size: 15px;
+}
+@keyframes shard-toast-in {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  12% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  80% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+}
+
 /* In the gacha wallet the shard chip sits immediately left of the swapping
    gems/owned readout, separated by a 12px gap. */
 .gacha__wallet .wallet-chip {

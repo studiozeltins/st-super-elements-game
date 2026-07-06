@@ -40,6 +40,8 @@ interface WeaponRow {
 interface GachaScreenProps {
   gems: number;
   transcendShards: number;
+  /** Transient flash modifier on the shard chip (`wallet-chip--pulse|--drain`), driven by App. */
+  shardFlashClass?: string;
   ownedCharacterIds: Set<string>;
   activeCharacterId: string;
   weaponItems: WeaponRow[];
@@ -70,6 +72,7 @@ export type GachaTab = 'banners' | 'party' | 'characters' | 'inventory';
 export function GachaScreen({
   gems,
   transcendShards,
+  shardFlashClass = '',
   ownedCharacterIds,
   activeCharacterId,
   weaponItems,
@@ -235,7 +238,7 @@ export function GachaScreen({
           {/* Scarce transcend-shard balance — read-only from the subscribed player
               row, shown on every tab, left of the swapping gems/owned readout. */}
           <span
-            className="wallet-chip"
+            className={`wallet-chip ${shardFlashClass}`.trim()}
             data-shard-anchor
             aria-label={`Zvaigžņu šķembas: ${shownShards}`}
           >
