@@ -28,6 +28,7 @@ import SetActiveCharacterReducer from "../set_active_character_reducer";
 import SetConstellationReducer from "../set_constellation_reducer";
 import SetPartyReducer from "../set_party_reducer";
 import TakeDamageReducer from "../take_damage_reducer";
+import TranscendCharacterReducer from "../transcend_character_reducer";
 import UpdatePositionReducer from "../update_position_reducer";
 
 export type AttackEnemiesParams = __Infer<typeof AttackEnemiesReducer>;
@@ -52,5 +53,6 @@ export type SetActiveCharacterParams = __Infer<typeof SetActiveCharacterReducer>
 export type SetConstellationParams = __Infer<typeof SetConstellationReducer>;
 export type SetPartyParams = __Infer<typeof SetPartyReducer>;
 export type TakeDamageParams = __Infer<typeof TakeDamageReducer>;
+export type TranscendCharacterParams = __Infer<typeof TranscendCharacterReducer>;
 export type UpdatePositionParams = __Infer<typeof UpdatePositionReducer>;
 

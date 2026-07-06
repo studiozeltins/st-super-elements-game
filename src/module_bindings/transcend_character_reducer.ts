@@ -10,11 +10,6 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  id: __t.u64().primaryKey(),
-  owner: __t.identity(),
-  characterId: __t.string().name("character_id"),
-  currentHealth: __t.u32().name("current_health"),
-  constellation: __t.u32(),
-  transcendLevel: __t.u32().name("transcend_level"),
-});
+export default {
+  characterId: __t.string(),
+};

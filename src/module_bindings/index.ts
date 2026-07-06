@@ -56,6 +56,7 @@ import SetActiveCharacterReducer from "./set_active_character_reducer";
 import SetConstellationReducer from "./set_constellation_reducer";
 import SetPartyReducer from "./set_party_reducer";
 import TakeDamageReducer from "./take_damage_reducer";
+import TranscendCharacterReducer from "./transcend_character_reducer";
 import UpdatePositionReducer from "./update_position_reducer";
 
 // Import all procedure arg schemas
@@ -262,6 +263,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_constellation", SetConstellationReducer),
   __reducerSchema("set_party", SetPartyReducer),
   __reducerSchema("take_damage", TakeDamageReducer),
+  __reducerSchema("transcend_character", TranscendCharacterReducer),
   __reducerSchema("update_position", UpdatePositionReducer),
 );
 

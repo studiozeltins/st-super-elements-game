@@ -118,6 +118,7 @@ export const OwnedCharacter = __t.object("OwnedCharacter", {
   characterId: __t.string(),
   currentHealth: __t.u32(),
   constellation: __t.u32(),
+  transcendLevel: __t.u32(),
 });
 export type OwnedCharacter = __Infer<typeof OwnedCharacter>;
 
