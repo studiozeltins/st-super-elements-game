@@ -393,27 +393,35 @@ constellation: result.nextConstellation })`. `[VERIFIED: index.ts:700-704, 933, 
 | A5 | `fallToDeath` (void death) is out of scope for the shard penalty (spec lists only 3 paths). | Pitfall 4 / Open Q | If void death should also cost a shard, a 4th wiring is needed. |
 | A6 | Minimal toast is a local `transcendShards` diff; a broadcast steal-feed (attacker+victim names) is optional and would need a new event table. | Client / Open Q | A diff-only toast can't name WHO stole; if the "steal-feed hint" must name the thief, an event table is required. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Does void death (`fallToDeath`) also cost a shard?**
+1. **Does void death (`fallToDeath`) also cost a shard?** → **RESOLVED: NO — `fallToDeath` is
+   NOT wired to the shard penalty. [D1]**
    - What we know: The spec enumerates exactly three death paths and `fallToDeath` wipes gems
      (not loot). It is a genuine death.
    - What's unclear: Whether self-inflicted void falls should also trigger `applyDeathShardPenalty`.
-   - Recommendation: Default to NO (match the spec's explicit list); flag for the human-verify
-     playtest. If added later, it's a one-line wiring.
+   - Disposition [D1]: Void death costs NO shard — `fallToDeath` (index.ts:1105) is left
+     unchanged and only the three enumerated paths (takeDamage, worldTick loop, attackPlayer)
+     apply the penalty. Encoded as a prohibition in Plan 03-02. If added later, it's a one-line
+     wiring.
 
-2. **Steal-feed hint: local toast or broadcast event?**
+2. **Steal-feed hint: local toast or broadcast event?** → **RESOLVED: self-facing toast only —
+   NO `shard_steal` broadcast table. [D2]**
    - What we know: There is NO existing toast/kill-feed system; `pvpHit`/`healEvent` are the
      event-table precedents. The counter itself is already reactive.
    - What's unclear: Whether "steal-feed hint" must name the thief/victim (needs a broadcast
      `shard_steal` event table) or is just a self-facing "you lost/stole a shard" toast.
-   - Recommendation: Ship the self-facing diff-driven toast first (zero new tables). Treat a
-     named broadcast feed as an optional stretch behind a small `shard_steal` event table
-     mirroring `pvpHit`.
+   - Disposition [D2]: Ship the self-facing diff-driven toast only (zero new tables); NO
+     `shard_steal` broadcast event table is created. Encoded as a prohibition in Plan 03-02. A
+     named broadcast feed remains an optional future stretch.
 
-3. **Write the clamped activation row on constellation erosion, or rely on read-time clamp?**
-   - Recommendation: Rely on `activatedConstellationFor`'s existing clamp (no extra write);
-     optionally write for cleanliness. Confirm during planning.
+3. **Write the clamped activation row on constellation erosion, or rely on read-time clamp?** →
+   **RESOLVED: read-time clamp via `activatedConstellationFor`; write an activation row only if
+   an un-clamped consumer is found. [D3]**
+   - Disposition [D3]: Rely on `activatedConstellationFor`'s existing read-time clamp
+     (index.ts:1592) — no extra write by default. During Plan 03-02 wiring, confirm no un-clamped
+     consumer reads `activatedConstellation` directly; only if such a consumer exists, additionally
+     write the clamped activation row (documented in the 03-02 SUMMARY).
 
 ## Environment Availability
 
