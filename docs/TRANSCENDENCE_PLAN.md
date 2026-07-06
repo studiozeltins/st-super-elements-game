@@ -40,10 +40,46 @@ parties gang the whale -> drain shards -> whale must defend
 ## Locked decisions
 
 - **PVE death shard → ground collectible.** On PVE death the dropped shard spills as a
-  ground pickup (reuse the gem-drop spill + the 1.2s `GEM_PICKUP_DELAY_MICROS` grace so a
-  nearby camp cannot instantly vacuum it). Anyone can grab it — including the dying player
-  on recovery. PVP death still transfers the shard directly to the killer.
-- **Branch:** all transcendence work lands on `feat/transcendence`, cut from `main`.
+  ground pickup (reuse the gem-drop spill + the 1.2s pickup grace so a nearby camp cannot
+  instantly vacuum it). Anyone can grab it — including the dying player on recovery. PVP
+  death still transfers the shard directly to the killer.
+- **Branch:** all transcendence work lands on `feat/transcendence`, cut from `master`
+  (the real trunk that holds the game; `main` is a stale Initial-commit branch).
+- **Naming unification:** rename every `primogem` → `gem` (Phase A). Two-tier economy:
+  `gems` = common/trivial currency (gacha fuel), `shards` = rare transcendence currency.
+- **Wipe, don't migrate.** The `primogems`→`gems` column rename is a destructive schema
+  op. We accept a full data wipe on BOTH local and maincloud (`--delete-data always`).
+  No migration reducer. Do this once in Phase A before any real players matter.
+
+## Naming conventions (use verbatim — this is the consistency contract)
+
+Common currency (renamed from primogem):
+
+| Concept | Identifier |
+|---|---|
+| Wallet balance (player column) | `gems` (u32) |
+| Ground drop table | `gem_drop` / accessor `gemDrop` |
+| Starting grant | `STARTING_GEMS` |
+| Kill reward base | `KILL_REWARD_GEMS` |
+| Spill helper | `spillGems` |
+| Death spill fractions | `PVE_DEATH_SPILL`, `PVP_DEATH_SPILL` (unchanged) |
+| Constants / mirrors | `GEM_*`, `gemsFromKills`, `gemsCollected`, `src/game/data/gem*.ts` (unchanged) |
+
+Transcendence currency (new):
+
+| Concept | Identifier |
+|---|---|
+| Shard balance (player column) | `transcendShards` (u32) |
+| Ground drop table (PVE death drop) | `shard_drop` / accessor `shardDrop` |
+| Spill helper | `spillShards` |
+| Collectible check | reuse `gemIsCollectible` (already generic: droppedAt/now/delay) |
+| Per-character transcend level | `ownedCharacter.transcendLevel` (u32) |
+| Constants | `SHARD_*`, `TRANSCEND_*` (see tunables) |
+| Client mirror | `src/game/data/shardDrops.ts` |
+
+User-facing nouns: **"Gems"** (common) and **"Constellation Shards"** (rare). Code root
+`shard`/`Shard`/`SHARD` everywhere — never "fragment"/"crystal". Shards are NOT vacuumable
+by camps (no `carriedShards` field).
 
 ## Tunable numbers (LOCKED in Phase 0, referenced everywhere after)
 
@@ -61,6 +97,46 @@ parties gang the whale -> drain shards -> whale must defend
 All numbers are proposals — the Phase 0 agent finalizes and writes them into
 `spacetimedb/src/*.ts` + client `src/game/data/constants.ts` and NOTHING else changes
 behavior in Phase 0.
+
+---
+
+## Phase A — Gem naming unification (rename primogem → gem, wipe both envs)
+
+**Depends on:** none. This is the FIRST phase — do it before Phase 0 so all later work
+builds on clean naming.
+
+Pure mechanical rename, no behavior change. One atomic commit.
+
+**Server (`spacetimedb/src/index.ts`):**
+- `player.primogems` column → `gems`.
+- `STARTING_PRIMOGEMS` → `STARTING_GEMS`; `KILL_REWARD_PRIMOGEMS` → `KILL_REWARD_GEMS`.
+- All `primogems` in reducer bodies (`spillGems`, `attackPlayer`, `takeDamage`,
+  `fallToDeath`, `pullBanner`, `collectGem`, `seedPlayer`, worldTick death, restore
+  reducers) → `gems`.
+- Comments mentioning "primogems" → "gems".
+
+**Backup/restore + scripts (do NOT miss these — they key on the column name):**
+- `scripts/*.mjs` (backup/restore): field key `primogems` → `gems`.
+- `restorePlayers` reducer field → `gems`.
+
+**Client:**
+- Regenerate bindings (`pnpm run spacetime:generate`) — the `player` type field becomes
+  `gems`.
+- Update every `.primogems` read and UI label ("Primogems" → "Gems") in
+  `CharacterScreen.tsx`, `GachaScreen.tsx`, `App.tsx`, and any HUD/wallet component.
+- `src/game/data/constants.ts` — rename any `*_PRIMOGEMS` mirror constants.
+
+**Tests:** update `serverSync.test.ts` and gacha/economy tests to the new names; all green.
+Grep the whole repo for `primogem` (case-insensitive) — must return ZERO hits after.
+
+**Validation (this is the wipe):**
+1. `spacetime publish 2d-impact-game-fr9ti --module-path spacetimedb --server local --delete-data always --yes`
+2. `spacetime publish 2d-impact-game-fr9ti --module-path spacetimedb --server maincloud --delete-data always --yes`
+3. `pnpm run spacetime:generate` → `pnpm build`
+4. Playtest: create account, confirm `STARTING_GEMS` granted, kill/collect adds gems,
+   gacha spends gems. No "primogem" anywhere in UI.
+
+**Commit:** `refactor(economy): rename primogems to gems`
 
 ---
 
@@ -301,16 +377,18 @@ BOTH local and maincloud per the CLAUDE.md migrate procedure (publish without
   `maincloud` only at Phase 7 (or when a phase is user-facing on prod), never
   `--delete-data` on a DB with real accounts.
 - **Schema changes are additive** (new columns/tables) so migrate-publish keeps data.
-  Never drop a table with rows without clearing it first.
+  Never drop a table with rows without clearing it first. EXCEPTION: Phase A is a
+  deliberate full wipe (`--delete-data always`) on both envs for the column rename.
 - **Tests:** pure math → dependency-free modules under `src/game/combat/` or
   `src/game/data/` (vitest). Reducer logic → extract pure helpers where possible so they
   unit-test without a running DB. Always keep `serverSync.test.ts` green.
 - **Validation:** every phase ends with a real playtest of the new slice, not just green
   tests. Use the webapp-testing (Playwright) skill.
-- **Commits:** one atomic commit per phase, on the `feat/goliath-raiders` branch or a new
-  `feat/transcendence` branch (recommend a fresh branch off `main`).
+- **Commits:** one atomic commit per phase, on the `feat/transcendence` branch (cut from
+  `master`, the real trunk).
 
 ## Suggested execution order
 
-`0 → (1 → 2 → 3)  and in parallel  4 → 5`, then `6 → 7`.
+`A → 0 → (1 → 2 → 3)  and in parallel  4 → 5`, then `6 → 7`.
+Phase A (rename + wipe) goes first so everything after builds on clean naming.
 Phases 1-3 are the transcendence spine; 4-5 are the co-op spine; they converge at 6.
