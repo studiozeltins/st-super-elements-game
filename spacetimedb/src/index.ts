@@ -1549,7 +1549,10 @@ export const healParty = spacetimedb.reducer(
     const healActivated = healer
       ? activatedConstellationFor(ctx, healer.owner, healer.characterId, healer.constellation)
       : 0;
-    const healMultiplier = 1 + healActivated * HEAL_CONSTELLATION_STEP;
+    const healMultiplier =
+      1 +
+      healActivated * HEAL_CONSTELLATION_STEP +
+      (healer ? healer.transcendLevel : 0) * TRANSCEND_HEAL_STEP;
 
     let activeHealth = currentPlayer.currentHealth;
     for (const owned of ownedList) {
