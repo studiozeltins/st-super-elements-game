@@ -332,7 +332,7 @@ Client mirror already exists: `src/game/data/constants.ts` line 11
 **Only one assumption** — the additive-default behavior. It is backed by an explicit project
 decision (STATE.md) and the requirement text, and is easy to falsify in the local playtest.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the pull result / animation surface the minted shard to the player?**
    - What we know: Success criterion 3 only requires the balance be visible in Character/Gacha
@@ -340,12 +340,16 @@ decision (STATE.md) and the requirement text, and is easy to falsify in the loca
    - What's unclear: Whether the planner wants per-pull "+1 shard" feedback (nice-to-have, not required).
    - Recommendation: Keep Phase 1 minimal — render the running balance only; defer per-pull shard
      feedback (fits better with Phase 2's transcend UI). Not a blocker.
+   - **(RESOLVED):** Deferred to Phase 2. Phase 1 renders the running balance only; per-pull "+1 shard"
+     feedback is out of scope and folds into Phase 2's transcend UI. No `pullResult` shard field added.
 
 2. **Where exactly in `CharacterScreen` should the shard chip sit?**
    - What we know: `CharacterScreen` currently receives no currency prop (verified: no `gems`/wallet
      in the file); it has a tab header area (`TABS`, lines 46-50).
    - Recommendation: Add a small shard chip near the header/roster, using the `✦`/`❖` glyph style
      from `gacha__wallet`. Planner/UI-spec can pin the exact slot; leave to discretion.
+   - **(RESOLVED):** Pinned by UI-SPEC and plan 01-04 — the shard chip's exact slot is specified there
+     (header/roster area, `✦`/`❖` glyph style from `gacha__wallet`). No longer at planner discretion.
 
 ## Environment Availability
 

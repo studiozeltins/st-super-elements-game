@@ -1,8 +1,8 @@
 ---
 phase: 1
 slug: constellation-shard-currency
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-06
 ---
@@ -73,4 +73,4 @@ created: 2026-07-06
 - [ ] Feedback latency < 60s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-07-06
