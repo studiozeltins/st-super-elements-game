@@ -24,6 +24,7 @@ export const TABLES = [
       'current_health',
       'gems_from_kills',
       'gems_collected',
+      'transcend_shards',
     ],
   },
   {

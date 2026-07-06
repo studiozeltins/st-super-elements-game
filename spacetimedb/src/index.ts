@@ -284,6 +284,8 @@ const player = table(
     // up off the ground (others can steal your drops).
     gemsFromKills: t.u32(),
     gemsCollected: t.u32(),
+    // Durable transcendence currency minted by C6-overflow dupes (REQ-shard-currency-mint).
+    transcendShards: t.u32(),
   }
 );
 
@@ -658,6 +660,7 @@ function seedPlayer(ctx: { db: any; timestamp: any }, identity: any, name: strin
     lastKillRewardAt: ctx.timestamp,
     gemsFromKills: 0,
     gemsCollected: 0,
+    transcendShards: 0,
   });
   ctx.db.ownedCharacter.insert({
     id: 0n,
@@ -1384,6 +1387,7 @@ const RestorePlayerRow = t.object('RestorePlayerRow', {
   currentHealth: t.u32(),
   gemsFromKills: t.u32(),
   gemsCollected: t.u32(),
+  transcendShards: t.u32(),
 });
 
 const RestoreOwnedCharacterRow = t.object('RestoreOwnedCharacterRow', {
