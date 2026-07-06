@@ -134,12 +134,12 @@ and with no shards the active character erodes in the locked order.
 
   4. The player sees a shard lost/stolen toast, an updated counter, and a steal-feed hint.
 
-**Plans**: 2/5 plans executed
+**Plans**: 3/5 plans executed
 **UI hint**: yes
 
 - [x] 03-01-PLAN.md — Pure `applyDeathShardPenalty` helper + cross-import unit test (Nyquist Wave 0)
 - [x] 03-02-PLAN.md — Server: `shard_drop` table + `spillShards` + `collectShard`, wire penalty into 3 death paths (keep gem spill, PVP credits `shardsLost`)
-- [ ] 03-03-PLAN.md — [BLOCKING] Additive migrate-publish to local + regenerate bindings (gates client)
+- [x] 03-03-PLAN.md — [BLOCKING] Additive migrate-publish to local + regenerate bindings (gates client)
 - [ ] 03-04-PLAN.md — Client: purple shard-drop renderer + subscribe/bridge + lost/stolen toast + counter loss/gain flash
 - [ ] 03-05-PLAN.md — Validation: suite + build green, two-client playtest, PROGRESS.md tracker update
 
@@ -243,7 +243,7 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | 0. Lock transcendence constants | 1/1 | Complete   | 2026-07-06 |
 | 1. Constellation shard currency | 4/4 | Complete    | 2026-07-06 |
 | 2. Transcendence install | 5/5 | Complete    | 2026-07-06 |
-| 3. Shards at risk | 2/5 | In Progress|  |
+| 3. Shards at risk | 3/5 | In Progress|  |
 | 4. Formalize character roles | 0/TBD | Not started | - |
 | 5. Multiplayer party | 0/TBD | Not started | - |
 | 6. Raid boss | 0/TBD | Not started | - |
