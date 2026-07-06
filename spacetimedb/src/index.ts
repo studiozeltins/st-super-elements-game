@@ -74,6 +74,15 @@ const DUPLICATE_REFUND = 800;
 const KILL_REWARD_GEMS = 40;
 const MAX_KILL_REWARD_TIER = 3;
 
+// Transcendence tunables (locked Phase 0; wired in phases 1-7). Declared only — no reducer references them yet.
+const MAX_TRANSCEND_LEVEL = 10;
+const TRANSCEND_DAMAGE_STEP = 0.05;
+const TRANSCEND_HEAL_STEP = 0.08;
+const SHARD_PER_OVERFLOW_DUPE = 1;
+const SHARD_DEATH_LOSS = 1;
+const RAID_SHARD_PAYOUT = 6;
+const TRANSCEND_SHARD_COST = (n: number): number => n; // installing level n costs n shards
+
 // ---- Wish banners + weapon catalog + pity (mirror src/game/data/gacha.ts) ----
 const BANNERS: Record<string, { featuredCharacterId: string }> = {
   tide: { featuredCharacterId: 'nereida' },
