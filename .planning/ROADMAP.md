@@ -80,12 +80,12 @@ the player can see their shard balance.
   3. The player's shard balance is visible in the Character and Gacha screens.
   4. Existing gacha/pity tests remain green; the overflow logic has a pure-helper unit test.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 **UI hint**: yes
 
 - [x] 01-01-PLAN.md — Pure `resolveDupeGrant` overflow helper + unit test (Nyquist wave 0)
 - [x] 01-02-PLAN.md — Server: `transcendShards` column (4 mirror sites), wire helper into grantCharacter/pullBanner, remove 800-gem refund, snapshot keep-list
-- [ ] 01-03-PLAN.md — Deploy: additive-migrate publish to local + regenerate bindings (gates client)
+- [x] 01-03-PLAN.md — Deploy: additive-migrate publish to local + regenerate bindings (gates client)
 - [ ] 01-04-PLAN.md — Client: shard `◈` chip in Gacha + Character screens + prop threading + verify playtest
 
 ### Phase 2: Transcendence install
@@ -226,7 +226,7 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 |-------|----------------|--------|-----------|
 | A. Gem naming unification | 1/1 | Complete | 2026-07 (commit `8236de4`) |
 | 0. Lock transcendence constants | 1/1 | Complete   | 2026-07-06 |
-| 1. Constellation shard currency | 2/4 | In Progress|  |
+| 1. Constellation shard currency | 3/4 | In Progress|  |
 | 2. Transcendence install | 0/TBD | Not started | - |
 | 3. Shards at risk | 0/TBD | Not started | - |
 | 4. Formalize character roles | 0/TBD | Not started | - |
