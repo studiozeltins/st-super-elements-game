@@ -20,7 +20,7 @@ parallel spines that converge at Phase 6.
 
 - [x] **Phase A: Gem naming unification** - Rename primogems→gems (SHIPPED, commit `8236de4`)
 - [x] **Phase 0: Lock transcendence constants** - Add + mirror all `SHARD_*` / `TRANSCEND_*` constants, no logic (completed 2026-07-06)
-- [ ] **Phase 1: Constellation shard currency** - Mint 1 shard per C6-overflow dupe (replaces 800-gem refund)
+- [x] **Phase 1: Constellation shard currency** - Mint 1 shard per C6-overflow dupe (replaces 800-gem refund) (completed 2026-07-06)
 - [ ] **Phase 2: Transcendence install** - Spend shards to transcend a C6 character past C6 for real power
 - [ ] **Phase 3: Shards at risk** - Death loss + PVP steal + erosion order (transcend-- then C--)
 - [ ] **Phase 4: Formalize character roles** - Tag every character tank/dps/healer/support
@@ -80,7 +80,10 @@ the player can see their shard balance.
   3. The player's shard balance is visible in the Character and Gacha screens.
   4. Existing gacha/pity tests remain green; the overflow logic has a pure-helper unit test.
 
-**Plans**: 4/4 plans executed (01-04 render + build green; blocking human-verify playtest pending)
+**Plans**: 4/4 plans complete
+
+- [x] 01-04-PLAN.md
+
 **UI hint**: yes
 
 - [x] 01-01-PLAN.md — Pure `resolveDupeGrant` overflow helper + unit test (Nyquist wave 0)
@@ -226,7 +229,7 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 |-------|----------------|--------|-----------|
 | A. Gem naming unification | 1/1 | Complete | 2026-07 (commit `8236de4`) |
 | 0. Lock transcendence constants | 1/1 | Complete   | 2026-07-06 |
-| 1. Constellation shard currency | 3/4 | In Progress|  |
+| 1. Constellation shard currency | 4/4 | Complete    | 2026-07-06 |
 | 2. Transcendence install | 0/TBD | Not started | - |
 | 3. Shards at risk | 0/TBD | Not started | - |
 | 4. Formalize character roles | 0/TBD | Not started | - |

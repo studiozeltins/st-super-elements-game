@@ -72,7 +72,10 @@ Existing token palette (`src/index.css` `:root`), mapped to the 60/30/10 split:
 | Dominant (60%) | `--ink` `#0c110e` | App background, canvas backdrop, screen fills |
 | Secondary (30%) | `--panel` `rgba(12,17,14,0.72)` + `--line` `rgba(232,245,224,0.16)` | Panels, cards, borders, rails |
 | Accent (10%) | `--accent` `#7ec843` (green) | Kickers, active/focus states, pity fill — **not introduced by this phase** |
-| Currency | `--gold` `#f2c14e` | Wallet readouts (gems today; **shards in this phase**) |
+> **POST-BUILD REVISION (2026-07-06):** Shard chip recolored from gold to **`--shard` `#9333ea` (royal amethyst)** so shards read distinctly from the gold gems. Additionally, the per-pull mint feedback (Open Question Q1, previously deferred) was **implemented this phase**: a C6-overflow dupe card ember-burns and flings a purple "+N ◈" token to the wallet counter (`PullAnimation.tsx` + `.reveal-card--minted` / `.shard-fly` in `index.css`). References to `--gold` for the shard chip below are superseded by `--shard`.
+
+| Currency (gems) | `--gold` `#f2c14e` | Gems wallet readout |
+| Shard | `--shard` `#9333ea` | Transcend-shard chip (both screens) + mint fly-token |
 | Destructive | `--danger` `#ff5c3c` | Destructive actions only — **none in this phase** |
 
 Accent reserved for: kicker text, active tab/rail state, focus rings, pity progress fill. **The shard chip does NOT use accent green** — it belongs to the currency family and uses `--gold`, identical to the gems chip.
