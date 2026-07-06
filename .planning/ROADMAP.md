@@ -108,8 +108,14 @@ observable power (damage; heal for healers).
   3. A transcended character deals more damage (and heals more, for healers) in play.
   4. The UI shows "C6 + T{n}" and an Install button gated by shard balance and the cap.
 
-**Plans**: TBD
+**Plans**: 5 plans
 **UI hint**: yes
+
+- [ ] 02-01-PLAN.md — Pure helpers test-first: `resolveTranscendInstall` + `transcendDamageMultiplier` + units (Wave 0)
+- [ ] 02-02-PLAN.md — Server: additive `owned_character.transcendLevel` column + `transcendCharacter` reducer + `healParty` transcend scaling
+- [ ] 02-03-PLAN.md — [BLOCKING] Additive publish to local + regenerate bindings (gates client)
+- [ ] 02-04-PLAN.md — Client bridge: damage multiplier + `setActiveTranscend` (createGame) + `transcendById`/feed/callback/props (App.tsx)
+- [ ] 02-05-PLAN.md — UI: gated Install control + `C6 · T{n}` badge on CharacterScreen + install playtest
 
 ### Phase 3: Shards at risk
 
@@ -230,7 +236,7 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | A. Gem naming unification | 1/1 | Complete | 2026-07 (commit `8236de4`) |
 | 0. Lock transcendence constants | 1/1 | Complete   | 2026-07-06 |
 | 1. Constellation shard currency | 4/4 | Complete    | 2026-07-06 |
-| 2. Transcendence install | 0/TBD | Not started | - |
+| 2. Transcendence install | 0/5 | Planned | - |
 | 3. Shards at risk | 0/TBD | Not started | - |
 | 4. Formalize character roles | 0/TBD | Not started | - |
 | 5. Multiplayer party | 0/TBD | Not started | - |
