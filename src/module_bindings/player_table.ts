@@ -25,4 +25,5 @@ export default __t.row({
   lastKillRewardAt: __t.timestamp().name("last_kill_reward_at"),
   gemsFromKills: __t.u32().name("gems_from_kills"),
   gemsCollected: __t.u32().name("gems_collected"),
+  transcendShards: __t.u32().name("transcend_shards"),
 });

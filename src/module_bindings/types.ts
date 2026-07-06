@@ -136,6 +136,7 @@ export const Player = __t.object("Player", {
   lastKillRewardAt: __t.timestamp(),
   gemsFromKills: __t.u32(),
   gemsCollected: __t.u32(),
+  transcendShards: __t.u32(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -205,6 +206,7 @@ export const RestorePlayerRow = __t.object("RestorePlayerRow", {
   currentHealth: __t.u32(),
   gemsFromKills: __t.u32(),
   gemsCollected: __t.u32(),
+  transcendShards: __t.u32(),
 });
 export type RestorePlayerRow = __Infer<typeof RestorePlayerRow>;
 
