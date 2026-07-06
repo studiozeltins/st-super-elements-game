@@ -6,14 +6,14 @@ current_phase: 03
 current_phase_name: Shards at risk
 status: executing
 stopped_at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
-last_updated: "2026-07-06T22:58:49.879Z"
+last_updated: "2026-07-06T23:09:42.170Z"
 last_activity: 2026-07-07
 last_activity_desc: Phase 03 plan 01 complete (applyDeathShardPenalty helper + spec)
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 14
   percent: 38
 ---
 
@@ -31,7 +31,7 @@ floor).
 ## Current Position
 
 Phase: 03 — Shards at risk
-Plan: 3 of 5 complete; plan 02 next
+Plan: 4 of 5 complete; plan 02 next
 Status: Ready to execute
 Last activity: 2026-07-07 — Phase 03 plan 01 complete (applyDeathShardPenalty helper + spec)
 
@@ -70,6 +70,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 | Phase 03 P01 | 5 min | 2 tasks | 2 files |
 | Phase 03 P02 | 6 min | 2 tasks | 1 files |
 | Phase 03 P03 | ~3m | 1 tasks | 5 files |
+| Phase 03 P04 | 20m | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 03]: shard-drop economy wired — shard_drop table + spillShards (single count-1 piece) + collectShard (reuses gemIsCollectible grace); applyDeathShardPenalty additively wired into all 3 death paths keeping gem spill; PVP killer credit folded with gem credit (gate stolen>0 || shardsLost>0) so a 0-gem shard carrier still transfers its shard (A1). D3: no un-clamped activatedConstellation consumer, no extra activation write.
 - [Phase ?]: 03-03: Published shard_drop additively to local (no --delete-data); migration ADD-only, player data intact.
 - [Phase ?]: 03-03: Regenerated bindings expose tables.shardDrop + reducers.collectShard — gates Plan 04 client work.
+- [Phase ?]: Shard-movement toast disambiguated client-side with no new broadcast table: DOWN+recent pvpHit = stolen, DOWN otherwise = PVE drop, UP with no recent local collect = kill-steal, plain pickup = pulse only.
+- [Phase ?]: Shard counter flash threaded to CharacterScreen + GachaScreen chips via shardFlashClass prop; loss shown by --drain shrink (motion) not --danger (hue).
 
 ### Pending Todos
 
@@ -115,6 +118,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06T22:58:23.125Z
+Last session: 2026-07-06T23:09:02.578Z
 Stopped at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
 Resume file: .planning/phases/03-shards-at-risk/03-01-SUMMARY.md
