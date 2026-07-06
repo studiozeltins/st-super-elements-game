@@ -473,6 +473,7 @@ export default function App() {
       {characterPageId && (
         <CharacterScreen
           characterId={characterPageId}
+          transcendShards={myPlayer?.transcendShards ?? 0}
           ownedCharacterIds={new Set(myCharacterIds)}
           activeCharacterId={myPlayer?.activeCharacterId ?? ''}
           constellationById={constellationById}

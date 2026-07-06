@@ -14,6 +14,7 @@ type Tab = 'info' | 'weapon' | 'constellation';
 
 interface CharacterScreenProps {
   characterId: string;
+  transcendShards: number;
   ownedCharacterIds: Set<string>;
   activeCharacterId: string;
   /** Unlocked constellation ceiling per character (from duplicate pulls). */
@@ -53,6 +54,7 @@ const SWIPE_THRESHOLD = 55;
 
 export function CharacterScreen({
   characterId,
+  transcendShards,
   ownedCharacterIds,
   activeCharacterId,
   constellationById,
@@ -164,6 +166,11 @@ export function CharacterScreen({
             );
           })}
         </nav>
+        {/* Scarce transcend-shard balance — identical chip to the gacha wallet,
+            pinned right of the scrolling roster, read-only from the player row. */}
+        <span className="wallet-chip" aria-label={`Zvaigžņu šķembas: ${transcendShards}`}>
+          <span className="gacha__gem">◈</span> {transcendShards}
+        </span>
         <button className="cscreen__close" onClick={onClose} aria-label="Aizvērt">
           ✕
         </button>
