@@ -33,6 +33,7 @@ import {
   type SwingProfile,
 } from './combat/comboSystem';
 import type { DamageKind } from './combat/damageKind';
+import { transcendDamageMultiplier } from './combat/transcendScaling';
 import { attackHitsEntity } from './combat/hitTest';
 import { gemVisual } from './data/gemDrops';
 import type { Enemy, GemDrop, Goliath, Player, RangedAttack, SkillCast } from '../module_bindings/types';
@@ -97,6 +98,8 @@ export interface Game {
   setActiveCharacter(characterId: string): void;
   /** Active character's constellation level, scaling its damage. */
   setActiveConstellation(constellation: number): void;
+  /** Active character's transcend level, further scaling its damage. */
+  setActiveTranscend(transcend: number): void;
   syncRemotePlayers(players: readonly Player[], myIdentityHex: string | null): void;
   syncMyServerRow(row: Player): void;
   handleRemoteSkillCast(cast: SkillCast): void;
@@ -388,9 +391,8 @@ export function createGame(
 
   const CRIT_CHANCE = 0.22;
   const CRIT_MULTIPLIER = 1.9;
-  const CONSTELLATION_DAMAGE_STEP = 0.08; // +8% damage per constellation (C6 = +48%)
   let activeConstellation = 0;
-  const constellationDamageMultiplier = () => 1 + activeConstellation * CONSTELLATION_DAMAGE_STEP;
+  let activeTranscend = 0;
 
   /** Client-only visual crit roll (no shared state, so plain randomness is fine). */
   function rollDamage(baseDamage: number): { amount: number; kind: DamageKind } {
@@ -414,7 +416,9 @@ export function createGame(
     const elementColor = ELEMENTS[activeCharacter.element].color;
     // Regular attacks get only a small combo boost — the payoff is the skill.
     const baseDamage =
-      weapon.damage * regularAttackMultiplier(combo) * constellationDamageMultiplier();
+      weapon.damage *
+      regularAttackMultiplier(combo) *
+      transcendDamageMultiplier(activeConstellation, activeTranscend);
     const { amount, kind } = rollDamage(baseDamage);
 
     if (profile.isFlourish) {
@@ -482,7 +486,9 @@ export function createGame(
       direction,
       applyDamage: applySkillDamage,
       // The combo's real payoff: the skill scales strongly and uncapped.
-      damageMultiplier: skillAttackMultiplier(combo) * constellationDamageMultiplier(),
+      damageMultiplier:
+        skillAttackMultiplier(combo) *
+        transcendDamageMultiplier(activeConstellation, activeTranscend),
       followPosition: () => playerPosition,
     });
     network.sendCastSkill(skill.id, playerPosition.x, playerPosition.z, direction.x, direction.z);
@@ -806,6 +812,9 @@ export function createGame(
     },
     setActiveConstellation(constellation) {
       activeConstellation = constellation;
+    },
+    setActiveTranscend(transcend) {
+      activeTranscend = transcend;
     },
     syncRemotePlayers(players, myIdentityHex) {
       const seenIdentities = new Set<string>();
