@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 00
+current_phase: 01
+current_phase_name: Constellation shard currency
 status: executing
 stopped_at: Phase 1 UI-SPEC approved
-last_updated: "2026-07-06T14:09:04.229Z"
+last_updated: "2026-07-06T14:15:36.860Z"
 last_activity: 2026-07-06
-last_activity_desc: Phase 00 marked complete
+last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  total_plans: 5
+  completed_plans: 2
   percent: 13
-current_phase_name: lock-transcendence-constants
 ---
 
 # Project State
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 **Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor).
-**Current focus:** Phase 00 — lock-transcendence-constants
+**Current focus:** Phase 01 — Constellation shard currency
 
 ## Current Position
 
-Phase: 00 — COMPLETE
-Plan: 1 of 1
+Phase: 01 (Constellation shard currency) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-07-06 — Phase 00 marked complete
+Last activity: 2026-07-06 — Phase 01 execution started
 
 Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 
@@ -57,6 +57,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 01 P01 | 2 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,7 @@ Recent decisions affecting current work:
 - [Phase A]: Wipe (not migrate) accepted for the primogems→gems rename; all later phases are additive schema.
 - [Death]: PVE-death shard = ground collectible; PVP-death shard = stolen by killer.
 - [Tunables]: `MAX_TRANSCEND_LEVEL=10`, `TRANSCEND_DAMAGE_STEP=0.05`, `RAID_SHARD_PAYOUT=6`, etc. finalized in Phase 0.
+- [Phase 01]: resolveDupeGrant extracted as a pure dependency-free helper so the C6-overflow mint semantics are unit-testable via cross-import before any reducer wiring.
 
 ### Pending Todos
 
@@ -90,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06T13:48:34.574Z
+Last session: 2026-07-06T14:14:56.254Z
 Stopped at: Phase 1 UI-SPEC approved
 Resume file: .planning/phases/01-constellation-shard-currency/01-UI-SPEC.md

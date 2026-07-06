@@ -12,6 +12,7 @@ then `6 → 7`.
 ## Economy Rename (ECON)
 
 ### REQ-gem-rename — Gem naming unification
+
 - **Phase:** A (DONE)
 - **Depends on:** none (first phase)
 - **Scope:** currency rename, mechanical only, no behavior change.
@@ -20,6 +21,7 @@ then `6 → 7`.
   all reducer bodies + comments), backup/restore scripts (`scripts/*.mjs` field key,
   `restorePlayers` reducer field), and client (regenerate bindings, all `.primogems` reads +
   UI labels "Primogems"→"Gems", `constants.ts` mirrors).
+
 - **Acceptance:** repo-wide grep for `primogem` (case-insensitive) returns ZERO hits;
   `serverSync.test.ts` + gacha/economy tests updated and green; wipe validation on both envs
   (`--delete-data always`), regenerate bindings, build, playtest confirms `STARTING_GEMS`
@@ -28,6 +30,7 @@ then `6 → 7`.
 ## Transcendence Spine (TRANS)
 
 ### REQ-lock-constants — Design lock + constants
+
 - **Phase:** 0
 - **Depends on:** none (builds on A's clean naming)
 - **Scope:** constants only, no behavior change.
@@ -35,11 +38,14 @@ then `6 → 7`.
   constellation constants) and any belonging in `enemyStats.ts`; mirror in client
   `src/game/data/constants.ts` / `constellations.ts`. Do NOT wire into logic yet. Finalize
   the locked tunables (see PROJECT.md).
+
 - **Acceptance:** `serverSync.test.ts` extended to assert every new constant matches
   server-side; trivial unit test asserts constants present and in valid ranges; `pnpm test`
+
   + `pnpm build` green; no publish (no schema/logic change).
 
 ### REQ-shard-currency-mint — Constellation shard currency + mint on C6-overflow dupe
+
 - **Phase:** 1
 - **Depends on:** Phase 0
 - **Scope:** shard currency, mint path.
@@ -48,12 +54,14 @@ then `6 → 7`.
   `transcendShards += SHARD_PER_OVERFLOW_DUPE` instead of the 800-gem refund
   (remove/replace the `DUPLICATE_REFUND` path). Client: regenerate bindings; show shard
   balance in `CharacterScreen.tsx` / `GachaScreen.tsx`.
+
 - **Acceptance:** pure-helper unit (extracted overflow logic): dupe of C6 char → shards += 1,
   gems unchanged; non-C6 char → constellation++ as before, no shard. Existing gacha/pity
   tests green. Publish local, regenerate, build; playtest: dupes of an already-C6 char raise
   shard count, no 800-gem refund occurs.
 
 ### REQ-transcend-install — Transcendence install + power scaling
+
 - **Phase:** 2
 - **Depends on:** Phase 1
 - **Scope:** transcend levels, power scaling.
@@ -64,6 +72,7 @@ then `6 → 7`.
   (`+transcendLevel * TRANSCEND_HEAL_STEP`). Client: extend damage multiplier in
   `createGame.ts` (`1 + activeConstellation*0.08 + transcendLevel*TRANSCEND_DAMAGE_STEP`);
   UI shows C6 + "T{n}" and an Install button gated by shard balance + cap.
+
 - **Acceptance:** pure-math unit `transcendDamageMultiplier(constellation, transcend)`
   extends correctly (in `src/game/combat/`); server logic unit: install deducts
   `TRANSCEND_SHARD_COST(n)`, raises level, rejects when short on shards / at cap / char < C6;
@@ -71,6 +80,7 @@ then `6 → 7`.
   per cost curve.
 
 ### REQ-shard-risk — Shards at risk: death loss, PVP steal, erosion
+
 - **Phase:** 3
 - **Depends on:** Phase 2
 - **Scope:** death penalty, PVP theft, erosion order.
@@ -83,6 +93,7 @@ then `6 → 7`.
   (`attackPlayer`) applies penalty AND credits the shard to the killer
   (`killer.transcendShards += 1`). Client: shard lost/stolen toast + counter + steal-feed
   hint.
+
 - **Acceptance:** pure unit for `applyDeathShardPenalty` across all branches (has shards /
   only transcend / only constellation / nothing); server logic: PVP kill transfers exactly 1
   shard to killer, PVE death creates no shard for anyone, erosion order respected; two-client
@@ -92,6 +103,7 @@ then `6 → 7`.
 ## Co-op Spine (COOP)
 
 ### REQ-combat-roles — Formalize character roles
+
 - **Phase:** 4
 - **Depends on:** none (parallel with 1–3; merges after Phase 0)
 - **Scope:** character role tagging.
@@ -101,10 +113,12 @@ then `6 → 7`.
   = tank; anemo utility (Aeris, Zefs) = support; rest = dps. Client: role badge in
   `CharacterSheet.tsx` / `CharacterScreen.tsx`. Store role server-side so the raid (Phase 6)
   can enforce it.
+
 - **Acceptance:** unit: every character has a valid role; `serverSync.test.ts` covers the new
   field; `pnpm test` + `pnpm build`; publish if role stored server-side.
 
 ### REQ-multiplayer-party — Multiplayer party
+
 - **Phase:** 5
 - **Depends on:** Phase 4 (roles used in roster; party mechanics themselves only need Phase 0)
 - **Scope:** party tables + reducers.
@@ -114,13 +128,16 @@ then `6 → 7`.
   collision with the existing 4-character personal party). Enforce one party per identity.
   Clean up membership on `clientDisconnected`. Client: party panel — create, show join code
   (= party id), join by code, roster with each member's active character + role.
+
 - **Acceptance:** tests: create/join/leave/disband, cap enforcement, no double-join,
   disconnect cleanup; two clients form a party and both see the roster; publish local + build
+
   + playtest.
 
 ## Convergence: Raid (RAID)
 
 ### REQ-raid-boss — Raid boss PVE shard faucet, party-gated
+
 - **Phase:** 6
 - **Depends on:** Phase 2 (shards), Phase 5 (party)
 - **Scope:** raid boss entity, summon, payout.
@@ -131,12 +148,14 @@ then `6 → 7`.
   `RAID_SHARD_PAYOUT` shards split among participating party members who dealt damage (track
   contributors like goliath damage tracking) — the recoverable faucet (INV-4). Client: render
   raid boss, summon button for leader, HP bar, payout feedback.
+
 - **Acceptance:** tests: boss HP/damage constants present; payout splits `RAID_SHARD_PAYOUT`
   across N contributors deterministically; solo damage cannot kill within timeout (sanity
   math); playtest: party summons + kills boss together, each contributor receives shards;
   solo player cannot solo it in the timeout.
 
 ### REQ-raid-roles-balance — Role enforcement + balance + full validation
+
 - **Phase:** 7
 - **Depends on:** Phase 3, Phase 6
 - **Scope:** raid role mechanics, balance pass, full-loop validation.
@@ -146,6 +165,7 @@ then `6 → 7`.
   neutral-to-slightly-positive; ganked player recovers via ~1 raid); transcendence power vs
   enemy HP (C6+T10 must not trivialize camps; optional mild camp scaling); no death-spiral
   (whale vs fresh player — fresh player not permanently locked out).
+
 - **Acceptance:** tests: enrage/aggro logic units; a "balance guard" test asserting key
   ratios (shard gain rate ≤ bound, transcend multiplier caps at a sane value); full
   multi-client playtest of the whole loop end to end (pull → C6 → shard → transcend → carry →
@@ -160,7 +180,7 @@ then `6 → 7`.
 |-------------|-------|--------|
 | REQ-gem-rename | Phase A | Done |
 | REQ-lock-constants | Phase 0 | Pending |
-| REQ-shard-currency-mint | Phase 1 | Pending |
+| REQ-shard-currency-mint | Phase 1 | Complete |
 | REQ-transcend-install | Phase 2 | Pending |
 | REQ-shard-risk | Phase 3 | Pending |
 | REQ-combat-roles | Phase 4 | Pending |
