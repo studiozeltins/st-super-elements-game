@@ -18,6 +18,7 @@ import { pickRayHit } from './hitscan';
 import { resistedDamage, GOLIATH_RESISTANCES, PLAYER_RESISTANCES } from './resistances';
 import { isWalkable, nextGoliathWaypoint } from './bridges';
 import { chooseGoliathTargetCamp, headingFromStep, hasReachedCamp, isWithinForwardArc } from './goliathAI';
+import { resolveDupeGrant } from './gachaOverflow';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -66,11 +67,10 @@ const CHARACTER_POOL = Object.entries(CHARACTER_STATS).map(([characterId, s]) =>
 
 const STARTER_CHARACTER_ID = 'zibo';
 const PARTY_SIZE = 4;
-const MAX_CONSTELLATION = 6; // C6 is the cap; duplicates past it refund gems
+const MAX_CONSTELLATION = 6; // C6 is the cap; duplicates past it mint transcend shards
 const HEAL_CONSTELLATION_STEP = 0.15; // healers heal +15% per constellation
 const STARTING_GEMS = 16000;
 const GACHA_PULL_COST = 160;
-const DUPLICATE_REFUND = 800;
 const KILL_REWARD_GEMS = 40;
 const MAX_KILL_REWARD_TIER = 3;
 
@@ -1526,7 +1526,7 @@ export const healParty = spacetimedb.reducer(
 );
 
 // Grants a character. New → added at C0. Duplicate → +1 constellation up to
-// C6. Returns the outcome so the pull can show C-level and refund at max.
+// C6. Returns the outcome so the pull can show C-level and mint a shard at max.
 // Upsert a character's manual activation level.
 function setActivation(ctx: { db: any }, owner: any, characterId: string, level: number) {
   const existing = [...ctx.db.characterActivation.by_owner_character.filter([owner, characterId])][0];
@@ -1561,17 +1561,22 @@ function grantCharacter(ctx: { db: any }, owner: any, characterId: string) {
       currentHealth: statsFor(characterId).maxHealth,
       constellation: 0,
     });
-    return { isNew: true, constellation: 0, maxed: false };
+    return { isNew: true, constellation: 0, shardMinted: 0 };
   }
-  if (owned.constellation < MAX_CONSTELLATION) {
-    const constellation = owned.constellation + 1;
+  // Below C6 the dupe advances the constellation; at/past C6 it pins to cap and
+  // mints a transcend shard instead (resolveDupeGrant is the proven pure decision).
+  const { constellation, shardMinted } = resolveDupeGrant(
+    owned.constellation,
+    MAX_CONSTELLATION,
+    SHARD_PER_OVERFLOW_DUPE
+  );
+  if (constellation !== owned.constellation) {
     ctx.db.ownedCharacter.id.update({ ...owned, constellation });
     // A freshly unlocked star auto-activates (feels good on pull); the player can
     // still dial it back down manually via setConstellation.
     setActivation(ctx, owner, characterId, constellation);
-    return { isNew: false, constellation, maxed: false };
   }
-  return { isNew: false, constellation: MAX_CONSTELLATION, maxed: true };
+  return { isNew: false, constellation, shardMinted };
 }
 
 function grantWeapon(ctx: { db: any; timestamp: any }, owner: any, weaponId: string, rarity: number) {
@@ -1613,7 +1618,7 @@ export const pullBanner = spacetimedb.reducer(
     let sinceFour = pity.pullsSinceFourStar;
     let guaranteed = pity.guaranteedFeatured;
     let total = pity.totalPulls;
-    let refund = 0;
+    let shardsMinted = 0;
 
     for (let slot = 0; slot < pullCount; slot++) {
       sinceFive++;
@@ -1638,7 +1643,7 @@ export const pullBanner = spacetimedb.reducer(
           const result = grantCharacter(ctx, currentPlayer.identity, itemId);
           isNew = result.isNew;
           constellation = result.constellation;
-          if (result.maxed) refund += DUPLICATE_REFUND;
+          shardsMinted += result.shardMinted;
         } else {
           // Lost the 50/50 → a 5★ weapon, and the next 5★ is guaranteed featured.
           guaranteed = true;
@@ -1654,7 +1659,7 @@ export const pullBanner = spacetimedb.reducer(
           const result = grantCharacter(ctx, currentPlayer.identity, itemId);
           isNew = result.isNew;
           constellation = result.constellation;
-          if (result.maxed) refund += DUPLICATE_REFUND;
+          shardsMinted += result.shardMinted;
         } else {
           itemId = pickWeaponId(ctx, 4);
           grantWeapon(ctx, currentPlayer.identity, itemId, 4);
@@ -1687,7 +1692,8 @@ export const pullBanner = spacetimedb.reducer(
     });
     ctx.db.player.identity.update({
       ...currentPlayer,
-      gems: currentPlayer.gems - totalCost + refund,
+      gems: currentPlayer.gems - totalCost,
+      transcendShards: currentPlayer.transcendShards + shardsMinted,
     });
   }
 );
