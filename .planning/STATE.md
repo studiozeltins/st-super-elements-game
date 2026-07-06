@@ -4,11 +4,11 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 current_phase_name: Constellation shard currency
-status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-07-06T14:27:55.076Z"
+status: awaiting-verification
+stopped_at: 01-04 render complete — human-verify playtest pending
+last_updated: "2026-07-06T14:32:45.000Z"
 last_activity: 2026-07-06
-last_activity_desc: Phase 01 execution started
+last_activity_desc: 01-04 shard chips rendered in both screens; blocking playtest open
 progress:
   total_phases: 8
   completed_phases: 1
@@ -30,10 +30,10 @@ floor).
 
 ## Current Position
 
-Phase: 01 (Constellation shard currency) — EXECUTING
+Phase: 01 (Constellation shard currency) — AWAITING VERIFICATION
 Plan: 4 of 4
-Status: Ready to execute
-Last activity: 2026-07-06 — Phase 01 execution started
+Status: 01-04 render complete + build green; blocking human-verify playtest pending
+Last activity: 2026-07-06 — 01-04 shard chips rendered in Gacha + Character screens
 
 Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 
@@ -60,6 +60,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 | Phase 01 P01 | 2 min | 2 tasks | 2 files |
 | Phase 01 P02 | 4min | 2 tasks | 2 files |
 | Phase 01 P03 | 5 min | 2 tasks | 3 files |
+| Phase 01 P04 | 8 min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,7 @@ None yet.
 
 ### Blockers/Concerns
 
+- [01-04 GATE] Blocking human-verify playtest pending: confirm ◈ chip on all Gacha tabs + Character topbar, and that a C6-dupe mints exactly 1 shard with gems unchanged (see 01-04-SUMMARY.md "Human Verification Pending").
 - All work must land on `feat/transcendence` (off `master`, not `main`).
 - pnpm only; server module path is `./spacetimedb` (the `spacetime:publish` npm scripts point at the wrong `server` path — ignore them).
 - Every data change must keep client/server mirrors in sync (`serverSync.test.ts`) — INV-5.
@@ -96,6 +98,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06T14:27:13.831Z
-Stopped at: Completed 01-02-PLAN.md
-Resume file: .planning/phases/01-constellation-shard-currency/01-UI-SPEC.md
+Last session: 2026-07-06T14:32:45.000Z
+Stopped at: 01-04 render complete — awaiting human-verify playtest
+Resume file: .planning/phases/01-constellation-shard-currency/01-04-SUMMARY.md

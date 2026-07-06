@@ -80,13 +80,13 @@ the player can see their shard balance.
   3. The player's shard balance is visible in the Character and Gacha screens.
   4. Existing gacha/pity tests remain green; the overflow logic has a pure-helper unit test.
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans executed (01-04 render + build green; blocking human-verify playtest pending)
 **UI hint**: yes
 
 - [x] 01-01-PLAN.md — Pure `resolveDupeGrant` overflow helper + unit test (Nyquist wave 0)
 - [x] 01-02-PLAN.md — Server: `transcendShards` column (4 mirror sites), wire helper into grantCharacter/pullBanner, remove 800-gem refund, snapshot keep-list
 - [x] 01-03-PLAN.md — Deploy: additive-migrate publish to local + regenerate bindings (gates client)
-- [ ] 01-04-PLAN.md — Client: shard `◈` chip in Gacha + Character screens + prop threading + verify playtest
+- [~] 01-04-PLAN.md — Client: shard `◈` chip in Gacha + Character screens + prop threading (done, build green); verify playtest PENDING
 
 ### Phase 2: Transcendence install
 
