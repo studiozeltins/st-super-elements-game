@@ -86,6 +86,7 @@ export default function App() {
         tables.rangedAttack,
         tables.healEvent,
         tables.gemDrop,
+        tables.shardDrop,
         tables.enemy,
         tables.goliath,
       ]);
@@ -104,6 +105,7 @@ export default function App() {
   const [bannerPityRows] = useTable(tables.bannerPity);
   const [weaponItemRows] = useTable(tables.weaponItem);
   const [gemDropRows] = useTable(tables.gemDrop);
+  const [shardDropRows] = useTable(tables.shardDrop);
   const [enemyRows] = useTable(tables.enemy);
   const [goliathRows] = useTable(tables.goliath);
   const [accountLinks] = useTable(tables.accountLink);
@@ -372,6 +374,10 @@ export default function App() {
   useEffect(() => {
     gameRef.current?.syncGemDrops(gemDropRows);
   }, [gemDropRows]);
+
+  useEffect(() => {
+    gameRef.current?.syncShardDrops(shardDropRows);
+  }, [shardDropRows]);
 
   useEffect(() => {
     gameRef.current?.syncEnemies(enemyRows);
