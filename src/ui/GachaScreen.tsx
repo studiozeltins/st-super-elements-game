@@ -37,6 +37,7 @@ interface WeaponRow {
 
 interface GachaScreenProps {
   gems: number;
+  transcendShards: number;
   ownedCharacterIds: Set<string>;
   activeCharacterId: string;
   weaponItems: WeaponRow[];
@@ -66,6 +67,7 @@ export type GachaTab = 'banners' | 'party' | 'characters' | 'inventory';
 
 export function GachaScreen({
   gems,
+  transcendShards,
   ownedCharacterIds,
   activeCharacterId,
   weaponItems,
@@ -216,6 +218,11 @@ export function GachaScreen({
           <span className="gacha__spacer" />
         )}
         <div className="gacha__wallet">
+          {/* Scarce transcend-shard balance — read-only from the subscribed player
+              row, shown on every tab, left of the swapping gems/owned readout. */}
+          <span className="wallet-chip" aria-label={`Zvaigžņu šķembas: ${transcendShards}`}>
+            <span className="gacha__gem">◈</span> {transcendShards}
+          </span>
           {tab === 'characters' ? (
             <>
               <span className="gacha__gem">❖</span> {[...ownedCharacterIds].length}/

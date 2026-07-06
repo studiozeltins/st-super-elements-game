@@ -449,6 +449,7 @@ export default function App() {
       {isGachaOpen && (
         <GachaScreen
           gems={myPlayer?.gems ?? 0}
+          transcendShards={myPlayer?.transcendShards ?? 0}
           ownedCharacterIds={new Set(myCharacterIds)}
           activeCharacterId={myPlayer?.activeCharacterId ?? ''}
           weaponItems={myWeaponItems}
