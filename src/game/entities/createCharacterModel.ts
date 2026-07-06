@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { disposeObject } from '../engine/disposeObject';
 import { ELEMENTS, type ElementId } from '../data/elements';
+import { OVERLAY_LAYER } from '../data/constants';
 import type { CharacterDefinition } from '../data/characters';
 import type { WeaponId } from '../data/weapons';
 import type { SwingProfile } from '../combat/comboSystem';
@@ -261,7 +262,9 @@ export function createNameSprite(name: string): THREE.Sprite {
   canvas.width = 256;
   canvas.height = 64;
   const context = canvas.getContext('2d')!;
-  context.font = 'bold 34px monospace';
+  // "Pixelify Sans" matches the UI display font; monospace fallback still carries
+  // Latvian diacritics if the webfont hasn't finished loading when this bakes.
+  context.font = 'bold 34px "Pixelify Sans", monospace';
   context.textAlign = 'center';
   context.fillStyle = 'rgba(10, 14, 12, 0.55)';
   const textWidth = context.measureText(name).width + 24;
@@ -272,6 +275,7 @@ export function createNameSprite(name: string): THREE.Sprite {
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.NearestFilter;
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
+  sprite.layers.set(OVERLAY_LAYER); // crisp: rendered in the native-res overlay pass
   sprite.scale.set(2.6, 0.65, 1);
   sprite.position.y = 3;
   return sprite;

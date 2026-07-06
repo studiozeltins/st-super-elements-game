@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { CHARACTERS } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { WEAPONS } from '../game/data/weapons';
@@ -15,6 +16,36 @@ interface CharacterSheetProps {
 const CENTER = 100;
 const RING_RADIUS = 72;
 
+// Human labels + a plain-language explanation for each resistance channel.
+// `describe(percent)` turns the raw multiplier into something a player can read.
+const RESIST_INFO: Record<string, { label: string; describe: (percent: number) => string }> = {
+  contact: {
+    label: 'Tuvcīņa',
+    describe: percent =>
+      `Saņem par ${percent}% mazāk bojājumu no ienaidnieku un goliātu sitieniem tuvcīņā.`,
+  },
+  ranged: {
+    label: 'Šāviens',
+    describe: percent => `Saņem par ${percent}% mazāk bojājumu no šāviņiem — bultām un lodēm.`,
+  },
+  melee: {
+    label: 'Zobens',
+    describe: percent => `Saņem par ${percent}% mazāk bojājumu no asmeņu uzbrukumiem.`,
+  },
+  skill: {
+    label: 'Prasme',
+    describe: percent => `Saņem par ${percent}% mazāk bojājumu no prasmēm un maģijas.`,
+  },
+};
+
+function resistLabel(channel: string): string {
+  return RESIST_INFO[channel]?.label ?? channel;
+}
+
+function resistDescription(channel: string, percent: number): string {
+  return RESIST_INFO[channel]?.describe(percent) ?? `Par ${percent}% mazāk bojājumu.`;
+}
+
 export function CharacterSheet({
   characterId,
   constellation,
@@ -22,6 +53,8 @@ export function CharacterSheet({
   onSetActive,
   onClose,
 }: CharacterSheetProps) {
+  // Which resistance chip is expanded into its plain-language explanation (tap to toggle).
+  const [openResist, setOpenResist] = useState<string | null>(null);
   const character = CHARACTERS[characterId];
   if (!character) return null;
   const element = ELEMENTS[character.element];
@@ -64,6 +97,49 @@ export function CharacterSheet({
         </header>
 
         <p className="sheet__lore">{loreFor(characterId)}</p>
+
+        {character.resistances && (
+          <div className="sheet__resist-block">
+            <span className="sheet__resist-hint">PRETESTĪBAS · piesit, lai uzzinātu</span>
+            <ul className="sheet__resists">
+              {Object.entries(character.resistances).map(([channel, multiplier]) => {
+                const percent = Math.round((1 - multiplier) * 100);
+                const open = openResist === channel;
+                return (
+                  <li key={channel}>
+                    <button
+                      type="button"
+                      className={`sheet__resist ${open ? 'sheet__resist--on' : ''}`}
+                      onClick={() => setOpenResist(open ? null : channel)}
+                    >
+                      <span className="sheet__resist-name">{resistLabel(channel)}</span>
+                      <span className="sheet__resist-value">−{percent}%</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {openResist && character.resistances[openResist as keyof typeof character.resistances] !== undefined && (
+              <div className="sheet__resist-card">
+                <strong className="sheet__resist-card-title">
+                  {resistLabel(openResist)} · pretestība
+                </strong>
+                <p className="sheet__resist-card-text">
+                  {resistDescription(
+                    openResist,
+                    Math.round(
+                      (1 -
+                        (character.resistances[
+                          openResist as keyof typeof character.resistances
+                        ] as number)) *
+                        100
+                    )
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="sheet__body">
           <svg className="sheet__diagram" viewBox="0 0 200 200" role="img" aria-label="Konstelācijas">

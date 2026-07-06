@@ -28,6 +28,15 @@ export const CHARACTER_LORE: Record<string, string> = {
     'Ugunskura meita, kas dejo starp liesmām. Dzirkste sirds deg karstāk par jebkuru uguni.',
   stindzis:
     'Sala mednieks, pacietīgs kā ledus. Stindzis bulta lido klusi un sasalst tieši sirdī.',
+  nereida:
+    'Dzimusi tur, kur upe satiek jūru, Nereīda velk bultas no pašas plūdmaiņas. Katrs šāviens nes ' +
+    'dziedināšanu draugiem un dziļumu ienaidniekiem — jo okeāns nekad neizvēlas tikai vienu seju.',
+  vesper:
+    'Vespers cīnās ātrāk, nekā zibens paspēj noskanēt. Kad citi vēl ievelk elpu, viņas šķēps jau ' +
+    'atgriezies — un vieta, kur viņa stāvēja, ir tikai dzirksteļu pēdas gaisā.',
+  glacia:
+    'Reiz vesela pilsēta lūdza kalnu par patvērumu; kalns atbildēja ar Glāciju. Viņa soļo lēni, jo ' +
+    'ledājs nesteidzas — un viss, ko tas satiek, agrāk vai vēlāk pakļaujas aukstumam.',
 };
 
 export function loreFor(characterId: string): string {

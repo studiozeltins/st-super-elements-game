@@ -34,9 +34,9 @@ describe('roster balance across elements', () => {
     expect(ofElement.some(character => character.stars === 4)).toBe(true);
   });
 
-  it('has exactly 7 five-star and 7 four-star characters (14 total)', () => {
-    expect(CHARACTER_LIST).toHaveLength(14);
-    expect(CHARACTER_LIST.filter(character => character.stars === 5)).toHaveLength(7);
+  it('has exactly 10 five-star and 7 four-star characters (17 total)', () => {
+    expect(CHARACTER_LIST).toHaveLength(17);
+    expect(CHARACTER_LIST.filter(character => character.stars === 5)).toHaveLength(10);
     expect(CHARACTER_LIST.filter(character => character.stars === 4)).toHaveLength(7);
   });
 });

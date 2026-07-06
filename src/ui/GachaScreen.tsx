@@ -1,14 +1,19 @@
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CHARACTERS, CHARACTER_LIST } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { WEAPONS } from '../game/data/weapons';
 import { BANNERS, WEAPONS_BY_ID, fiveStarChanceForNextPull, HARD_PITY } from '../game/data/gacha';
-import { constellationBonuses } from '../game/data/constellations';
-import type { CharacterDefinition } from '../game/data/characters';
 import { GACHA_PULL_COST } from '../game/data/constants';
 import { CharacterPreview } from './CharacterPreview';
 import { PullAnimation } from './PullAnimation';
-import { CharacterSheet } from './CharacterSheet';
+import { CharacterInfoSheet } from './CharacterInfoSheet';
+import { ConstellationRing } from './ConstellationRing';
+import { useTeamDrag } from './useTeamDrag';
+import { useDragScroll } from './useDragScroll';
+import { MAIN_MENU } from './menu';
+
+const PARTY_SIZE = 4;
 
 export interface PityInfo {
   pullsSinceFiveStar: number;
@@ -36,11 +41,16 @@ interface GachaScreenProps {
   weaponItems: WeaponRow[];
   partyCharacterIds: string[];
   constellationById: Record<string, number>;
+  activatedById: Record<string, number>;
   pityByBanner: Record<string, PityInfo>;
   pullResults: PullView[] | null;
+  /** Which tab to open on. */
+  initialTab?: GachaTab;
   onPull(bannerId: string, count: number): void;
   onSetParty(characterIds: string[]): void;
-  onSelectCharacter(characterId: string): void;
+  onSetConstellation(characterId: string, level: number): void;
+  /** Open the owned-only character detail/management modal. */
+  onOpenCharacterPage(characterId: string): void;
   onDismissResults(): void;
   onClose(): void;
 }
@@ -51,29 +61,7 @@ const DEFAULT_PITY: PityInfo = {
   totalPulls: 0,
 };
 
-/** Inline C0–C6 dots + the currently-active cumulative bonus, shown on cards. */
-function ConstellationInline({
-  character,
-  constellation,
-}: {
-  character: CharacterDefinition;
-  constellation: number;
-}) {
-  const bonusText =
-    constellation > 0
-      ? constellationBonuses(character)[constellation - 1].effect
-      : 'C0 · bāzes spēks';
-  return (
-    <span className="con-inline">
-      <span className="con-dots" aria-label={`C${constellation}`}>
-        {[1, 2, 3, 4, 5, 6].map(level => (
-          <i key={level} className={`con-dot ${level <= constellation ? 'con-dot--on' : ''}`} />
-        ))}
-      </span>
-      <span className="con-inline__bonus">{bonusText}</span>
-    </span>
-  );
-}
+export type GachaTab = 'banners' | 'party' | 'characters' | 'inventory';
 
 export function GachaScreen({
   primogems,
@@ -82,45 +70,56 @@ export function GachaScreen({
   weaponItems,
   partyCharacterIds,
   constellationById,
+  activatedById,
   pityByBanner,
   pullResults,
+  initialTab = 'banners',
   onPull,
   onSetParty,
-  onSelectCharacter,
+  onSetConstellation,
+  onOpenCharacterPage,
   onDismissResults,
   onClose,
 }: GachaScreenProps) {
-  const [tab, setTab] = useState<'banners' | 'party' | 'inventory'>('banners');
-  // Drag-and-drop party editing. Source is either a roster character or a slot.
-  const [dragItem, setDragItem] = useState<
-    { from: 'roster'; id: string } | { from: 'slot'; index: number } | null
-  >(null);
-  const [overSlot, setOverSlot] = useState<number | null>(null);
-  const [sheetCharacterId, setSheetCharacterId] = useState<string | null>(null);
-
-  const dropOnSlot = (slotIndex: number) => {
-    setOverSlot(null);
-    if (!dragItem) return;
-    const party = [...partyCharacterIds];
-    if (dragItem.from === 'roster') {
-      if (slotIndex < party.length) party[slotIndex] = dragItem.id;
-      else if (party.length < 4) party.push(dragItem.id);
-    } else if (slotIndex < party.length) {
-      [party[dragItem.index], party[slotIndex]] = [party[slotIndex], party[dragItem.index]];
-    } else {
-      const [moved] = party.splice(dragItem.index, 1);
-      party.push(moved);
-    }
-    setDragItem(null);
-    onSetParty(party);
+  const [tab, setTab] = useState<GachaTab>(initialTab);
+  // Right-sliding detail sheet — shared by banner previews (unowned) and team taps.
+  const [infoCharacterId, setInfoCharacterId] = useState<string | null>(null);
+  const [infoOwned, setInfoOwned] = useState(false);
+  const openInfo = (characterId: string, owned: boolean) => {
+    setInfoOwned(owned);
+    setInfoCharacterId(characterId);
   };
 
-  const dropOnRoster = () => {
-    if (dragItem?.from === 'slot' && partyCharacterIds.length > 1) {
-      onSetParty(partyCharacterIds.filter((_, i) => i !== dragItem.index));
-    }
-    setDragItem(null);
+  // Drag a roster chip → drop into a slot. The character moves there (removed from
+  // any previous slot); dropping past the last member appends it.
+  const assignToSlot = (characterId: string, slotIndex: number) => {
+    const filtered = partyCharacterIds.filter(id => id !== characterId);
+    const next = [...filtered];
+    if (slotIndex < next.length) next[slotIndex] = characterId;
+    else next.push(characterId);
+    onSetParty(next.slice(0, PARTY_SIZE));
   };
+  const removeFromSlot = (slotIndex: number) => {
+    if (partyCharacterIds.length <= 1) return; // keep at least one member
+    onSetParty(partyCharacterIds.filter((_, index) => index !== slotIndex));
+  };
+  const teamDrag = useTeamDrag({
+    onAssign: assignToSlot,
+    onTap: characterId => openInfo(characterId, true),
+  });
+  // Open the owned-character modal (main-menu 'profile') for the active character.
+  const openOwnedModal = () => {
+    const first = ownedCharacterIds.has(activeCharacterId)
+      ? activeCharacterId
+      : [...ownedCharacterIds][0];
+    if (first) onOpenCharacterPage(first);
+  };
+
+  const bannerScroll = useDragScroll();
+  // Team roster: wheel-to-horizontal only — click-drag is reserved for the chip's
+  // own drag-to-slot gesture, so panning by drag would conflict.
+  const teamScroll = useDragScroll({ drag: false });
+
   const [bannerId, setBannerId] = useState(BANNERS[0].id);
 
   const banner = BANNERS.find(entry => entry.id === bannerId) ?? BANNERS[0];
@@ -147,28 +146,74 @@ export function GachaScreen({
 
   return (
     <div className="gacha">
+      {/* Thumb-reachable close for phones in portrait — top-right X is a stretch there. */}
+      <button className="gacha__close-fab" onClick={onClose} aria-label="Aizvērt">
+        ✕
+      </button>
       <header className="gacha__header">
         <h2 className="gacha__title">VĒLĒŠANĀS</h2>
-        <nav className="gacha__tabs">
-          <button
-            className={`gacha__tab ${tab === 'banners' ? 'gacha__tab--on' : ''}`}
-            onClick={() => setTab('banners')}
+        {/* Banner selector — scrolls in the middle of the header (banners tab). */}
+        {tab === 'banners' ? (
+          <nav
+            className="gacha__banner-list drag-scroll"
+            aria-label="Baneru saraksts"
+            ref={bannerScroll.ref as React.RefObject<HTMLElement>}
+            {...bannerScroll.handlers}
           >
-            BANERI
-          </button>
-          <button
-            className={`gacha__tab ${tab === 'party' ? 'gacha__tab--on' : ''}`}
-            onClick={() => setTab('party')}
+            {BANNERS.map(entry => {
+              const entryChar = CHARACTERS[entry.featuredCharacterId];
+              const entryElement = ELEMENTS[entryChar.element];
+              return (
+                <button
+                  key={entry.id}
+                  className={`banner-chip ${entry.id === bannerId ? 'banner-chip--on' : ''}`}
+                  style={{ '--element-color': entryElement.cssColor } as React.CSSProperties}
+                  onClick={() => setBannerId(entry.id)}
+                >
+                  <span className="banner-chip__name">{entry.displayName}</span>
+                  <span className="banner-chip__char">{entryChar.displayName}</span>
+                </button>
+              );
+            })}
+          </nav>
+        ) : tab === 'party' ? (
+          <nav
+            className={`team-roster ${teamDrag.isDragging ? 'team-roster--dragging' : ''}`}
+            aria-label="Pieejamie varoņi · turi un velc slotā"
+            ref={teamScroll.ref as React.RefObject<HTMLElement>}
+            {...teamScroll.handlers}
           >
-            KOMANDA
-          </button>
-          <button
-            className={`gacha__tab ${tab === 'inventory' ? 'gacha__tab--on' : ''}`}
-            onClick={() => setTab('inventory')}
-          >
-            INVENTĀRS
-          </button>
-        </nav>
+            {CHARACTER_LIST.filter(character => ownedCharacterIds.has(character.id)).map(character => {
+              const element = ELEMENTS[character.element];
+              const inParty = partyCharacterIds.includes(character.id);
+              return (
+                <button
+                  key={character.id}
+                  className={`team-chip rarity-${character.stars} ${inParty ? 'team-chip--in' : ''} ${
+                    teamDrag.dragId === character.id ? 'team-chip--dragging' : ''
+                  }`}
+                  style={{ '--element-color': element.cssColor } as React.CSSProperties}
+                  {...teamDrag.chipHandlers(character.id, character.displayName[0], element.cssColor)}
+                >
+                  <span className="team-chip__ring">
+                    <ConstellationRing
+                      variant="chip"
+                      letter={character.displayName[0]}
+                      unlocked={constellationById[character.id] ?? 0}
+                      activated={activatedById[character.id] ?? constellationById[character.id] ?? 0}
+                    />
+                  </span>
+                  <span className="team-chip__text">
+                    <span className="team-chip__name">{character.displayName}</span>
+                    <span className="team-chip__level">Līm. 1</span>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        ) : (
+          <span className="gacha__spacer" />
+        )}
         <div className="gacha__wallet">
           <span className="gacha__gem">✦</span> {primogems}
         </div>
@@ -177,33 +222,84 @@ export function GachaScreen({
         </button>
       </header>
 
+      <div className="gacha__main">
+        {/* Main menu rail (always visible). 'profile' opens the character modal. */}
+        <nav className="cscreen__rail cscreen__rail--main" aria-label="Galvenā izvēlne">
+          {MAIN_MENU.map(entry => {
+            const isProfile = entry.id === 'profile';
+            const on = !isProfile && tab === entry.id;
+            return (
+              <button
+                key={entry.id}
+                className={`rail-tab ${on ? 'rail-tab--on' : ''}`}
+                onClick={() => (isProfile ? openOwnedModal() : setTab(entry.id as GachaTab))}
+                aria-pressed={on}
+              >
+                <span className="rail-tab__glyph">{entry.glyph}</span>
+                <span className="rail-tab__label">{entry.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
       {tab === 'banners' ? (
         <div className="gacha__body">
-          <div className="banner-switch">
-            {BANNERS.map(entry => {
-              const entryChar = CHARACTERS[entry.featuredCharacterId];
-              const entryElement = ELEMENTS[entryChar.element];
-              return (
-                <button
-                  key={entry.id}
-                  className={`banner-switch__item ${entry.id === bannerId ? 'banner-switch__item--on' : ''}`}
-                  style={{ '--element-color': entryElement.cssColor } as React.CSSProperties}
-                  onClick={() => setBannerId(entry.id)}
-                >
-                  <span className="banner-switch__name">{entry.displayName}</span>
-                  <span className="banner-switch__char">{entryChar.displayName}</span>
-                </button>
-              );
-            })}
-          </div>
-
           <div
             className="banner"
             style={{ '--element-color': featuredElement.cssColor } as React.CSSProperties}
           >
-            <div className="banner__stage">
-              <CharacterPreview characterId={featured.id} />
+            <div className="banner__info">
               <p className="banner__lore">{banner.lore}</p>
+
+              <div className="pity">
+                <div className="pity__row">
+                  <span className="pity__label">GARANTIJAS PROGRESS</span>
+                  <span className="pity__value">{pityProgress.toFixed(2)}%</span>
+                </div>
+                <div className="pity__bar">
+                  <span className="pity__fill" style={{ transform: `scaleX(${pityFraction})` }} />
+                </div>
+                <div className="pity__row pity__row--muted">
+                  <span>5★ izredzes {(fiveStarChance * 100).toFixed(2)}%</span>
+                  <span>
+                    Vēlēšanās {pity.pullsSinceFiveStar} · garantija pēc {pullsToHardPity}
+                  </span>
+                </div>
+                {pity.guaranteedFeatured && (
+                  <span className="pity__guarantee">
+                    NĀKAMAIS 5★ = GARANTĒTS {featured.displayName}
+                  </span>
+                )}
+              </div>
+
+              <div className="pull-actions">
+                <button
+                  className="pull-btn"
+                  disabled={!canPullOne}
+                  onClick={() => onPull(banner.id, 1)}
+                >
+                  <span className="pull-btn__count">VĒLĒTIES ×1</span>
+                  <span className="pull-btn__cost">✦ {GACHA_PULL_COST}</span>
+                </button>
+                <button
+                  className="pull-btn pull-btn--ten"
+                  disabled={!canPullTen}
+                  onClick={() => onPull(banner.id, 10)}
+                >
+                  <span className="pull-btn__count">VĒLĒTIES ×10</span>
+                  <span className="pull-btn__cost">✦ {GACHA_PULL_COST * 10}</span>
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="banner__stage"
+              onClick={() => openInfo(featured.id, false)}
+              aria-label={`${featured.displayName} — sīkāk`}
+            >
+              <CharacterPreview characterId={featured.id} />
+              <span className="banner__stage-hint">SĪKĀK ▸</span>
               <div className="banner__caption">
                 <span className="banner__tagline">{banner.subtitle}</span>
                 <span className="banner__name">{featured.displayName}</span>
@@ -212,156 +308,76 @@ export function GachaScreen({
                 </span>
                 <span className="banner__stars">{'✦'.repeat(5)}</span>
               </div>
-            </div>
-
-            <div className="banner__panel">
-              <div className="banner__controls">
-                <div className="pity">
-                  <div className="pity__row">
-                    <span className="pity__label">GARANTIJAS PROGRESS</span>
-                    <span className="pity__value">{pityProgress.toFixed(2)}%</span>
-                  </div>
-                  <div className="pity__bar">
-                    <span className="pity__fill" style={{ transform: `scaleX(${pityFraction})` }} />
-                  </div>
-                  <div className="pity__row pity__row--muted">
-                    <span>5★ izredzes {(fiveStarChance * 100).toFixed(2)}%</span>
-                    <span>
-                      Vēlēšanās {pity.pullsSinceFiveStar} · garantija pēc {pullsToHardPity}
-                    </span>
-                  </div>
-                  {pity.guaranteedFeatured && (
-                    <span className="pity__guarantee">
-                      NĀKAMAIS 5★ = GARANTĒTS {featured.displayName}
-                    </span>
-                  )}
-                </div>
-
-                <div className="pull-actions">
-                  <button
-                    className="pull-btn"
-                    disabled={!canPullOne}
-                    onClick={() => onPull(banner.id, 1)}
-                  >
-                    <span className="pull-btn__count">VĒLĒTIES ×1</span>
-                    <span className="pull-btn__cost">✦ {GACHA_PULL_COST}</span>
-                  </button>
-                  <button
-                    className="pull-btn pull-btn--ten"
-                    disabled={!canPullTen}
-                    onClick={() => onPull(banner.id, 10)}
-                  >
-                    <span className="pull-btn__count">VĒLĒTIES ×10</span>
-                    <span className="pull-btn__cost">✦ {GACHA_PULL_COST * 10}</span>
-                  </button>
-                </div>
-              </div>
-            </div>
+            </button>
           </div>
         </div>
       ) : tab === 'party' ? (
-        <div className="gacha__body gacha__body--inventory">
-          <section className="inv">
-            <h3 className="inv__heading">KOMANDA · VELC UN NOMET ({partyCharacterIds.length}/4)</h3>
-            <div className="party-slots">
-              {Array.from({ length: 4 }).map((_, slotIndex) => {
-                const characterId = partyCharacterIds[slotIndex];
-                const character = characterId ? CHARACTERS[characterId] : null;
-                const element = character ? ELEMENTS[character.element] : null;
-                const isActive = Boolean(characterId) && characterId === activeCharacterId;
-                return (
-                  <div
-                    key={slotIndex}
-                    className={`party-drop ${character ? '' : 'party-drop--empty'} ${
-                      overSlot === slotIndex ? 'party-drop--over' : ''
-                    } ${isActive ? 'party-drop--active' : ''}`}
-                    style={
-                      element
-                        ? ({ '--element-color': element.cssColor } as React.CSSProperties)
-                        : undefined
-                    }
-                    onDragOver={event => {
-                      event.preventDefault();
-                      setOverSlot(slotIndex);
-                    }}
-                    onDragLeave={() => setOverSlot(prev => (prev === slotIndex ? null : prev))}
-                    onDrop={() => dropOnSlot(slotIndex)}
-                    onClick={() => characterId && setSheetCharacterId(characterId)}
-                  >
-                    <span className="party-drop__index">{slotIndex + 1}</span>
-                    {character && element ? (
-                      <div
-                        className="party-drop__face"
-                        draggable
-                        onDragStart={event => {
-                          event.dataTransfer.setData('text/plain', characterId as string);
-                          setDragItem({ from: 'slot', index: slotIndex });
-                        }}
-                        onDragEnd={() => {
-                          setDragItem(null);
-                          setOverSlot(null);
-                        }}
+        <div className="gacha__body">
+          <span className="team-hint">
+            Turi un velc varoni no augšas · nomet slotā ({partyCharacterIds.length}/{PARTY_SIZE})
+          </span>
+          <div className="team-slots">
+            {Array.from({ length: PARTY_SIZE }).map((_, slotIndex) => {
+              const characterId = partyCharacterIds[slotIndex];
+              const character = characterId ? CHARACTERS[characterId] : null;
+              const element = character ? ELEMENTS[character.element] : null;
+              const isActive = Boolean(characterId) && characterId === activeCharacterId;
+              const isOver = teamDrag.overSlot === slotIndex;
+              return (
+                <div
+                  key={slotIndex}
+                  data-slot={slotIndex}
+                  className={`team-slot ${character ? '' : 'team-slot--empty'} ${
+                    isOver ? 'team-slot--over' : ''
+                  } ${isActive ? 'team-slot--active' : ''}`}
+                  style={
+                    element ? ({ '--element-color': element.cssColor } as React.CSSProperties) : undefined
+                  }
+                >
+                  <span className="team-slot__index">{slotIndex + 1}</span>
+                  {character && element ? (
+                    <>
+                      <button
+                        className="team-slot__stage"
+                        onClick={() => openInfo(character.id, true)}
+                        aria-label={`${character.displayName} — sīkāk`}
                       >
-                        <span className="inv-card__name">{character.displayName}</span>
-                        <span className="inv-card__sub">{element.displayName}</span>
-                        <ConstellationInline
-                          character={character}
-                          constellation={constellationById[characterId as string] ?? 0}
-                        />
-                        {isActive && <span className="party-drop__active">AKTĪVS</span>}
+                        <CharacterPreview characterId={character.id} />
+                      </button>
+                      <div className="team-slot__id">
+                        <span className={`team-slot__stars rarity-${character.stars}`}>
+                          {'✦'.repeat(character.stars)}
+                        </span>
+                        <span className="team-slot__name">{character.displayName}</span>
+                        <span className="team-slot__sub">
+                          {element.displayName} · {WEAPONS[character.weapon].displayName}
+                        </span>
                       </div>
-                    ) : (
-                      <span className="party-drop__hint">Tukšs</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="inv" onDragOver={event => event.preventDefault()} onDrop={dropOnRoster}>
-            <h3 className="inv__heading">PIEEJAMIE VAROŅI · velc slotā (nomet šeit, lai izņemtu)</h3>
-            <div className="inv__grid">
-              {CHARACTER_LIST.filter(
-                character =>
-                  ownedCharacterIds.has(character.id) && !partyCharacterIds.includes(character.id)
-              ).map(character => {
-                const element = ELEMENTS[character.element];
-                return (
-                  <div
-                    key={character.id}
-                    className="inv-card inv-card--draggable"
-                    style={{ '--element-color': element.cssColor } as React.CSSProperties}
-                    draggable
-                    onClick={() => setSheetCharacterId(character.id)}
-                    onDragStart={event => {
-                      event.dataTransfer.setData('text/plain', character.id);
-                      setDragItem({ from: 'roster', id: character.id });
-                    }}
-                    onDragEnd={() => {
-                      setDragItem(null);
-                      setOverSlot(null);
-                    }}
-                  >
-                    <span className={`inv-card__rarity rarity-${character.stars}`}>
-                      {'✦'.repeat(character.stars)}
-                    </span>
-                    <span className="inv-card__name">{character.displayName}</span>
-                    <span className="inv-card__sub">{element.displayName}</span>
-                    <ConstellationInline
-                      character={character}
-                      constellation={constellationById[character.id] ?? 0}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+                      {isActive && <span className="team-slot__active">AKTĪVS</span>}
+                      {partyCharacterIds.length > 1 && (
+                        <button
+                          className="team-slot__remove"
+                          onClick={() => removeFromSlot(slotIndex)}
+                          aria-label="Izņemt no komandas"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <span className="team-slot__hint">＋</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      ) : (
+      ) : tab === 'characters' ? (
         <div className="gacha__body gacha__body--inventory">
           <section className="inv">
-            <h3 className="inv__heading">VAROŅI</h3>
+            <h3 className="inv__heading">
+              VAROŅI · KOLEKCIJA ({[...ownedCharacterIds].length}/{CHARACTER_LIST.length})
+            </h3>
             <div className="inv__grid">
               {CHARACTER_LIST.map(character => {
                 const element = ELEMENTS[character.element];
@@ -374,8 +390,7 @@ export function GachaScreen({
                       isActive ? 'inv-card--active' : ''
                     }`}
                     style={{ '--element-color': element.cssColor } as React.CSSProperties}
-                    disabled={!isOwned}
-                    onClick={() => onSelectCharacter(character.id)}
+                    onClick={() => openInfo(character.id, isOwned)}
                   >
                     <span className={`inv-card__rarity rarity-${character.stars}`}>
                       {'✦'.repeat(character.stars)}
@@ -392,7 +407,9 @@ export function GachaScreen({
               })}
             </div>
           </section>
-
+        </div>
+      ) : (
+        <div className="gacha__body gacha__body--inventory">
           <section className="inv">
             <h3 className="inv__heading">IEROČI ({weaponItems.length})</h3>
             {weaponInventory.length === 0 ? (
@@ -414,16 +431,41 @@ export function GachaScreen({
           </section>
         </div>
       )}
+      </div>
 
-      {sheetCharacterId && (
-        <CharacterSheet
-          characterId={sheetCharacterId}
-          constellation={constellationById[sheetCharacterId] ?? 0}
-          isActive={sheetCharacterId === activeCharacterId}
-          onSetActive={onSelectCharacter}
-          onClose={() => setSheetCharacterId(null)}
-        />
-      )}
+      <CharacterInfoSheet
+        characterId={infoCharacterId}
+        owned={infoOwned}
+        level={1}
+        unlocked={infoCharacterId ? constellationById[infoCharacterId] ?? 0 : 0}
+        activated={
+          infoCharacterId
+            ? activatedById[infoCharacterId] ?? constellationById[infoCharacterId] ?? 0
+            : 0
+        }
+        onOpenFull={characterId => {
+          setInfoCharacterId(null);
+          onOpenCharacterPage(characterId);
+        }}
+        onClose={() => setInfoCharacterId(null)}
+      />
+
+      {/* Floating drag ghost that follows the pointer while dragging a team chip. */}
+      {teamDrag.ghost &&
+        createPortal(
+          <div
+            className="team-ghost"
+            style={{
+              left: teamDrag.ghost.x,
+              top: teamDrag.ghost.y,
+              // @ts-expect-error custom property
+              '--element-color': teamDrag.ghost.color,
+            }}
+          >
+            {teamDrag.ghost.letter}
+          </div>,
+          document.body
+        )}
 
       {pullResults && pullResults.length > 0 && (
         <PullAnimation results={pullResults} onClose={onDismissResults} />

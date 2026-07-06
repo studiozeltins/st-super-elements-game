@@ -20,9 +20,15 @@ export function CharacterPreview({ characterId }: { characterId: string }) {
     camera.position.set(0, 1.35, 6.2);
     camera.lookAt(0, 1.15, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Render at a low internal resolution and let CSS upscale it with nearest-
+    // neighbour so the character reads as chunky pixel-art (matches the game).
+    const PIXEL_SCALE = 0.32;
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+    renderer.setPixelRatio(PIXEL_SCALE);
     renderer.setSize(width, height);
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.imageRendering = 'pixelated';
     mount.appendChild(renderer.domElement);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.85));
@@ -57,6 +63,8 @@ export function CharacterPreview({ characterId }: { characterId: string }) {
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
+      renderer.domElement.style.width = '100%';
+      renderer.domElement.style.height = '100%';
     };
     window.addEventListener('resize', onResize);
 

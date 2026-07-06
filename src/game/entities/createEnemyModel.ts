@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { EnemyArchetype } from '../data/enemyArchetypes';
+import { OVERLAY_LAYER } from '../data/constants';
 
 /** One element status dot to draw: color + remaining time (1→0). */
 export interface StatusDot {
@@ -118,6 +119,7 @@ export function createEnemyOverlay(scale: number, barHeight: number): EnemyOverl
   const texture = new THREE.CanvasTexture(canvas);
   const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true });
   const sprite = new THREE.Sprite(material);
+  sprite.layers.set(OVERLAY_LAYER); // crisp: rendered in the native-res overlay pass
   const localWidth = OVERLAY_WORLD_WIDTH / scale; // constant on-screen size for any enemy
   sprite.scale.set(localWidth, localWidth * (OVERLAY_CANVAS_HEIGHT / OVERLAY_CANVAS_WIDTH), 1);
   sprite.position.y = barHeight;

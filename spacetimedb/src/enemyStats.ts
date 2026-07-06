@@ -65,10 +65,12 @@ export interface GoliathSizeStat {
 }
 
 // Mirrors GOLIATH_ARCHETYPES_BY_SIZE in src/game/data/goliathArchetypes.ts.
+// Health is tripled vs. the authored base so raiders are a real siege — they now
+// soak far more punishment (and even more from range, see GOLIATH_RANGED_RESIST).
 export const GOLIATH_SIZE_STATS: readonly GoliathSizeStat[] = [
-  { maxHealth: 2600, contactDamage: 90, moveSpeed: 3.2, collisionRadius: 0.8, splashesOnAttack: false },
-  { maxHealth: 4200, contactDamage: 130, moveSpeed: 2.7, collisionRadius: 1.0, splashesOnAttack: false },
-  { maxHealth: 6500, contactDamage: 170, moveSpeed: 2.2, collisionRadius: 1.3, splashesOnAttack: true },
+  { maxHealth: 15600, contactDamage: 90, moveSpeed: 3.2, collisionRadius: 0.8, splashesOnAttack: false },
+  { maxHealth: 25200, contactDamage: 130, moveSpeed: 2.7, collisionRadius: 1.0, splashesOnAttack: false },
+  { maxHealth: 39000, contactDamage: 170, moveSpeed: 2.2, collisionRadius: 1.3, splashesOnAttack: true },
 ];
 
 // Ported from goliathBatchForTime() in src/game/systems/goliathIdentity.ts: seed

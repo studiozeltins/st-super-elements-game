@@ -1,6 +1,7 @@
 /* ============================================================
    SUPER ELEMENTS — quiet-glass minimal HUD over pixel-art 3D
-   Fonts: Silkscreen (display), Chakra Petch (body)
+   Fonts: Pixelify Sans (display), Chakra Petch (body) — both self-hosted with
+   the latin-ext subset so Latvian diacritics don't fall back to another font.
    Motion: transform/opacity only (60–144 fps safe)
    ============================================================ */
 
@@ -21,7 +22,7 @@
   --accent: #7ec843;
   --gold: #f2c14e;
   --danger: #ff5c3c;
-  --font-display: 'Silkscreen', monospace;
+  --font-display: 'Pixelify Sans', monospace;
   --font-body: 'Chakra Petch', sans-serif;
 }
 
@@ -48,7 +49,10 @@ button {
 
 .app {
   position: relative;
-  height: 100%;
+  height: 100vh;
+  /* Dynamic viewport: on iOS this excludes the URL/home bars, so the game canvas
+     and the wish overlay fill exactly the visible area (no bottom cutoff). */
+  height: 100dvh;
 }
 
 .game-canvas {
@@ -676,6 +680,32 @@ button {
   transform: translateY(-1px);
 }
 
+/* Quick-access icons next to the gem count — same panel/line language as the
+   gem chip (sharp corners, glass panel, gold on hover). */
+.hud__quick {
+  display: flex;
+  gap: 6px;
+}
+
+.hud__quick-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  transition: border-color 0.12s, transform 0.12s, color 0.12s;
+}
+
+.hud__quick-btn:hover {
+  color: var(--gold);
+  border-color: var(--gold);
+  transform: translateY(-1px);
+}
+
 /* ---------- Party bar (diamonds) ---------- */
 
 .hud__party {
@@ -937,14 +967,15 @@ button {
 .gacha__header {
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 16px 24px;
+  gap: 14px;
+  padding: calc(8px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 8px
+    max(20px, env(safe-area-inset-left));
   border-bottom: 1px solid var(--line);
 }
 
 .gacha__title {
-  font: 700 18px var(--font-display);
-  letter-spacing: 0.14em;
+  font: 700 15px var(--font-display);
+  letter-spacing: 0.12em;
 }
 
 .gacha__tabs {
@@ -953,7 +984,7 @@ button {
 }
 
 .gacha__tab {
-  padding: 7px 16px;
+  padding: 5px 14px;
   font: 700 11px var(--font-display);
   letter-spacing: 0.14em;
   color: var(--muted);
@@ -974,8 +1005,12 @@ button {
 }
 
 .gacha__close {
-  font-size: 18px;
-  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 36px;
+  font-size: 20px;
   color: var(--muted);
   transition: color 0.12s;
 }
@@ -984,13 +1019,102 @@ button {
   color: var(--text);
 }
 
-.gacha__body {
+/* Floating close, shown only on phones in portrait (top corners are a stretch
+   there). Pinned to the bottom-left thumb zone, clear of the pull buttons. */
+.gacha__close-fab {
+  display: none;
+}
+
+@media (orientation: portrait) and (pointer: coarse) {
+  .gacha__close-fab {
+    position: fixed;
+    left: calc(14px + env(safe-area-inset-left));
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 20px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+  }
+}
+
+/* Main = left tab rail + the active tab body. */
+.gacha__main {
   flex: 1;
   min-height: 0;
   display: flex;
+}
+
+/* Banner selector scrolling in the middle of the header, and a spacer that keeps
+   the wallet/close pinned right on the other tabs. */
+.gacha__banner-list {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  align-items: center;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.gacha__banner-list::-webkit-scrollbar {
+  display: none;
+}
+
+.gacha__spacer {
+  flex: 1;
+}
+
+.banner-chip {
+  flex: 0 0 auto;
+  display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 18px 24px calc(20px + env(safe-area-inset-bottom));
+  gap: 1px;
+  padding: 5px 14px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--element-color);
+  background: var(--panel);
+  opacity: 0.6;
+  transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.banner-chip--on {
+  opacity: 1;
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px var(--element-color);
+}
+
+.banner-chip__name {
+  font: 700 11px var(--font-display);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.banner-chip__char {
+  font-size: 10px;
+  color: var(--element-color);
+  white-space: nowrap;
+}
+
+.gacha__body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px max(20px, env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) 14px;
+  overflow-y: auto;
 }
 
 .gacha__body--inventory {
@@ -1009,8 +1133,8 @@ button {
 .banner-switch__item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 9px 16px;
+  gap: 1px;
+  padding: 6px 14px;
   text-align: left;
   border: 1px solid var(--line);
   border-left: 3px solid var(--element-color);
@@ -1037,23 +1161,59 @@ button {
 
 /* ---------- Banner hero ---------- */
 
+/* Portrait / narrow default: character on top, info + pulls stacked below.
+   Landscape / wide: two columns — INFO left, CHARACTER right (see media query). */
 .banner {
   flex: 1;
   min-height: 0;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr;
+  grid-template-areas: 'stage' 'info';
+  grid-template-rows: minmax(190px, 1fr) auto;
+  overflow-y: auto;
+}
+
+.banner__info {
+  grid-area: info;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
+  min-height: 0;
 }
 
 .banner__stage {
+  grid-area: stage;
   position: relative;
-  flex: 1;
+  display: block;
+  width: 100%;
   min-height: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
   border: 1px solid var(--line);
   background:
     radial-gradient(80% 90% at 50% 10%, color-mix(in srgb, var(--element-color) 22%, transparent), transparent 70%),
     linear-gradient(180deg, rgba(12, 17, 14, 0.4), rgba(6, 10, 8, 0.85));
   overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.banner__stage:hover {
+  border-color: var(--element-color);
+}
+
+.banner__stage-hint {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 2;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.14em;
+  color: var(--element-color);
+  opacity: 0.85;
+  pointer-events: none;
 }
 
 .banner__model {
@@ -1063,8 +1223,8 @@ button {
 
 .banner__caption {
   position: absolute;
-  left: 22px;
-  bottom: 20px;
+  left: 20px;
+  bottom: 18px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -1080,7 +1240,7 @@ button {
 }
 
 .banner__name {
-  font: 700 30px var(--font-display);
+  font: 700 clamp(22px, 6vw, 32px) var(--font-display);
   letter-spacing: 0.02em;
 }
 
@@ -1092,53 +1252,58 @@ button {
 
 .banner__stars {
   margin-top: 6px;
-  font-size: 30px;
+  font-size: 26px;
   line-height: 1;
   letter-spacing: 0.14em;
   color: var(--gold);
   text-shadow: 0 2px 18px color-mix(in srgb, var(--gold) 65%, transparent);
 }
 
-.banner__panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
 .banner__lore {
-  position: absolute;
-  top: 20px;
-  left: 24px;
-  z-index: 2;
-  max-width: min(44%, 360px);
+  margin: 0;
   font-size: 12.5px;
-  line-height: 1.65;
+  line-height: 1.6;
   font-style: italic;
   color: var(--text);
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.92);
-  pointer-events: none;
+  opacity: 0.92;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.banner__controls {
-  display: flex;
-  gap: 18px;
-  align-items: stretch;
-  flex-wrap: wrap;
-}
-
-.banner__controls .pity {
-  flex: 1;
-  min-width: 260px;
-}
-
-.banner__controls .pull-actions {
-  margin-top: 0;
+/* Pull buttons: side-by-side, equal width, pinned to the bottom of the info column. */
+.banner__info .pull-actions {
+  margin-top: auto;
   flex-direction: row;
-  align-items: stretch;
+  gap: 10px;
 }
 
-.banner__controls .pull-btn {
-  min-width: 168px;
+.banner__info .pull-btn {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Wide / landscape: INFO column on the left, big CHARACTER on the right. */
+@media (min-width: 680px) and (min-aspect-ratio: 1/1) {
+  .banner {
+    grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'info stage';
+    overflow: hidden;
+  }
+
+  /* Short landscape phones: keep lore compact so pity + pulls always fit. */
+  .banner__lore {
+    -webkit-line-clamp: 3;
+  }
+}
+
+/* Portrait phones: keep the last pull button clear of the floating close FAB. */
+@media (orientation: portrait) and (pointer: coarse) {
+  .banner__info .pull-actions {
+    padding-left: 66px;
+  }
 }
 
 /* ---------- Pity meter ---------- */
@@ -1146,8 +1311,8 @@ button {
 .pity {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 16px;
+  gap: 6px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   background: var(--panel);
 }
@@ -1165,7 +1330,7 @@ button {
 }
 
 .pity__value {
-  font: 700 20px var(--font-display);
+  font: 700 17px var(--font-display);
   color: var(--gold);
 }
 
@@ -1212,9 +1377,10 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 15px 20px;
-  font: 700 13px var(--font-display);
-  letter-spacing: 0.1em;
+  gap: 8px;
+  padding: 10px 14px;
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.08em;
   color: var(--text);
   border: 1px solid var(--line);
   background: var(--panel);
@@ -1275,14 +1441,18 @@ button {
   transition: transform 0.14s, border-color 0.14s;
 }
 
-.inv-card:not(.inv-card--weapon):not(.inv-card--locked):hover {
+.inv-card:not(.inv-card--weapon):hover {
   transform: translateY(-3px);
   border-color: var(--element-color);
 }
 
 .inv-card--locked {
-  opacity: 0.32;
-  cursor: default;
+  opacity: 0.42;
+  cursor: pointer;
+}
+
+.inv-card--locked:hover {
+  opacity: 0.6;
 }
 
 .inv-card--active {
@@ -1861,6 +2031,80 @@ button {
   opacity: 0.9;
 }
 
+.sheet__resist-block {
+  margin: 0 0 18px;
+}
+
+.sheet__resist-hint {
+  display: block;
+  margin-bottom: 6px;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.sheet__resists {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sheet__resist {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--element-color) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--element-color) 14%, transparent);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.sheet__resist:hover {
+  background: color-mix(in srgb, var(--element-color) 22%, transparent);
+}
+
+.sheet__resist--on {
+  background: color-mix(in srgb, var(--element-color) 32%, transparent);
+  border-color: var(--element-color);
+}
+
+.sheet__resist-name {
+  color: var(--muted);
+}
+
+.sheet__resist-value {
+  font: 700 12px var(--font-display);
+  color: var(--element-color);
+}
+
+.sheet__resist-card {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--element-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--element-color) 10%, transparent);
+}
+
+.sheet__resist-card-title {
+  display: block;
+  margin-bottom: 4px;
+  font: 700 12px var(--font-display);
+  color: var(--element-color);
+}
+
+.sheet__resist-card-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
 .sheet__body {
   display: grid;
   grid-template-columns: 220px 1fr;
@@ -2003,5 +2247,1189 @@ button {
 
   .sheet__diagram {
     width: 220px;
+  }
+}
+
+/* ============================================================
+   CHARACTER SCREEN — full-page roster + tabs (landscape-first)
+   ============================================================ */
+
+.cscreen {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(120% 80% at 80% 0%, color-mix(in srgb, var(--element-color) 10%, transparent), transparent 60%),
+    rgba(6, 10, 8, 0.97);
+  animation: gacha-fade 0.22s ease-out both;
+}
+
+.cscreen__topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: calc(8px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 8px
+    max(20px, env(safe-area-inset-left));
+  border-bottom: 1px solid var(--line);
+}
+
+.cscreen__title {
+  font: 700 15px var(--font-display);
+  letter-spacing: 0.16em;
+}
+
+.cscreen__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 36px;
+  flex-shrink: 0;
+  font-size: 20px;
+  color: var(--muted);
+  transition: color 0.12s;
+}
+
+.cscreen__close:hover {
+  color: var(--text);
+}
+
+.cscreen__close-fab {
+  display: none;
+}
+
+@media (orientation: portrait) and (pointer: coarse) {
+  .cscreen__close-fab {
+    position: fixed;
+    left: calc(14px + env(safe-area-inset-left));
+    bottom: calc(14px + env(safe-area-inset-bottom));
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 20px;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+  }
+}
+
+/* ---------- Roster (scrolls in the middle of the header) ---------- */
+
+.cscreen__roster {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  align-items: center;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding: 0 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.cscreen__roster::-webkit-scrollbar {
+  display: none;
+}
+
+.roster-chip {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px 5px 6px;
+  scroll-snap-align: start;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--element-color);
+  background: var(--panel);
+  opacity: 0.62;
+  transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.roster-chip--on {
+  opacity: 1;
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px var(--element-color);
+}
+
+.roster-chip--locked {
+  filter: grayscale(0.7);
+}
+
+.roster-chip__ring {
+  display: block;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.roster-chip__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.roster-chip__name {
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.roster-chip__level {
+  font: 700 8px var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.roster-chip__active {
+  font-size: 9px;
+  color: var(--accent);
+}
+
+/* Desktop drag-to-scroll affordance on horizontal lists. */
+.drag-scroll {
+  cursor: grab;
+}
+
+.drag-scroll:active {
+  cursor: grabbing;
+}
+
+/* ---------- Main: left rail + swipeable panel ---------- */
+
+.cscreen__main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.cscreen__rail {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 6px;
+  border-right: 1px solid var(--line);
+}
+
+/* Main menu rail: pinned to the screen edge — left padding clears the iPhone
+   notch in landscape and the solid black fills that inset (invisible on OLED). */
+.cscreen__rail--main {
+  padding-left: calc(6px + env(safe-area-inset-left));
+  background: #000;
+}
+
+/* Sub-rail: the modal's own sections, sits inboard so no notch handling. */
+.cscreen__rail--sub {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rail-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 58px;
+  padding: 9px 3px;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: color 0.14s, background 0.14s, border-color 0.14s;
+}
+
+.rail-tab--on {
+  color: var(--text);
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--element-color) 12%, transparent);
+}
+
+.rail-tab__glyph {
+  font-size: 18px;
+  color: var(--element-color);
+}
+
+.rail-tab__label {
+  font: 700 9px var(--font-display);
+  letter-spacing: 0.08em;
+}
+
+.cscreen__panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  padding: 10px max(16px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) 12px;
+}
+
+/* ---------- Character card: full-bleed spinning portrait, text overlaid ------ */
+
+.cchar {
+  position: relative;
+  flex: 0 0 40%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  background:
+    radial-gradient(80% 90% at 50% 8%, color-mix(in srgb, var(--element-color) 24%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(12, 17, 14, 0.4), rgba(6, 10, 8, 0.9));
+}
+
+.cchar__id {
+  position: absolute;
+  left: 16px;
+  bottom: 14px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+
+.cchar__element {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--element-color);
+}
+
+.cchar__name {
+  font: 700 clamp(20px, 4vw, 30px) var(--font-display);
+  line-height: 1.1;
+}
+
+.cchar__title {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cchar__stars {
+  margin-top: 3px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--gold);
+}
+
+.cchar__locked {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 2;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+/* Constellation ring badge (tap → constellation tab), overlaid top-left. */
+.cchar__ring {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  width: clamp(52px, 10vw, 70px);
+  height: clamp(52px, 10vw, 70px);
+  cursor: pointer;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.55));
+  transition: transform 0.14s;
+}
+
+.cchar__ring:hover {
+  transform: scale(1.06);
+}
+
+.cring {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.cring__seg {
+  fill: none;
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  transition: stroke 0.15s, opacity 0.15s;
+}
+
+/* Tiny selector-slider ring — a touch thicker so it reads at small size. */
+.cring--chip .cring__seg {
+  stroke-width: 6;
+}
+
+.cring__seg--active {
+  stroke: var(--gold);
+  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--gold) 70%, transparent));
+}
+
+.cring__seg--available {
+  stroke: var(--element-color);
+  opacity: 0.55;
+}
+
+.cring__seg--next {
+  opacity: 0.9;
+  stroke-dasharray: 3 5;
+}
+
+.cring__seg--locked {
+  stroke: var(--line);
+  opacity: 0.5;
+}
+
+.cring__disc {
+  fill: var(--element-color);
+  stroke: rgba(0, 0, 0, 0.35);
+  stroke-width: 1.5;
+}
+
+.cring__letter {
+  fill: var(--ink);
+  font: 700 26px var(--font-display);
+}
+
+.cring--chip .cring__letter {
+  font-size: 30px;
+}
+
+.cchar__active-tag {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 5px 10px;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  border: 1px solid currentColor;
+}
+
+/* ---------- Tab content column ---------- */
+
+.ctab {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  background: transparent;
+}
+
+.ctab__scroll {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 4px 6px 2px;
+  overflow-y: auto;
+}
+
+.ctab__section {
+  font: 700 11px var(--font-display);
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+.ctab__lore {
+  font-size: 12.5px;
+  line-height: 1.6;
+  font-style: italic;
+  color: var(--text);
+  opacity: 0.9;
+}
+
+.ctab__soon {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+  border-top: 1px dashed var(--line);
+  padding-top: 12px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--element-color);
+  background: var(--panel);
+}
+
+.stat-cell__label {
+  font: 700 9px var(--font-display);
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.stat-cell__value {
+  font: 700 18px var(--font-display);
+  color: var(--text);
+}
+
+.stat-cell {
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.14s, background 0.14s;
+}
+
+.stat-cell--on {
+  border-color: var(--element-color);
+  background: color-mix(in srgb, var(--element-color) 16%, var(--panel));
+}
+
+/* Tap-to-explain popover — absolute inside .ctab so it overlays without shifting. */
+.stat-pop__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: rgba(4, 7, 5, 0.35);
+  animation: gacha-fade 0.15s ease-out both;
+}
+
+.stat-pop {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--element-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 88%, var(--element-color));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+  animation: gacha-fade 0.16s ease-out both;
+}
+
+.stat-pop__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.stat-pop__label {
+  font: 700 11px var(--font-display);
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.stat-pop__value {
+  font: 700 20px var(--font-display);
+  color: var(--element-color);
+}
+
+.stat-pop__text {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+/* Resistances (reused pattern from the wish sheet) */
+
+.ctab__resist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resist-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+}
+
+.resist-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--element-color) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--element-color) 14%, transparent);
+  font-size: 12px;
+}
+
+.resist-chip--on {
+  background: color-mix(in srgb, var(--element-color) 32%, transparent);
+  border-color: var(--element-color);
+}
+
+.resist-chip__name {
+  color: var(--muted);
+}
+
+.resist-chip__value {
+  font: 700 12px var(--font-display);
+  color: var(--element-color);
+}
+
+.resist-card {
+  padding: 10px 12px;
+  border-left: 3px solid var(--element-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--element-color) 10%, transparent);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+/* Weapon tab */
+
+.weapon-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--element-color);
+  background: var(--panel);
+}
+
+.weapon-card__name {
+  font: 700 17px var(--font-display);
+}
+
+.weapon-card__type {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+/* Constellation tab */
+
+.con-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+}
+
+.con-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+  transition: border-color 0.14s, background 0.14s;
+}
+
+.con-item:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--gold) 60%, transparent);
+}
+
+.con-item--on {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 10%, var(--panel));
+}
+
+.con-item--off {
+  opacity: 0.45;
+}
+
+.con-item:disabled {
+  cursor: default;
+}
+
+.con-item__toggle {
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--gold);
+}
+
+.con-item__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  font: 700 13px var(--font-display);
+  color: var(--gold);
+  border: 1px solid color-mix(in srgb, var(--gold) 50%, transparent);
+  border-radius: 50%;
+}
+
+.con-item--on .con-item__badge {
+  color: var(--ink);
+  background: var(--gold);
+}
+
+.con-item__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.con-item__title {
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.06em;
+}
+
+.con-item__effect {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---------- Portrait / narrow: stack portrait over tab content ---------- */
+
+@media (max-aspect-ratio: 1/1) {
+  .cscreen__panel {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .cchar {
+    flex: 0 0 auto;
+    min-height: 260px;
+  }
+
+  .ctab {
+    min-height: 240px;
+  }
+}
+
+/* ============================================================
+   CHARACTER INFO SHEET — right-sliding preview (unowned banner char)
+   ============================================================ */
+
+.csheet__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(4, 7, 5, 0.6);
+  animation: csheet-fade 0.2s ease-out both;
+}
+
+.csheet {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 71;
+  width: min(420px, 92vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: rgba(6, 10, 8, 0.98);
+  box-shadow: -18px 0 40px rgba(0, 0, 0, 0.5);
+  padding-right: env(safe-area-inset-right);
+  animation: csheet-slide 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes csheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes csheet-slide {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+.csheet__stage {
+  position: relative;
+  flex: 0 0 auto;
+  height: clamp(220px, 42vh, 340px);
+  overflow: hidden;
+  background:
+    radial-gradient(85% 90% at 50% 8%, color-mix(in srgb, var(--element-color) 26%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(12, 17, 14, 0.4), rgba(6, 10, 8, 0.92));
+}
+
+.csheet__close {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top));
+  right: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+  color: var(--text);
+  font-size: 18px;
+}
+
+.csheet__pill {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  left: 16px;
+  z-index: 2;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.csheet__id {
+  position: absolute;
+  left: 16px;
+  bottom: 14px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+}
+
+.csheet__element {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--element-color);
+}
+
+.csheet__name {
+  font: 700 clamp(22px, 6vw, 30px) var(--font-display);
+  line-height: 1.05;
+}
+
+.csheet__title {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.csheet__stars {
+  margin-top: 3px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--gold);
+}
+
+.csheet__scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+/* Sticky footer (last flex child; the scroll above takes the remaining space). */
+.csheet__footer {
+  flex-shrink: 0;
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: rgba(6, 10, 8, 0.98);
+}
+
+.csheet__btn {
+  flex: 1;
+  padding: 12px;
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.08em;
+  border: 1px solid var(--line);
+  transition: transform 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.csheet__btn--ghost {
+  color: var(--muted);
+  background: transparent;
+}
+
+.csheet__btn--ghost:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+
+.csheet__btn--primary {
+  color: var(--ink);
+  background: var(--element-color);
+  border-color: var(--element-color);
+}
+
+.csheet__btn--primary:hover {
+  transform: translateY(-1px);
+}
+
+.csheet__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.csheet__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--element-color);
+  background: var(--panel);
+}
+
+.csheet__stat-label {
+  font: 700 8px var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.csheet__stat-value {
+  font: 700 17px var(--font-display);
+}
+
+.csheet__stat-value--sm {
+  font-size: 12px;
+}
+
+.csheet__lore {
+  font-size: 12.5px;
+  line-height: 1.6;
+  font-style: italic;
+  color: var(--text);
+  opacity: 0.9;
+}
+
+.csheet__block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.csheet__section {
+  font: 700 11px var(--font-display);
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.csheet__skill {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.csheet__resists {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+}
+
+.csheet__resist {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid color-mix(in srgb, var(--element-color) 55%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--element-color) 14%, transparent);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.csheet__resist-val {
+  font: 700 12px var(--font-display);
+  color: var(--element-color);
+}
+
+.csheet__cons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+}
+
+.csheet__con {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.csheet__con-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  font: 700 11px var(--font-display);
+  color: var(--gold);
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  border-radius: 50%;
+}
+
+.csheet__con-effect {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.csheet__con--on {
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  background: color-mix(in srgb, var(--gold) 10%, var(--panel));
+}
+
+.csheet__con--on .csheet__con-badge {
+  color: var(--ink);
+  background: var(--gold);
+}
+
+.csheet__pill--own {
+  color: var(--gold);
+  letter-spacing: 0.14em;
+}
+
+/* ============================================================
+   TEAM PAGE — header roster (drag) + spinning slots (drop)
+   ============================================================ */
+
+.team-roster {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  align-items: center;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  touch-action: pan-x;
+}
+
+.team-roster::-webkit-scrollbar {
+  display: none;
+}
+
+/* While a chip is being dragged, freeze the header list so the finger drags the
+   character down to a slot instead of scrolling the list. */
+.team-roster--dragging {
+  overflow: hidden;
+  touch-action: none;
+}
+
+.team-chip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px 4px 5px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--rarity, var(--line));
+  background: var(--panel);
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: transform 0.12s, box-shadow 0.12s, opacity 0.12s;
+  touch-action: pan-x;
+  user-select: none;
+}
+
+.team-chip.rarity-5 {
+  --rarity: var(--gold);
+}
+
+.team-chip.rarity-4 {
+  --rarity: #5aa9ff;
+}
+
+.team-chip--in {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity) 60%, transparent);
+}
+
+.team-chip--dragging {
+  opacity: 0.35;
+}
+
+.team-chip__ring {
+  display: block;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.team-chip__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.team-chip__name {
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.team-chip__level {
+  font: 700 8px var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--rarity, var(--muted));
+}
+
+.team-hint {
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.team-slots {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.team-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--element-color, var(--line));
+  background:
+    radial-gradient(85% 80% at 50% 6%, color-mix(in srgb, var(--element-color) 22%, transparent), transparent 70%),
+    rgba(8, 12, 9, 0.55);
+  overflow: hidden;
+  transition: box-shadow 0.14s, border-color 0.14s;
+}
+
+.team-slot--empty {
+  border-top-color: var(--line);
+  border-style: dashed;
+  background: rgba(8, 12, 9, 0.35);
+}
+
+.team-slot--over {
+  box-shadow: 0 0 0 2px var(--gold), 0 0 22px color-mix(in srgb, var(--gold) 45%, transparent);
+  border-color: var(--gold);
+}
+
+.team-slot--active {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.team-slot__index {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  z-index: 2;
+  font: 700 12px var(--font-display);
+  color: var(--muted);
+}
+
+.team-slot__stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  cursor: pointer;
+}
+
+.team-slot__id {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+
+.team-slot__stars {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--gold);
+}
+
+.team-slot__name {
+  font: 700 13px var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+.team-slot__sub {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.team-slot__active {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  font: 700 8px var(--font-display);
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  border: 1px solid currentColor;
+  padding: 2px 5px;
+}
+
+.team-slot__remove {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 55%, transparent);
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.team-slot__hint {
+  margin: auto;
+  font-size: 34px;
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+/* Floating drag ghost following the pointer. */
+.team-ghost {
+  position: fixed;
+  z-index: 90;
+  transform: translate(-50%, -50%) scale(1.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font: 700 20px var(--font-display);
+  color: var(--ink);
+  background: var(--element-color, var(--accent));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+/* Portrait: 2×2 team grid so slots stay tall enough for the spinning model. */
+@media (max-aspect-ratio: 1/1) {
+  .team-slots {
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: minmax(200px, 1fr);
   }
 }

@@ -6,6 +6,8 @@ dist
 
 spacetime.local.json
 image.png
+image copy*.png
+WhatsApp Image*.jpeg
 
 # Snapshot dumps (contain player identities) — do not commit
 backup/

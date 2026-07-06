@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { DAMAGE_KIND_STYLES, type DamageKind } from '../combat/damageKind';
+import { OVERLAY_LAYER } from '../data/constants';
 
 export interface DamageNumbers {
   spawn(worldPosition: THREE.Vector3, amount: number, kind: DamageKind, color?: number): void;
@@ -81,6 +82,7 @@ export function createDamageNumbers(scene: THREE.Scene): DamageNumbers {
     const sprite = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })
     );
+    sprite.layers.set(OVERLAY_LAYER); // crisp: rendered in the native-res overlay pass
     sprite.visible = false;
     scene.add(sprite);
     const entry: FloatingNumber = {
@@ -104,7 +106,8 @@ export function createDamageNumbers(scene: THREE.Scene): DamageNumbers {
       drawNumber(entry.context, roundedAmount, kind, color === undefined ? null : toCssColor(color));
       entry.texture.needsUpdate = true;
 
-      const worldScale = 1.4 * DAMAGE_KIND_STYLES[kind].fontScale;
+      // Bumped up from 1.4 so numbers stay legible on small/high-DPI mobile screens.
+      const worldScale = 2.1 * DAMAGE_KIND_STYLES[kind].fontScale;
       entry.baseScaleX = worldScale;
       entry.baseScaleY = worldScale * (CANVAS_HEIGHT / CANVAS_WIDTH);
       entry.sprite.scale.set(entry.baseScaleX, entry.baseScaleY, 1);

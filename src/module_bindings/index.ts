@@ -53,6 +53,7 @@ import RestorePlayersReducer from "./restore_players_reducer";
 import RestoreWeaponItemsReducer from "./restore_weapon_items_reducer";
 import SeedWorldReducer from "./seed_world_reducer";
 import SetActiveCharacterReducer from "./set_active_character_reducer";
+import SetConstellationReducer from "./set_constellation_reducer";
 import SetPartyReducer from "./set_party_reducer";
 import TakeDamageReducer from "./take_damage_reducer";
 import UpdatePositionReducer from "./update_position_reducer";
@@ -62,6 +63,7 @@ import UpdatePositionReducer from "./update_position_reducer";
 // Import all table schema definitions
 import AccountLinkRow from "./account_link_table";
 import BannerPityRow from "./banner_pity_table";
+import CharacterActivationRow from "./character_activation_table";
 import EnemyRow from "./enemy_table";
 import GemDropRow from "./gem_drop_table";
 import GoliathRow from "./goliath_table";
@@ -70,6 +72,7 @@ import OwnedCharacterRow from "./owned_character_table";
 import PlayerRow from "./player_table";
 import PullResultRow from "./pull_result_table";
 import PvpHitRow from "./pvp_hit_table";
+import RangedAttackRow from "./ranged_attack_table";
 import SkillCastRow from "./skill_cast_table";
 import WeaponItemRow from "./weapon_item_table";
 
@@ -103,6 +106,24 @@ const tablesSchema = __schema({
       { name: 'banner_pity_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, BannerPityRow),
+  characterActivation: __table({
+    name: 'character_activation',
+    indexes: [
+      { accessor: 'id', name: 'character_activation_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'by_owner_character', name: 'character_activation_owner_character_id_idx_btree', algorithm: 'btree', columns: [
+        'owner',
+        'characterId',
+      ] },
+      { accessor: 'owner', name: 'character_activation_owner_idx_btree', algorithm: 'btree', columns: [
+        'owner',
+      ] },
+    ],
+    constraints: [
+      { name: 'character_activation_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, CharacterActivationRow),
   enemy: __table({
     name: 'enemy',
     indexes: [
@@ -185,6 +206,14 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, PvpHitRow),
+  rangedAttack: __table({
+    name: 'ranged_attack',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, RangedAttackRow),
   skillCast: __table({
     name: 'skill_cast',
     indexes: [
@@ -230,6 +259,7 @@ const reducersSchema = __reducers(
   __reducerSchema("restore_weapon_items", RestoreWeaponItemsReducer),
   __reducerSchema("seed_world", SeedWorldReducer),
   __reducerSchema("set_active_character", SetActiveCharacterReducer),
+  __reducerSchema("set_constellation", SetConstellationReducer),
   __reducerSchema("set_party", SetPartyReducer),
   __reducerSchema("take_damage", TakeDamageReducer),
   __reducerSchema("update_position", UpdatePositionReducer),

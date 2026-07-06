@@ -6,6 +6,7 @@ import {
   GRAVITY,
   JUMP_VELOCITY,
   MAX_HEALTH,
+  OVERLAY_LAYER,
   POSITION_SYNC_INTERVAL_SECONDS,
   SAFE_ZONE_HEAL_PER_SECOND,
   WORLD_BOUND,
@@ -34,7 +35,7 @@ import {
 import type { DamageKind } from './combat/damageKind';
 import { attackHitsEntity } from './combat/hitTest';
 import { gemVisual } from './data/gemDrops';
-import type { Enemy, GemDrop, Goliath, Player, SkillCast } from '../module_bindings/types';
+import type { Enemy, GemDrop, Goliath, Player, RangedAttack, SkillCast } from '../module_bindings/types';
 
 export interface HudState {
   attackCooldownFraction: number;
@@ -99,6 +100,7 @@ export interface Game {
   syncRemotePlayers(players: readonly Player[], myIdentityHex: string | null): void;
   syncMyServerRow(row: Player): void;
   handleRemoteSkillCast(cast: SkillCast): void;
+  handleRemotePlayerAttack(attack: RangedAttack): void;
   /** Floats a number over the local player — PVP damage taken, or heals. */
   spawnSelfNumber(amount: number, kind: DamageKind): void;
   /** Shows a remote player's health bar for a few seconds (they were hit). */
@@ -142,6 +144,7 @@ function createHealthBar(): HealthBar {
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true })
   );
+  sprite.layers.set(OVERLAY_LAYER); // crisp: rendered in the native-res overlay pass
   sprite.scale.set(1.7, 0.22, 1);
   sprite.position.y = 2.7;
   sprite.visible = false;
@@ -946,6 +949,28 @@ export function createGame(
         direction: { x: cast.directionX, z: cast.directionZ },
         applyDamage: null,
         followPosition: casterView ? () => casterView.model.group.position : undefined,
+      });
+    },
+    handleRemotePlayerAttack(attack) {
+      // Purely visual: render another player's bow/book shot flying from where it
+      // was fired. Damage is server-authoritative (pvpHit), so applyDamage stays null.
+      const character = CHARACTERS[attack.characterId];
+      if (!character) return;
+      const weapon = WEAPONS[character.weapon];
+      if (!weapon.isRanged) return;
+      effectSystem.spawnProjectile({
+        origin: new THREE.Vector3(
+          attack.originX,
+          world.getGroundHeight(attack.originX, attack.originZ) + 1.2,
+          attack.originZ
+        ),
+        direction: { x: attack.directionX, z: attack.directionZ },
+        speed: weapon.projectileSpeed,
+        damage: 0,
+        element: character.element,
+        hitRadius: RANGED_HIT_RADIUS,
+        applyDamage: null,
+        damageKind: 'normal',
       });
     },
     setTouchMove(x, z) {

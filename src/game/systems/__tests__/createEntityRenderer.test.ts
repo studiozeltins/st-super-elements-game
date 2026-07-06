@@ -111,17 +111,31 @@ describe('createEntityRenderer — reconciliation', () => {
     expect(renderer.getAlivePositions()).toHaveLength(0);
   });
 
-  it('propagates health + carriedGems into the overlay on update', () => {
+  it('propagates health + carriedGems into the overlay once the enemy is hit', () => {
     const { scene, adapter, spawned } = makeHarness();
     const renderer = createEntityRenderer({ scene, adapter });
+    renderer.syncRows([row({ id: 5n, health: 200, maxHealth: 200, carried: 7 })]);
+    // A health drop reveals the overlay so its content is refreshed.
     renderer.syncRows([row({ id: 5n, health: 40, maxHealth: 200, carried: 7 })]);
 
     renderer.update(0.016, () => 0);
 
     // Base (10) + carried (7); fraction 40/200.
+    expect(spawned[0].model.overlay.sprite.visible).toBe(true);
     expect(spawned[0].model.overlay.update).toHaveBeenLastCalledWith(
       expect.objectContaining({ healthFraction: 0.2, carriedGems: 17 })
     );
+  });
+
+  it('keeps the overlay hidden and unrefreshed until the enemy takes damage', () => {
+    const { scene, adapter, spawned } = makeHarness();
+    const renderer = createEntityRenderer({ scene, adapter });
+    renderer.syncRows([row({ id: 5n, health: 200, maxHealth: 200 })]);
+
+    renderer.update(0.016, () => 0);
+
+    expect(spawned[0].model.overlay.sprite.visible).toBe(false);
+    expect(spawned[0].model.overlay.update).not.toHaveBeenCalled();
   });
 
   it('floats the exact drop when a live row loses health', () => {

@@ -10,7 +10,8 @@ import { deriveKey } from './auth/hash';
 import { Hud } from './ui/Hud';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
-import { GachaScreen, type PityInfo, type PullView } from './ui/GachaScreen';
+import { GachaScreen, type GachaTab, type PityInfo, type PullView } from './ui/GachaScreen';
+import { CharacterScreen } from './ui/CharacterScreen';
 
 const PARTY_SIZE = 4;
 
@@ -30,12 +31,21 @@ export default function App() {
   // one, so every ownership/event filter downstream keys off the account.
   const deviceIdentityHex = identity?.toHexString() ?? null;
   const myIdentityRef = useRef<string | null>(null);
+  // Session eviction tracking: whether we were logged in (to notice the link row
+  // vanishing when another device claims the account) and whether the current
+  // logout was user-initiated (so we don't show the "kicked" notice for it).
+  const wasLoggedInRef = useRef(false);
+  const didLogoutRef = useRef(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
   const partyRef = useRef<string[]>([]);
   const [hudState, setHudState] = useState<HudState>(INITIAL_HUD_STATE);
   const [isGachaOpen, setIsGachaOpen] = useState(false);
+  const [gachaTab, setGachaTab] = useState<GachaTab>('banners');
+  // The owned-only character detail/management modal (distinct from the VAROŅI
+  // collection grid inside the wish screen). Holds the viewed character id.
+  const [characterPageId, setCharacterPageId] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showFps, setShowFps] = useState(() => localStorage.getItem('settings.showFps') === '1');
   const [showPing, setShowPing] = useState(() => localStorage.getItem('settings.showPing') === '1');
@@ -59,11 +69,13 @@ export default function App() {
         tables.accountLink.where(row => row.identity.eq(identity)),
         tables.player,
         tables.ownedCharacter,
+        tables.characterActivation,
         tables.skillCast,
         tables.bannerPity,
         tables.weaponItem,
         tables.pullResult,
         tables.pvpHit,
+        tables.rangedAttack,
         tables.healEvent,
         tables.gemDrop,
         tables.enemy,
@@ -80,6 +92,7 @@ export default function App() {
 
   const [players] = useTable(tables.player);
   const [ownedCharacterRows] = useTable(tables.ownedCharacter);
+  const [activationRows] = useTable(tables.characterActivation);
   const [bannerPityRows] = useTable(tables.bannerPity);
   const [weaponItemRows] = useTable(tables.weaponItem);
   const [gemDropRows] = useTable(tables.gemDrop);
@@ -98,6 +111,14 @@ export default function App() {
     onInsert: cast => {
       if (cast.caster.toHexString() === myIdentityRef.current) return;
       gameRef.current?.handleRemoteSkillCast(cast);
+    },
+  });
+  // Another player fired a ranged shot → render its projectile (the shooter drew
+  // its own locally, so skip our own events).
+  useTable(tables.rangedAttack, {
+    onInsert: attack => {
+      if (attack.attacker.toHexString() === myIdentityRef.current) return;
+      gameRef.current?.handleRemotePlayerAttack(attack);
     },
   });
   // Each pull emits one pull_result event row; collect a request's rows (they
@@ -169,6 +190,16 @@ export default function App() {
     constellationById[row.characterId] = row.constellation;
   }
 
+  // Manually-activated stars per character. No row = full constellation is active
+  // (matches the server fallback), so untouched characters behave as before.
+  const activatedById: Record<string, number> = {};
+  for (const row of activationRows) {
+    if (row.owner.toHexString() !== myIdentityHex) continue;
+    activatedById[row.characterId] = row.activatedConstellation;
+  }
+  const effectiveConstellation = (characterId: string) =>
+    activatedById[characterId] ?? constellationById[characterId] ?? 0;
+
   const pityByBanner: Record<string, PityInfo> = {};
   for (const row of bannerPityRows) {
     if (row.owner.toHexString() !== myIdentityHex) continue;
@@ -203,6 +234,13 @@ export default function App() {
     (characterId: string) => {
       connection?.reducers.setActiveCharacter({ characterId });
       gameRef.current?.setActiveCharacter(characterId);
+    },
+    [connection]
+  );
+
+  const setConstellation = useCallback(
+    (characterId: string, level: number) => {
+      connection?.reducers.setConstellation({ characterId, level });
     },
     [connection]
   );
@@ -242,11 +280,32 @@ export default function App() {
   );
 
   const handleLogout = useCallback(() => {
+    didLogoutRef.current = true; // suppress the "kicked" notice for a self logout
     connection?.reducers.logout({});
   }, [connection]);
 
   const isLoggedIn = Boolean(myLink);
   const hasJoined = Boolean(myPlayer);
+
+  // Session eviction: another device logging into this account deletes our
+  // account_link row server-side. When that row vanishes while we are still
+  // connected (and we didn't log out ourselves), surface a notice and let the
+  // render fall back to the auth screen.
+  useEffect(() => {
+    if (isLoggedIn) {
+      wasLoggedInRef.current = true;
+      return;
+    }
+    if (!wasLoggedInRef.current || !isActive) return;
+    wasLoggedInRef.current = false;
+    if (didLogoutRef.current) {
+      didLogoutRef.current = false;
+      return;
+    }
+    setAuthError(
+      'Tu tiki izrakstīts, jo šajā kontā pieteicās cita ierīce. Lūdzu piesakies vēlreiz.'
+    );
+  }, [isLoggedIn, isActive]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -306,15 +365,13 @@ export default function App() {
   useEffect(() => {
     const active = myPlayer?.activeCharacterId;
     if (!active) return;
-    const row = ownedCharacterRows.find(
-      r => r.owner.toHexString() === myIdentityHex && r.characterId === active
-    );
-    gameRef.current?.setActiveConstellation(row?.constellation ?? 0);
-  }, [myPlayer, ownedCharacterRows, myIdentityHex]);
+    // Damage scaling follows the ACTIVE stars, not the unlocked ceiling.
+    gameRef.current?.setActiveConstellation(effectiveConstellation(active));
+  }, [myPlayer, ownedCharacterRows, activationRows, myIdentityHex]);
 
   useEffect(() => {
-    gameRef.current?.setInputEnabled(!isGachaOpen && !isSettingsOpen);
-  }, [isGachaOpen, isSettingsOpen]);
+    gameRef.current?.setInputEnabled(!isGachaOpen && !isSettingsOpen && !characterPageId);
+  }, [isGachaOpen, isSettingsOpen, characterPageId]);
 
   useEffect(() => {
     localStorage.setItem('settings.showFps', showFps ? '1' : '0');
@@ -328,6 +385,11 @@ export default function App() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
+      if (characterPageId) {
+        event.preventDefault();
+        setCharacterPageId(null);
+        return;
+      }
       if (isGachaOpen) {
         event.preventDefault();
         setIsGachaOpen(false);
@@ -340,7 +402,7 @@ export default function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isGachaOpen, isSettingsOpen]);
+  }, [isGachaOpen, isSettingsOpen, characterPageId]);
 
   if (!isLoggedIn) {
     return (
@@ -371,7 +433,15 @@ export default function App() {
           if (characterId) selectCharacter(characterId);
         }}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        onOpenGacha={() => setIsGachaOpen(true)}
+        onOpenGacha={tab => {
+          setGachaTab(tab);
+          setIsGachaOpen(true);
+        }}
+        onOpenCharacters={() => {
+          const active = myPlayer?.activeCharacterId;
+          const first = active && myCharacterIds.includes(active) ? active : myCharacterIds[0];
+          if (first) setCharacterPageId(first);
+        }}
         onJoystickMove={(x, z) => gameRef.current?.setTouchMove(x, z)}
         onTouchButton={button => gameRef.current?.pressTouchButton(button)}
         onTouchButtonRelease={button => gameRef.current?.releaseTouchButton(button)}
@@ -384,16 +454,36 @@ export default function App() {
           weaponItems={myWeaponItems}
           partyCharacterIds={partyCharacterIds}
           constellationById={constellationById}
+          activatedById={activatedById}
           pityByBanner={pityByBanner}
           pullResults={pullResults}
+          initialTab={gachaTab}
           onPull={pullBanner}
           onSetParty={setParty}
-          onSelectCharacter={selectCharacter}
+          onSetConstellation={setConstellation}
+          onOpenCharacterPage={setCharacterPageId}
           onDismissResults={() => setPullResults(null)}
           onClose={() => {
             setIsGachaOpen(false);
             setPullResults(null);
           }}
+        />
+      )}
+      {characterPageId && (
+        <CharacterScreen
+          characterId={characterPageId}
+          ownedCharacterIds={new Set(myCharacterIds)}
+          activeCharacterId={myPlayer?.activeCharacterId ?? ''}
+          constellationById={constellationById}
+          activatedById={activatedById}
+          onView={setCharacterPageId}
+          onSetConstellation={setConstellation}
+          onOpenMenu={openTab => {
+            setCharacterPageId(null);
+            setGachaTab(openTab);
+            setIsGachaOpen(true);
+          }}
+          onClose={() => setCharacterPageId(null)}
         />
       )}
       <StatsOverlay connection={connection} showFps={showFps} showPing={showPing} />

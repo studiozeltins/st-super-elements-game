@@ -15,7 +15,8 @@ interface HudProps {
   hudState: HudState;
   onSelectPartySlot(slotIndex: number): void;
   onOpenSettings(): void;
-  onOpenGacha(): void;
+  onOpenGacha(tab: 'banners' | 'party'): void;
+  onOpenCharacters(): void;
   onJoystickMove(x: number, z: number): void;
   onTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   onTouchButtonRelease(button: 'attack'): void;
@@ -32,6 +33,7 @@ export function Hud({
   onSelectPartySlot,
   onOpenSettings,
   onOpenGacha,
+  onOpenCharacters,
   onJoystickMove,
   onTouchButton,
   onTouchButtonRelease,
@@ -75,9 +77,6 @@ export function Hud({
           <span className={`hud__zone ${hudState.inSafeZone ? 'hud__zone--safe' : 'hud__zone--pvp'}`}>
             {hudState.inSafeZone ? 'DROŠĀ ZONA' : 'PVP ZONA'}
           </span>
-          <button className="hud__chip hud__wish" onClick={onOpenGacha}>
-            VĒLĒŠANĀS
-          </button>
         </div>
       </div>
 
@@ -93,6 +92,25 @@ export function Hud({
 
       <div className="hud__top-right">
         <span className="hud__gems">✦ {primogems}</span>
+        <div className="hud__quick">
+          <button
+            className="hud__quick-btn"
+            onClick={() => onOpenGacha('banners')}
+            aria-label="Vēlēšanās"
+          >
+            ✧
+          </button>
+          <button
+            className="hud__quick-btn"
+            onClick={() => onOpenGacha('party')}
+            aria-label="Komanda"
+          >
+            ⚑
+          </button>
+          <button className="hud__quick-btn" onClick={onOpenCharacters} aria-label="Varoņi">
+            ❖
+          </button>
+        </div>
       </div>
 
       <div className="hud__party">

@@ -15,6 +15,7 @@ import {
 } from './enemyStats';
 import { damagePerTick, distanceBetween, gemIsCollectible, stepToward, windowBucketFor } from './combatMath';
 import { pickRayHit } from './hitscan';
+import { resistedDamage, GOLIATH_RESISTANCES, PLAYER_RESISTANCES } from './resistances';
 import { isWalkable, nextGoliathWaypoint } from './bridges';
 import { chooseGoliathTargetCamp, headingFromStep, hasReachedCamp, isWithinForwardArc } from './goliathAI';
 
@@ -43,6 +44,10 @@ const CHARACTER_STATS: Record<string, CharacterStat> = {
   marina: { stars: 5, maxHealth: 1150, healthRegen: 12, healType: 'active', healMode: 'percent', healPower: 0.2 },
   ignis: { stars: 5, maxHealth: 1300, healthRegen: 0, ...NO_HEAL },
   sarma: { stars: 5, maxHealth: 1000, healthRegen: 0, ...NO_HEAL },
+  // Nereīda: active healer — her tide arrows mend the party for 20% of each pool.
+  nereida: { stars: 5, maxHealth: 1120, healthRegen: 14, healType: 'active', healMode: 'percent', healPower: 0.2 },
+  vesper: { stars: 5, maxHealth: 1080, healthRegen: 0, ...NO_HEAL },
+  glacia: { stars: 5, maxHealth: 1550, healthRegen: 0, ...NO_HEAL },
   zefs: { stars: 4, maxHealth: 900, healthRegen: 0, ...NO_HEAL },
   petra: { stars: 4, maxHealth: 1200, healthRegen: 0, ...NO_HEAL },
   zibo: { stars: 4, maxHealth: 1000, healthRegen: 0, ...NO_HEAL },
@@ -71,9 +76,9 @@ const MAX_KILL_REWARD_TIER = 3;
 
 // ---- Wish banners + weapon catalog + pity (mirror src/game/data/gacha.ts) ----
 const BANNERS: Record<string, { featuredCharacterId: string }> = {
-  wind: { featuredCharacterId: 'aeris' },
-  flame: { featuredCharacterId: 'ignis' },
-  flood: { featuredCharacterId: 'marina' },
+  tide: { featuredCharacterId: 'nereida' },
+  storm: { featuredCharacterId: 'vesper' },
+  glacier: { featuredCharacterId: 'glacia' },
 };
 const GACHA_WEAPONS: Array<{ id: string; rarity: 3 | 4 | 5 }> = [
   { id: 'debesu-zobens', rarity: 5 },
@@ -90,13 +95,14 @@ const GACHA_WEAPONS: Array<{ id: string; rarity: 3 | 4 | 5 }> = [
   { id: 'mednieka-loks', rarity: 3 },
   { id: 'dzelzs-skeps', rarity: 3 },
 ];
-// Generous, fun rates: multiple 5★ per 10-pull are possible, and every pull
-// has a real shot at a character. Pity still guarantees a 4★ within 10.
-const FIVE_STAR_BASE_RATE = 0.06;
+// Genshin-authentic rates: 0.6% base 5★ (≈1.6% averaged over the pity curve),
+// soft pity ramps from pull 74, hard pity guarantees a 5★ at 90. 4★ at 5.1%,
+// guaranteed within 10. A 5★ every ~10 pulls is no longer expected.
+const FIVE_STAR_BASE_RATE = 0.006;
 const SOFT_PITY_START = 74;
 const HARD_PITY = 90;
 const SOFT_PITY_STEP = 0.06;
-const FOUR_STAR_RATE = 0.16;
+const FOUR_STAR_RATE = 0.051;
 const FOUR_STAR_PITY = 10;
 const FEATURED_5STAR_WIN = 0.5;
 const FOUR_STAR_CHARACTER_SHARE = 0.5;
@@ -362,9 +368,27 @@ const ownedCharacter = table(
     // Each character keeps its own HP; only the active one is in the world, so
     // benched characters stay wounded until a healer tops them up.
     currentHealth: t.u32(),
-    // Constellation level 0..6; duplicate pulls raise it and make the character
-    // stronger (more damage, and stronger heals for healers).
+    // Constellation level 0..6; duplicate pulls raise it. This is the UNLOCKED
+    // ceiling — how many stars the player has earned for this character.
     constellation: t.u32(),
+  }
+);
+
+// How many of a character's unlocked stars are currently ACTIVE (manual tuning).
+// A SEPARATE table (not a column on owned_character) so it can be added to a live
+// DB with no migration/wipe. No row for a character = "use the full constellation"
+// (so existing players are unaffected until they dial it themselves).
+const characterActivation = table(
+  {
+    name: 'character_activation',
+    public: true,
+    indexes: [{ accessor: 'by_owner_character', algorithm: 'btree', columns: ['owner', 'characterId'] }],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    owner: t.identity().index('btree'),
+    characterId: t.string(),
+    activatedConstellation: t.u32(),
   }
 );
 
@@ -433,6 +457,22 @@ const pvpHit = table(
   {
     target: t.identity(),
     amount: t.u32(),
+  }
+);
+
+// Broadcasts a ranged shot so every OTHER client can render the flying
+// projectile (the shooter draws its own locally). Fires for every valid shot —
+// including a pure-PvP shot that reaches no enemy — so a victim actually sees
+// what is being fired at them, not just the damage number.
+const rangedAttack = table(
+  { name: 'ranged_attack', public: true, event: true },
+  {
+    attacker: t.identity(),
+    characterId: t.string(),
+    originX: t.f32(),
+    originZ: t.f32(),
+    directionX: t.f32(),
+    directionZ: t.f32(),
   }
 );
 
@@ -510,11 +550,13 @@ const spacetimedb = schema({
   enemy,
   goliath,
   ownedCharacter,
+  characterActivation,
   skillCast,
   bannerPity,
   weaponItem,
   pullResult,
   pvpHit,
+  rangedAttack,
   healEvent,
   regenTimer,
   worldTimer,
@@ -565,6 +607,21 @@ function normalizeEmail(raw: string): string {
 function accountIdentity(ctx: { db: any; sender: any }): any | null {
   const link = ctx.db.accountLink.identity.find(ctx.sender);
   return link ? link.canonicalIdentity : null;
+}
+
+// Single active session per account: this device (keepIdentity) becomes the sole
+// device linked to the account, deleting every OTHER device's account_link row.
+// Those evicted clients see their own link row vanish (they each subscribe to
+// only it) and drop back to the login screen with a "logged in elsewhere" notice.
+// This is the root-cause fix for the same account being driven from two devices
+// at once (which also made the shared online flag flap). No accountId index, but
+// account_link is tiny, so a full scan is fine.
+function claimSession(ctx: { db: any }, accountId: bigint, keepIdentity: any) {
+  for (const link of [...ctx.db.accountLink.iter()]) {
+    if (link.accountId === accountId && !link.identity.equals(keepIdentity)) {
+      ctx.db.accountLink.identity.delete(link.identity);
+    }
+  }
 }
 
 // Seeds a fresh player + starter character under the given (canonical) identity.
@@ -782,18 +839,19 @@ export const login = spacetimedb.reducer(
       throw new SenderError('Invalid username or password');
     }
     const existing = ctx.db.accountLink.identity.find(ctx.sender);
-    if (existing) {
-      if (existing.accountId !== acct.accountId) {
-        throw new SenderError('This device is already logged into another account');
-      }
-      return; // already linked to this account
+    if (existing && existing.accountId !== acct.accountId) {
+      throw new SenderError('This device is already logged into another account');
     }
-    ctx.db.accountLink.insert({
-      identity: ctx.sender,
-      accountId: acct.accountId,
-      canonicalIdentity: acct.canonicalIdentity,
-      username: acct.username,
-    });
+    if (!existing) {
+      ctx.db.accountLink.insert({
+        identity: ctx.sender,
+        accountId: acct.accountId,
+        canonicalIdentity: acct.canonicalIdentity,
+        username: acct.username,
+      });
+    }
+    // This device claims the account's single session, evicting any other device.
+    claimSession(ctx, acct.accountId, ctx.sender);
     // Mark the account's player online (it may have been created on another device).
     const existingPlayer = ctx.db.player.identity.find(acct.canonicalIdentity);
     if (existingPlayer && !existingPlayer.online) {
@@ -829,6 +887,10 @@ export const updatePosition = spacetimedb.reducer(
     const stepScale = stepDistance > MAX_STEP_DISTANCE ? MAX_STEP_DISTANCE / stepDistance : 1;
     ctx.db.player.identity.update({
       ...currentPlayer,
+      // Self-heal online: if a reload's onDisconnect landed after the new
+      // onConnect (order isn't guaranteed) the flag can stick false; an active
+      // player writing positions flips it back within ~100ms. Same row write.
+      online: true,
       positionX: clampToWorld(currentPlayer.positionX + stepX * stepScale),
       // Negative Y allowed (falls off island edges are real), but per-update
       // steps are clamped so a client cannot teleport straight to the void.
@@ -903,6 +965,19 @@ export const setActiveCharacter = spacetimedb.reducer(
   }
 );
 
+// Manually set how many unlocked stars are active for a character (0..unlocked).
+// Combat scaling reads activatedConstellation, so this tunes the character's power
+// within the ceiling the player has earned from duplicate pulls.
+export const setConstellation = spacetimedb.reducer(
+  { characterId: t.string(), level: t.u32() },
+  (ctx, { characterId, level }) => {
+    const currentPlayer = requirePlayer(ctx);
+    const owned = findOwnedRow(ctx, currentPlayer, characterId);
+    if (!owned) throw new SenderError('Character not owned');
+    setActivation(ctx, currentPlayer.identity, characterId, Math.min(level, owned.constellation));
+  }
+);
+
 // Sets the ordered party (membership + order). Keeps only owned, unique ids up
 // to PARTY_SIZE, and makes sure the active character stays inside the party.
 export const setParty = spacetimedb.reducer(
@@ -952,7 +1027,13 @@ export const takeDamage = spacetimedb.reducer(
     const currentPlayer = requirePlayer(ctx);
     if (isInsideSafeZone(currentPlayer.positionX, currentPlayer.positionZ)) return;
 
-    const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE, currentPlayer.currentHealth);
+    // Active character's resistances soften the incoming blow (enemy melee = contact).
+    const resisted = resistedDamage(
+      Math.min(damage, MAX_HIT_DAMAGE),
+      PLAYER_RESISTANCES[currentPlayer.activeCharacterId],
+      'contact'
+    );
+    const clampedDamage = Math.min(resisted, currentPlayer.currentHealth);
     const remainingHealth = currentPlayer.currentHealth - clampedDamage;
     if (remainingHealth > 0) {
       setActiveHealth(ctx, currentPlayer, remainingHealth);
@@ -971,7 +1052,9 @@ export const fallToDeath = spacetimedb.reducer(ctx => {
     currentPlayer.positionY < VOID_DEATH_DEPTH &&
     !isOverAnyIsland(currentPlayer.positionX, currentPlayer.positionZ);
   if (!isInTheVoid) throw new SenderError('Not falling into the void');
-  respawnPlayerAtSpawn(ctx, currentPlayer);
+  // Fall toll: half your primogems are wiped from the game (not spilled as loot).
+  const wiped = Math.floor(currentPlayer.primogems / 2);
+  respawnPlayerAtSpawn(ctx, { ...currentPlayer, primogems: currentPlayer.primogems - wiped });
 });
 
 // Every enemy carries a virtual base gem stipend that is always present from
@@ -1180,6 +1263,17 @@ export const attackRay = spacetimedb.reducer(
     const comboScale = 1 + combo * COMBO_GEM_STEP;
     const now = ctx.timestamp.microsSinceUnixEpoch;
 
+    // Tell every other client to draw this projectile. Emitted here — before the
+    // enemy/goliath hit test can early-return — so a pure-PvP shot still shows.
+    ctx.db.rangedAttack.insert({
+      attacker: currentPlayer.identity,
+      characterId: currentPlayer.activeCharacterId,
+      originX,
+      originZ,
+      directionX: dirX,
+      directionZ: dirZ,
+    });
+
     const aliveEnemies = [...ctx.db.enemy.iter()].filter(row => row.alive);
     const aliveGoliaths = [...ctx.db.goliath.iter()].filter(row => row.alive);
     const enemyHit = pickRayHit(
@@ -1209,7 +1303,9 @@ export const attackRay = spacetimedb.reducer(
     let gemsCredited = 0;
     if (strikeGoliath) {
       const goliathRow = aliveGoliaths[goliathHit.index];
-      const remaining = goliathRow.health - Math.min(clampedDamage, goliathRow.health);
+      // Ranged resistance: a projectile only chips a fraction off a goliath.
+      const goliathDamage = resistedDamage(clampedDamage, GOLIATH_RESISTANCES, 'ranged');
+      const remaining = goliathRow.health - Math.min(goliathDamage, goliathRow.health);
       if (remaining > 0) {
         ctx.db.goliath.goliathId.update({
           ...goliathRow,
@@ -1390,7 +1486,10 @@ export const healParty = spacetimedb.reducer(
 
     const ownedList = [...ctx.db.ownedCharacter.owner.filter(currentPlayer.identity)];
     const healer = ownedList.find(row => row.characterId === currentPlayer.activeCharacterId);
-    const healMultiplier = 1 + (healer?.constellation ?? 0) * HEAL_CONSTELLATION_STEP;
+    const healActivated = healer
+      ? activatedConstellationFor(ctx, healer.owner, healer.characterId, healer.constellation)
+      : 0;
+    const healMultiplier = 1 + healActivated * HEAL_CONSTELLATION_STEP;
 
     let activeHealth = currentPlayer.currentHealth;
     for (const owned of ownedList) {
@@ -1415,6 +1514,28 @@ export const healParty = spacetimedb.reducer(
 
 // Grants a character. New → added at C0. Duplicate → +1 constellation up to
 // C6. Returns the outcome so the pull can show C-level and refund at max.
+// Upsert a character's manual activation level.
+function setActivation(ctx: { db: any }, owner: any, characterId: string, level: number) {
+  const existing = [...ctx.db.characterActivation.by_owner_character.filter([owner, characterId])][0];
+  if (existing) {
+    ctx.db.characterActivation.id.update({ ...existing, activatedConstellation: level });
+  } else {
+    ctx.db.characterActivation.insert({ id: 0n, owner, characterId, activatedConstellation: level });
+  }
+}
+
+// Effective active stars for scaling: the manual value if set, else the full
+// unlocked constellation (so players who never touch it keep their old power).
+function activatedConstellationFor(
+  ctx: { db: any },
+  owner: any,
+  characterId: string,
+  unlocked: number
+): number {
+  const row = [...ctx.db.characterActivation.by_owner_character.filter([owner, characterId])][0];
+  return row ? Math.min(row.activatedConstellation, unlocked) : unlocked;
+}
+
 function grantCharacter(ctx: { db: any }, owner: any, characterId: string) {
   const owned = [...ctx.db.ownedCharacter.owner.filter(owner)].find(
     (row: any) => row.characterId === characterId
@@ -1432,6 +1553,9 @@ function grantCharacter(ctx: { db: any }, owner: any, characterId: string) {
   if (owned.constellation < MAX_CONSTELLATION) {
     const constellation = owned.constellation + 1;
     ctx.db.ownedCharacter.id.update({ ...owned, constellation });
+    // A freshly unlocked star auto-activates (feels good on pull); the player can
+    // still dial it back down manually via setConstellation.
+    setActivation(ctx, owner, characterId, constellation);
     return { isNew: false, constellation, maxed: false };
   }
   return { isNew: false, constellation: MAX_CONSTELLATION, maxed: true };
@@ -2107,7 +2231,13 @@ export const worldTick = spacetimedb.reducer(
     for (const [hex, rawDamage] of playerDamage) {
       const targetPlayer = ctx.db.player.identity.find(playerByHex.get(hex).identity);
       if (!targetPlayer || isInsideSafeZone(targetPlayer.positionX, targetPlayer.positionZ)) continue;
-      const damage = Math.min(Math.round(rawDamage), targetPlayer.currentHealth);
+      // Active character's resistances soften enemy/goliath melee (contact channel).
+      const resisted = resistedDamage(
+        Math.round(rawDamage),
+        PLAYER_RESISTANCES[targetPlayer.activeCharacterId],
+        'contact'
+      );
+      const damage = Math.min(resisted, targetPlayer.currentHealth);
       const remaining = targetPlayer.currentHealth - damage;
       if (remaining > 0) {
         setActiveHealth(ctx, targetPlayer, remaining);

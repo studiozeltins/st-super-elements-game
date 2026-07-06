@@ -45,31 +45,31 @@ export interface BannerDef {
 
 export const BANNERS: BannerDef[] = [
   {
-    id: 'wind',
-    displayName: 'Vēja Solījums',
+    id: 'tide',
+    displayName: 'Plūdmaiņu Sauciens',
     subtitle: 'Pastiprināta parādīšanās',
-    featuredCharacterId: 'aeris',
+    featuredCharacterId: 'nereida',
     lore:
-      'Kur vējš griežas, tur Aeris dejo. Katrs viņas solis ir vētras čuksts, ' +
-      'katra kustība — brīvības zvērests. Debesis pieder tiem, kas nebaidās krist.',
+      'Kad jūra ievelk elpu, Nereīda uzvelk loku. Viņas bultas nes dziedināšanu ' +
+      'draugiem un dziļumu ienaidniekiem — jo plūdmaiņa nekad neizvēlas tikai vienu krastu.',
   },
   {
-    id: 'flame',
-    displayName: 'Liesmu Ceļš',
+    id: 'storm',
+    displayName: 'Zibens Solis',
     subtitle: 'Pastiprināta parādīšanās',
-    featuredCharacterId: 'ignis',
+    featuredCharacterId: 'vesper',
     lore:
-      'Ignis nesa liesmu cauri tūkstoš kaujām un nekad nepazuda tumsā. ' +
-      'Viņa uguns nav iznīcība — tā ir apņēmība, kas izkausē pat dzelzi.',
+      'Vespers cīnās ātrāk, nekā zibens paspēj noskanēt. Kad tu redzi viņas šķēpu, ' +
+      'tas jau ir atgriezies — un tu esi zaudējis divas reizes.',
   },
   {
-    id: 'flood',
-    displayName: 'Plūdu Dziesma',
+    id: 'glacier',
+    displayName: 'Ledāja Zvērests',
     subtitle: 'Pastiprināta parādīšanās',
-    featuredCharacterId: 'marina',
+    featuredCharacterId: 'glacia',
     lore:
-      'Marina valda pār plūdiem, kas apraka veselas pilsētas. Mierīga kā spogulis, ' +
-      'nežēlīga kā vilnis — okeāns klausa tikai viņas balsij.',
+      'Glācija soļo lēni, jo ledājs nesteidzas. Viss, kas met tai izaicinājumu, ' +
+      'agrāk vai vēlāk pakļaujas tam pašam mūžsenajam aukstumam.',
   },
 ];
 
@@ -82,7 +82,8 @@ export const BANNERS_BY_ID: Record<string, BannerDef> = Object.fromEntries(
 );
 
 // ---- Pity math (mirror of the server roll in spacetimedb/src/index.ts) ----
-export const FIVE_STAR_BASE_RATE = 0.06;
+// Genshin-authentic rates: 0.6% base 5★, soft pity ramps from 74, hard pity at 90.
+export const FIVE_STAR_BASE_RATE = 0.006;
 export const SOFT_PITY_START = 74; // this pull number onward, odds ramp up
 export const HARD_PITY = 90; // guaranteed 5★ on this pull
 export const SOFT_PITY_STEP = 0.06;

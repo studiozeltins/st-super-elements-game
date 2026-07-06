@@ -41,6 +41,14 @@ export const BannerPity = __t.object("BannerPity", {
 });
 export type BannerPity = __Infer<typeof BannerPity>;
 
+export const CharacterActivation = __t.object("CharacterActivation", {
+  id: __t.u64(),
+  owner: __t.identity(),
+  characterId: __t.string(),
+  activatedConstellation: __t.u32(),
+});
+export type CharacterActivation = __Infer<typeof CharacterActivation>;
+
 export const Enemy = __t.object("Enemy", {
   enemyId: __t.u64(),
   campIndex: __t.u32(),
@@ -149,6 +157,16 @@ export const PvpHit = __t.object("PvpHit", {
   amount: __t.u32(),
 });
 export type PvpHit = __Infer<typeof PvpHit>;
+
+export const RangedAttack = __t.object("RangedAttack", {
+  attacker: __t.identity(),
+  characterId: __t.string(),
+  originX: __t.f32(),
+  originZ: __t.f32(),
+  directionX: __t.f32(),
+  directionZ: __t.f32(),
+});
+export type RangedAttack = __Infer<typeof RangedAttack>;
 
 export const RegenTimer = __t.object("RegenTimer", {
   scheduledId: __t.u64(),

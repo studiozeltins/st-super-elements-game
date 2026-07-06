@@ -3,6 +3,12 @@ import type { WeaponId } from './weapons';
 
 export type SkillKind = 'projectile' | 'nova' | 'dash' | 'ring' | 'volley';
 
+// Incoming-damage channels a character can resist. Mirrors DamageType in
+// spacetimedb/src/resistances.ts. A multiplier < 1 means damage is reduced
+// (0.7 = takes 70%, i.e. 30% resisted); an omitted channel is normal (1.0).
+export type DamageChannel = 'melee' | 'ranged' | 'skill' | 'contact';
+export type ResistanceProfile = Partial<Record<DamageChannel, number>>;
+
 export interface SkillDefinition {
   id: string;
   displayName: string;
@@ -28,6 +34,8 @@ export interface CharacterDefinition {
   /** Passive health regenerated per second (0 = no regen). */
   healthRegen: number;
   hairColor: number;
+  /** Incoming-damage resistances (multipliers). Absent = no resistances. */
+  resistances?: ResistanceProfile;
   skill: SkillDefinition;
 }
 
@@ -156,6 +164,54 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
       radius: 1.4,
     }),
   },
+  nereida: {
+    id: 'nereida',
+    displayName: 'Nereīda',
+    title: 'Plūdmaiņu glābēja',
+    stars: 5,
+    element: 'hydro',
+    weapon: 'bow',
+    moveSpeed: 7.2,
+    maxHealth: 1120,
+    healthRegen: 14,
+    hairColor: 0x2fb6d8,
+    // Water cushions her: enemy blows land at 70% (30% resisted).
+    resistances: { contact: 0.7 },
+    skill: skill('tide-arrow', 'Plūdmaiņu bulta', 'projectile', 165, 7, {
+      projectileSpeed: 26,
+      radius: 3,
+    }),
+  },
+  vesper: {
+    id: 'vesper',
+    displayName: 'Vespers',
+    title: 'Zibens dueliste',
+    stars: 5,
+    element: 'electro',
+    weapon: 'spear',
+    moveSpeed: 7.6,
+    maxHealth: 1080,
+    healthRegen: 0,
+    hairColor: 0x9d5cff,
+    // Blink-fast: hard to pin (ranged 50%) and slips most blows (contact 85%).
+    resistances: { ranged: 0.5, contact: 0.85 },
+    skill: skill('storm-lunge', 'Vētras izklupiens', 'dash', 210, 7, { radius: 2.6 }),
+  },
+  glacia: {
+    id: 'glacia',
+    displayName: 'Glācija',
+    title: 'Ledāja sirds',
+    stars: 5,
+    element: 'cryo',
+    weapon: 'greatsword',
+    moveSpeed: 5.8,
+    maxHealth: 1550,
+    healthRegen: 0,
+    hairColor: 0xbfeaff,
+    // A walking glacier: heavy ice armor cuts melee blows to 55% (45% resisted).
+    resistances: { contact: 0.55 },
+    skill: skill('glacier-fall', 'Ledāja krišana', 'nova', 240, 10, { radius: 5 }),
+  },
   zefs: {
     id: 'zefs',
     displayName: 'Zefs',
@@ -280,6 +336,7 @@ export interface HealSpec {
 // Hydro characters are healers (with active/passive sub-types); Lapa (dendro) too.
 const HEALERS: Record<string, HealSpec> = {
   marina: { type: 'active', mode: 'percent', power: 0.2 },
+  nereida: { type: 'active', mode: 'percent', power: 0.2 },
   lapa: { type: 'active', mode: 'combo', power: 6 },
   rasa: { type: 'passive', mode: 'flat', power: 10 },
 };

@@ -66,6 +66,15 @@ const SNAP_DISTANCE = 8;
 const LERP_RATE = 10;
 /** Below this per-frame move the entity reads as idle (no facing / bob). */
 const MOTION_EPSILON = 0.02;
+/**
+ * The health bar + info overlay stays hidden until an enemy is hit, then shows
+ * for this long after the LAST hit. Repeated hits during a fight keep refreshing
+ * it; once the enemy disengages or drifts back to its camp (no more hits) it
+ * fades out. Alive enemies never regen server-side, so a "health < max" rule
+ * would keep a wounded idle enemy's bar up forever — this recency rule matches
+ * the intent instead.
+ */
+const OVERLAY_VISIBLE_SECONDS = 4;
 
 interface RenderedEntity {
   model: EnemyModel;
@@ -78,6 +87,8 @@ interface RenderedEntity {
   maxHealth: number;
   carriedGems: number;
   alive: boolean;
+  /** Elapsed time of the last observed health drop; drives overlay visibility. */
+  lastDamagedAt: number;
   /** Elapsed time the death animation began, or null when never observed alive. */
   deathStartedAt: number | null;
 }
@@ -112,6 +123,8 @@ export function createEntityRenderer<Row>(
       maxHealth: adapter.readMaxHealth(row),
       carriedGems: adapter.readCarriedGems(row),
       alive,
+      // A freshly spawned enemy shows no bar until it is actually hit.
+      lastDamagedAt: -Infinity,
       // A row first seen already dead never toppled here: backdate the start so
       // the first frame reports progress 1 — it lands finished and hidden.
       deathStartedAt: alive ? null : elapsedSeconds - adapter.deathDurationSeconds,
@@ -120,6 +133,7 @@ export function createEntityRenderer<Row>(
 
   function revive(entity: RenderedEntity) {
     entity.deathStartedAt = null;
+    entity.lastDamagedAt = -Infinity; // a full-health revived enemy shows no bar
     const group = entity.model.group;
     group.visible = true;
     group.rotation.set(0, group.rotation.y, 0); // clear any death topple
@@ -155,11 +169,15 @@ export function createEntityRenderer<Row>(
       existing.carriedGems = adapter.readCarriedGems(row);
       const nextHealth = adapter.readHealth(row);
       const nowAlive = adapter.readIsAlive(row);
-      // A falling health bar means a hit landed — float the exact server-driven
-      // drop, but only while the entity stays alive (death has its own flourish).
-      if (nowAlive && onHealthDrop && nextHealth < existing.lastHealth) {
-        const position = existing.model.group.position;
-        onHealthDrop(position.clone().setY(position.y + 1), existing.lastHealth - nextHealth);
+      // A falling health bar means a hit landed — reveal the overlay and float
+      // the exact server-driven drop, but only while the entity stays alive
+      // (death has its own flourish).
+      if (nowAlive && nextHealth < existing.lastHealth) {
+        existing.lastDamagedAt = elapsedSeconds;
+        if (onHealthDrop) {
+          const position = existing.model.group.position;
+          onHealthDrop(position.clone().setY(position.y + 1), existing.lastHealth - nextHealth);
+        }
       }
       existing.lastHealth = nextHealth;
       if (nowAlive && !existing.alive) revive(existing);
@@ -172,6 +190,10 @@ export function createEntityRenderer<Row>(
   }
 
   function refreshOverlay(entity: RenderedEntity) {
+    // Hidden until hit, then shown for a short window after the last hit.
+    const recentlyHit = elapsedSeconds - entity.lastDamagedAt < OVERLAY_VISIBLE_SECONDS;
+    entity.model.overlay.sprite.visible = entity.alive && recentlyHit;
+    if (!entity.model.overlay.sprite.visible) return;
     entity.model.overlay.update({
       healthFraction: entity.maxHealth > 0 ? entity.lastHealth / entity.maxHealth : 0,
       carriedGems: entity.displayBaseGems + entity.carriedGems,

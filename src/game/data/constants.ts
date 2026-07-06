@@ -15,3 +15,10 @@ export const SAFE_ZONE_HEAL_PER_SECOND = 60;
  */
 export const PIXEL_TARGET_INTERNAL_WIDTH = 440;
 export const MAX_PIXELATION_FACTOR = 4;
+/**
+ * Three.js render layer for crisp UI billboards (health bars, damage numbers,
+ * name tags). The world renders to a low-res target and is upscaled with
+ * nearest-neighbour for the pixel look; layer-1 objects render in a second pass
+ * at native resolution on top, so they stay sharp. See createPixelRenderer.
+ */
+export const OVERLAY_LAYER = 1;
