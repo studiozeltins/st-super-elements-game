@@ -3106,6 +3106,32 @@ button {
   color: var(--muted);
 }
 
+/* Transcend install control — purple (--shard) variant of the constellation row.
+   Swaps the gold accent for the transcend-shard family color; enabled + at-cap
+   filled states use --shard, disabled gates dim via the shared .con-item--off. */
+.con-item--shard:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--shard) 60%, transparent);
+}
+
+.con-item--shard.con-item--on {
+  border-color: color-mix(in srgb, var(--shard) 55%, transparent);
+  background: color-mix(in srgb, var(--shard) 10%, var(--panel));
+}
+
+.con-item--shard .con-item__badge {
+  color: var(--shard);
+  border-color: color-mix(in srgb, var(--shard) 50%, transparent);
+}
+
+.con-item--shard.con-item--on .con-item__badge {
+  color: var(--ink);
+  background: var(--shard);
+}
+
+.con-item--shard .con-item__toggle {
+  color: var(--shard);
+}
+
 /* ---------- Portrait / narrow: stack portrait over tab content ---------- */
 
 @media (max-aspect-ratio: 1/1) {

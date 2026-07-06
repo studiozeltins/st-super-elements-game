@@ -3,6 +3,7 @@ import { CHARACTER_LIST, CHARACTERS } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { WEAPONS } from '../game/data/weapons';
 import { constellationBonuses } from '../game/data/constellations';
+import { MAX_TRANSCEND_LEVEL, TRANSCEND_SHARD_COST } from '../game/data/constants';
 import { loreFor } from '../game/data/characterLore';
 import { CharacterPreview } from './CharacterPreview';
 import { ConstellationRing } from './ConstellationRing';
@@ -98,6 +99,28 @@ export function CharacterScreen({
   const activated = activatedById[characterId] ?? unlocked; // stars currently on
   const transcendLevel = transcendById[characterId] ?? 0; // installed levels past C6
   const bonuses = constellationBonuses(character);
+
+  // Transcend install gate — client UX only; the transcendCharacter reducer is authoritative.
+  // Cost curve is nextLevel (never client-derived beyond TRANSCEND_SHARD_COST).
+  const belowC6 = unlocked < 6;
+  const atTranscendCap = transcendLevel >= MAX_TRANSCEND_LEVEL;
+  const nextTranscendLevel = transcendLevel + 1;
+  const transcendCost = TRANSCEND_SHARD_COST(nextTranscendLevel);
+  const canTranscend = owned && !belowC6 && !atTranscendCap && transcendShards >= transcendCost;
+  // Level chip: below C6 shows the earned ceiling C{n}; otherwise the transcend level (C6 at T0).
+  const transcendBadge = belowC6 ? `C${unlocked}` : transcendLevel === 0 ? 'C6' : `T${transcendLevel}`;
+  const transcendTitle = belowC6
+    ? 'Vajadzīgs C6'
+    : atTranscendCap
+      ? `Maksimums · T${MAX_TRANSCEND_LEVEL}`
+      : 'PĀRSNIEGŠANA';
+  const transcendHelper = belowC6
+    ? 'Atbloķē visas 6 zvaigznes, lai sāktu pārsniegšanu.'
+    : atTranscendCap
+      ? 'Sasniegts pārsniegšanas maksimums.'
+      : canTranscend
+        ? `Pārsniegt · ${transcendCost} ◈`
+        : `Vajag vēl ${transcendCost - transcendShards} ◈.`;
 
   // Only owned characters appear here (menu + swipe order).
   const ownedList = CHARACTER_LIST.filter(entry => ownedCharacterIds.has(entry.id));
@@ -378,6 +401,32 @@ export function CharacterScreen({
                     );
                   })}
                 </ol>
+
+                {/* Transcendence install — purple (--shard) clone of the con-item row, gated.
+                    One enabled state + three distinct disabled states (below C6 / at cap /
+                    not enough shards). Single-tap, no confirm dialog; server is authoritative. */}
+                <span className="ctab__section">
+                  PĀRSNIEGŠANA · T{transcendLevel} / {MAX_TRANSCEND_LEVEL}
+                </span>
+                <button
+                  className={`con-item con-item--shard ${
+                    atTranscendCap ? 'con-item--on' : canTranscend ? '' : 'con-item--off'
+                  }`}
+                  disabled={!canTranscend}
+                  onClick={() => onTranscend(characterId)}
+                  aria-label={`Pārsniegt ${character.displayName}: līmenis T${nextTranscendLevel}, maksā ${transcendCost} zvaigžņu šķembas`}
+                >
+                  <span className="con-item__badge">{transcendBadge}</span>
+                  <span className="con-item__text">
+                    <span className="con-item__title">{transcendTitle}</span>
+                    <span className="con-item__effect">{transcendHelper}</span>
+                  </span>
+                  {canTranscend && <span className="con-item__toggle">›</span>}
+                  {!canTranscend && !belowC6 && !atTranscendCap && (
+                    <span className="con-item__toggle">{transcendCost} ◈</span>
+                  )}
+                </button>
+
                 <p className="ctab__soon">
                   Piesit zvaigzni, lai to ieslēgtu vai izslēgtu. Aktīvās zvaigznes pastiprina varoni;
                   atbloķē vairāk ar dublikātiem no vēlēšanās. Drīzumā zvaigznes dos jaunas spējas.
