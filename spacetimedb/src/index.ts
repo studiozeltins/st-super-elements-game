@@ -20,6 +20,7 @@ import { isWalkable, nextGoliathWaypoint } from './bridges';
 import { chooseGoliathTargetCamp, headingFromStep, hasReachedCamp, isWithinForwardArc } from './goliathAI';
 import { resolveTranscendInstall } from './transcendInstall';
 import { resolveDupeGrant } from './gachaOverflow';
+import { applyDeathShardPenalty } from './deathPenalty';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -996,13 +997,42 @@ export const attackPlayer = spacetimedb.reducer(
     // Kill: a third of the loser's gems spill onto the ground. The winner
     // earns credit but must collect it (as can anyone).
     const stolen = spillGems(ctx, target, PVP_DEATH_SPILL, attacker.identity);
-    if (stolen > 0) {
+    // Shard penalty on the VICTIM: a PVP death transfers the carried shard straight to
+    // the killer (NO ground drop). The Plan 01 helper yields the victim's next* state and
+    // result.shardsLost (0 when the victim eroded a level instead of dropping a shard).
+    const targetOwned = findOwnedRow(ctx, target, target.activeCharacterId);
+    const result = applyDeathShardPenalty(
+      target.transcendShards,
+      targetOwned ? targetOwned.transcendLevel : 0,
+      targetOwned ? targetOwned.constellation : 0,
+      SHARD_DEATH_LOSS
+    );
+    if (targetOwned && (result.erodedTranscend || result.erodedConstellation)) {
+      ctx.db.ownedCharacter.id.update({
+        ...targetOwned,
+        transcendLevel: result.nextTranscendLevel,
+        constellation: result.nextConstellation,
+      });
+    }
+    // Credit the killer BOTH the gem spill (gemsFromKills) AND the stolen shard
+    // (transcendShards). CRITICAL [A1]: the shard credit MUST NOT be gated by `stolen > 0`
+    // alone — a victim carrying a shard but 0 gems yields stolen===0, and nesting the
+    // shard credit inside that block would DROP it while the victim is already decremented,
+    // DESTROYING the shard (breaks shard conservation). Both credits are no-op adds when
+    // their amount is 0, so a single update gated on EITHER amount conserves both. The
+    // shard credit is exactly result.shardsLost (0 on a 0-shard victim), never a fixed 1.
+    if (stolen > 0 || result.shardsLost > 0) {
       ctx.db.player.identity.update({
         ...attacker,
         gemsFromKills: attacker.gemsFromKills + stolen,
+        transcendShards: attacker.transcendShards + result.shardsLost,
       });
     }
-    respawnPlayerAtSpawn(ctx, { ...target, gems: target.gems - stolen });
+    respawnPlayerAtSpawn(ctx, {
+      ...target,
+      gems: target.gems - stolen,
+      transcendShards: result.nextShards,
+    });
   }
 );
 
@@ -1140,7 +1170,31 @@ export const takeDamage = spacetimedb.reducer(
     }
     // Died to an enemy: drop a quarter of your gems where you fell.
     const spilled = spillGems(ctx, currentPlayer, PVE_DEATH_SPILL, currentPlayer.identity);
-    respawnPlayerAtSpawn(ctx, { ...currentPlayer, gems: currentPlayer.gems - spilled });
+    // Shard penalty (additive to the gem spill): a carried shard falls as a collectible
+    // at the death spot; a shard-less death erodes the transcend layer, then one C-level.
+    // The Plan 01 helper is the sole decision authority — no raw subtraction here.
+    const activeOwned = findOwnedRow(ctx, currentPlayer, currentPlayer.activeCharacterId);
+    const result = applyDeathShardPenalty(
+      currentPlayer.transcendShards,
+      activeOwned ? activeOwned.transcendLevel : 0,
+      activeOwned ? activeOwned.constellation : 0,
+      SHARD_DEATH_LOSS
+    );
+    if (result.shardsLost > 0) {
+      spillShards(ctx, currentPlayer.positionX, currentPlayer.positionZ, result.shardsLost, currentPlayer.identity);
+    }
+    if (activeOwned && (result.erodedTranscend || result.erodedConstellation)) {
+      ctx.db.ownedCharacter.id.update({
+        ...activeOwned,
+        transcendLevel: result.nextTranscendLevel,
+        constellation: result.nextConstellation,
+      });
+    }
+    respawnPlayerAtSpawn(ctx, {
+      ...currentPlayer,
+      gems: currentPlayer.gems - spilled,
+      transcendShards: result.nextShards,
+    });
   }
 );
 
@@ -2377,7 +2431,30 @@ export const worldTick = spacetimedb.reducer(
         continue;
       }
       const spilled = spillGems(ctx, targetPlayer, PVE_DEATH_SPILL, ctx.sender);
-      respawnPlayerAtSpawn(ctx, { ...targetPlayer, gems: targetPlayer.gems - spilled });
+      // Same additive shard penalty as takeDamage — a carried shard falls at the death
+      // spot (droppedBy = the dying player); a shard-less death erodes transcend then C.
+      const activeOwned = findOwnedRow(ctx, targetPlayer, targetPlayer.activeCharacterId);
+      const result = applyDeathShardPenalty(
+        targetPlayer.transcendShards,
+        activeOwned ? activeOwned.transcendLevel : 0,
+        activeOwned ? activeOwned.constellation : 0,
+        SHARD_DEATH_LOSS
+      );
+      if (result.shardsLost > 0) {
+        spillShards(ctx, targetPlayer.positionX, targetPlayer.positionZ, result.shardsLost, targetPlayer.identity);
+      }
+      if (activeOwned && (result.erodedTranscend || result.erodedConstellation)) {
+        ctx.db.ownedCharacter.id.update({
+          ...activeOwned,
+          transcendLevel: result.nextTranscendLevel,
+          constellation: result.nextConstellation,
+        });
+      }
+      respawnPlayerAtSpawn(ctx, {
+        ...targetPlayer,
+        gems: targetPlayer.gems - spilled,
+        transcendShards: result.nextShards,
+      });
     }
 
     vacuumGems(ctx, now);
