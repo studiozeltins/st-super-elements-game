@@ -285,7 +285,9 @@ const player = table(
     gemsFromKills: t.u32(),
     gemsCollected: t.u32(),
     // Durable transcendence currency minted by C6-overflow dupes (REQ-shard-currency-mint).
-    transcendShards: t.u32(),
+    // .default(0) lets the additive migrate backfill existing player rows to 0 (assumption A1)
+    // without a data wipe — SpacetimeDB refuses to add a non-defaulted column to a populated table.
+    transcendShards: t.u32().default(0),
   }
 );
 
