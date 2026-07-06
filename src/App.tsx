@@ -18,6 +18,7 @@ const PARTY_SIZE = 4;
 const INITIAL_HUD_STATE: HudState = {
   attackCooldownFraction: 0,
   skillCooldownFraction: 0,
+  skillCooldownByCharacter: {},
   inSafeZone: true,
   combo: 0,
 };

@@ -41,6 +41,13 @@ import type { Enemy, GemDrop, Goliath, Player, RangedAttack, SkillCast } from '.
 export interface HudState {
   attackCooldownFraction: number;
   skillCooldownFraction: number;
+  /**
+   * Remaining skill-cooldown fraction [0..1] per character id, for EVERY party
+   * member whose skill is still cooling (benched characters keep cooling in real
+   * time). Absent id = ready (0). Lets the party HUD show each member's cooldown,
+   * not only the active one.
+   */
+  skillCooldownByCharacter: Record<string, number>;
   inSafeZone: boolean;
   /** Current hit combo (0 = none); unbounded, only rises on landed hits. */
   combo: number;
@@ -689,6 +696,14 @@ export function createGame(
 
   function pushHudState() {
     const skillReadyAt = skillReadyAtByCharacter.get(activeCharacter.id) ?? 0;
+    // Per-character remaining cooldown — benched members keep cooling in real time.
+    const skillCooldownByCharacter: Record<string, number> = {};
+    for (const [id, readyAt] of skillReadyAtByCharacter) {
+      const cooldownSeconds = CHARACTERS[id]?.skill.cooldownSeconds ?? 0;
+      if (cooldownSeconds <= 0) continue;
+      const fraction = Math.min(1, (readyAt - elapsedSeconds) / cooldownSeconds);
+      if (fraction > 0.001) skillCooldownByCharacter[id] = fraction;
+    }
     onHudChange({
       attackCooldownFraction: Math.max(
         0,

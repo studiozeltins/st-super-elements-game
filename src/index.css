@@ -732,21 +732,21 @@ button {
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  gap: 22px;
+  gap: 12px;
 }
 
 .party-slot {
-  width: 46px;
-  height: 46px;
+  width: 40px;
+  height: 40px;
   border: 1px solid var(--line);
   background: var(--panel);
-  transform: rotate(45deg);
+  border-radius: 50%;
   transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.18s;
 }
 
 .party-slot--active {
   border-color: var(--element-color);
-  transform: rotate(45deg) scale(1.18);
+  transform: scale(1.18);
   box-shadow: 0 0 0 1px var(--element-color);
 }
 
@@ -755,7 +755,6 @@ button {
   place-items: center;
   width: 100%;
   height: 100%;
-  transform: rotate(-45deg);
   position: relative;
 }
 
@@ -769,11 +768,11 @@ button {
 /* Per-character special-ability glyph, top of the box. */
 .party-slot__skill {
   position: absolute;
-  top: 0;
+  top: 1px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1;
   color: var(--muted);
 }
@@ -788,8 +787,8 @@ button {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   transform: translate(-50%, -50%);
   z-index: 1;
   border-radius: 50%;
@@ -797,13 +796,32 @@ button {
   pointer-events: none;
 }
 
+/* The "line that runs around" — a thin colored ring arc that sweeps the slot
+   perimeter, shrinking to nothing as the skill cools to ready. One per bench
+   member, so every non-active character shows its own cooldown at a glance. */
+.party-slot__ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 42px;
+  height: 42px;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(var(--element-color) calc(var(--cooldown) * 360deg), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--element-color) 70%, transparent));
+}
+
 /* One-shot "skill ready" ring pulse. */
 .party-slot__ready {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   transform: translate(-50%, -50%);
   z-index: 3;
   border-radius: 50%;
@@ -865,19 +883,18 @@ button {
   }
 
   /* Character switcher moves to the right edge so it's reachable with the right
-     thumb. A 2-column grid keeps it compact enough to sit between the top-right
-     wallet and the bottom-right action buttons on short landscape screens. */
+     thumb. A single vertical column (only the 3 bench members show) between the
+     top-right wallet and the bottom-right action buttons. */
   .hud__party {
     left: auto;
     bottom: auto;
     right: max(12px, env(safe-area-inset-right));
     top: 50%;
     transform: translateY(-50%);
-    display: grid;
-    grid-auto-flow: row;
-    grid-template-columns: repeat(2, auto);
-    gap: 22px 20px;
-    place-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
   }
 
 }

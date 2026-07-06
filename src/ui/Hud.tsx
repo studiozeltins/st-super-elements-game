@@ -69,14 +69,25 @@ export function Hud({
   const healthColor =
     healthFraction >= 0.5 ? 'var(--accent)' : healthFraction >= 0.4 ? '#f5a623' : 'var(--danger)';
 
-  // Fire a one-shot "skill ready" pulse on the active slot when its cooldown drains.
-  const skillCd = hudState.skillCooldownFraction;
-  const [readyPulse, setReadyPulse] = useState(0);
-  const prevCdRef = useRef(skillCd);
+  // Fire a one-shot "skill ready" pulse on any bench slot the moment its cooldown drains.
+  const cooldownByChar = hudState.skillCooldownByCharacter;
+  const [readyPulses, setReadyPulses] = useState<Record<string, number>>({});
+  const prevCdByChar = useRef<Record<string, number>>({});
   useEffect(() => {
-    if (prevCdRef.current > 0.02 && skillCd <= 0.02) setReadyPulse(pulse => pulse + 1);
-    prevCdRef.current = skillCd;
-  }, [skillCd]);
+    const prev = prevCdByChar.current;
+    const readyNow: string[] = [];
+    for (const id of new Set([...Object.keys(prev), ...Object.keys(cooldownByChar)])) {
+      if ((prev[id] ?? 0) > 0.02 && (cooldownByChar[id] ?? 0) <= 0.02) readyNow.push(id);
+    }
+    prevCdByChar.current = { ...cooldownByChar };
+    if (readyNow.length) {
+      setReadyPulses(current => {
+        const next = { ...current };
+        for (const id of readyNow) next[id] = (next[id] ?? 0) + 1;
+        return next;
+      });
+    }
+  }, [cooldownByChar]);
 
   return (
     <div className="hud">
@@ -136,22 +147,22 @@ export function Hud({
         {partyCharacterIds.map((characterId, slotIndex) => {
           const character = CHARACTERS[characterId];
           if (!character) return null;
+          // Bench-only bar: the active character is the one you're playing, so it
+          // is hidden here — only the three swappable members show.
+          if (characterId === activeCharacterId) return null;
           const element = ELEMENTS[character.element];
-          const isActive = characterId === activeCharacterId;
           const hpFraction = Math.max(0, Math.min(1, partyHealthById[characterId] ?? 1));
-          // Only the active character has a live cooldown (server tracks one in combat).
-          const cooldown = isActive ? skillCd : 0;
+          // Each bench member shows its own live cooldown (benched skills keep cooling).
+          const cooldown = cooldownByChar[characterId] ?? 0;
+          const readyPulse = readyPulses[characterId] ?? 0;
           const skillGlyph = SKILL_GLYPH[character.skill.kind] ?? '✦';
           return (
             <button
               key={characterId}
-              className={`party-slot ${isActive ? 'party-slot--active' : ''} ${
-                cooldown > 0.02 ? 'party-slot--cooling' : ''
-              }`}
+              className={`party-slot ${cooldown > 0.02 ? 'party-slot--cooling' : ''}`}
               style={{ '--element-color': element.cssColor } as React.CSSProperties}
               onClick={() => onSelectPartySlot(slotIndex)}
               aria-label={`${character.displayName} (${slotIndex + 1})`}
-              aria-pressed={isActive}
             >
               <span className="party-slot__inner">
                 <span className="party-slot__initial">{character.displayName[0]}</span>
@@ -159,12 +170,19 @@ export function Hud({
                   {skillGlyph}
                 </span>
                 {cooldown > 0.02 && (
-                  <span
-                    className="party-slot__cd"
-                    style={{ '--cooldown': cooldown } as React.CSSProperties}
-                  />
+                  <>
+                    <span
+                      className="party-slot__cd"
+                      style={{ '--cooldown': cooldown } as React.CSSProperties}
+                    />
+                    {/* The "line that runs around" — a colored ring arc shrinking as the skill cools. */}
+                    <span
+                      className="party-slot__ring"
+                      style={{ '--cooldown': cooldown } as React.CSSProperties}
+                    />
+                  </>
                 )}
-                {isActive && readyPulse > 0 && (
+                {readyPulse > 0 && (
                   <span key={readyPulse} className="party-slot__ready" aria-hidden="true" />
                 )}
                 <span className="party-slot__key">{slotIndex + 1}</span>
