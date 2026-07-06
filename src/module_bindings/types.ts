@@ -150,6 +150,7 @@ export const PullResult = __t.object("PullResult", {
   isNew: __t.bool(),
   isFeatured: __t.bool(),
   constellation: __t.u32(),
+  shardMinted: __t.u32(),
 });
 export type PullResult = __Infer<typeof PullResult>;
 

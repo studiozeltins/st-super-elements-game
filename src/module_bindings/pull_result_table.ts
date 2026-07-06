@@ -20,4 +20,5 @@ export default __t.row({
   isNew: __t.bool().name("is_new"),
   isFeatured: __t.bool().name("is_featured"),
   constellation: __t.u32(),
+  shardMinted: __t.u32().name("shard_minted"),
 });
