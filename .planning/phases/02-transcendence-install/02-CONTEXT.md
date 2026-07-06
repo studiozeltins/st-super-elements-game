@@ -48,7 +48,9 @@ Everything below is LOCKED (from the phase PRD + Phase 0 tunables + shared contr
 ### Heal scaling (server `healParty` reducer, ~1496)
 - Heal multiplier adds `transcendLevel * TRANSCEND_HEAL_STEP` (0.08) for healers.
 
-### UI (`src/ui/CharacterSheet.tsx`, `src/ui/ConstellationRing.tsx`)
+### UI (`src/ui/CharacterScreen.tsx` — LIVE, wired in App.tsx:474; `src/ui/ConstellationRing.tsx`)
+- **NOTE (research correction):** `src/ui/CharacterSheet.tsx` is DEAD CODE (nothing imports it).
+  Target the live `CharacterScreen.tsx` (shard chip already at :171-173). Do NOT touch CharacterSheet.
 - Show `C6 · T{n}` when transcended.
 - Install button calling `transcendCharacter`, **gated**: disabled when char < C6,
   at `MAX_TRANSCEND_LEVEL`, or `transcendShards < TRANSCEND_SHARD_COST(nextLevel)`.
@@ -87,7 +89,8 @@ Everything below is LOCKED (from the phase PRD + Phase 0 tunables + shared contr
   `healParty` reducer (~1496).
 - `src/game/createGame.ts:391-393` — `constellationDamageMultiplier` (consumed at 417 & 485).
 - `src/game/combat/comboSystem.ts` — pattern to mirror for the new pure module.
-- `src/ui/CharacterSheet.tsx`, `src/ui/ConstellationRing.tsx` — install UI.
+- `src/ui/CharacterScreen.tsx` (LIVE install UI target; shard chip @171-173) + `src/ui/ConstellationRing.tsx`.
+  `src/ui/CharacterSheet.tsx` is DEAD CODE — ignore it.
 </canonical_refs>
 
 <specifics>
