@@ -461,6 +461,7 @@ const pullResult = table(
     isNew: t.bool(),
     isFeatured: t.bool(),
     constellation: t.u32(), // character constellation after this pull (0 for weapons)
+    shardMinted: t.u32(), // shards minted by THIS pull (C6-overflow dupe); 0 otherwise
   }
 );
 
@@ -1632,6 +1633,7 @@ export const pullBanner = spacetimedb.reducer(
       let isNew = false;
       let isFeatured = false;
       let constellation = 0;
+      let slotShard = 0;
 
       if (ctx.random() < fiveStarChance(sinceFive)) {
         sinceFive = 0;
@@ -1645,6 +1647,7 @@ export const pullBanner = spacetimedb.reducer(
           const result = grantCharacter(ctx, currentPlayer.identity, itemId);
           isNew = result.isNew;
           constellation = result.constellation;
+          slotShard = result.shardMinted;
           shardsMinted += result.shardMinted;
         } else {
           // Lost the 50/50 → a 5★ weapon, and the next 5★ is guaranteed featured.
@@ -1661,6 +1664,7 @@ export const pullBanner = spacetimedb.reducer(
           const result = grantCharacter(ctx, currentPlayer.identity, itemId);
           isNew = result.isNew;
           constellation = result.constellation;
+          slotShard = result.shardMinted;
           shardsMinted += result.shardMinted;
         } else {
           itemId = pickWeaponId(ctx, 4);
@@ -1682,6 +1686,7 @@ export const pullBanner = spacetimedb.reducer(
         isNew,
         isFeatured,
         constellation,
+        shardMinted: slotShard,
       });
     }
 
