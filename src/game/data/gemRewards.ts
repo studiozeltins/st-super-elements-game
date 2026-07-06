@@ -13,7 +13,7 @@ import { BOSS_GEM_MULTIPLIER } from './gemDrops';
 
 export { BOSS_GEM_MULTIPLIER };
 
-export const KILL_REWARD_PRIMOGEMS = 40;
+export const KILL_REWARD_GEMS = 40;
 
 /** Reward tiers run 1..3; higher tiers pay proportionally more. */
 const MAX_KILL_REWARD_TIER = 3;
@@ -28,7 +28,7 @@ function clampToRange(value: number, minimum: number, maximum: number): number {
 /** Base gems for a regular enemy of the given reward tier. Bosses pay triple. */
 export function regularEnemyBaseGems(rewardTier: number, isBoss: boolean): number {
   const clampedTier = clampToRange(rewardTier, 1, MAX_KILL_REWARD_TIER);
-  return KILL_REWARD_PRIMOGEMS * clampedTier * (isBoss ? BOSS_GEM_MULTIPLIER : 1);
+  return KILL_REWARD_GEMS * clampedTier * (isBoss ? BOSS_GEM_MULTIPLIER : 1);
 }
 
 /** Base gems for a goliath raider of the given size, clamped into range. */

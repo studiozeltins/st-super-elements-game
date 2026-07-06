@@ -7,7 +7,7 @@ import { VirtualJoystick } from './VirtualJoystick';
 interface HudProps {
   playerName: string;
   health: number;
-  primogems: number;
+  gems: number;
   partyCharacterIds: string[];
   /** characterId -> current HP fraction [0..1] for each owned character. */
   partyHealthById: Record<string, number>;
@@ -25,7 +25,7 @@ interface HudProps {
 export function Hud({
   playerName,
   health,
-  primogems,
+  gems,
   partyCharacterIds,
   partyHealthById,
   activeCharacterId,
@@ -91,7 +91,7 @@ export function Hud({
       )}
 
       <div className="hud__top-right">
-        <span className="hud__gems">✦ {primogems}</span>
+        <span className="hud__gems">✦ {gems}</span>
         <div className="hud__quick">
           <button
             className="hud__quick-btn"

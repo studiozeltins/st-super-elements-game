@@ -68,10 +68,10 @@ const STARTER_CHARACTER_ID = 'zibo';
 const PARTY_SIZE = 4;
 const MAX_CONSTELLATION = 6; // C6 is the cap; duplicates past it refund gems
 const HEAL_CONSTELLATION_STEP = 0.15; // healers heal +15% per constellation
-const STARTING_PRIMOGEMS = 16000;
+const STARTING_GEMS = 16000;
 const GACHA_PULL_COST = 160;
 const DUPLICATE_REFUND = 800;
-const KILL_REWARD_PRIMOGEMS = 40;
+const KILL_REWARD_GEMS = 40;
 const MAX_KILL_REWARD_TIER = 3;
 
 // ---- Wish banners + weapon catalog + pity (mirror src/game/data/gacha.ts) ----
@@ -171,7 +171,7 @@ const MAX_RANGED_HIT_RADIUS = 3;
 const MAX_STEP_DISTANCE = 12;
 const MAX_COMBO_FOR_GEMS = 100;
 const COMBO_GEM_STEP = 0.03; // +3% dropped gems per combo point (capped)
-const PVP_DEATH_SPILL = 1 / 3; // fraction of primogems a PVP loser drops
+const PVP_DEATH_SPILL = 1 / 3; // fraction of gems a PVP loser drops
 const PVE_DEATH_SPILL = 1 / 4; // fraction a player drops when an enemy kills them
 const CARRY_HARD_CAP = 20000; // server sanity cap on enemy-carried gems per kill
 const BOSS_GEM_MULTIPLIER = 3; // a boss kill pays triple the base reward
@@ -268,7 +268,7 @@ const player = table(
     activeCharacterId: t.string(),
     // Ordered party (up to PARTY_SIZE character ids) the player picked.
     partyOrder: t.array(t.string()),
-    primogems: t.u32(),
+    gems: t.u32(),
     currentHealth: t.u32(),
     lastKillRewardAt: t.timestamp(),
     // Leaderboard stats: gems this player dropped via kills vs gems they picked
@@ -278,7 +278,7 @@ const player = table(
   }
 );
 
-// Primogems dropped on the ground by a kill. Any player can walk over and grab
+// Gems dropped on the ground by a kill. Any player can walk over and grab
 // them; droppedBy records who earned them for the leaderboard.
 const gemDrop = table(
   { name: 'gem_drop', public: true },
@@ -644,7 +644,7 @@ function seedPlayer(ctx: { db: any; timestamp: any }, identity: any, name: strin
     rotationY: 0,
     activeCharacterId: STARTER_CHARACTER_ID,
     partyOrder: [STARTER_CHARACTER_ID],
-    primogems: STARTING_PRIMOGEMS,
+    gems: STARTING_GEMS,
     currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
     lastKillRewardAt: ctx.timestamp,
     gemsFromKills: 0,
@@ -759,7 +759,7 @@ function spillDenominations(
   }
 }
 
-// Spills a fraction of a victim's primogems onto the ground at their location as
+// Spills a fraction of a victim's gems onto the ground at their location as
 // a shower of small gems. Returns how much was dropped (caller deducts it).
 function spillGems(
   ctx: { db: any; random: any; timestamp: any },
@@ -767,7 +767,7 @@ function spillGems(
   fraction: number,
   droppedBy: any
 ) {
-  const amount = Math.floor(victim.primogems * fraction);
+  const amount = Math.floor(victim.gems * fraction);
   if (amount <= 0) return 0;
   spillDenominations(ctx, victim.positionX, victim.positionZ, amount, droppedBy);
   return amount;
@@ -930,7 +930,7 @@ export const attackPlayer = spacetimedb.reducer(
       setActiveHealth(ctx, target, remainingHealth);
       return;
     }
-    // Kill: a third of the loser's primogems spill onto the ground. The winner
+    // Kill: a third of the loser's gems spill onto the ground. The winner
     // earns credit but must collect it (as can anyone).
     const stolen = spillGems(ctx, target, PVP_DEATH_SPILL, attacker.identity);
     if (stolen > 0) {
@@ -939,7 +939,7 @@ export const attackPlayer = spacetimedb.reducer(
         gemsFromKills: attacker.gemsFromKills + stolen,
       });
     }
-    respawnPlayerAtSpawn(ctx, { ...target, primogems: target.primogems - stolen });
+    respawnPlayerAtSpawn(ctx, { ...target, gems: target.gems - stolen });
   }
 );
 
@@ -1039,9 +1039,9 @@ export const takeDamage = spacetimedb.reducer(
       setActiveHealth(ctx, currentPlayer, remainingHealth);
       return;
     }
-    // Died to an enemy: drop a quarter of your primogems where you fell.
+    // Died to an enemy: drop a quarter of your gems where you fell.
     const spilled = spillGems(ctx, currentPlayer, PVE_DEATH_SPILL, currentPlayer.identity);
-    respawnPlayerAtSpawn(ctx, { ...currentPlayer, primogems: currentPlayer.primogems - spilled });
+    respawnPlayerAtSpawn(ctx, { ...currentPlayer, gems: currentPlayer.gems - spilled });
   }
 );
 
@@ -1052,9 +1052,9 @@ export const fallToDeath = spacetimedb.reducer(ctx => {
     currentPlayer.positionY < VOID_DEATH_DEPTH &&
     !isOverAnyIsland(currentPlayer.positionX, currentPlayer.positionZ);
   if (!isInTheVoid) throw new SenderError('Not falling into the void');
-  // Fall toll: half your primogems are wiped from the game (not spilled as loot).
-  const wiped = Math.floor(currentPlayer.primogems / 2);
-  respawnPlayerAtSpawn(ctx, { ...currentPlayer, primogems: currentPlayer.primogems - wiped });
+  // Fall toll: half your gems are wiped from the game (not spilled as loot).
+  const wiped = Math.floor(currentPlayer.gems / 2);
+  respawnPlayerAtSpawn(ctx, { ...currentPlayer, gems: currentPlayer.gems - wiped });
 });
 
 // Every enemy carries a virtual base gem stipend that is always present from
@@ -1074,7 +1074,7 @@ function enemyBaseGems(
     return GOLIATH_BASE_GEMS_BY_SIZE[clampedSizeIndex];
   }
   const clampedTier = Math.max(1, Math.min(MAX_KILL_REWARD_TIER, rewardTier));
-  return KILL_REWARD_PRIMOGEMS * clampedTier * (isBoss ? BOSS_GEM_MULTIPLIER : 1);
+  return KILL_REWARD_GEMS * clampedTier * (isBoss ? BOSS_GEM_MULTIPLIER : 1);
 }
 
 // ---- Server-authoritative death + economy -----------------------------------
@@ -1371,7 +1371,7 @@ const RestorePlayerRow = t.object('RestorePlayerRow', {
   rotationY: t.f32(),
   activeCharacterId: t.string(),
   partyOrder: t.array(t.string()),
-  primogems: t.u32(),
+  gems: t.u32(),
   currentHealth: t.u32(),
   gemsFromKills: t.u32(),
   gemsCollected: t.u32(),
@@ -1454,7 +1454,7 @@ export const collectGem = spacetimedb.reducer(
     ctx.db.gemDrop.id.delete(dropId);
     ctx.db.player.identity.update({
       ...currentPlayer,
-      primogems: currentPlayer.primogems + drop.amount,
+      gems: currentPlayer.gems + drop.amount,
       gemsCollected: currentPlayer.gemsCollected + drop.amount,
     });
   }
@@ -1580,7 +1580,7 @@ export const pullBanner = spacetimedb.reducer(
 
     const pullCount = count >= MAX_PULLS_PER_REQUEST ? MAX_PULLS_PER_REQUEST : 1;
     const totalCost = GACHA_PULL_COST * pullCount;
-    if (currentPlayer.primogems < totalCost) throw new SenderError('Not enough primogems');
+    if (currentPlayer.gems < totalCost) throw new SenderError('Not enough gems');
 
     // Load (or create) this banner's pity row for the player.
     let pity = [...ctx.db.bannerPity.by_owner_banner.filter([currentPlayer.identity, bannerId])][0];
@@ -1674,7 +1674,7 @@ export const pullBanner = spacetimedb.reducer(
     });
     ctx.db.player.identity.update({
       ...currentPlayer,
-      primogems: currentPlayer.primogems - totalCost + refund,
+      gems: currentPlayer.gems - totalCost + refund,
     });
   }
 );
@@ -2244,7 +2244,7 @@ export const worldTick = spacetimedb.reducer(
         continue;
       }
       const spilled = spillGems(ctx, targetPlayer, PVE_DEATH_SPILL, ctx.sender);
-      respawnPlayerAtSpawn(ctx, { ...targetPlayer, primogems: targetPlayer.primogems - spilled });
+      respawnPlayerAtSpawn(ctx, { ...targetPlayer, gems: targetPlayer.gems - spilled });
     }
 
     vacuumGems(ctx, now);

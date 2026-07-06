@@ -20,7 +20,7 @@ export default __t.row({
   rotationY: __t.f32().name("rotation_y"),
   activeCharacterId: __t.string().name("active_character_id"),
   partyOrder: __t.array(__t.string()).name("party_order"),
-  primogems: __t.u32(),
+  gems: __t.u32(),
   currentHealth: __t.u32().name("current_health"),
   lastKillRewardAt: __t.timestamp().name("last_kill_reward_at"),
   gemsFromKills: __t.u32().name("gems_from_kills"),

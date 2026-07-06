@@ -35,7 +35,7 @@ interface WeaponRow {
 }
 
 interface GachaScreenProps {
-  primogems: number;
+  gems: number;
   ownedCharacterIds: Set<string>;
   activeCharacterId: string;
   weaponItems: WeaponRow[];
@@ -64,7 +64,7 @@ const DEFAULT_PITY: PityInfo = {
 export type GachaTab = 'banners' | 'party' | 'characters' | 'inventory';
 
 export function GachaScreen({
-  primogems,
+  gems,
   ownedCharacterIds,
   activeCharacterId,
   weaponItems,
@@ -132,8 +132,8 @@ export function GachaScreen({
   const pityFraction = Math.min(1, pity.pullsSinceFiveStar / HARD_PITY);
   const pityProgress = pityFraction * 100;
 
-  const canPullOne = primogems >= GACHA_PULL_COST;
-  const canPullTen = primogems >= GACHA_PULL_COST * 10;
+  const canPullOne = gems >= GACHA_PULL_COST;
+  const canPullTen = gems >= GACHA_PULL_COST * 10;
 
   const weaponInventory = useMemo(() => {
     const counts = new Map<string, number>();
@@ -215,7 +215,16 @@ export function GachaScreen({
           <span className="gacha__spacer" />
         )}
         <div className="gacha__wallet">
-          <span className="gacha__gem">✦</span> {primogems}
+          {tab === 'characters' ? (
+            <>
+              <span className="gacha__gem">❖</span> {[...ownedCharacterIds].length}/
+              {CHARACTER_LIST.length}
+            </>
+          ) : (
+            <>
+              <span className="gacha__gem">✦</span> {gems}
+            </>
+          )}
         </div>
         <button className="gacha__close" onClick={onClose} aria-label="Aizvērt">
           ✕

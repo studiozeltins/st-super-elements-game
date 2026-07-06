@@ -6,7 +6,7 @@ import { BANNERS, GACHA_WEAPONS } from '../gacha';
 import { BOSS_GEM_MULTIPLIER, GEM_DENOMINATIONS } from '../gemDrops';
 import {
   GOLIATH_BASE_GEMS_BY_SIZE,
-  KILL_REWARD_PRIMOGEMS,
+  KILL_REWARD_GEMS,
   goliathBaseGems,
   regularEnemyBaseGems,
 } from '../gemRewards';
@@ -154,8 +154,8 @@ function extractServerNumberArray(name: string): number[] {
 }
 
 describe('server enemy base-gem math stays in sync with client gemRewards', () => {
-  it('KILL_REWARD_PRIMOGEMS matches', () => {
-    expect(extractServerConstant('KILL_REWARD_PRIMOGEMS')).toBe(KILL_REWARD_PRIMOGEMS);
+  it('KILL_REWARD_GEMS matches', () => {
+    expect(extractServerConstant('KILL_REWARD_GEMS')).toBe(KILL_REWARD_GEMS);
   });
 
   it('BOSS_GEM_MULTIPLIER re-exported from gemRewards matches server', () => {
@@ -180,7 +180,7 @@ describe('server enemy base-gem math stays in sync with client gemRewards', () =
 
   it('regularEnemyBaseGems matches the server formula for tier/boss combos', () => {
     // Rebuild the server formula from the server source, then compare.
-    const killReward = extractServerConstant('KILL_REWARD_PRIMOGEMS');
+    const killReward = extractServerConstant('KILL_REWARD_GEMS');
     const bossMultiplier = extractServerConstant('BOSS_GEM_MULTIPLIER');
     const maxTier = extractServerConstant('MAX_KILL_REWARD_TIER');
     const serverRegularBaseGems = (rewardTier: number, isBoss: boolean): number => {

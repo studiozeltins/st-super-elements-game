@@ -20,7 +20,7 @@ export const TABLES = [
       'rotation_y',
       'active_character_id',
       'party_order',
-      'primogems',
+      'gems',
       'current_health',
       'gems_from_kills',
       'gems_collected',

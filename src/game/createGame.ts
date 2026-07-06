@@ -105,7 +105,7 @@ export interface Game {
   spawnSelfNumber(amount: number, kind: DamageKind): void;
   /** Shows a remote player's health bar for a few seconds (they were hit). */
   flashRemoteHealth(identityHex: string): void;
-  /** Syncs the primogem drops lying in the world (walk over to collect). */
+  /** Syncs the gem drops lying in the world (walk over to collect). */
   syncGemDrops(drops: readonly GemDrop[]): void;
   /** Reconciles the rendered camp enemies against the server `enemy` table. */
   syncEnemies(rows: readonly Enemy[]): void;

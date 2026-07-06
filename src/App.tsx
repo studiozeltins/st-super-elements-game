@@ -423,7 +423,7 @@ export default function App() {
       <Hud
         playerName={myPlayer?.name ?? ''}
         health={myPlayer?.currentHealth ?? MAX_HEALTH}
-        primogems={myPlayer?.primogems ?? 0}
+        gems={myPlayer?.gems ?? 0}
         partyCharacterIds={partyCharacterIds}
         partyHealthById={partyHealthById}
         activeCharacterId={myPlayer?.activeCharacterId ?? ''}
@@ -448,7 +448,7 @@ export default function App() {
       />
       {isGachaOpen && (
         <GachaScreen
-          primogems={myPlayer?.primogems ?? 0}
+          gems={myPlayer?.gems ?? 0}
           ownedCharacterIds={new Set(myCharacterIds)}
           activeCharacterId={myPlayer?.activeCharacterId ?? ''}
           weaponItems={myWeaponItems}
