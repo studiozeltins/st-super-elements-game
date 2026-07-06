@@ -308,6 +308,23 @@ const gemDrop = table(
   }
 );
 
+// A single scarce transcendence shard dropped on the ground by a PVE death.
+// Mirrors gem_drop exactly but is always a count-1 piece (no denomination shower)
+// and is NEVER vacuumed by camps. Any player can grab it after the reused pickup
+// grace. droppedAtMicros defaults to 0n so this whole new table is an additive
+// migration and pre-existing (none, it's new) rows read as long-elapsed/collectible.
+const shardDrop = table(
+  { name: 'shard_drop', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    positionX: t.f32(),
+    positionZ: t.f32(),
+    amount: t.u32(),
+    droppedBy: t.identity(),
+    droppedAtMicros: t.u64().default(0n),
+  }
+);
+
 // A server-authoritative camp enemy. Spawned at init (one boss + guards per camp),
 // moved and fought by the world tick. Public so clients render position, health,
 // and the gem hoard. enemyId is the stable camp+member id (enemyIdFor).
@@ -567,6 +584,7 @@ const spacetimedb = schema({
   accountLink,
   player,
   gemDrop,
+  shardDrop,
   enemy,
   goliath,
   ownedCharacter,
@@ -792,6 +810,30 @@ function spillGems(
   if (amount <= 0) return 0;
   spillDenominations(ctx, victim.positionX, victim.positionZ, amount, droppedBy);
   return amount;
+}
+
+// Drops a SINGLE transcendence shard on the ground at a PVE death spot. Unlike
+// spillDenominations this never denominates — a shard is a count-1 piece — but it
+// reuses the same deterministic scatter (GEM_SPILL_SCATTER + clampToWorld) and the
+// same droppedAtMicros grace stamp so collectShard can reuse gemIsCollectible.
+function spillShards(
+  ctx: { db: any; random: any; timestamp: any },
+  positionX: number,
+  positionZ: number,
+  amount: number,
+  droppedBy: any
+) {
+  if (amount <= 0) return;
+  const angle = ctx.random() * Math.PI * 2;
+  const radius = ctx.random() * GEM_SPILL_SCATTER;
+  ctx.db.shardDrop.insert({
+    id: 0n,
+    positionX: clampToWorld(positionX + Math.cos(angle) * radius),
+    positionZ: clampToWorld(positionZ + Math.sin(angle) * radius),
+    amount,
+    droppedBy,
+    droppedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
+  });
 }
 
 function isInsideSafeZone(positionX: number, positionZ: number) {
@@ -1516,6 +1558,24 @@ export const collectGem = spacetimedb.reducer(
       ...currentPlayer,
       gems: currentPlayer.gems + drop.amount,
       gemsCollected: currentPlayer.gemsCollected + drop.amount,
+    });
+  }
+);
+
+// Grabs a ground shard. Same first-there-wins race and same 1.2s anti-cheat grace
+// as collectGem — it REUSES the generic gemIsCollectible + GEM_PICKUP_DELAY_MICROS
+// (no forked grace). Credits the scarce shard to the grabber's transcendShards.
+export const collectShard = spacetimedb.reducer(
+  { dropId: t.u64() },
+  (ctx, { dropId }) => {
+    const currentPlayer = requirePlayer(ctx);
+    const drop = ctx.db.shardDrop.id.find(dropId);
+    if (!drop) return;
+    if (!gemIsCollectible(drop.droppedAtMicros, ctx.timestamp.microsSinceUnixEpoch, GEM_PICKUP_DELAY_MICROS)) return;
+    ctx.db.shardDrop.id.delete(dropId);
+    ctx.db.player.identity.update({
+      ...currentPlayer,
+      transcendShards: currentPlayer.transcendShards + drop.amount,
     });
   }
 );
