@@ -148,6 +148,11 @@ None - no external service configuration required.
 - Success criterion 3 (shard balance visible in Character and Gacha screens) is implemented and build-verified; pending the human playtest above.
 - Per-pull "+1 shard" mint feedback animation is explicitly deferred to Phase 2 (UI-SPEC / RESEARCH open question 1).
 
+## Self-Check: PASSED
+
+- `01-04-SUMMARY.md` present.
+- Commits `3ca26e5`, `57e8ecc`, `3ef3092` all in git history.
+
 ---
 *Phase: 01-constellation-shard-currency*
 *Completed: 2026-07-06 (render); playtest gate open*
