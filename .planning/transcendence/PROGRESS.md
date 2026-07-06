@@ -9,7 +9,7 @@ status box and tick the boxes as phases land.
 | Phase | File | Status | Depends on | Commit |
 |---|---|---|---|---|
 | A | [phase-A-rename.md](./phase-A-rename.md) | ✅ DONE | — | `8236de4` |
-| 0 | [phase-0-constants.md](./phase-0-constants.md) | ⬜ TODO | A | — |
+| 0 | [phase-0-constants.md](./phase-0-constants.md) | ✅ DONE | A | `10f3fa6` |
 | 1 | [phase-1-shards.md](./phase-1-shards.md) | ⬜ TODO | 0 | — |
 | 2 | [phase-2-transcendence.md](./phase-2-transcendence.md) | ⬜ TODO | 1 | — |
 | 3 | [phase-3-shard-risk.md](./phase-3-shard-risk.md) | ⬜ TODO | 2 | — |
@@ -32,7 +32,7 @@ Phase A (rename + wipe) first. Then transcendence spine (0→1→2→3) and co-o
 ## Checklist
 
 - [x] **A** — rename primogems → gems (shipped, both envs wiped + published)
-- [ ] **0** — lock transcendence constants (no behavior change)
+- [x] **0** — lock transcendence constants (no behavior change)
 - [ ] **1** — constellation shard currency + mint on C6-overflow dupe
 - [ ] **2** — transcendence install + power scaling past C6
 - [ ] **3** — shards at risk on death + PVP steal + erosion
