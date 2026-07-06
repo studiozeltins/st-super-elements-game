@@ -19,12 +19,16 @@ interface CharacterScreenProps {
   activeCharacterId: string;
   /** Unlocked constellation ceiling per character (from duplicate pulls). */
   constellationById: Record<string, number>;
+  /** Installed transcend levels past C6 per character. */
+  transcendById: Record<string, number>;
   /** Currently-active stars per character (manual). Absent = full ceiling active. */
   activatedById: Record<string, number>;
   /** Change which character is being viewed (roster tap / swipe). */
   onView(characterId: string): void;
   /** Set how many unlocked stars are active for a character. */
   onSetConstellation(characterId: string, level: number): void;
+  /** Install one transcend level on a character (spends transcend shards, C6-gated). */
+  onTranscend(characterId: string): void;
   /** Jump to a wish-screen tab from the always-visible main menu. Omit to hide it. */
   onOpenMenu?(tab: 'banners' | 'party' | 'characters' | 'inventory'): void;
   onClose(): void;

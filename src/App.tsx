@@ -186,9 +186,11 @@ export default function App() {
   }
 
   const constellationById: Record<string, number> = {};
+  const transcendById: Record<string, number> = {};
   for (const row of ownedCharacterRows) {
     if (row.owner.toHexString() !== myIdentityHex) continue;
     constellationById[row.characterId] = row.constellation;
+    transcendById[row.characterId] = row.transcendLevel;
   }
 
   // Manually-activated stars per character. No row = full constellation is active
@@ -242,6 +244,13 @@ export default function App() {
   const setConstellation = useCallback(
     (characterId: string, level: number) => {
       connection?.reducers.setConstellation({ characterId, level });
+    },
+    [connection]
+  );
+
+  const transcendCharacter = useCallback(
+    (characterId: string) => {
+      connection?.reducers.transcendCharacter({ characterId });
     },
     [connection]
   );
@@ -368,6 +377,7 @@ export default function App() {
     if (!active) return;
     // Damage scaling follows the ACTIVE stars, not the unlocked ceiling.
     gameRef.current?.setActiveConstellation(effectiveConstellation(active));
+    gameRef.current?.setActiveTranscend(transcendById[active] ?? 0);
   }, [myPlayer, ownedCharacterRows, activationRows, myIdentityHex]);
 
   useEffect(() => {
@@ -478,9 +488,11 @@ export default function App() {
           ownedCharacterIds={new Set(myCharacterIds)}
           activeCharacterId={myPlayer?.activeCharacterId ?? ''}
           constellationById={constellationById}
+          transcendById={transcendById}
           activatedById={activatedById}
           onView={setCharacterPageId}
           onSetConstellation={setConstellation}
+          onTranscend={transcendCharacter}
           onOpenMenu={openTab => {
             setCharacterPageId(null);
             setGachaTab(openTab);
