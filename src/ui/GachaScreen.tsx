@@ -29,6 +29,8 @@ export interface PullView {
   isNew: boolean;
   isFeatured: boolean;
   constellation: number;
+  /** Shards minted by this specific pull (C6-overflow dupe); 0 otherwise. */
+  shardMinted: number;
 }
 interface WeaponRow {
   weaponId: string;
@@ -220,7 +222,11 @@ export function GachaScreen({
         <div className="gacha__wallet">
           {/* Scarce transcend-shard balance — read-only from the subscribed player
               row, shown on every tab, left of the swapping gems/owned readout. */}
-          <span className="wallet-chip" aria-label={`Zvaigžņu šķembas: ${transcendShards}`}>
+          <span
+            className="wallet-chip"
+            data-shard-anchor
+            aria-label={`Zvaigžņu šķembas: ${transcendShards}`}
+          >
             <span className="gacha__gem">◈</span> {transcendShards}
           </span>
           {tab === 'characters' ? (

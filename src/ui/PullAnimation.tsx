@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CHARACTERS } from '../game/data/characters';
 import { WEAPONS_BY_ID, RARITY_CSS } from '../game/data/gacha';
 import { SplashModel } from './SplashModel';
@@ -21,6 +22,17 @@ interface Sparkle {
   vy: number;
   life: number;
   max: number;
+}
+
+/** A flying "+N ◈" shard token tweening from a minted card to the wallet chip. */
+interface Fly {
+  id: number;
+  x: number;
+  y: number;
+  dx: number;
+  dy: number;
+  n: number;
+  arrived: boolean;
 }
 
 /** Full-screen canvas of 1 or 3 rarity-colored shooting stars with glowing tails. */
@@ -153,6 +165,53 @@ export function PullAnimation({ results, onClose }: { results: PullView[]; onClo
   const sorted = useMemo(() => [...results].sort((a, b) => a.slot - b.slot), [results]);
   const [phase, setPhase] = useState<Phase>('stars');
   const [index, setIndex] = useState(0);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [flies, setFlies] = useState<Fly[]>([]);
+
+  // Reveal juice: each C6-overflow dupe card (shardMinted > 0) ember-burns, then
+  // flings a purple "+N ◈" token that flies to the wallet shard counter.
+  useEffect(() => {
+    if (phase !== 'summary') return;
+    const grid = gridRef.current;
+    if (!grid) return;
+    const anchor = document.querySelector('[data-shard-anchor]') as HTMLElement | null;
+    const aRect = anchor?.getBoundingClientRect();
+    const minted = sorted.filter(view => view.kind === 'character' && view.shardMinted > 0);
+    const timers: number[] = [];
+    minted.forEach(view => {
+      // Fire after the card's staggered reveal-pop lands, plus a short beat.
+      timers.push(
+        window.setTimeout(() => {
+          const card = grid.querySelector<HTMLElement>(`[data-slot="${view.slot}"]`);
+          if (!card) return;
+          const cRect = card.getBoundingClientRect();
+          const startX = cRect.left + cRect.width / 2;
+          const startY = cRect.top + cRect.height / 2;
+          const targetX = aRect ? aRect.left + aRect.width / 2 : startX;
+          const targetY = aRect ? aRect.top + aRect.height / 2 : 40;
+          const id = view.slot;
+          setFlies(list => [
+            ...list,
+            { id, x: startX, y: startY, dx: targetX - startX, dy: targetY - startY, n: view.shardMinted, arrived: false },
+          ]);
+          // Two rAFs so the initial transform paints before we tween to target.
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              setFlies(list => list.map(fl => (fl.id === id ? { ...fl, arrived: true } : fl)))
+            )
+          );
+          timers.push(
+            window.setTimeout(() => {
+              anchor?.classList.add('wallet-chip--pulse');
+              window.setTimeout(() => anchor?.classList.remove('wallet-chip--pulse'), 500);
+              setFlies(list => list.filter(fl => fl.id !== id));
+            }, 740)
+          );
+        }, view.slot * 50 + 520)
+      );
+    });
+    return () => timers.forEach(t => window.clearTimeout(t));
+  }, [phase, sorted]);
 
   const starColors = useMemo(() => {
     const rarities = results.map(view => view.rarity).sort((a, b) => b - a);
@@ -230,31 +289,60 @@ export function PullAnimation({ results, onClose }: { results: PullView[]; onClo
 
   return (
     <div className="pull-reveal" onClick={onClose}>
-      <div className={`pull-reveal__grid ${sorted.length > 1 ? 'pull-reveal__grid--ten' : ''}`}>
-        {sorted.map(view => (
-          <div
-            key={view.slot}
-            className={`reveal-card rarity-border-${view.rarity}`}
-            style={{ animationDelay: `${view.slot * 0.05}s` }}
-          >
-            <span className={`reveal-card__rarity rarity-${view.rarity}`}>
-              {'✦'.repeat(view.rarity)}
-            </span>
-            <span className="reveal-card__name">{itemName(view)}</span>
-            <span className="reveal-card__kind">
-              {view.kind === 'character' ? 'VARONIS' : 'IEROCIS'}
-            </span>
-            {view.isFeatured && <span className="reveal-card__tag">PASTIPRINĀTS</span>}
-            {view.kind === 'character' && view.isNew && (
-              <span className="reveal-card__tag reveal-card__tag--new">JAUNS</span>
-            )}
-            {view.kind === 'character' && !view.isNew && view.constellation > 0 && (
-              <span className="reveal-card__tag">C{view.constellation}</span>
-            )}
-          </div>
-        ))}
+      <div
+        ref={gridRef}
+        className={`pull-reveal__grid ${sorted.length > 1 ? 'pull-reveal__grid--ten' : ''}`}
+      >
+        {sorted.map(view => {
+          const minted = view.kind === 'character' && view.shardMinted > 0;
+          return (
+            <div
+              key={view.slot}
+              data-slot={view.slot}
+              className={`reveal-card rarity-border-${view.rarity} ${minted ? 'reveal-card--minted' : ''}`}
+              style={{ animationDelay: `${view.slot * 0.05}s` }}
+            >
+              <span className={`reveal-card__rarity rarity-${view.rarity}`}>
+                {'✦'.repeat(view.rarity)}
+              </span>
+              <span className="reveal-card__name">{itemName(view)}</span>
+              <span className="reveal-card__kind">
+                {view.kind === 'character' ? 'VARONIS' : 'IEROCIS'}
+              </span>
+              {view.isFeatured && <span className="reveal-card__tag">PASTIPRINĀTS</span>}
+              {view.kind === 'character' && view.isNew && (
+                <span className="reveal-card__tag reveal-card__tag--new">JAUNS</span>
+              )}
+              {view.kind === 'character' && !view.isNew && view.constellation > 0 && (
+                <span className="reveal-card__tag">C{view.constellation}</span>
+              )}
+              {minted && (
+                <span className="reveal-card__shardtag">◈ +{view.shardMinted}</span>
+              )}
+            </div>
+          );
+        })}
       </div>
       <span className="pull-reveal__hint">Pieskaries, lai aizvērtu</span>
+      {createPortal(
+        flies.map(fl => (
+          <span
+            key={fl.id}
+            className="shard-fly"
+            style={{
+              left: fl.x,
+              top: fl.y,
+              transform: fl.arrived
+                ? `translate(calc(-50% + ${fl.dx}px), calc(-50% + ${fl.dy}px)) scale(0.55)`
+                : 'translate(-50%, -50%) scale(1)',
+              opacity: fl.arrived ? 0.15 : 1,
+            }}
+          >
+            +{fl.n} ◈
+          </span>
+        )),
+        document.body
+      )}
     </div>
   );
 }

@@ -137,6 +137,7 @@ export default function App() {
         isNew: row.isNew,
         isFeatured: row.isFeatured,
         constellation: row.constellation,
+        shardMinted: row.shardMinted,
       });
       if (flushTimerRef.current) window.clearTimeout(flushTimerRef.current);
       flushTimerRef.current = window.setTimeout(() => {
