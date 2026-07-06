@@ -2814,6 +2814,18 @@ button {
   border: 1px solid currentColor;
 }
 
+/* Transcend status tag — purple (--shard) clone of the green active tag.
+   The two colors read as two facts: green = active character, purple = transcended. */
+.cchar__transcend-tag {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 5px 10px;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.12em;
+  color: var(--shard);
+  border: 1px solid currentColor;
+}
+
 /* ---------- Tab content column ---------- */
 
 .ctab {

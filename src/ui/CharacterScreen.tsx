@@ -62,9 +62,11 @@ export function CharacterScreen({
   ownedCharacterIds,
   activeCharacterId,
   constellationById,
+  transcendById,
   activatedById,
   onView,
   onSetConstellation,
+  onTranscend,
   onOpenMenu,
   onClose,
 }: CharacterScreenProps) {
@@ -94,6 +96,7 @@ export function CharacterScreen({
   const isActive = characterId === activeCharacterId;
   const unlocked = constellationById[characterId] ?? 0; // ceiling earned from pulls
   const activated = activatedById[characterId] ?? unlocked; // stars currently on
+  const transcendLevel = transcendById[characterId] ?? 0; // installed levels past C6
   const bonuses = constellationBonuses(character);
 
   // Only owned characters appear here (menu + swipe order).
@@ -239,6 +242,14 @@ export function CharacterScreen({
             <div className="cchar__id">
               <CharacterIdentity character={character} className="cident--lg" />
               {isActive && <span className="cchar__active-tag">AKTĪVS VARONIS</span>}
+              {transcendLevel > 0 && (
+                <span
+                  className="cchar__transcend-tag"
+                  aria-label={`Pārsniegšanas līmenis T${transcendLevel}, sešas zvaigznes`}
+                >
+                  C6 · T{transcendLevel}
+                </span>
+              )}
             </div>
           </section>
 
