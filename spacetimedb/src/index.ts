@@ -18,6 +18,7 @@ import { pickRayHit } from './hitscan';
 import { resistedDamage, GOLIATH_RESISTANCES, PLAYER_RESISTANCES } from './resistances';
 import { isWalkable, nextGoliathWaypoint } from './bridges';
 import { chooseGoliathTargetCamp, headingFromStep, hasReachedCamp, isWithinForwardArc } from './goliathAI';
+import { resolveTranscendInstall } from './transcendInstall';
 import { resolveDupeGrant } from './gachaOverflow';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
@@ -384,6 +385,11 @@ const ownedCharacter = table(
     // Constellation level 0..6; duplicate pulls raise it. This is the UNLOCKED
     // ceiling — how many stars the player has earned for this character.
     constellation: t.u32(),
+    // Transcendence install level 0..MAX_TRANSCEND_LEVEL, bought with transcendShards
+    // past C6 (REQ-transcend-install). Appended AFTER constellation and given
+    // .default(0) so the additive migrate backfills existing rows without a data
+    // wipe — STDB refuses a non-defaulted or mid-table column on a populated table.
+    transcendLevel: t.u32().default(0),
   }
 );
 
@@ -993,6 +999,42 @@ export const setConstellation = spacetimedb.reducer(
   }
 );
 
+// Installs one transcendence level on a C6 character, spending transcendShards.
+// This reducer is the SOLE enforcement point for the currency (client gating is UX
+// only): ownership, the C6 gate, the level cap, and the shard cost are all derived
+// server-side from ctx.sender + stored rows + constants — the caller supplies ONLY a
+// characterId. The pure resolveTranscendInstall (plan 01) is the decision authority;
+// every reject path throws before any mutation, and the deduct happens only on ok
+// (so a u32 balance can never underflow — T-02-03).
+export const transcendCharacter = spacetimedb.reducer(
+  { characterId: t.string() },
+  (ctx, { characterId }) => {
+    const currentPlayer = requirePlayer(ctx);
+    const owned = findOwnedRow(ctx, currentPlayer, characterId);
+    if (!owned) throw new SenderError('Character not owned');
+
+    const result = resolveTranscendInstall(
+      owned.constellation,
+      MAX_CONSTELLATION,
+      owned.transcendLevel,
+      MAX_TRANSCEND_LEVEL,
+      currentPlayer.transcendShards,
+      TRANSCEND_SHARD_COST
+    );
+    if (!result.ok) {
+      if (result.reason === 'below_c6') throw new SenderError('Requires C6');
+      if (result.reason === 'at_cap') throw new SenderError('At transcend cap');
+      throw new SenderError('Not enough shards');
+    }
+
+    ctx.db.player.identity.update({
+      ...currentPlayer,
+      transcendShards: currentPlayer.transcendShards - result.shardCost,
+    });
+    ctx.db.ownedCharacter.id.update({ ...owned, transcendLevel: result.nextLevel });
+  }
+);
+
 // Sets the ordered party (membership + order). Keeps only owned, unique ids up
 // to PARTY_SIZE, and makes sure the active character stays inside the party.
 export const setParty = spacetimedb.reducer(
@@ -1433,7 +1475,9 @@ export const restoreOwnedCharacters = spacetimedb.reducer(
   { rows: t.array(RestoreOwnedCharacterRow) },
   (ctx, { rows }) => {
     requireEmpty(ctx.db.ownedCharacter.iter(), 'owned_character');
-    for (const row of rows) ctx.db.ownedCharacter.insert({ id: 0n, ...row });
+    // transcendLevel is a Phase-02 additive column absent from pre-existing backups;
+    // backfill it to 0 on restore (spread cannot override a field the row lacks).
+    for (const row of rows) ctx.db.ownedCharacter.insert({ id: 0n, transcendLevel: 0, ...row });
   }
 );
 
