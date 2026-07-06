@@ -54,7 +54,8 @@ client and server — ready to wire into logic later.
   2. `serverSync.test.ts` asserts every new constant matches its client mirror.
   3. A unit test confirms constants are present and within valid ranges.
   4. `pnpm test` and `pnpm build` are green; no publish is needed (no schema/logic change).
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 00-01-PLAN.md — Add + mirror all SHARD_*/TRANSCEND_* constants + TRANSCEND_SHARD_COST helper, sync test, range unit test
 
 ### Phase 1: Constellation shard currency
 **Goal**: A dupe of an already-C6 character mints a scarce shard instead of a gem refund, and
@@ -175,7 +176,7 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | A. Gem naming unification | 1/1 | Complete | 2026-07 (commit `8236de4`) |
-| 0. Lock transcendence constants | 0/TBD | Not started | - |
+| 0. Lock transcendence constants | 0/1 | Not started | - |
 | 1. Constellation shard currency | 0/TBD | Not started | - |
 | 2. Transcendence install | 0/TBD | Not started | - |
 | 3. Shards at risk | 0/TBD | Not started | - |
