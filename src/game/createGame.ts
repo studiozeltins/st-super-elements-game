@@ -37,7 +37,15 @@ import type { DamageKind } from './combat/damageKind';
 import { transcendDamageMultiplier } from './combat/transcendScaling';
 import { attackHitsEntity } from './combat/hitTest';
 import { gemVisual } from './data/gemDrops';
-import type { Enemy, GemDrop, Goliath, Player, RangedAttack, SkillCast } from '../module_bindings/types';
+import type {
+  Enemy,
+  GemDrop,
+  Goliath,
+  Player,
+  RangedAttack,
+  ShardDrop,
+  SkillCast,
+} from '../module_bindings/types';
 
 export interface HudState {
   attackCooldownFraction: number;
@@ -97,6 +105,8 @@ export interface GameNetworkActions {
     comboCount: number
   ): void;
   sendCollectGem(dropId: bigint): void;
+  /** Requests collection of a rare transcend-shard ground drop (mirror of sendCollectGem). */
+  sendCollectShard(dropId: bigint): void;
   sendFallToDeath(): void;
 }
 
@@ -118,6 +128,8 @@ export interface Game {
   flashRemoteHealth(identityHex: string): void;
   /** Syncs the gem drops lying in the world (walk over to collect). */
   syncGemDrops(drops: readonly GemDrop[]): void;
+  /** Syncs the rare transcend-shard drops lying in the world (purple, walk over to collect). */
+  syncShardDrops(drops: readonly ShardDrop[]): void;
   /** Reconciles the rendered camp enemies against the server `enemy` table. */
   syncEnemies(rows: readonly Enemy[]): void;
   /** Reconciles the rendered goliath raiders against the server `goliath` table. */
@@ -264,6 +276,20 @@ export function createGame(
     }
   >();
   const requestedGemPickups = new Set<string>();
+  // Rare transcend-shard drops reuse the ENTIRE gem magnet/grace/collect pipeline
+  // (same delay/magnet/collect radii below); only the mesh look differs — a purple
+  // octahedron 1.4x the gem radius, brighter emissive, always sparkling.
+  const shardDrops = new Map<
+    string,
+    {
+      mesh: THREE.Mesh;
+      rawId: bigint;
+      age: number;
+      baseY: number;
+      sparkleAt: number;
+    }
+  >();
+  const requestedShardPickups = new Set<string>();
   // Drops are un-grabbable for a moment so they are clearly visible before the
   // killer (usually standing right on top) sweeps them up. After that they
   // magnet toward the nearest (local) player and get collected on contact.
@@ -274,6 +300,11 @@ export function createGame(
   const GEM_RADIUS = 0.3;
   const GEM_EMISSIVE_INTENSITY = 0.4;
   const GEM_SPARKLE_INTERVAL = 0.8;
+  // Rare shard look — a purple relative of the gem: 1.4x the gem radius, a brighter
+  // self-glow, and always sparkling so it reads as scarcer/heavier at a glance.
+  const SHARD_COLOR = 0x9333ea;
+  const SHARD_RADIUS = 0.42;
+  const SHARD_EMISSIVE_INTENSITY = 0.6;
   let animationFrameHandle = 0;
   let lastFrameTime = 0;
   let lastSentPosition = new THREE.Vector3(Infinity, 0, 0);
@@ -660,6 +691,59 @@ export function createGame(
     }
   }
 
+  function createShardMesh(drop: ShardDrop): { mesh: THREE.Mesh; baseY: number } {
+    // A rarer purple relative of the gem: same crystalline octahedron, scaled 1.4x
+    // with a brighter self-glow so a scarce shard is immediately distinguishable
+    // from a gold gem. Always "rare tier" — always sparkling.
+    const material = new THREE.MeshLambertMaterial({
+      color: SHARD_COLOR,
+      emissive: SHARD_COLOR,
+      emissiveIntensity: SHARD_EMISSIVE_INTENSITY,
+    });
+    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(SHARD_RADIUS), material);
+    // Raise slightly above the gem baseline so the larger mesh clears the ground.
+    const baseY = world.getGroundHeight(drop.positionX, drop.positionZ) + 1.0;
+    mesh.position.set(drop.positionX, baseY, drop.positionZ);
+    scene.add(mesh);
+    // A denser purple landing burst signals rarity.
+    effectSystem.spawnBurst(mesh.position.clone(), SHARD_COLOR, 12);
+    return { mesh, baseY };
+  }
+
+  function updateShardDrops(deltaSeconds: number) {
+    // Mirrors updateGemDrops verbatim (spin/bob, grace gate, magnet, collect) but
+    // always sparkles and requests network.sendCollectShard on contact.
+    for (const [key, shard] of shardDrops) {
+      shard.age += deltaSeconds;
+      shard.mesh.rotation.y += deltaSeconds * 2.4;
+      shard.mesh.position.y = shard.baseY + Math.sin(elapsedSeconds * 3) * 0.12;
+
+      // A shard is always rare tier — always emits the slow-burn pixel sparkle on
+      // the same throttle rare gems use.
+      if (elapsedSeconds >= shard.sparkleAt) {
+        shard.sparkleAt = elapsedSeconds + GEM_SPARKLE_INTERVAL;
+        effectSystem.spawnSparkle(shard.mesh.position.clone(), SHARD_COLOR, 4);
+      }
+
+      if (shard.age < GEM_PICKUP_DELAY) continue;
+
+      const playerDx = playerPosition.x - shard.mesh.position.x;
+      const playerDz = playerPosition.z - shard.mesh.position.z;
+      const playerDistance = Math.hypot(playerDx, playerDz);
+
+      if (playerDistance < GEM_MAGNET_RADIUS && playerDistance > 0.001) {
+        const pull = Math.min(1, deltaSeconds * (3 + (GEM_MAGNET_RADIUS - playerDistance)));
+        shard.mesh.position.x += playerDx * pull;
+        shard.mesh.position.z += playerDz * pull;
+      }
+
+      if (playerDistance <= GEM_COLLECT_RADIUS && !requestedShardPickups.has(key)) {
+        requestedShardPickups.add(key);
+        network.sendCollectShard(shard.rawId);
+      }
+    }
+  }
+
   function healInSafeZone(deltaSeconds: number) {
     healTimer += deltaSeconds;
     if (healTimer < 1) return;
@@ -778,6 +862,7 @@ export function createGame(
     enemyRenderer.update(deltaSeconds, world.getGroundHeight);
     goliathRenderer.update(deltaSeconds, world.getGroundHeight);
     updateGemDrops(deltaSeconds);
+    updateShardDrops(deltaSeconds);
     resolveAllCollisions();
     damageNumbers.update(deltaSeconds);
     world.update(deltaSeconds);
@@ -962,6 +1047,29 @@ export function createGame(
         });
         gemDrops.delete(key);
         requestedGemPickups.delete(key);
+      }
+    },
+    syncShardDrops(drops) {
+      const seen = new Set<string>();
+      for (const drop of drops) {
+        const key = drop.id.toString();
+        seen.add(key);
+        if (!shardDrops.has(key)) {
+          const { mesh, baseY } = createShardMesh(drop);
+          shardDrops.set(key, { mesh, rawId: drop.id, age: 0, baseY, sparkleAt: 0 });
+        }
+      }
+      for (const [key, shard] of shardDrops) {
+        if (seen.has(key)) continue;
+        scene.remove(shard.mesh);
+        shard.mesh.traverse(object => {
+          if (object instanceof THREE.Mesh) {
+            object.geometry.dispose();
+            (object.material as THREE.Material).dispose();
+          }
+        });
+        shardDrops.delete(key);
+        requestedShardPickups.delete(key);
       }
     },
     syncEnemies(rows) {

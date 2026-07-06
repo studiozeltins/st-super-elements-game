@@ -346,6 +346,7 @@ export default function App() {
         sendAttackRay: (originX, originZ, directionX, directionZ, range, hitRadius, damage, comboCount) =>
           connection.reducers.attackRay({ originX, originZ, dirX: directionX, dirZ: directionZ, range, hitRadius, damage, comboCount }),
         sendCollectGem: dropId => connection.reducers.collectGem({ dropId }),
+        sendCollectShard: dropId => connection.reducers.collectShard({ dropId }),
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
       setHudState
