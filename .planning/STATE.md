@@ -6,15 +6,15 @@ current_phase: 03
 current_phase_name: Shards at risk
 status: executing
 stopped_at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
-last_updated: "2026-07-07T00:00:00.000Z"
+last_updated: "2026-07-06T22:55:46.400Z"
 last_activity: 2026-07-07
-last_activity_desc: Phase 03 plan 01 complete — pure applyDeathShardPenalty helper + spec
+last_activity_desc: Phase 03 plan 01 complete (applyDeathShardPenalty helper + spec)
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 15
   completed_plans: 12
-  percent: 40
+  percent: 38
 ---
 
 # Project State
@@ -31,8 +31,8 @@ floor).
 ## Current Position
 
 Phase: 03 — Shards at risk
-Plan: 01 of 5 complete; plan 02 next
-Status: Executing Phase 03
+Plan: 2 of 5 complete; plan 02 next
+Status: Ready to execute
 Last activity: 2026-07-07 — Phase 03 plan 01 complete (applyDeathShardPenalty helper + spec)
 
 Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
@@ -68,6 +68,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 | Phase 02 P03 | 2min | 2 tasks | 5 files |
 | Phase 02 P04 | 3min | 2 tasks | 3 files |
 | Phase 03 P01 | 5 min | 2 tasks | 2 files |
+| Phase 03 P02 | 6 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 02]: transcend module published additively to LOCAL (transcend_level column, no wipe; player=1/owned_character=8 intact); bindings regenerated so transcendLevel + transcendCharacter client-typed. maincloud deferred (paused DB, no recovery-wipe).
 - [Phase 02]: transcend level scales client damage: createGame consumes pure transcendDamageMultiplier(activeConstellation, activeTranscend) behind setActiveTranscend; App.tsx builds owner-filtered transcendById, feeds the loop, threads transcendById + onTranscend to CharacterScreen (plan 05 UI)
 - [Phase 03]: applyDeathShardPenalty extracted as a pure dependency-free helper (branch order = u32 underflow safety; shardsLost 0 on erosion = A1 economy invariant), test-first before any reducer wiring
+- [Phase ?]: [Phase 03]: shard-drop economy wired — shard_drop table + spillShards (single count-1 piece) + collectShard (reuses gemIsCollectible grace); applyDeathShardPenalty additively wired into all 3 death paths keeping gem spill; PVP killer credit folded with gem credit (gate stolen>0 || shardsLost>0) so a 0-gem shard carrier still transfers its shard (A1). D3: no un-clamped activatedConstellation consumer, no extra activation write.
 
 ### Pending Todos
 
@@ -110,6 +112,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-07T00:00:00.000Z
+Last session: 2026-07-06T22:55:17.250Z
 Stopped at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
 Resume file: .planning/phases/03-shards-at-risk/03-01-SUMMARY.md
