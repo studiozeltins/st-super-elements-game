@@ -2681,6 +2681,90 @@ button {
     linear-gradient(180deg, rgba(12, 17, 14, 0.4), rgba(6, 10, 8, 0.9));
 }
 
+/* ── Būsts orbit + install flourish on the portrait ──────────────────────── */
+
+/* One purple shard-star per būsts level, slowly circling the character. */
+.cchar__orbit {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  animation: cchar-orbit-spin 22s linear infinite;
+}
+
+.cchar__star {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  font-size: clamp(12px, 2.4vw, 18px);
+  line-height: 0;
+  color: var(--shard);
+  text-shadow:
+    0 0 8px var(--shard),
+    0 0 18px color-mix(in srgb, var(--shard) 60%, transparent);
+  /* Place on a ring: center on the card, rotate to the star's angle, push out. */
+  transform: translate(-50%, -50%) rotate(var(--a)) translateY(clamp(-118px, -15.5vw, -70px));
+  animation: cchar-star-in 0.55s ease-out backwards;
+}
+
+@keyframes cchar-orbit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes cchar-star-in {
+  from {
+    opacity: 0;
+    text-shadow: 0 0 28px var(--shard);
+  }
+}
+
+/* One-shot flourish: a big star slams onto the portrait, a ring shocks outward. */
+.cchar__burst {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.cchar__burst-star {
+  font-size: clamp(44px, 10vw, 88px);
+  color: var(--shard);
+  text-shadow: 0 0 26px var(--shard), 0 0 52px color-mix(in srgb, var(--shard) 70%, transparent);
+  animation: cchar-burst-star 0.9s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+}
+
+.cchar__burst-ring {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--shard);
+  animation: cchar-burst-ring 0.9s ease-out forwards;
+}
+
+@keyframes cchar-burst-star {
+  0% { transform: scale(2.6) translateY(-38px); opacity: 0; }
+  35% { opacity: 1; }
+  62% { transform: scale(1) translateY(0); opacity: 1; }
+  100% { transform: scale(0.55); opacity: 0; }
+}
+
+@keyframes cchar-burst-ring {
+  0% { transform: scale(0.3); opacity: 0.85; }
+  100% { transform: scale(6.5); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cchar__orbit { animation: none; }
+  .cchar__star { animation: none; }
+  .cchar__burst-star,
+  .cchar__burst-ring { animation-duration: 0.01s; }
+}
+
 .cchar__id {
   position: absolute;
   left: 16px;
@@ -3123,30 +3207,316 @@ button {
   color: var(--muted);
 }
 
-/* Transcend install control — purple (--shard) variant of the constellation row.
-   Swaps the gold accent for the transcend-shard family color; enabled + at-cap
-   filled states use --shard, disabled gates dim via the shared .con-item--off. */
-.con-item--shard:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--shard) 60%, transparent);
+/* ── Ascension altar (transcendence) ──────────────────────────────────────
+   A dedicated purple (--shard) section below the gold constellation list:
+   progress track, stat preview with green (--accent) deltas, two-step install.
+   Purple energy vs gold stars = two distinct power tracks at a glance. */
+.transcend {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 4px;
+  padding: 14px 14px 13px;
+  border: 1px solid color-mix(in srgb, var(--shard) 34%, var(--line));
+  background:
+    radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--shard) 15%, transparent) 0%, transparent 60%),
+    color-mix(in srgb, var(--shard) 5%, var(--panel));
+  overflow: hidden;
 }
 
-.con-item--shard.con-item--on {
-  border-color: color-mix(in srgb, var(--shard) 55%, transparent);
-  background: color-mix(in srgb, var(--shard) 10%, var(--panel));
+/* Faint arcane sheen sweeping the top edge — atmosphere, not decoration overload. */
+.transcend::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--shard) 80%, transparent), transparent);
 }
 
-.con-item--shard .con-item__badge {
+.transcend__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.transcend__kicker {
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   color: var(--shard);
-  border-color: color-mix(in srgb, var(--shard) 50%, transparent);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--shard) 50%, transparent);
 }
 
-.con-item--shard.con-item--on .con-item__badge {
-  color: var(--ink);
+.transcend__level {
+  font: 700 15px var(--font-display);
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+
+.transcend__level em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Progress track: 10 pips, filled up to the installed level, the next one pulsing. */
+.transcend__track {
+  display: flex;
+  gap: 5px;
+  list-style: none;
+  padding: 0;
+}
+
+.transcend__pip {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--shard) 16%, transparent);
+  transition: background 0.25s, box-shadow 0.25s;
+}
+
+.transcend__pip--on {
   background: var(--shard);
+  box-shadow: 0 0 8px -1px color-mix(in srgb, var(--shard) 75%, transparent);
 }
 
-.con-item--shard .con-item__toggle {
+.transcend__pip--next {
+  background: color-mix(in srgb, var(--shard) 45%, transparent);
+  animation: transcend-pip-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes transcend-pip-pulse {
+  0%, 100% { background: color-mix(in srgb, var(--shard) 34%, transparent); }
+  50% { background: color-mix(in srgb, var(--shard) 72%, transparent); box-shadow: 0 0 10px -1px var(--shard); }
+}
+
+/* Two-column body: stat preview | action. Collapses to one column when narrow. */
+.transcend__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 0.9fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.transcend__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-content: center;
+}
+
+.tstat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tstat__label {
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tstat__values {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.tstat__base {
+  font: 700 15px var(--font-display);
+  color: var(--text);
+}
+
+.tstat__arrow {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.tstat__next {
+  font: 700 15px var(--font-display);
+  color: color-mix(in srgb, var(--shard) 55%, var(--text));
+}
+
+/* Green (--accent) delta chip — the "what you gain" signal. */
+.tstat__delta {
+  margin-left: auto;
+  padding: 1px 6px;
+  font: 700 11px var(--font-display);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 3px;
+}
+
+.transcend__action {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Base button shape shared by install + confirm/cancel. */
+.transcend__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 12px;
+  font: 700 12.5px var(--font-display);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--shard) 55%, transparent);
+  background: color-mix(in srgb, var(--shard) 14%, var(--panel));
+  color: var(--text);
+  transition: background 0.14s, border-color 0.14s, box-shadow 0.14s, transform 0.08s;
+}
+
+.transcend__btn:hover {
+  background: color-mix(in srgb, var(--shard) 24%, var(--panel));
+  border-color: var(--shard);
+  box-shadow: 0 0 22px -8px var(--shard);
+}
+
+.transcend__btn:active {
+  transform: translateY(1px);
+}
+
+.transcend__btn--install .transcend__btn-cost {
+  margin-left: auto;
   color: var(--shard);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--shard) 55%, transparent);
+}
+
+.transcend__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transcend__confirm-q {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+  text-align: center;
+}
+
+.transcend__confirm-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Both buttons share width and may shrink to 0 / wrap — never clip on mobile. */
+.transcend__confirm-row .transcend__btn {
+  flex: 1 1 90px;
+  min-width: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* Confirm = solid purple commit; cancel = neutral ghost. */
+.transcend__btn--yes {
+  background: var(--shard);
+  border-color: var(--shard);
+  color: #fff;
+  box-shadow: 0 0 24px -8px var(--shard);
+}
+
+.transcend__btn--yes:hover {
+  background: color-mix(in srgb, var(--shard) 88%, #fff);
+}
+
+/* Cancel = compact red X square next to the wide confirm button. */
+.transcend__btn--no {
+  flex: 0 0 auto;
+  width: 44px;
+  padding: 11px 0;
+  font-size: 15px;
+  background: color-mix(in srgb, var(--danger) 14%, var(--panel));
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  color: var(--danger);
+}
+
+.transcend__btn--no:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  box-shadow: 0 0 22px -8px var(--danger);
+}
+
+/* Cancel keeps its fixed width even under the confirm-row flex sizing. */
+.transcend__confirm-row .transcend__btn--no {
+  flex: 0 0 44px;
+}
+
+/* Disabled gate states — locked / maxed / short on shards. */
+.transcend__gate {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
+  text-align: center;
+}
+
+.transcend__gate-title {
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.transcend__gate-note {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
+.transcend__gate--short .transcend__gate-title {
+  color: var(--shard);
+}
+
+.transcend__gate--max {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--shard) 45%, transparent);
+  background: color-mix(in srgb, var(--shard) 10%, transparent);
+}
+
+.transcend__gate--max .transcend__gate-title {
+  color: var(--shard);
+}
+
+.transcend__note {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  border-top: 1px dashed color-mix(in srgb, var(--shard) 24%, var(--line));
+  padding-top: 10px;
+}
+
+.transcend__note strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.transcend__note em {
+  font-style: normal;
+  color: var(--shard);
+}
+
+/* Narrow screens: stack preview over action. */
+/* Stack the preview over the action early — a two-up action column is too
+   tight for the confirm/cancel pair on phones (the Atcelt button was clipping). */
+@media (max-width: 640px) {
+  .transcend__body {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 }
 
 /* ---------- Portrait / narrow: stack portrait over tab content ---------- */

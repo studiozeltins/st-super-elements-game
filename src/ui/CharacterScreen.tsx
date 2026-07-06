@@ -1,9 +1,14 @@
-import { useRef, useState } from 'react';
-import { CHARACTER_LIST, CHARACTERS } from '../game/data/characters';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { CHARACTER_LIST, CHARACTERS, healSpecFor } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { WEAPONS } from '../game/data/weapons';
 import { constellationBonuses } from '../game/data/constellations';
-import { MAX_TRANSCEND_LEVEL, TRANSCEND_SHARD_COST } from '../game/data/constants';
+import {
+  MAX_TRANSCEND_LEVEL,
+  TRANSCEND_SHARD_COST,
+  TRANSCEND_DAMAGE_STEP,
+  TRANSCEND_HEAL_STEP,
+} from '../game/data/constants';
 import { loreFor } from '../game/data/characterLore';
 import { CharacterPreview } from './CharacterPreview';
 import { ConstellationRing } from './ConstellationRing';
@@ -11,7 +16,7 @@ import { CharacterIdentity } from './CharacterIdentity';
 import { useDragScroll } from './useDragScroll';
 import { MAIN_MENU } from './menu';
 
-type Tab = 'info' | 'weapon' | 'constellation';
+type Tab = 'info' | 'weapon' | 'constellation' | 'transcend';
 
 interface CharacterScreenProps {
   characterId: string;
@@ -52,7 +57,8 @@ const RESIST_INFO: Record<string, { label: string; describe: (percent: number) =
 const TABS: { id: Tab; label: string; glyph: string }[] = [
   { id: 'info', label: 'INFO', glyph: '❖' },
   { id: 'weapon', label: 'IEROCIS', glyph: '⚔' },
-  { id: 'constellation', label: 'ZVAIGZNES', glyph: '✦' },
+  { id: 'constellation', label: 'CIEŅA', glyph: '✦' },
+  { id: 'transcend', label: 'BŪSTS', glyph: '◈' },
 ];
 
 const SWIPE_THRESHOLD = 55;
@@ -74,8 +80,24 @@ export function CharacterScreen({
   const [tab, setTab] = useState<Tab>('info');
   const [openResist, setOpenResist] = useState<string | null>(null);
   const [openStat, setOpenStat] = useState<string | null>(null);
+  // Transcend confirm is two-step. Track the character it's armed for so switching
+  // characters (or a completed install) auto-disarms without a reset effect.
+  const [confirmingTranscendId, setConfirmingTranscendId] = useState<string | null>(null);
+  // Bumped whenever the shown character's transcend level rises → replays the
+  // orbit-star "drop-in" flourish on the portrait. prevLevels remembers the last
+  // seen level per character so switching characters never mis-fires the anim.
+  const [transcendFlourish, setTranscendFlourish] = useState(0);
+  const prevTranscendLevels = useRef<Record<string, number>>({});
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const rosterScroll = useDragScroll();
+
+  // Replay the orbit flourish when the shown character's transcend level rises.
+  useEffect(() => {
+    const lvl = transcendById[characterId] ?? 0;
+    const prev = prevTranscendLevels.current[characterId];
+    prevTranscendLevels.current[characterId] = lvl;
+    if (prev !== undefined && lvl > prev) setTranscendFlourish(f => f + 1);
+  }, [characterId, transcendById]);
 
   const character = CHARACTERS[characterId];
   if (!character) return null;
@@ -107,20 +129,28 @@ export function CharacterScreen({
   const nextTranscendLevel = transcendLevel + 1;
   const transcendCost = TRANSCEND_SHARD_COST(nextTranscendLevel);
   const canTranscend = owned && !belowC6 && !atTranscendCap && transcendShards >= transcendCost;
-  // Level chip: below C6 shows the earned ceiling C{n}; otherwise the transcend level (C6 at T0).
-  const transcendBadge = belowC6 ? `C${unlocked}` : transcendLevel === 0 ? 'C6' : `T${transcendLevel}`;
-  const transcendTitle = belowC6
-    ? 'Vajadzīgs C6'
-    : atTranscendCap
-      ? `Maksimums · T${MAX_TRANSCEND_LEVEL}`
-      : 'PĀRSNIEGŠANA';
-  const transcendHelper = belowC6
-    ? 'Atbloķē visas 6 zvaigznes, lai sāktu pārsniegšanu.'
-    : atTranscendCap
-      ? 'Sasniegts pārsniegšanas maksimums.'
-      : canTranscend
-        ? `Pārsniegt · ${transcendCost} ◈`
-        : `Vajag vēl ${transcendCost - transcendShards} ◈.`;
+  // Two-step confirm is armed only while it stays valid for THIS character.
+  const confirmingTranscend = confirmingTranscendId === characterId && canTranscend;
+  const shardShortfall = Math.max(0, transcendCost - transcendShards);
+
+  // Transcend stat preview — the delta each level adds ON TOP of constellations.
+  // Damage applies to everyone; healing only to party healers (healSpecFor).
+  const isHealer = healSpecFor(characterId).type !== 'none';
+  const pct = (v: number) => Math.round(v * 100);
+  const dmgBonusNow = pct(transcendLevel * TRANSCEND_DAMAGE_STEP);
+  const dmgBonusNext = pct(nextTranscendLevel * TRANSCEND_DAMAGE_STEP);
+  const healBonusNow = pct(transcendLevel * TRANSCEND_HEAL_STEP);
+  const healBonusNext = pct(nextTranscendLevel * TRANSCEND_HEAL_STEP);
+  const dmgStepPct = pct(TRANSCEND_DAMAGE_STEP);
+  const healStepPct = pct(TRANSCEND_HEAL_STEP);
+  // A preview shows a "→ next" only when another level is actually reachable.
+  const showTranscendNext = !belowC6 && !atTranscendCap;
+  const transcendStats = [
+    { label: 'Bojājums', now: dmgBonusNow, next: dmgBonusNext, step: dmgStepPct },
+    ...(isHealer
+      ? [{ label: 'Dziedināšana', now: healBonusNow, next: healBonusNext, step: healStepPct }]
+      : []),
+  ];
 
   // Only owned characters appear here (menu + swipe order).
   const ownedList = CHARACTER_LIST.filter(entry => ownedCharacterIds.has(entry.id));
@@ -250,6 +280,33 @@ export function CharacterScreen({
               Swipe (or tap a roster chip) to change character — no arrows. */}
           <section className="cchar">
             <CharacterPreview characterId={character.id} />
+
+            {/* Būsts orbit — one purple shard-star circling the portrait per
+                installed level. Persistent (follows the character across tabs);
+                a new star fades in as the level rises. */}
+            {transcendLevel > 0 && (
+              <div className="cchar__orbit" aria-hidden="true">
+                {Array.from({ length: transcendLevel }, (_, i) => (
+                  <span
+                    key={i}
+                    className="cchar__star"
+                    style={{ '--a': `${(i / transcendLevel) * 360}deg` } as CSSProperties}
+                  >
+                    ◈
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* One-shot install flourish: remounts on every level-up (keyed by the
+                flourish counter) so its star-slams-home burst replays each time. */}
+            {transcendFlourish > 0 && (
+              <div key={transcendFlourish} className="cchar__burst" aria-hidden="true">
+                <span className="cchar__burst-star">◈</span>
+                <span className="cchar__burst-ring" />
+              </div>
+            )}
+
             <button
               className="cchar__ring"
               onClick={() => setTab('constellation')}
@@ -268,9 +325,9 @@ export function CharacterScreen({
               {transcendLevel > 0 && (
                 <span
                   className="cchar__transcend-tag"
-                  aria-label={`Pārsniegšanas līmenis T${transcendLevel}, sešas zvaigznes`}
+                  aria-label={`Būsts līmenis B${transcendLevel}, sešas cieņas zvaigznes`}
                 >
-                  C6 · T{transcendLevel}
+                  C6 · B{transcendLevel}
                 </span>
               )}
             </div>
@@ -367,7 +424,7 @@ export function CharacterScreen({
             {tab === 'constellation' && (
               <div className="ctab__scroll">
                 <span className="ctab__section">
-                  ZVAIGZNES · aktīvas C{activated} / atbloķētas C{unlocked}
+                  CIEŅA · aktīvas C{activated} / atbloķētas C{unlocked}
                 </span>
                 <ol className="con-list">
                   {bonuses.map(bonus => {
@@ -402,35 +459,146 @@ export function CharacterScreen({
                   })}
                 </ol>
 
-                {/* Transcendence install — purple (--shard) clone of the con-item row, gated.
-                    One enabled state + three distinct disabled states (below C6 / at cap /
-                    not enough shards). Single-tap, no confirm dialog; server is authoritative. */}
-                <span className="ctab__section">
-                  PĀRSNIEGŠANA · T{transcendLevel} / {MAX_TRANSCEND_LEVEL}
-                </span>
-                <button
-                  className={`con-item con-item--shard ${
-                    atTranscendCap ? 'con-item--on' : canTranscend ? '' : 'con-item--off'
-                  }`}
-                  disabled={!canTranscend}
-                  onClick={() => onTranscend(characterId)}
-                  aria-label={`Pārsniegt ${character.displayName}: līmenis T${nextTranscendLevel}, maksā ${transcendCost} zvaigžņu šķembas`}
-                >
-                  <span className="con-item__badge">{transcendBadge}</span>
-                  <span className="con-item__text">
-                    <span className="con-item__title">{transcendTitle}</span>
-                    <span className="con-item__effect">{transcendHelper}</span>
-                  </span>
-                  {canTranscend && <span className="con-item__toggle">›</span>}
-                  {!canTranscend && !belowC6 && !atTranscendCap && (
-                    <span className="con-item__toggle">{transcendCost} ◈</span>
-                  )}
-                </button>
-
                 <p className="ctab__soon">
                   Piesit zvaigzni, lai to ieslēgtu vai izslēgtu. Aktīvās zvaigznes pastiprina varoni;
                   atbloķē vairāk ar dublikātiem no vēlēšanās. Drīzumā zvaigznes dos jaunas spējas.
                 </p>
+              </div>
+            )}
+
+            {tab === 'transcend' && (
+              <div className="ctab__scroll">
+                {/* ── Būsts altar ─────────────────────────────────────────────
+                    Dedicated būsts section: a B1→B10 progress track, a stat
+                    preview (current būsts bonus + green delta for the next
+                    level), and a two-step confirm install. Purple (--shard)
+                    energy sets it apart from the gold cieņa stars.
+                    Client gate is UX only — the transcendCharacter reducer is
+                    authoritative. */}
+                <section className="transcend" aria-label="Būsts">
+                  <header className="transcend__head">
+                    <span className="transcend__kicker">Būsts</span>
+                    <span className="transcend__level">
+                      B{transcendLevel}
+                      <em> / {MAX_TRANSCEND_LEVEL}</em>
+                    </span>
+                  </header>
+
+                  <ol className="transcend__track" aria-hidden="true">
+                    {Array.from({ length: MAX_TRANSCEND_LEVEL }, (_, i) => {
+                      const lvl = i + 1;
+                      const filled = lvl <= transcendLevel;
+                      const isNext = lvl === nextTranscendLevel && showTranscendNext;
+                      return (
+                        <li
+                          key={lvl}
+                          className={`transcend__pip${filled ? ' transcend__pip--on' : ''}${
+                            isNext ? ' transcend__pip--next' : ''
+                          }`}
+                        />
+                      );
+                    })}
+                  </ol>
+
+                  <div className="transcend__body">
+                    <div className="transcend__preview">
+                      {transcendStats.map(stat => (
+                        <div className="tstat" key={stat.label}>
+                          <span className="tstat__label">{stat.label}</span>
+                          <span className="tstat__values">
+                            <span className="tstat__base">+{stat.now}%</span>
+                            {showTranscendNext && (
+                              <>
+                                <span className="tstat__arrow">→</span>
+                                <span className="tstat__next">+{stat.next}%</span>
+                                <span className="tstat__delta">+{stat.step}%</span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="transcend__action">
+                      {belowC6 ? (
+                        <div className="transcend__gate">
+                          <span className="transcend__gate-title">Vajadzīgs C6</span>
+                          <span className="transcend__gate-note">
+                            Atbloķē visas 6 cieņas zvaigznes, lai sāktu būstu.
+                          </span>
+                        </div>
+                      ) : atTranscendCap ? (
+                        <div className="transcend__gate transcend__gate--max">
+                          <span className="transcend__gate-title">
+                            Maksimums · B{MAX_TRANSCEND_LEVEL}
+                          </span>
+                          <span className="transcend__gate-note">
+                            Pilns būsts — stiprāk vairs nevar. Leģenda.
+                          </span>
+                        </div>
+                      ) : confirmingTranscend ? (
+                        <div className="transcend__confirm">
+                          <span className="transcend__confirm-q">
+                            Uzlabot uz <strong>B{nextTranscendLevel}</strong> par {transcendCost} ◈?
+                          </span>
+                          <div className="transcend__confirm-row">
+                            <button
+                              className="transcend__btn transcend__btn--yes"
+                              onClick={() => {
+                                onTranscend(characterId);
+                                setConfirmingTranscendId(null);
+                              }}
+                              aria-label={`Apstiprināt būstu uz B${nextTranscendLevel} par ${transcendCost} zvaigžņu šķembas`}
+                            >
+                              Jā, būsts!
+                            </button>
+                            <button
+                              className="transcend__btn transcend__btn--no"
+                              onClick={() => setConfirmingTranscendId(null)}
+                              aria-label="Atcelt"
+                              title="Atcelt"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      ) : canTranscend ? (
+                        <button
+                          className="transcend__btn transcend__btn--install"
+                          onClick={() => setConfirmingTranscendId(characterId)}
+                          aria-label={`Būsts ${character.displayName} uz B${nextTranscendLevel}, maksā ${transcendCost} zvaigžņu šķembas`}
+                        >
+                          <span className="transcend__btn-label">
+                            + Būsts · B{nextTranscendLevel}
+                          </span>
+                          <span className="transcend__btn-cost">{transcendCost} ◈</span>
+                        </button>
+                      ) : (
+                        <div className="transcend__gate transcend__gate--short">
+                          <span className="transcend__gate-title">
+                            Vajag vēl {shardShortfall} ◈
+                          </span>
+                          <span className="transcend__gate-note">
+                            B{nextTranscendLevel} maksā {transcendCost} ◈ · tev ir {transcendShards} ◈.
+                            Nogalini, vāc šķembas!
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="transcend__note">
+                    Katrs būsts = <strong>+{dmgStepPct}% bojājuma</strong>
+                    {isHealer && (
+                      <>
+                        {' '}un <strong>+{healStepPct}% dziedināšanas</strong>
+                      </>
+                    )}
+                    , virs cieņas zvaigznēm. Jo augstāk kāp, jo stiprāks kļūsti — līdz{' '}
+                    <em>B{MAX_TRANSCEND_LEVEL}</em>. Cena aug ar līmeni: sāc lēti (B1 = 1 ◈),
+                    tad vāc šķembas un dodies uz maksimumu.
+                  </p>
+                </section>
               </div>
             )}
 
