@@ -19,6 +19,7 @@ import {
   type CollisionBody,
 } from './physics/resolveCollisions';
 import { createCharacterModel, createNameSprite, type CharacterModel } from './entities/createCharacterModel';
+import { createBoostOrbit } from './entities/createBoostOrbit';
 import { createInputSystem } from './systems/createInputSystem';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
@@ -229,6 +230,10 @@ export function createGame(
   let activeCharacter: CharacterDefinition = CHARACTERS.zibo;
   let playerModel = createCharacterModel(activeCharacter);
   scene.add(playerModel.group);
+
+  // Būsts stars orbiting the local player (count = active character's būsts level).
+  const boostOrbit = createBoostOrbit();
+  scene.add(boostOrbit.group);
 
   // Matches SPAWN_X/SPAWN_Z on the server (next to the plaza fountain).
   const playerPosition = new THREE.Vector3(6, 0, 6);
@@ -713,6 +718,7 @@ export function createGame(
         0,
         Math.min(1, (skillReadyAt - elapsedSeconds) / activeCharacter.skill.cooldownSeconds)
       ),
+      skillCooldownByCharacter,
       inSafeZone: isInsideSafeZone(playerPosition.x, playerPosition.z),
       combo,
     });
@@ -759,6 +765,12 @@ export function createGame(
     }
 
     updateLocalPlayer(deltaSeconds);
+    boostOrbit.update({
+      position: playerPosition,
+      transcend: activeTranscend,
+      healthFraction: myServerHealth / activeCharacter.maxHealth,
+      deltaSeconds,
+    });
     effectSystem.update(deltaSeconds);
     // Enemies/goliaths are drawn straight from the server tables and interpolated;
     // the server tick owns their combat and damages players (reflected through
@@ -807,6 +819,8 @@ export function createGame(
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
       playerModel.dispose();
+      scene.remove(boostOrbit.group);
+      boostOrbit.dispose();
       world.dispose();
       pixelRenderer.dispose();
     },
