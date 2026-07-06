@@ -9,6 +9,7 @@ import { CharacterPreview } from './CharacterPreview';
 import { PullAnimation } from './PullAnimation';
 import { CharacterInfoSheet } from './CharacterInfoSheet';
 import { ConstellationRing } from './ConstellationRing';
+import { CharacterIdentity } from './CharacterIdentity';
 import { useTeamDrag } from './useTeamDrag';
 import { useDragScroll } from './useDragScroll';
 import { MAIN_MENU } from './menu';
@@ -343,9 +344,21 @@ export function GachaScreen({
                     element ? ({ '--element-color': element.cssColor } as React.CSSProperties) : undefined
                   }
                 >
-                  <span className="team-slot__index">{slotIndex + 1}</span>
                   {character && element ? (
                     <>
+                      <div className="team-slot__header">
+                        <span className="team-slot__ring">
+                          <ConstellationRing
+                            variant="chip"
+                            letter={character.displayName[0]}
+                            unlocked={constellationById[character.id] ?? 0}
+                            activated={
+                              activatedById[character.id] ?? constellationById[character.id] ?? 0
+                            }
+                          />
+                        </span>
+                        <CharacterIdentity character={character} className="team-slot__id" />
+                      </div>
                       <button
                         className="team-slot__stage"
                         onClick={() => openInfo(character.id, true)}
@@ -353,15 +366,7 @@ export function GachaScreen({
                       >
                         <CharacterPreview characterId={character.id} />
                       </button>
-                      <div className="team-slot__id">
-                        <span className={`team-slot__stars rarity-${character.stars}`}>
-                          {'✦'.repeat(character.stars)}
-                        </span>
-                        <span className="team-slot__name">{character.displayName}</span>
-                        <span className="team-slot__sub">
-                          {element.displayName} · {WEAPONS[character.weapon].displayName}
-                        </span>
-                      </div>
+                      <span className="team-slot__index">{slotIndex + 1}</span>
                       {isActive && <span className="team-slot__active">AKTĪVS</span>}
                       {partyCharacterIds.length > 1 && (
                         <button
@@ -374,7 +379,10 @@ export function GachaScreen({
                       )}
                     </>
                   ) : (
-                    <span className="team-slot__hint">＋</span>
+                    <>
+                      <span className="team-slot__index">{slotIndex + 1}</span>
+                      <span className="team-slot__hint">＋</span>
+                    </>
                   )}
                 </div>
               );

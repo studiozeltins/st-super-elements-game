@@ -1,8 +1,18 @@
+import { useEffect, useRef, useState } from 'react';
 import { CHARACTERS } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { MAX_HEALTH } from '../game/data/constants';
 import type { HudState } from '../game/createGame';
 import { VirtualJoystick } from './VirtualJoystick';
+
+// A glyph per skill kind so each character box shows its special ability at a glance.
+const SKILL_GLYPH: Record<string, string> = {
+  projectile: '➹',
+  nova: '✷',
+  dash: '»',
+  ring: '◎',
+  volley: '⁘',
+};
 
 interface HudProps {
   playerName: string;
@@ -58,6 +68,15 @@ export function Hud({
   // Health-bar fill: green ≥50%, orange 40–50%, red below 40%.
   const healthColor =
     healthFraction >= 0.5 ? 'var(--accent)' : healthFraction >= 0.4 ? '#f5a623' : 'var(--danger)';
+
+  // Fire a one-shot "skill ready" pulse on the active slot when its cooldown drains.
+  const skillCd = hudState.skillCooldownFraction;
+  const [readyPulse, setReadyPulse] = useState(0);
+  const prevCdRef = useRef(skillCd);
+  useEffect(() => {
+    if (prevCdRef.current > 0.02 && skillCd <= 0.02) setReadyPulse(pulse => pulse + 1);
+    prevCdRef.current = skillCd;
+  }, [skillCd]);
 
   return (
     <div className="hud">
@@ -120,10 +139,15 @@ export function Hud({
           const element = ELEMENTS[character.element];
           const isActive = characterId === activeCharacterId;
           const hpFraction = Math.max(0, Math.min(1, partyHealthById[characterId] ?? 1));
+          // Only the active character has a live cooldown (server tracks one in combat).
+          const cooldown = isActive ? skillCd : 0;
+          const skillGlyph = SKILL_GLYPH[character.skill.kind] ?? '✦';
           return (
             <button
               key={characterId}
-              className={`party-slot ${isActive ? 'party-slot--active' : ''}`}
+              className={`party-slot ${isActive ? 'party-slot--active' : ''} ${
+                cooldown > 0.02 ? 'party-slot--cooling' : ''
+              }`}
               style={{ '--element-color': element.cssColor } as React.CSSProperties}
               onClick={() => onSelectPartySlot(slotIndex)}
               aria-label={`${character.displayName} (${slotIndex + 1})`}
@@ -131,6 +155,18 @@ export function Hud({
             >
               <span className="party-slot__inner">
                 <span className="party-slot__initial">{character.displayName[0]}</span>
+                <span className="party-slot__skill" title={character.skill.displayName}>
+                  {skillGlyph}
+                </span>
+                {cooldown > 0.02 && (
+                  <span
+                    className="party-slot__cd"
+                    style={{ '--cooldown': cooldown } as React.CSSProperties}
+                  />
+                )}
+                {isActive && readyPulse > 0 && (
+                  <span key={readyPulse} className="party-slot__ready" aria-hidden="true" />
+                )}
                 <span className="party-slot__key">{slotIndex + 1}</span>
                 <span className="party-slot__hp">
                   <span

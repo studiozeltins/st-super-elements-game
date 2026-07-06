@@ -6,6 +6,7 @@ import { constellationBonuses } from '../game/data/constellations';
 import { loreFor } from '../game/data/characterLore';
 import { CharacterPreview } from './CharacterPreview';
 import { ConstellationRing } from './ConstellationRing';
+import { CharacterIdentity } from './CharacterIdentity';
 import { useDragScroll } from './useDragScroll';
 import { MAIN_MENU } from './menu';
 
@@ -225,12 +226,7 @@ export function CharacterScreen({
               />
             </button>
             <div className="cchar__id">
-              <span className="cchar__element">{element.displayName}</span>
-              <span className="cchar__name">{character.displayName}</span>
-              <span className="cchar__title">{character.title}</span>
-              <span className={`cchar__stars rarity-${character.stars}`}>
-                {'✦'.repeat(character.stars)}
-              </span>
+              <CharacterIdentity character={character} className="cident--lg" />
               {isActive && <span className="cchar__active-tag">AKTĪVS VARONIS</span>}
             </div>
           </section>

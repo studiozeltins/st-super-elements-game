@@ -242,6 +242,23 @@ button {
   margin-top: 4px;
 }
 
+.auth__remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.auth__remember input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--gold);
+  cursor: pointer;
+}
+
 .auth__error {
   font-size: 13px;
   color: #ff6b6b;
@@ -742,8 +759,67 @@ button {
 }
 
 .party-slot__initial {
+  position: relative;
+  z-index: 2;
   font: 700 16px var(--font-display);
   color: var(--element-color);
+}
+
+/* Per-character special-ability glyph, top of the box. */
+.party-slot__skill {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.party-slot--cooling .party-slot__skill {
+  color: var(--element-color);
+}
+
+/* Radial cooldown wipe: a dark pie covers the remaining cooldown, shrinking to
+   nothing as the skill comes back up. */
+.party-slot__cd {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  border-radius: 50%;
+  background: conic-gradient(rgba(6, 10, 8, 0.74) calc(var(--cooldown) * 360deg), transparent 0);
+  pointer-events: none;
+}
+
+/* One-shot "skill ready" ring pulse. */
+.party-slot__ready {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 38px;
+  height: 38px;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--element-color);
+  pointer-events: none;
+  animation: slot-ready 0.5s ease-out forwards;
+}
+
+@keyframes slot-ready {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.55);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.55);
+  }
 }
 
 .party-slot__key {
@@ -803,6 +879,20 @@ button {
     place-items: center;
   }
 
+}
+
+/* Desktop (mouse): float the party on the right edge, vertically centered — the
+   touch skill button is hidden here, so the slots carry the skill cooldown. */
+@media (pointer: fine) {
+  .hud__party {
+    left: auto;
+    bottom: auto;
+    right: 22px;
+    top: 50%;
+    transform: translateY(-50%);
+    flex-direction: column;
+    gap: 28px;
+  }
 }
 
 /* Narrow screens: keep the id/meta stack compact next to the gems wallet. */
@@ -2442,19 +2532,23 @@ button {
   padding: 9px 3px;
   color: var(--muted);
   border: 1px solid transparent;
-  border-radius: 6px;
   transition: color 0.14s, background 0.14s, border-color 0.14s;
 }
 
 .rail-tab--on {
   color: var(--text);
   border-color: var(--line);
-  background: color-mix(in srgb, var(--element-color) 12%, transparent);
+  /* Fixed accent — the menu stays consistent regardless of the active character. */
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rail-tab--on .rail-tab__glyph {
+  color: var(--gold);
 }
 
 .rail-tab__glyph {
   font-size: 18px;
-  color: var(--element-color);
+  color: var(--muted);
 }
 
 .rail-tab__label {
@@ -2497,28 +2591,52 @@ button {
   pointer-events: none;
 }
 
-.cchar__element {
+/* Reusable character identity block (CharacterIdentity component). Base = compact;
+   `.cident--lg` = big form (character modal + desktop team slots). */
+.cident {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cident__element {
   font-size: 10px;
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--element-color);
 }
 
-.cchar__name {
-  font: 700 clamp(20px, 4vw, 30px) var(--font-display);
+.cident__name {
+  font: 700 14px var(--font-display);
   line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.cchar__title {
+.cident__title {
   font-size: 11px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.cchar__stars {
-  margin-top: 3px;
-  font-size: 18px;
+.cident__stars {
+  margin-top: 2px;
+  font-size: 13px;
   line-height: 1;
   color: var(--gold);
+}
+
+.cident--lg .cident__name {
+  font-size: clamp(20px, 4vw, 30px);
+}
+
+.cident--lg .cident__stars {
+  margin-top: 3px;
+  font-size: 18px;
 }
 
 .cchar__locked {
@@ -3331,11 +3449,12 @@ button {
 
 .team-slot__index {
   position: absolute;
-  top: 8px;
+  bottom: 8px;
   left: 10px;
   z-index: 2;
-  font: 700 12px var(--font-display);
+  font: 700 13px var(--font-display);
   color: var(--muted);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
 }
 
 .team-slot__stage {
@@ -3345,16 +3464,29 @@ button {
   cursor: pointer;
 }
 
-.team-slot__id {
-  position: absolute;
-  left: 10px;
-  bottom: 8px;
+/* Identity header pinned to the top of the card: constellation ring + text. */
+.team-slot__header {
+  position: relative;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: linear-gradient(180deg, rgba(6, 10, 8, 0.9), transparent);
+}
+
+.team-slot__ring {
+  display: block;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+}
+
+.team-slot__id {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
-  pointer-events: none;
+  min-width: 0;
 }
 
 .team-slot__stars {
@@ -3366,11 +3498,17 @@ button {
 .team-slot__name {
   font: 700 13px var(--font-display);
   letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .team-slot__sub {
   font-size: 10px;
   color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .team-slot__active {
@@ -3424,6 +3562,31 @@ button {
   background: var(--element-color, var(--accent));
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
   pointer-events: none;
+}
+
+/* Desktop: larger slots + the big identity form in the header. */
+@media (pointer: fine) {
+  .team-slot {
+    min-height: 320px;
+  }
+
+  .team-slot__ring {
+    width: 42px;
+    height: 42px;
+  }
+
+  .team-slot .cident__name {
+    font-size: clamp(18px, 2vw, 24px);
+  }
+
+  .team-slot .cident__stars {
+    font-size: 16px;
+  }
+
+  .team-slot__header {
+    padding: 10px 12px;
+    gap: 10px;
+  }
 }
 
 /* Portrait: 2×2 team grid so slots stay tall enough for the spinning model. */
