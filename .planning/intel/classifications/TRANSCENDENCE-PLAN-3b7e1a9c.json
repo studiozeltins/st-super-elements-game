@@ -1,0 +1,43 @@
+{
+  "source_path": "C:\\laragon\\www\\2d-genshin-top-down\\docs\\TRANSCENDENCE_PLAN.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "Transcendence Loop — Phased Build Plan",
+  "summary": "Phased build plan for the Transcendence PVPvE loop: constellation shards, transcend levels past C6, shard theft, parties, and a raid-boss faucet.",
+  "scope": [
+    "transcendence system",
+    "constellation shards",
+    "gem currency rename",
+    "transcendLevel scaling",
+    "PVP shard theft",
+    "death erosion",
+    "multiplayer party",
+    "raid boss",
+    "combat roles",
+    "shard_drop table",
+    "SpacetimeDB economy"
+  ],
+  "cross_refs": [
+    "spacetimedb/src/index.ts",
+    "spacetimedb/src/enemyStats.ts",
+    "src/game/data/constants.ts",
+    "src/game/data/constellations.ts",
+    "src/game/data/characters.ts",
+    "src/game/data/gem*.ts",
+    "src/game/data/shardDrops.ts",
+    "src/game/data/__tests__/serverSync.test.ts",
+    "src/game/combat/comboSystem.ts",
+    "src/game/createGame.ts",
+    "src/ui/CharacterScreen.tsx",
+    "src/ui/GachaScreen.tsx",
+    "CharacterSheet.tsx",
+    "ConstellationRing.tsx",
+    "App.tsx",
+    "scripts/*.mjs",
+    "CLAUDE.md"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Type set from MANIFEST_TYPE=PRD (authoritative). Document is a phased roadmap/PRD carrying a 'Locked decisions' + 'Naming conventions' contract and 'Design invariants'; those locked items are requirement-level here, not an Accepted ADR, so locked=false per schema."
+}
