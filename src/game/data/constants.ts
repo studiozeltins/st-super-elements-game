@@ -4,6 +4,16 @@ export const WORLD_BOUND = 130; // server — archipelago extent, islands + brid
 export const MAX_HEALTH = 1000; // server
 export const GACHA_PULL_COST = 160; // server — ×10 pull costs 1600
 
+// Transcendence tunables — mirror spacetimedb/src/index.ts (locked Phase 0; wired in phases 1-7).
+export const MAX_TRANSCEND_LEVEL = 10; // server
+export const TRANSCEND_DAMAGE_STEP = 0.05; // server
+export const TRANSCEND_HEAL_STEP = 0.08; // server
+export const SHARD_PER_OVERFLOW_DUPE = 1; // server
+export const SHARD_DEATH_LOSS = 1; // server
+export const RAID_SHARD_PAYOUT = 6; // server
+/** Installing transcend level n costs n shards. Mirrors the server helper. */
+export const TRANSCEND_SHARD_COST = (n: number): number => n;
+
 export const GRAVITY = 30;
 /** Jump apex ≈ v²/2g = 2.4 — clears a 1.8 terrace and medium boulders. */
 export const JUMP_VELOCITY = 12;
