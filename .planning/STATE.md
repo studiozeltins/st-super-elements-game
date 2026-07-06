@@ -5,16 +5,16 @@ milestone_name: milestone
 current_phase: 03
 current_phase_name: Shards at risk
 status: executing
-stopped_at: Completed 02-04-PLAN.md; plan 05 (CharacterScreen Install UI) next
-last_updated: "2026-07-06T22:46:09.545Z"
-last_activity: 2026-07-06
-last_activity_desc: Phase 02 complete, transitioned to Phase 03
+stopped_at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
+last_updated: "2026-07-07T00:00:00.000Z"
+last_activity: 2026-07-07
+last_activity_desc: Phase 03 plan 01 complete — pure applyDeathShardPenalty helper + spec
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 15
-  completed_plans: 10
-  percent: 38
+  completed_plans: 12
+  percent: 40
 ---
 
 # Project State
@@ -31,9 +31,9 @@ floor).
 ## Current Position
 
 Phase: 03 — Shards at risk
-Plan: Not started
+Plan: 01 of 5 complete; plan 02 next
 Status: Executing Phase 03
-Last activity: 2026-07-06 — Phase 02 complete, transitioned to Phase 03
+Last activity: 2026-07-07 — Phase 03 plan 01 complete (applyDeathShardPenalty helper + spec)
 
 Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 
@@ -67,6 +67,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 | Phase 02 P02 | 3min | 2 tasks | 1 files |
 | Phase 02 P03 | 2min | 2 tasks | 5 files |
 | Phase 02 P04 | 3min | 2 tasks | 3 files |
+| Phase 03 P01 | 5 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,7 @@ Recent decisions affecting current work:
 - [Phase 02]: transcendCharacter reducer is the sole server-side enforcement point for the shard currency (C6/cap/cost/ownership); owned_character.transcendLevel added as additive .default(0) column; healParty scales by healer transcendLevel
 - [Phase ?]: [Phase 02]: transcend module published additively to LOCAL (transcend_level column, no wipe; player=1/owned_character=8 intact); bindings regenerated so transcendLevel + transcendCharacter client-typed. maincloud deferred (paused DB, no recovery-wipe).
 - [Phase 02]: transcend level scales client damage: createGame consumes pure transcendDamageMultiplier(activeConstellation, activeTranscend) behind setActiveTranscend; App.tsx builds owner-filtered transcendById, feeds the loop, threads transcendById + onTranscend to CharacterScreen (plan 05 UI)
+- [Phase 03]: applyDeathShardPenalty extracted as a pure dependency-free helper (branch order = u32 underflow safety; shardsLost 0 on erosion = A1 economy invariant), test-first before any reducer wiring
 
 ### Pending Todos
 
@@ -108,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06T17:37:19.545Z
-Stopped at: Completed 02-04-PLAN.md; plan 05 (CharacterScreen Install UI) next
-Resume file: .planning/phases/02-transcendence-install/02-04-SUMMARY.md
+Last session: 2026-07-07T00:00:00.000Z
+Stopped at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
+Resume file: .planning/phases/03-shards-at-risk/03-01-SUMMARY.md
