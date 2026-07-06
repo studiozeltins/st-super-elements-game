@@ -21,7 +21,7 @@ parallel spines that converge at Phase 6.
 - [x] **Phase A: Gem naming unification** - Rename primogems→gems (SHIPPED, commit `8236de4`)
 - [x] **Phase 0: Lock transcendence constants** - Add + mirror all `SHARD_*` / `TRANSCEND_*` constants, no logic (completed 2026-07-06)
 - [x] **Phase 1: Constellation shard currency** - Mint 1 shard per C6-overflow dupe (replaces 800-gem refund) (completed 2026-07-06)
-- [ ] **Phase 2: Transcendence install** - Spend shards to transcend a C6 character past C6 for real power
+- [x] **Phase 2: Transcendence install** - Spend shards to transcend a C6 character past C6 for real power (completed 2026-07-06)
 - [ ] **Phase 3: Shards at risk** - Death loss + PVP steal + erosion order (transcend-- then C--)
 - [ ] **Phase 4: Formalize character roles** - Tag every character tank/dps/healer/support
 - [ ] **Phase 5: Multiplayer party** - Create/join/leave parties with a live role roster
@@ -108,14 +108,14 @@ observable power (damage; heal for healers).
   3. A transcended character deals more damage (and heals more, for healers) in play.
   4. The UI shows "C6 + T{n}" and an Install button gated by shard balance and the cap.
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans complete
 **UI hint**: yes
 
 - [x] 02-01-PLAN.md — Pure helpers test-first: `resolveTranscendInstall` + `transcendDamageMultiplier` + units (Wave 0)
 - [x] 02-02-PLAN.md — Server: additive `owned_character.transcendLevel` column + `transcendCharacter` reducer + `healParty` transcend scaling
 - [x] 02-03-PLAN.md — [BLOCKING] Additive publish to local + regenerate bindings (gates client)
 - [x] 02-04-PLAN.md — Client bridge: damage multiplier + `setActiveTranscend` (createGame) + `transcendById`/feed/callback/props (App.tsx)
-- [ ] 02-05-PLAN.md — UI: gated Install control + `C6 · T{n}` badge on CharacterScreen + install playtest
+- [x] 02-05-PLAN.md — UI: gated Install control + `C6 · T{n}` badge on CharacterScreen + install playtest
 
 ### Phase 3: Shards at risk
 
@@ -242,7 +242,7 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | A. Gem naming unification | 1/1 | Complete | 2026-07 (commit `8236de4`) |
 | 0. Lock transcendence constants | 1/1 | Complete   | 2026-07-06 |
 | 1. Constellation shard currency | 4/4 | Complete    | 2026-07-06 |
-| 2. Transcendence install | 4/5 | In Progress|  |
+| 2. Transcendence install | 5/5 | Complete   | 2026-07-06 |
 | 3. Shards at risk | 0/5 | Not started | - |
 | 4. Formalize character roles | 0/TBD | Not started | - |
 | 5. Multiplayer party | 0/TBD | Not started | - |
