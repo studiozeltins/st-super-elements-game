@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 6
-current_phase_name: Raid boss
-status: planning
-stopped_at: "Phase 05 complete + verified (VERIFICATION passed); ready to plan Phase 6"
-last_updated: "2026-07-07T23:15:48.830Z"
-last_activity: 2026-07-07
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
+current_phase: 5
+current_phase_name: Multiplayer party
+status: complete
+stopped_at: "Milestone shipped at Phase 5 (2026-07-08). Phases 6 & 7 deferred to a future milestone; feat/transcendence merged to master."
+last_updated: "2026-07-08T00:00:00.000Z"
+last_activity: 2026-07-08
+last_activity_desc: Milestone shipped at Phase 5; phases 6 & 7 deferred; branch merged to master
 progress:
-  total_phases: 8
-  completed_phases: 6
+  total_phases: 7
+  completed_phases: 7
   total_plans: 23
   completed_plans: 23
-  percent: 75
+  percent: 100
 ---
 
 # Project State
@@ -30,12 +30,13 @@ floor).
 
 ## Current Position
 
-Phase: 6 — Raid boss
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-07-07 — Phase 05 complete + verified, transitioned to Phase 6
+Milestone: SHIPPED at Phase 5 (2026-07-08)
+Phase: 5 — Multiplayer party (last shipped)
+Status: Complete — feat/transcendence merged to master
+Deferred: Phase 6 (Raid boss) + Phase 7 (Role enforcement + balance) → future milestone
+Last activity: 2026-07-08 — Milestone shipped at Phase 5; 6 & 7 deferred; branch merged
 
-Progress: [███████░░░] 75% (6 of 8 phases complete)
+Progress: [██████████] 100% (7 of 7 shipped phases complete; 6 & 7 deferred out of scope)
 
 ## Performance Metrics
 
@@ -133,6 +134,8 @@ None yet.
 | Feature | Elemental resistance system | Deferred to future milestone | 2026-07-06 |
 | Feature | XP/levelling for players + enemies | Deferred to future milestone | 2026-07-06 |
 | Feature | Email password reset | Deferred (needs external service) | 2026-07-06 |
+| Phase | Phase 6 — Raid boss (party-gated shard faucet) | Deferred to future milestone; spec at `.planning/todos/pending/2026-07-08-phase-6-raid-boss-DEFERRED.md` | 2026-07-08 |
+| Phase | Phase 7 — Role enforcement + balance + full validation | Deferred to future milestone; spec at `.planning/todos/pending/2026-07-08-phase-7-role-enforcement-balance-DEFERRED.md` | 2026-07-08 |
 
 ## Session Continuity
 

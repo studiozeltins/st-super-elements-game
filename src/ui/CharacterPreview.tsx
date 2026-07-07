@@ -3,8 +3,18 @@ import * as THREE from 'three';
 import { createCharacterModel } from '../game/entities/createCharacterModel';
 import { CHARACTERS } from '../game/data/characters';
 
-/** A small self-contained THREE scene that slowly spins a character + weapon. */
-export function CharacterPreview({ characterId }: { characterId: string }) {
+// Purple transcend-shard colour (matches --shard) for the orbiting Būsts stars.
+const SHARD_COLOR = 0x9333ea;
+
+/** A small self-contained THREE scene that slowly spins a character + weapon, with
+ *  one orbiting purple shard-star per installed transcend (Būsts) level. */
+export function CharacterPreview({
+  characterId,
+  transcendLevel = 0,
+}: {
+  characterId: string;
+  transcendLevel?: number;
+}) {
   const mountRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,6 +54,23 @@ export function CharacterPreview({ characterId }: { characterId: string }) {
     model.group.position.y = -0.3;
     scene.add(model.group);
 
+    // Būsts orbit — one purple shard diamond per transcend level, circling in 3D.
+    const orbitGroup = new THREE.Group();
+    const starGeo = transcendLevel > 0 ? new THREE.OctahedronGeometry(0.1) : null;
+    const starMat =
+      transcendLevel > 0
+        ? new THREE.MeshBasicMaterial({ color: SHARD_COLOR, transparent: true, opacity: 0.95 })
+        : null;
+    if (starGeo && starMat) {
+      for (let i = 0; i < transcendLevel; i++) {
+        const star = new THREE.Mesh(starGeo, starMat);
+        const angle = (i / transcendLevel) * Math.PI * 2;
+        star.position.set(Math.cos(angle) * 1.15, 1.0, Math.sin(angle) * 1.15);
+        orbitGroup.add(star);
+      }
+      scene.add(orbitGroup);
+    }
+
     let raf = 0;
     let elapsed = 0;
     let last = performance.now();
@@ -53,6 +80,9 @@ export function CharacterPreview({ characterId }: { characterId: string }) {
       elapsed += dt;
       model.group.rotation.y = elapsed * 0.6;
       model.animate(elapsed, dt, false);
+      // Stars orbit the character and each spins on its own axis.
+      orbitGroup.rotation.y = elapsed * 0.9;
+      for (const star of orbitGroup.children) star.rotation.y = elapsed * 2.4;
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
     };
@@ -74,10 +104,12 @@ export function CharacterPreview({ characterId }: { characterId: string }) {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
       model.dispose();
+      starGeo?.dispose();
+      starMat?.dispose();
       renderer.dispose();
       if (renderer.domElement.parentNode === mount) mount.removeChild(renderer.domElement);
     };
-  }, [characterId]);
+  }, [characterId, transcendLevel]);
 
   return <div ref={mountRef} className="banner__model" />;
 }

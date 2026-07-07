@@ -15,10 +15,13 @@ status box and tick the boxes as phases land.
 | 3 | [phase-3-shard-risk.md](./phase-3-shard-risk.md) | ✅ DONE | 2 | `93d071b` |
 | 4 | [phase-4-roles.md](./phase-4-roles.md) | ⬜ TODO | 0 | — |
 | 5 | [phase-5-party.md](./phase-5-party.md) | ✅ DONE | 4 | `feat/transcendence` |
-| 6 | [phase-6-raid.md](./phase-6-raid.md) | ⬜ TODO | 2, 5 | — |
-| 7 | [phase-7-balance.md](./phase-7-balance.md) | ⬜ TODO | 3, 6 | — |
+| 6 | [phase-6-raid.md](./phase-6-raid.md) | ➡️ DEFERRED | 2, 5 | — |
+| 7 | [phase-7-balance.md](./phase-7-balance.md) | ➡️ DEFERRED | 3, 6 | — |
 
-Status legend: ⬜ TODO · 🟡 IN PROGRESS · ✅ DONE · ⛔ BLOCKED
+Status legend: ⬜ TODO · 🟡 IN PROGRESS · ✅ DONE · ⛔ BLOCKED · ➡️ DEFERRED
+
+> **Milestone shipped at Phase 5 (2026-07-08).** Phases 6 & 7 deferred to a future milestone —
+> specs preserved here + as backlog todos under `.planning/todos/pending/*-DEFERRED.md`.
 
 ## Execution order
 
@@ -38,8 +41,8 @@ Phase A (rename + wipe) first. Then transcendence spine (0→1→2→3) and co-o
 - [x] **3** — shards at risk on death + PVP steal + erosion
 - [ ] **4** — formalize character roles (tank/dps/healer/support)
 - [x] **5** — multiplayer party (invite-only, cap 4, roster/frames, promote/disband, persists across disconnect)
-- [ ] **6** — raid boss (party-gated shard faucet)
-- [ ] **7** — role enforcement in raid + balance + full validation
+- [→] **6** — raid boss (party-gated shard faucet) — DEFERRED to future milestone
+- [→] **7** — role enforcement in raid + balance + full validation — DEFERRED to future milestone
 
 ---
 

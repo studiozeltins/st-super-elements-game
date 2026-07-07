@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CHARACTER_LIST, CHARACTERS, healSpecFor, ROLE_META } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { WEAPONS } from '../game/data/weapons';
@@ -288,24 +288,9 @@ export function CharacterScreen({
           {/* Full-bleed card: the spinning character fills it, text overlaid.
               Swipe (or tap a roster chip) to change character — no arrows. */}
           <section className="cchar">
-            <CharacterPreview characterId={character.id} />
-
-            {/* Būsts orbit — one purple shard-star circling the portrait per
-                installed level. Persistent (follows the character across tabs);
-                a new star fades in as the level rises. */}
-            {transcendLevel > 0 && (
-              <div className="cchar__orbit" aria-hidden="true">
-                {Array.from({ length: transcendLevel }, (_, i) => (
-                  <span
-                    key={i}
-                    className="cchar__star"
-                    style={{ '--a': `${(i / transcendLevel) * 360}deg` } as CSSProperties}
-                  >
-                    ◈
-                  </span>
-                ))}
-              </div>
-            )}
+            {/* Būsts orbit now lives in the 3D scene (CharacterPreview), one purple
+                shard-diamond per installed level. */}
+            <CharacterPreview characterId={character.id} transcendLevel={transcendLevel} />
 
             {/* One-shot install flourish: remounts on every level-up (keyed by the
                 flourish counter) so its star-slams-home burst replays each time. */}

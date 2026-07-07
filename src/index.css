@@ -2984,42 +2984,6 @@ button {
 /* ── Būsts orbit + install flourish on the portrait ──────────────────────── */
 
 /* One purple shard-star per būsts level, slowly circling the character. */
-.cchar__orbit {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  animation: cchar-orbit-spin 22s linear infinite;
-}
-
-.cchar__star {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  font-size: clamp(12px, 2.4vw, 18px);
-  line-height: 0;
-  color: var(--shard);
-  text-shadow:
-    0 0 8px var(--shard),
-    0 0 18px color-mix(in srgb, var(--shard) 60%, transparent);
-  /* Place on a ring: center on the card, rotate to the star's angle, push out. */
-  transform: translate(-50%, -50%) rotate(var(--a)) translateY(clamp(-118px, -15.5vw, -70px));
-  animation: cchar-star-in 0.55s ease-out backwards;
-}
-
-@keyframes cchar-orbit-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes cchar-star-in {
-  from {
-    opacity: 0;
-    text-shadow: 0 0 28px var(--shard);
-  }
-}
-
 /* One-shot flourish: a big star slams onto the portrait, a ring shocks outward. */
 .cchar__burst {
   position: absolute;
@@ -3059,8 +3023,6 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cchar__orbit { animation: none; }
-  .cchar__star { animation: none; }
   .cchar__burst-star,
   .cchar__burst-ring { animation-duration: 0.01s; }
 }

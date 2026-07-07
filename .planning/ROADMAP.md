@@ -25,8 +25,8 @@ parallel spines that converge at Phase 6.
 - [x] **Phase 3: Shards at risk** - Death loss + PVP steal + erosion order (transcend-- then C--) (completed 2026-07-07)
 - [x] **Phase 4: Formalize character roles** - Tag every character tank/dps/healer/support (completed 2026-07-07)
 - [x] **Phase 5: Multiplayer party** - Create/join/leave parties with a live role roster (completed 2026-07-07)
-- [ ] **Phase 6: Raid boss** - Party-summoned boss that drops shards (the recoverable faucet)
-- [ ] **Phase 7: Role enforcement + balance** - Raid role mechanics + balance pass + full-loop validation
+- [→] **Phase 6: Raid boss** - DEFERRED to a future milestone (2026-07-08) — Party-summoned boss that drops shards (the recoverable faucet). Spec preserved: `.planning/todos/pending/2026-07-08-phase-6-raid-boss-DEFERRED.md`
+- [→] **Phase 7: Role enforcement + balance** - DEFERRED to a future milestone (2026-07-08) — Raid role mechanics + balance pass + full-loop validation. Spec preserved: `.planning/todos/pending/2026-07-08-phase-7-role-enforcement-balance-DEFERRED.md`
 
 ## Phase Details
 
@@ -273,5 +273,8 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | 3. Shards at risk | 5/5 | Complete    | 2026-07-07 |
 | 4. Formalize character roles | 2/2 | Complete   | 2026-07-07 |
 | 5. Multiplayer party | 6/6 | Complete    | 2026-07-07 |
-| 6. Raid boss | 0/TBD | Not started | - |
-| 7. Role enforcement + balance | 0/TBD | Not started | - |
+| 6. Raid boss | 0/TBD | DEFERRED (2026-07-08) | - |
+| 7. Role enforcement + balance | 0/TBD | DEFERRED (2026-07-08) | - |
+
+> **Milestone shipped at Phase 5 (2026-07-08).** Phases 6 & 7 deferred to a future milestone;
+> full specs preserved under `.planning/todos/pending/*-DEFERRED.md`.
