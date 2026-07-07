@@ -94,6 +94,9 @@ export function CharacterInfoSheet({
                     showRing
                     unlocked={unlocked}
                     activated={activated}
+                    onBoostClick={
+                      owned && onOpenFull ? () => onOpenFull(character.id) : undefined
+                    }
                   />
                 </div>
               </div>

@@ -28,7 +28,7 @@ export function ConstellationRing({
   variant?: 'large' | 'chip';
 }) {
   const GAP = 26; // degrees of empty space between segments
-  const RADIUS = 40; // arc radius — close to the disc so padding is small
+  const RADIUS = 35; // arc radius — hugs the disc (small padding)
   const disc = variant === 'chip' ? 30 : 29;
   const nextAvailable = activated < unlocked ? activated + 1 : 0;
   return (

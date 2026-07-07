@@ -335,6 +335,7 @@ export function CharacterScreen({
                 className="cident--lg"
                 showRole
                 transcendLevel={transcendLevel}
+                onBoostClick={() => setTab('transcend')}
               />
             </div>
           </section>

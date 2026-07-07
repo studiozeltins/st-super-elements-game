@@ -19,6 +19,8 @@ export function CharacterIdentity({
   /** Ring data (unlocked ceiling + currently-active stars). */
   unlocked = 0,
   activated = 0,
+  /** If given, the Būsts chip becomes a button opening the dedicated tab/page. */
+  onBoostClick,
 }: {
   character: CharacterDefinition;
   className?: string;
@@ -27,6 +29,7 @@ export function CharacterIdentity({
   showRing?: boolean;
   unlocked?: number;
   activated?: number;
+  onBoostClick?: () => void;
 }) {
   const element = ELEMENTS[character.element];
   const role = ROLE_META[character.role];
@@ -61,11 +64,23 @@ export function CharacterIdentity({
                 {role.label}
               </span>
             )}
-            {transcendLevel > 0 && (
-              <span className="cident__boost" aria-label={`Būsts B${transcendLevel}`}>
-                C6 · B{transcendLevel}
-              </span>
-            )}
+            {transcendLevel > 0 &&
+              (onBoostClick ? (
+                <button
+                  type="button"
+                  className="cident__boost cident__boost--btn"
+                  onClick={onBoostClick}
+                  aria-label={`Būsts B${transcendLevel} — atvērt`}
+                >
+                  <span className="cident__boost-c6">C6</span> ·{' '}
+                  <span className="cident__boost-b">B{transcendLevel}</span>
+                </button>
+              ) : (
+                <span className="cident__boost" aria-label={`Būsts B${transcendLevel}`}>
+                  <span className="cident__boost-c6">C6</span> ·{' '}
+                  <span className="cident__boost-b">B{transcendLevel}</span>
+                </span>
+              ))}
           </div>
         )}
       </div>
