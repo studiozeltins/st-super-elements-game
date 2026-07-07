@@ -4242,3 +4242,235 @@ button {
     grid-auto-rows: minmax(200px, 1fr);
   }
 }
+
+/* ============================================================
+   PLAYER PARTY (Pulks) — phase 5. Reuses the shipped HUD tokens
+   verbatim (no new color tokens). See 05-UI-SPEC §1 / §5.
+   ============================================================ */
+
+/* HUD entry chip — clones the .hud__zone box language (panel bg, line border,
+   10px/700 uppercase); distinct from the ⚑ "Komanda" character-team button. */
+.hud__party-chip {
+  align-self: flex-start;
+  padding: 3px 9px;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  transition: border-color 0.12s, transform 0.12s;
+}
+
+.hud__party-chip:hover,
+.hud__party-chip:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+/* Guarantee a ≥44px tap target on touch without bloating the pill visually. */
+@media (pointer: coarse) {
+  .hud__party-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/* Right-docked slide-out sheet. Portaled to <body> via Radix Dialog; absolute
+   inset:0 resolves against the viewport there. Motion is transform/opacity only,
+   matching .modal__panel's easing/duration. */
+.player-sheet__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 14;
+  background: rgba(4, 7, 5, 0.82);
+  cursor: pointer;
+  animation: player-sheet-fade 0.22s ease-out both;
+}
+
+.player-sheet__panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 15;
+  height: 100%;
+  width: min(360px, 92vw);
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-left: 1px solid var(--line);
+  border-radius: 12px 0 0 12px;
+  background: var(--panel);
+  animation: player-sheet-in 0.22s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+@keyframes player-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+@keyframes player-sheet-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.player-sheet__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.player-sheet__name {
+  font: 700 18px var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+
+.player-sheet__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.player-sheet__character {
+  font: 700 14px var(--font-body);
+  letter-spacing: 0.04em;
+}
+
+.player-sheet__online {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.player-sheet__online--off {
+  color: var(--muted);
+}
+
+.player-sheet__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.player-sheet__actions .btn {
+  min-height: 44px;
+}
+
+.player-sheet__hint {
+  margin-top: -8px;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.player-sheet__confirm-body {
+  font: 400 14px var(--font-body);
+  color: var(--muted);
+}
+
+/* Reduced motion (mandatory, UI-SPEC): the sheet fades only — no translate. */
+@media (prefers-reduced-motion: reduce) {
+  .player-sheet__panel,
+  .player-sheet__scrim {
+    animation: none;
+    transition: opacity 0.12s linear;
+    transform: none;
+  }
+}
+
+/* Online-players + received-invites lists inside the Pulks Modal. */
+.party-invites__kicker {
+  margin: 4px 0 8px;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.party-invites__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  list-style: none;
+}
+
+.party-invites__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.party-invites__msg {
+  font: 400 14px var(--font-body);
+  color: var(--text);
+}
+
+.party-invites__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.online-players {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+}
+
+.online-players__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 11px 12px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  transition: border-color 0.12s;
+}
+
+.online-players__row:hover,
+.online-players__row:focus-visible {
+  border-color: var(--accent);
+}
+
+.online-players__dot {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.online-players__name {
+  font: 700 14px var(--font-body);
+  color: var(--text);
+}
+
+.online-players__char {
+  margin-left: auto;
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.04em;
+}
+
+.online-players__empty {
+  padding: 16px 0;
+  font: 400 14px var(--font-body);
+  color: var(--muted);
+  text-align: center;
+}
