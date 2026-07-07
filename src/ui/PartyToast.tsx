@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { Button } from './Button';
+import { useToastCountdown } from './useToastCountdown';
 
 interface PartyToastProps {
   /** Display-only invite kind: 'invite' = a leader invited me; 'request' = someone
@@ -16,17 +15,13 @@ interface PartyToastProps {
   onExpire(inviteId: bigint): void;
 }
 
-// ~10s client-side auto-dismiss (D-07). Hover/focus PAUSES the countdown so a
-// keyboard user is never timed out mid-read.
+// ~10s client-side auto-dismiss (D-07); pause/expiry logic lives in useToastCountdown.
 const DISMISS_MS = 10_000;
-// Matches the .party-toast exit keyframe duration (0.3s) — keep in sync with CSS.
-const EXIT_MS = 300;
 
-// Right-edge transient for a single incoming invite/join-request. Announces via
-// role="status" + aria-live="polite" so it never steals focus (Pitfall 5). The
-// 10s timer is client-only: on expiry the toast slides out and is removed from
-// view, but NO reducer is called — the invite lives on server-side (D-08) and
-// remains actionable from Settings' missed-invites list.
+// Slim Frost strip (top-center header) for one incoming invite/join-request:
+// a green clickable-style name tag, a short action label, round icon-only
+// accept/decline buttons, and a thin depleting countdown bar. Announces via
+// role="status" + aria-live="polite" so it never steals focus (Pitfall 5).
 export function PartyToast({
   kind,
   inviterName,
@@ -35,54 +30,39 @@ export function PartyToast({
   onDecline,
   onExpire,
 }: PartyToastProps) {
-  const [paused, setPaused] = useState(false);
-  const [leaving, setLeaving] = useState(false);
-  // Remaining time so hover/focus truly PAUSES (not restarts) the countdown.
-  const remainingRef = useRef(DISMISS_MS);
-
-  // Countdown: runs while not paused and not already leaving. On timeout we begin
-  // the exit animation rather than removing immediately.
-  useEffect(() => {
-    if (paused || leaving) return;
-    const startedAt = Date.now();
-    const timer = window.setTimeout(() => setLeaving(true), remainingRef.current);
-    return () => {
-      window.clearTimeout(timer);
-      remainingRef.current = Math.max(0, remainingRef.current - (Date.now() - startedAt));
-    };
-  }, [paused, leaving]);
-
-  // After the exit animation plays, drop the toast from view (no reducer call).
-  useEffect(() => {
-    if (!leaving) return;
-    const timer = window.setTimeout(() => onExpire(inviteId), EXIT_MS);
-    return () => window.clearTimeout(timer);
-  }, [leaving, inviteId, onExpire]);
-
-  const message =
-    kind === 'request'
-      ? `${inviterName} lūdz pievienoties tavam baram`
-      : `${inviterName} aicina tevi savā barā`;
+  const { leaving, paused, pauseHandlers } = useToastCountdown(DISMISS_MS, () => onExpire(inviteId));
+  const action = kind === 'request' ? 'lūdz pievienoties' : 'aicina barā';
 
   return (
     <div
       className={`party-toast ${leaving ? 'party-toast--leaving' : ''}`}
       role="status"
       aria-live="polite"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
-      onBlur={() => setPaused(false)}
+      {...pauseHandlers}
     >
-      <p className="party-toast__msg">{message}</p>
-      <div className="party-toast__actions">
-        <Button variant="primary" onClick={() => onAccept(inviteId)}>
-          Pieņemt
-        </Button>
-        <Button variant="ghost" onClick={() => onDecline(inviteId)}>
-          Noraidīt
-        </Button>
-      </div>
+      <span className="party-toast__tag">{inviterName}</span>
+      <span className="party-toast__msg">{action}</span>
+      <button
+        type="button"
+        className="party-toast__btn party-toast__btn--accept"
+        onClick={() => onAccept(inviteId)}
+        aria-label="Pieņemt"
+      >
+        ✓
+      </button>
+      <button
+        type="button"
+        className="party-toast__btn party-toast__btn--decline"
+        onClick={() => onDecline(inviteId)}
+        aria-label="Noraidīt"
+      >
+        ✕
+      </button>
+      <span
+        className="party-toast__timer"
+        style={{ animationPlayState: paused || leaving ? 'paused' : 'running' }}
+        aria-hidden="true"
+      />
     </div>
   );
 }
