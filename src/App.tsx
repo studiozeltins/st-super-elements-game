@@ -9,8 +9,8 @@ import { MAX_HEALTH, RAID_PARTY_SIZE } from './game/data/constants';
 import { AuthScreen } from './ui/AuthScreen';
 import { deriveKey } from './auth/hash';
 import { Modal } from './ui/Modal';
-import { Button } from './ui/Button';
 import { PlayerSheet } from './ui/PlayerSheet';
+import { PartyToast } from './ui/PartyToast';
 import { Hud } from './ui/Hud';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
@@ -73,6 +73,10 @@ export default function App() {
   // reactive to name/character/online changes while open.
   const [isPartyOpen, setIsPartyOpen] = useState(false);
   const [sheetTargetHex, setSheetTargetHex] = useState<string | null>(null);
+  // Invite ids whose transient toast has been dismissed (expired at ~10s, or acted
+  // on). A dismissed toast never re-appears, but the invite stays in the Settings
+  // missed-invites list because the server row persists (D-08). Keyed by id string.
+  const [dismissedToastIds, setDismissedToastIds] = useState<string[]>([]);
   // Shard loss/gain feedback: a --pulse (gain) / --drain (loss) flash on the shard
   // counter and a self-facing toast on a real shard MOVEMENT. Disambiguated purely
   // client-side (no new broadcast table): a recent pvpHit on me marks a DOWN as a
@@ -310,10 +314,45 @@ export default function App() {
     isInParty && targetMembership !== undefined && targetMembership.partyId === myPartyId;
 
   // Invites addressed to me (the subscription already filters to my canonical id;
-  // the extra guard keeps the derivation correct against any cache overlap).
-  const myPendingInvites = myInvites.filter(
-    invite => invite.recipientIdentity.toHexString() === myIdentityHex
+  // the extra guard keeps the derivation correct against any cache overlap), newest
+  // first so the freshest invite tops the toast stack.
+  const myPendingInvites = myInvites
+    .filter(invite => invite.recipientIdentity.toHexString() === myIdentityHex)
+    .sort((a, b) =>
+      a.createdAt.microsSinceUnixEpoch < b.createdAt.microsSinceUnixEpoch ? 1 : -1
+    );
+
+  // Resolve each pending invite to a display view (kind + other player's name +
+  // ready-to-render Latvian message). kind is DISPLAY only: 'request' = the joiner
+  // asked to join MY party (name = joiner); 'invite' = a leader invited ME (name =
+  // that party's leader). Shared by the toast AND the Settings missed list.
+  const invitesWithNames = myPendingInvites.map(invite => {
+    const isRequest = invite.kind === 'request';
+    const otherHex = isRequest
+      ? invite.joinerIdentity.toHexString()
+      : parties.find(party => party.id === invite.partyId)?.leaderIdentity.toHexString() ?? null;
+    const name =
+      players.find(player => player.identity.toHexString() === otherHex)?.name ?? 'Spēlētājs';
+    const kind: 'invite' | 'request' = isRequest ? 'request' : 'invite';
+    const message =
+      kind === 'request'
+        ? `${name} lūdz pievienoties tavam pulkam`
+        : `${name} aicina tevi savā pulkā`;
+    return { id: invite.id, kind, name, message };
+  });
+
+  // Live toasts = pending invites not yet toast-dismissed. The Settings missed list
+  // shows ALL of invitesWithNames (including dismissed/expired ones).
+  const toastInvites = invitesWithNames.filter(
+    invite => !dismissedToastIds.includes(invite.id.toString())
   );
+
+  // Drop an invite's toast from view WITHOUT calling any reducer — the server row
+  // persists, so it stays actionable in Settings' missed list (D-08).
+  const dismissToast = useCallback((inviteId: bigint) => {
+    const key = inviteId.toString();
+    setDismissedToastIds(prev => (prev.includes(key) ? prev : [...prev, key]));
+  }, []);
 
   const pullBanner = useCallback(
     (bannerId: string, count: number) => {
@@ -623,6 +662,29 @@ export default function App() {
           <span className="shard-toast__glyph">◈</span> {shardToast.text}
         </div>
       )}
+      {toastInvites.length > 0 && (
+        <div className="party-toast-stack">
+          {toastInvites.map(invite => (
+            // key = invite id: a new invite mounts a fresh element so the enter
+            // animation replays per toast (clone of the shard-toast remount trick).
+            <PartyToast
+              key={invite.id.toString()}
+              kind={invite.kind}
+              inviterName={invite.name}
+              inviteId={invite.id}
+              onAccept={id => {
+                acceptInvite(id);
+                dismissToast(id);
+              }}
+              onDecline={id => {
+                declineInvite(id);
+                dismissToast(id);
+              }}
+              onExpire={dismissToast}
+            />
+          ))}
+        </div>
+      )}
       <Hud
         playerName={myPlayer?.name ?? ''}
         health={myPlayer?.currentHealth ?? MAX_HEALTH}
@@ -718,41 +780,6 @@ export default function App() {
         onOpenChange={setIsPartyOpen}
         title={isInParty ? `Pulks · ${myPartyCount}/${RAID_PARTY_SIZE}` : 'Pulks'}
       >
-        {myPendingInvites.length > 0 && (
-          <div className="party-invites">
-            <p className="party-invites__kicker">SAŅEMTIE AICINĀJUMI</p>
-            <ul className="party-invites__list">
-              {myPendingInvites.map(invite => {
-                // kind is display copy only. request → the joiner asked to join MY
-                // party; invite → the party leader invited ME.
-                const isRequest = invite.kind === 'request';
-                const otherHex = isRequest
-                  ? invite.joinerIdentity.toHexString()
-                  : parties.find(party => party.id === invite.partyId)?.leaderIdentity.toHexString() ??
-                    null;
-                const otherName =
-                  players.find(player => player.identity.toHexString() === otherHex)?.name ??
-                  'Spēlētājs';
-                const message = isRequest
-                  ? `${otherName} lūdz pievienoties tavam pulkam`
-                  : `${otherName} aicina tevi savā pulkā`;
-                return (
-                  <li key={invite.id.toString()} className="party-invites__item">
-                    <span className="party-invites__msg">{message}</span>
-                    <div className="party-invites__actions">
-                      <Button variant="primary" onClick={() => acceptInvite(invite.id)}>
-                        Pieņemt
-                      </Button>
-                      <Button variant="ghost" onClick={() => declineInvite(invite.id)}>
-                        Noraidīt
-                      </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
         <p className="party-invites__kicker">TIEŠSAISTES SPĒLĒTĀJI</p>
         {onlinePlayers.length === 0 ? (
           <p className="online-players__empty">Nav citu spēlētāju tiešsaistē.</p>

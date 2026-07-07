@@ -1188,6 +1188,62 @@ button {
   100% { opacity: 0; transform: translateX(-50%) translateY(-4px); }
 }
 
+/* Party invite/join-request toasts — right-edge transients under the wallet. The
+   stack owns the placement + z-index and is pointer-passive (never blocks the
+   joystick/action cluster in the lower-left); each toast re-enables pointer events
+   so hover pauses its timer. Motion is transform/opacity only. */
+.party-toast-stack {
+  position: absolute;
+  top: 88px;
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(320px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.party-toast {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  pointer-events: auto;
+  animation: party-toast-in 0.3s ease-out both;
+}
+.party-toast--leaving {
+  animation: party-toast-out 0.3s ease-out both;
+}
+.party-toast__msg {
+  font: 400 14px var(--font-body);
+  color: var(--text);
+}
+.party-toast__actions {
+  display: flex;
+  gap: 8px;
+}
+.party-toast__actions .btn {
+  min-height: 44px;
+}
+@keyframes party-toast-in {
+  from { opacity: 0; transform: translateX(120%); }
+}
+@keyframes party-toast-out {
+  to { opacity: 0; transform: translateX(120%); }
+}
+/* Reduced motion (mandatory, UI-SPEC): fade only, no translate. */
+@media (prefers-reduced-motion: reduce) {
+  .party-toast,
+  .party-toast--leaving {
+    animation: none;
+    transition: opacity 0.12s linear;
+    transform: none;
+  }
+}
+
 /* In the gacha wallet the shard chip sits immediately left of the swapping
    gems/owned readout, separated by a 12px gap. */
 .gacha__wallet .wallet-chip {
