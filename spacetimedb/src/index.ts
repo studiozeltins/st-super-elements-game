@@ -1217,8 +1217,6 @@ export const invitePlayer = spacetimedb.reducer(
     if (me.identity.equals(targetIdentity)) throw new SenderError('Nevar aicināt sevi');
     const target = ctx.db.player.identity.find(targetIdentity);
     if (!target) throw new SenderError('Spēlētājs nav atrasts');
-    if (ctx.db.partyMember.identity.find(targetIdentity))
-      throw new SenderError(`${target.name} jau ir citā barā`);
 
     // Ensure my party exists with me as leader.
     const mine = ctx.db.partyMember.identity.find(me.identity);
@@ -1230,6 +1228,13 @@ export const invitePlayer = spacetimedb.reducer(
       partyId = p.id;
       ctx.db.partyMember.insert({ id: 0n, partyId, identity: me.identity, joinedAt: ctx.timestamp });
     }
+
+    // A target already in MY party is a no-op; a target in ANOTHER party is allowed
+    // now — the recipient decides how to resolve it (merge if they lead, or
+    // poach/forward if they're a member). Cap is re-checked at accept time.
+    const targetMem = ctx.db.partyMember.identity.find(targetIdentity);
+    if (targetMem && targetMem.partyId === partyId)
+      throw new SenderError(`${target.name} jau ir tavā barā`);
 
     const roster = [...ctx.db.partyMember.partyId.filter(partyId)];
     if (roster.length >= RAID_PARTY_SIZE) throw new SenderError('Bars ir pilns (4/4)');
@@ -1301,6 +1306,13 @@ export const acceptInvite = spacetimedb.reducer(
     const inv = ctx.db.partyInvite.id.find(inviteId);
     if (!inv) throw new SenderError('Aicinājums vairs nav spēkā');
     if (!inv.recipientIdentity.equals(me.identity)) throw new SenderError('unauthorized');
+    // A join REQUEST may only be accepted by the party leader — a non-leader member
+    // who holds one must forward it up (forwardRequest), never accept directly.
+    if (inv.kind === 'request') {
+      const party = ctx.db.party.id.find(inv.partyId);
+      if (party && !party.leaderIdentity.equals(me.identity))
+        throw new SenderError('Tikai vadonis var pieņemt pieprasījumu');
+    }
 
     // Eligibility decided by Plan 01's pure helper (cap + no-double-join, T-05-04).
     const rosterSize = [...ctx.db.partyMember.partyId.filter(inv.partyId)].length;
@@ -1336,6 +1348,25 @@ export const acceptInvite = spacetimedb.reducer(
   }
 );
 
+// Forward a join REQUEST to the party leader (D-02 relay). A non-leader member who
+// received an ask-to-join can pass it up: only the current recipient may forward,
+// and only a 'request' (not an 'invite'). Re-points recipient to the leader, who
+// then accepts/declines through the normal toast. No membership change here.
+export const forwardRequest = spacetimedb.reducer(
+  { inviteId: t.u64() },
+  (ctx, { inviteId }) => {
+    const me = requirePlayer(ctx);
+    const inv = ctx.db.partyInvite.id.find(inviteId);
+    if (!inv) throw new SenderError('Aicinājums vairs nav spēkā');
+    if (!inv.recipientIdentity.equals(me.identity)) throw new SenderError('unauthorized');
+    if (inv.kind !== 'request') throw new SenderError('Tikai pieprasījumu var nodot');
+    const party = ctx.db.party.id.find(inv.partyId);
+    if (!party) throw new SenderError('Bars vairs nav spēkā');
+    if (party.leaderIdentity.equals(me.identity)) return; // I'm the leader — nothing to relay
+    ctx.db.partyInvite.id.update({ ...inv, recipientIdentity: party.leaderIdentity });
+  }
+);
+
 // Decline a pending invite/request: same recipient-only guard, no membership change.
 export const declineInvite = spacetimedb.reducer(
   { inviteId: t.u64() },
@@ -1344,6 +1375,144 @@ export const declineInvite = spacetimedb.reducer(
     const inv = ctx.db.partyInvite.id.find(inviteId);
     if (!inv) throw new SenderError('Aicinājums vairs nav spēkā');
     if (!inv.recipientIdentity.equals(me.identity)) throw new SenderError('unauthorized');
+    ctx.db.partyInvite.id.delete(inv.id);
+  }
+);
+
+// Accept an invite by MERGING my whole party into the inviter's (D-02 extension).
+// Only a leader merges: every member of my party moves into the inviter's party,
+// the inviter stays leader, and my old party row + invites are dissolved. Rejected
+// if the combined roster would exceed the 4/4 cap.
+export const acceptMerge = spacetimedb.reducer(
+  { inviteId: t.u64() },
+  (ctx, { inviteId }) => {
+    const me = requirePlayer(ctx);
+    const inv = ctx.db.partyInvite.id.find(inviteId);
+    if (!inv) throw new SenderError('Aicinājums vairs nav spēkā');
+    if (!inv.recipientIdentity.equals(me.identity)) throw new SenderError('unauthorized');
+    if (inv.kind !== 'invite') throw new SenderError('Nav apvienojams');
+    const myMem = ctx.db.partyMember.identity.find(me.identity);
+    if (!myMem) throw new SenderError('Neesi barā — pieņem parasti');
+    const myParty = ctx.db.party.id.find(myMem.partyId);
+    if (!myParty || !myParty.leaderIdentity.equals(me.identity))
+      throw new SenderError('Tikai vadonis var apvienot barus');
+    const dest = ctx.db.party.id.find(inv.partyId);
+    if (!dest) throw new SenderError('Bars vairs nav spēkā');
+    if (myMem.partyId === inv.partyId) {
+      ctx.db.partyInvite.id.delete(inv.id);
+      return;
+    }
+    const myMembers = [...ctx.db.partyMember.partyId.filter(myMem.partyId)];
+    const destSize = [...ctx.db.partyMember.partyId.filter(inv.partyId)].length;
+    if (destSize + myMembers.length > RAID_PARTY_SIZE)
+      throw new SenderError('Apvienotais bars pārsniedz 4/4');
+    for (const m of myMembers) ctx.db.partyMember.id.update({ ...m, partyId: inv.partyId });
+    for (const stale of [...ctx.db.partyInvite.partyId.filter(myMem.partyId)])
+      ctx.db.partyInvite.id.delete(stale.id);
+    ctx.db.party.id.delete(myMem.partyId);
+    ctx.db.partyInvite.id.delete(inv.id);
+  }
+);
+
+// Accept an invite by being POACHED: a non-leader member leaves their current party
+// (which lives on for the others) and joins the inviter's party. Rejected if the
+// inviter's party is full. A leader can't be poached — they merge instead.
+export const acceptPoach = spacetimedb.reducer(
+  { inviteId: t.u64() },
+  (ctx, { inviteId }) => {
+    const me = requirePlayer(ctx);
+    const inv = ctx.db.partyInvite.id.find(inviteId);
+    if (!inv) throw new SenderError('Aicinājums vairs nav spēkā');
+    if (!inv.recipientIdentity.equals(me.identity)) throw new SenderError('unauthorized');
+    if (inv.kind !== 'invite') throw new SenderError('Nav pārvelkams');
+    const myMem = ctx.db.partyMember.identity.find(me.identity);
+    if (!myMem) throw new SenderError('Neesi barā — pieņem parasti');
+    const myParty = ctx.db.party.id.find(myMem.partyId);
+    if (myParty && myParty.leaderIdentity.equals(me.identity))
+      throw new SenderError('Vadoni nevar pārvilkt — apvieno barus');
+    const dest = ctx.db.party.id.find(inv.partyId);
+    if (!dest) throw new SenderError('Bars vairs nav spēkā');
+    if ([...ctx.db.partyMember.partyId.filter(inv.partyId)].length >= RAID_PARTY_SIZE)
+      throw new SenderError('Bars ir pilns (4/4)');
+    ctx.db.partyMember.id.delete(myMem.id);
+    ctx.db.partyMember.insert({ id: 0n, partyId: inv.partyId, identity: me.identity, joinedAt: ctx.timestamp });
+    ctx.db.partyInvite.id.delete(inv.id);
+  }
+);
+
+// A non-leader member who was invited elsewhere can FORWARD it as a counter-offer:
+// instead of leaving, they ask their own leader to accept the inviter into THEIR
+// party. Turns the invite into a 'request' (joiner = inviter, recipient = my leader).
+export const forwardInviteToLeader = spacetimedb.reducer(
+  { inviteId: t.u64() },
+  (ctx, { inviteId }) => {
+    const me = requirePlayer(ctx);
+    const inv = ctx.db.partyInvite.id.find(inviteId);
+    if (!inv) throw new SenderError('Aicinājums vairs nav spēkā');
+    if (!inv.recipientIdentity.equals(me.identity)) throw new SenderError('unauthorized');
+    if (inv.kind !== 'invite') throw new SenderError('Nav nododams');
+    const myMem = ctx.db.partyMember.identity.find(me.identity);
+    if (!myMem) throw new SenderError('Neesi barā');
+    const myParty = ctx.db.party.id.find(myMem.partyId);
+    if (!myParty) throw new SenderError('Bars vairs nav spēkā');
+    if (myParty.leaderIdentity.equals(me.identity)) throw new SenderError('Esi vadonis — pieņem pats');
+    const inviter = ctx.db.party.id.find(inv.partyId)?.leaderIdentity;
+    if (!inviter) throw new SenderError('Bars vairs nav spēkā');
+    const dupe = [...ctx.db.partyInvite.partyId.filter(myMem.partyId)].some(row =>
+      row.joinerIdentity.equals(inviter)
+    );
+    if (!dupe)
+      ctx.db.partyInvite.insert({
+        id: 0n,
+        partyId: myMem.partyId,
+        joinerIdentity: inviter,
+        recipientIdentity: myParty.leaderIdentity,
+        kind: 'request',
+        createdAt: ctx.timestamp,
+      });
+    ctx.db.partyInvite.id.delete(inv.id);
+  }
+);
+
+// A member asks their leader to promote them to leader. Recorded as a 'promote'
+// pending row (joiner = me, recipient = current leader) the leader accepts/declines.
+export const requestPromotion = spacetimedb.reducer(ctx => {
+  const me = requirePlayer(ctx);
+  const myMem = ctx.db.partyMember.identity.find(me.identity);
+  if (!myMem) throw new SenderError('Neesi nevienā barā');
+  const party = ctx.db.party.id.find(myMem.partyId);
+  if (!party) throw new SenderError('Bars vairs nav spēkā');
+  if (party.leaderIdentity.equals(me.identity)) throw new SenderError('Jau esi vadonis');
+  const dupe = [...ctx.db.partyInvite.partyId.filter(myMem.partyId)].some(
+    row => row.kind === 'promote' && row.joinerIdentity.equals(me.identity)
+  );
+  if (dupe) return;
+  ctx.db.partyInvite.insert({
+    id: 0n,
+    partyId: myMem.partyId,
+    joinerIdentity: me.identity,
+    recipientIdentity: party.leaderIdentity,
+    kind: 'promote',
+    createdAt: ctx.timestamp,
+  });
+});
+
+// Leader accepts a promotion request: the crown moves to the requester. Only the
+// current leader (the recipient) may accept, and only a 'promote' row.
+export const acceptPromotion = spacetimedb.reducer(
+  { inviteId: t.u64() },
+  (ctx, { inviteId }) => {
+    const me = requirePlayer(ctx);
+    const inv = ctx.db.partyInvite.id.find(inviteId);
+    if (!inv) throw new SenderError('Pieprasījums vairs nav spēkā');
+    if (!inv.recipientIdentity.equals(me.identity)) throw new SenderError('unauthorized');
+    if (inv.kind !== 'promote') throw new SenderError('Nav paaugstinājuma pieprasījums');
+    const party = ctx.db.party.id.find(inv.partyId);
+    if (party && party.leaderIdentity.equals(me.identity)) {
+      const promoted = ctx.db.partyMember.identity.find(inv.joinerIdentity);
+      if (promoted && promoted.partyId === inv.partyId)
+        ctx.db.party.id.update({ ...party, leaderIdentity: inv.joinerIdentity });
+    }
     ctx.db.partyInvite.id.delete(inv.id);
   }
 );
@@ -1408,6 +1577,26 @@ export const kickMember = spacetimedb.reducer(
     for (const inv of [...ctx.db.partyInvite.partyId.filter(mine.partyId)]) {
       if (inv.joinerIdentity.equals(targetIdentity)) ctx.db.partyInvite.id.delete(inv.id);
     }
+  }
+);
+
+// Promote another member of my party to leader (leader-only). The crown moves; I
+// stay in the party as a normal member. Target must be a current member (not me).
+export const promoteLeader = spacetimedb.reducer(
+  { targetIdentity: t.identity() },
+  (ctx, { targetIdentity }) => {
+    const me = requirePlayer(ctx);
+    const mine = ctx.db.partyMember.identity.find(me.identity);
+    if (!mine) throw new SenderError('Neesi nevienā barā');
+    const party = ctx.db.party.id.find(mine.partyId);
+    if (!party) throw new SenderError('Bars vairs nav spēkā');
+    if (!party.leaderIdentity.equals(me.identity))
+      throw new SenderError('Tikai vadonis var iecelt jaunu vadoni');
+    if (me.identity.equals(targetIdentity)) return; // already leader
+    const target = ctx.db.partyMember.identity.find(targetIdentity);
+    if (!target || target.partyId !== mine.partyId)
+      throw new SenderError('Spēlētājs nav tavā barā');
+    ctx.db.party.id.update({ ...party, leaderIdentity: targetIdentity });
   }
 );
 
@@ -2414,6 +2603,202 @@ export const debugSetPuppet = spacetimedb.reducer(
   }
 );
 
+// DEV/TEST: make player `fromName` invite player `toName` to a party (mirrors
+// invitePlayer, but with an explicit actor so a headless bot can invite you).
+// Local testing only.
+export const debugInvite = spacetimedb.reducer(
+  { fromName: t.string(), toName: t.string() },
+  (ctx, { fromName, toName }) => {
+    const roster0 = [...ctx.db.player.iter()];
+    const me = roster0.find(p => p.name === fromName);
+    const target = roster0.find(p => p.name === toName);
+    if (!me || !target) throw new SenderError('Player name not found');
+    if (me.identity.equals(target.identity)) throw new SenderError('Nevar aicināt sevi');
+    if (ctx.db.partyMember.identity.find(target.identity))
+      throw new SenderError(`${target.name} jau ir citā barā`);
+    const mine = ctx.db.partyMember.identity.find(me.identity);
+    let partyId: bigint;
+    if (mine) {
+      partyId = mine.partyId;
+    } else {
+      const p = ctx.db.party.insert({ id: 0n, leaderIdentity: me.identity, createdAt: ctx.timestamp });
+      partyId = p.id;
+      ctx.db.partyMember.insert({ id: 0n, partyId, identity: me.identity, joinedAt: ctx.timestamp });
+    }
+    if ([...ctx.db.partyMember.partyId.filter(partyId)].length >= RAID_PARTY_SIZE)
+      throw new SenderError('Bars ir pilns (4/4)');
+    const dupe = [...ctx.db.partyInvite.partyId.filter(partyId)].some(inv =>
+      inv.joinerIdentity.equals(target.identity)
+    );
+    if (dupe) return;
+    ctx.db.partyInvite.insert({
+      id: 0n,
+      partyId,
+      joinerIdentity: target.identity,
+      recipientIdentity: target.identity,
+      kind: 'invite',
+      createdAt: ctx.timestamp,
+    });
+  }
+);
+
+// DEV/TEST: synthetic bot players so party features (cap 4/4, leave, promote,
+// disband) can be exercised solo. Each bot is a normal ONLINE player row parked
+// in a spread ring around spawn (NOT a puppet — puppets all chase you and stack
+// into one blob), so you can tap each in-game and invite it through the real UI.
+// Fixed high-nibble identities keep bots out of any real identity space; clear
+// them with debugClearBots. Local only.
+const BOT_ID_BASE = BigInt('0x' + 'b0'.repeat(31) + '00'); // 64 hex digits, top nibble 0xb
+const MAX_BOTS = 8;
+function botIdentity(i: number): any {
+  return new Identity(BOT_ID_BASE + BigInt(i));
+}
+
+// Resolve every pending invite addressed to a bot into an actual membership,
+// respecting the 4/4 cap. Shared by the world tick (auto-accept each frame) and
+// the debugBotsAccept reducer (one-shot). Bots-only so real players still accept
+// through the normal flow. Cheap: partyInvite is tiny and this no-ops with no bots.
+function autoAcceptBotInvites(ctx: { db: any; timestamp: any }): void {
+  const invites = [...ctx.db.partyInvite.iter()];
+  if (invites.length === 0) return;
+  const botHexes = new Set<string>();
+  for (let i = 0; i < MAX_BOTS; i++) botHexes.add(botIdentity(i).toHexString());
+  for (const inv of invites) {
+    // A bot can't click, so it auto-resolves anything it is the RECIPIENT of.
+    if (!botHexes.has(inv.recipientIdentity.toHexString())) continue;
+    ctx.db.partyInvite.id.delete(inv.id);
+    const joiner = inv.joinerIdentity;
+    const party = ctx.db.party.id.find(inv.partyId);
+    if (!party) continue; // party gone
+    if (inv.kind === 'promote') {
+      // A member asked the (bot) leader to hand over the crown — approve it.
+      const promoted = ctx.db.partyMember.identity.find(joiner);
+      if (promoted && promoted.partyId === inv.partyId && party.leaderIdentity.equals(inv.recipientIdentity))
+        ctx.db.party.id.update({ ...party, leaderIdentity: joiner });
+      continue;
+    }
+    // 'invite' (bot joins my party) or 'request' (I join the bot's party): add joiner.
+    if (ctx.db.partyMember.identity.find(joiner)) continue; // already partied
+    if ([...ctx.db.partyMember.partyId.filter(inv.partyId)].length >= RAID_PARTY_SIZE) continue;
+    ctx.db.partyMember.insert({
+      id: 0n,
+      partyId: inv.partyId,
+      identity: joiner,
+      joinedAt: ctx.timestamp,
+    });
+  }
+}
+
+export const debugSpawnBots = spacetimedb.reducer(
+  { count: t.i32() },
+  (ctx, { count }) => {
+    const n = Math.max(1, Math.min(MAX_BOTS, count));
+    for (let i = 0; i < n; i++) {
+      const identity = botIdentity(i);
+      if (ctx.db.player.identity.find(identity)) continue; // already spawned
+      const angle = (i / MAX_BOTS) * Math.PI * 2;
+      ctx.db.player.insert({
+        identity,
+        name: `Bot${i + 1}`,
+        online: true,
+        positionX: SPAWN_X + Math.cos(angle) * 5,
+        positionY: 0,
+        positionZ: SPAWN_Z + Math.sin(angle) * 5,
+        rotationY: 0,
+        activeCharacterId: STARTER_CHARACTER_ID,
+        partyOrder: [STARTER_CHARACTER_ID],
+        gems: 0,
+        currentHealth: statsFor(STARTER_CHARACTER_ID).maxHealth,
+        lastKillRewardAt: ctx.timestamp,
+        gemsFromKills: 0,
+        gemsCollected: 0,
+        transcendShards: 0,
+      });
+    }
+  }
+);
+
+// DEV/TEST: one-shot version of the world tick's bot-invite auto-accept, for
+// forcing pending bot invites to join immediately without waiting a tick. Local only.
+export const debugBotsAccept = spacetimedb.reducer(ctx => {
+  autoAcceptBotInvites(ctx);
+});
+
+// DEV/TEST: make bot `fromName` ask to join the party of member `toName`, with
+// toName as the request recipient — so if toName is a NON-leader you can exercise
+// the "nodot vadonim" (forward-to-leader) toast solo. Bot joiner → the world tick
+// auto-accepts once the request reaches the leader. Local only.
+export const debugRequest = spacetimedb.reducer(
+  { fromName: t.string(), toName: t.string() },
+  (ctx, { fromName, toName }) => {
+    const roster0 = [...ctx.db.player.iter()];
+    const joiner = roster0.find(p => p.name === fromName);
+    const recipient = roster0.find(p => p.name === toName);
+    if (!joiner || !recipient) throw new SenderError('Player name not found');
+    if (ctx.db.partyMember.identity.find(joiner.identity))
+      throw new SenderError(`${joiner.name} jau ir barā`);
+    const mem = ctx.db.partyMember.identity.find(recipient.identity);
+    if (!mem) throw new SenderError(`${recipient.name} nav barā`);
+    if ([...ctx.db.partyMember.partyId.filter(mem.partyId)].length >= RAID_PARTY_SIZE)
+      throw new SenderError('Bars ir pilns (4/4)');
+    const dupe = [...ctx.db.partyInvite.partyId.filter(mem.partyId)].some(inv =>
+      inv.joinerIdentity.equals(joiner.identity)
+    );
+    if (dupe) return;
+    ctx.db.partyInvite.insert({
+      id: 0n,
+      partyId: mem.partyId,
+      joinerIdentity: joiner.identity,
+      recipientIdentity: recipient.identity,
+      kind: 'request',
+      createdAt: ctx.timestamp,
+    });
+  }
+);
+
+// DEV/TEST: flip a player's online flag by name to simulate a disconnect/reconnect
+// without closing a tab — for verifying a member stays in the party while offline
+// (roster shows them dimmed) and returns online in the same party. Local only.
+export const debugSetOnline = spacetimedb.reducer(
+  { name: t.string(), online: t.bool() },
+  (ctx, { name, online }) => {
+    const target = [...ctx.db.player.iter()].find(p => p.name === name);
+    if (!target) throw new SenderError('No player with that name');
+    ctx.db.player.identity.update({ ...target, online });
+  }
+);
+
+// DEV/TEST: remove every spawned bot and any party state they left behind.
+export const debugClearBots = spacetimedb.reducer(ctx => {
+  for (let i = 0; i < MAX_BOTS; i++) {
+    const identity = botIdentity(i);
+    // Drop pending invites addressed to / raised by the bot.
+    for (const inv of [...ctx.db.partyInvite.iter()]) {
+      if (inv.joinerIdentity.equals(identity) || inv.recipientIdentity.equals(identity))
+        ctx.db.partyInvite.id.delete(inv.id);
+    }
+    // Drop the bot's party membership; if it led a party, hand the crown to the
+    // oldest remaining member, or delete the party when it empties.
+    const mem = ctx.db.partyMember.identity.find(identity);
+    if (mem) {
+      ctx.db.partyMember.id.delete(mem.id);
+      const party = ctx.db.party.id.find(mem.partyId);
+      if (party) {
+        const remaining = [...ctx.db.partyMember.partyId.filter(mem.partyId)].sort((a, b) =>
+          a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1
+        );
+        if (remaining.length === 0) {
+          ctx.db.party.id.delete(mem.partyId);
+        } else if (party.leaderIdentity.equals(identity)) {
+          ctx.db.party.id.update({ ...party, leaderIdentity: remaining[0].identity });
+        }
+      }
+    }
+    if (ctx.db.puppet.identity.find(identity)) ctx.db.puppet.identity.delete(identity);
+    if (ctx.db.player.identity.find(identity)) ctx.db.player.identity.delete(identity);
+  }
+});
+
 // The heart of the server-authoritative fight. Each tick: spawn/retire goliaths,
 // move everyone, resolve REAL contact damage (goliaths grind camps, camps grind
 // back, aggroed enemies bite the player), pay out deaths, vacuum loose gems, and
@@ -2423,6 +2808,11 @@ export const worldTick = spacetimedb.reducer(
   ctx => {
     const now = ctx.timestamp.microsSinceUnixEpoch;
     const tick = WORLD_TICK_INTERVAL_MICROS;
+
+    // DEV: headless bots can't click "accept", so auto-resolve any invite aimed
+    // at a bot into a membership (respecting the 4/4 cap) — bots join instantly
+    // like a real player accepting. No-op in prod (no bot rows exist there).
+    autoAcceptBotInvites(ctx);
 
     const enemiesBefore = [...ctx.db.enemy.iter()];
     const campCenters = campCentersFrom(enemiesBefore);

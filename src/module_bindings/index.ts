@@ -35,16 +35,27 @@ import {
 
 // Import all reducer arg schemas
 import AcceptInviteReducer from "./accept_invite_reducer";
+import AcceptMergeReducer from "./accept_merge_reducer";
+import AcceptPoachReducer from "./accept_poach_reducer";
+import AcceptPromotionReducer from "./accept_promotion_reducer";
 import AttackEnemiesReducer from "./attack_enemies_reducer";
 import AttackPlayerReducer from "./attack_player_reducer";
 import AttackRayReducer from "./attack_ray_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
 import CollectGemReducer from "./collect_gem_reducer";
 import CollectShardReducer from "./collect_shard_reducer";
+import DebugBotsAcceptReducer from "./debug_bots_accept_reducer";
+import DebugClearBotsReducer from "./debug_clear_bots_reducer";
+import DebugInviteReducer from "./debug_invite_reducer";
+import DebugRequestReducer from "./debug_request_reducer";
+import DebugSetOnlineReducer from "./debug_set_online_reducer";
 import DebugSetPuppetReducer from "./debug_set_puppet_reducer";
+import DebugSpawnBotsReducer from "./debug_spawn_bots_reducer";
 import DeclineInviteReducer from "./decline_invite_reducer";
 import DisbandPartyReducer from "./disband_party_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
+import ForwardInviteToLeaderReducer from "./forward_invite_to_leader_reducer";
+import ForwardRequestReducer from "./forward_request_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import HealPartyReducer from "./heal_party_reducer";
 import InvitePlayerReducer from "./invite_player_reducer";
@@ -53,9 +64,11 @@ import LeavePartyReducer from "./leave_party_reducer";
 import LoginReducer from "./login_reducer";
 import LogoutReducer from "./logout_reducer";
 import PingReducer from "./ping_reducer";
+import PromoteLeaderReducer from "./promote_leader_reducer";
 import PullBannerReducer from "./pull_banner_reducer";
 import RegisterReducer from "./register_reducer";
 import RequestJoinReducer from "./request_join_reducer";
+import RequestPromotionReducer from "./request_promotion_reducer";
 import RestoreBannerPityReducer from "./restore_banner_pity_reducer";
 import RestoreOwnedCharactersReducer from "./restore_owned_characters_reducer";
 import RestorePlayersReducer from "./restore_players_reducer";
@@ -327,16 +340,27 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("accept_invite", AcceptInviteReducer),
+  __reducerSchema("accept_merge", AcceptMergeReducer),
+  __reducerSchema("accept_poach", AcceptPoachReducer),
+  __reducerSchema("accept_promotion", AcceptPromotionReducer),
   __reducerSchema("attack_enemies", AttackEnemiesReducer),
   __reducerSchema("attack_player", AttackPlayerReducer),
   __reducerSchema("attack_ray", AttackRayReducer),
   __reducerSchema("cast_skill", CastSkillReducer),
   __reducerSchema("collect_gem", CollectGemReducer),
   __reducerSchema("collect_shard", CollectShardReducer),
+  __reducerSchema("debug_bots_accept", DebugBotsAcceptReducer),
+  __reducerSchema("debug_clear_bots", DebugClearBotsReducer),
+  __reducerSchema("debug_invite", DebugInviteReducer),
+  __reducerSchema("debug_request", DebugRequestReducer),
+  __reducerSchema("debug_set_online", DebugSetOnlineReducer),
   __reducerSchema("debug_set_puppet", DebugSetPuppetReducer),
+  __reducerSchema("debug_spawn_bots", DebugSpawnBotsReducer),
   __reducerSchema("decline_invite", DeclineInviteReducer),
   __reducerSchema("disband_party", DisbandPartyReducer),
   __reducerSchema("fall_to_death", FallToDeathReducer),
+  __reducerSchema("forward_invite_to_leader", ForwardInviteToLeaderReducer),
+  __reducerSchema("forward_request", ForwardRequestReducer),
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("heal_party", HealPartyReducer),
   __reducerSchema("invite_player", InvitePlayerReducer),
@@ -345,9 +369,11 @@ const reducersSchema = __reducers(
   __reducerSchema("login", LoginReducer),
   __reducerSchema("logout", LogoutReducer),
   __reducerSchema("ping", PingReducer),
+  __reducerSchema("promote_leader", PromoteLeaderReducer),
   __reducerSchema("pull_banner", PullBannerReducer),
   __reducerSchema("register", RegisterReducer),
   __reducerSchema("request_join", RequestJoinReducer),
+  __reducerSchema("request_promotion", RequestPromotionReducer),
   __reducerSchema("restore_banner_pity", RestoreBannerPityReducer),
   __reducerSchema("restore_owned_characters", RestoreOwnedCharactersReducer),
   __reducerSchema("restore_players", RestorePlayersReducer),
