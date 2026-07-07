@@ -71,6 +71,60 @@ button {
   letter-spacing: 0.06em;
 }
 
+/* Desktop: the mobile-first pixel sizes read too small on a large screen — scale
+   the display text up. Mobile/tablet keep their tuned sizes. */
+@media (min-width: 1024px) {
+  .gacha__title,
+  .cscreen__title {
+    font-size: 19px;
+  }
+  .csheet__name {
+    font-size: 36px;
+  }
+  .csheet__title {
+    font-size: 13px;
+  }
+  .csheet__section,
+  .ctab__section {
+    font-size: 14px;
+  }
+  .inv__heading {
+    font-size: 16px;
+  }
+  .csheet__stat-label,
+  .stat-cell__label,
+  .roster-chip__level,
+  .team-chip__level {
+    font-size: 11px;
+  }
+  .csheet__stat-value,
+  .stat-cell__value {
+    font-size: 22px;
+  }
+  .csheet__stat-value--sm,
+  .csheet__con-effect,
+  .pity__value,
+  .resist-chip__value {
+    font-size: 15px;
+  }
+  .rail-tab__label {
+    font-size: 11px;
+  }
+  .roster-chip__name,
+  .team-chip__name,
+  .banner-chip__name {
+    font-size: 14px;
+  }
+  .inv-card__name {
+    font-size: 17px;
+  }
+  .csheet__btn,
+  .pull-btn__count,
+  .pull-btn__cost {
+    font-size: 15px;
+  }
+}
+
 .app {
   position: relative;
   height: 100vh;
