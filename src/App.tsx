@@ -11,7 +11,6 @@ import { deriveKey } from './auth/hash';
 import { Modal } from './ui/Modal';
 import { PlayerSheet } from './ui/PlayerSheet';
 import { PartyToast } from './ui/PartyToast';
-import { PartyRoster } from './ui/PartyRoster';
 import { PartyFrames } from './ui/PartyFrames';
 import { Hud } from './ui/Hud';
 import { SettingsScreen } from './ui/SettingsScreen';
@@ -73,7 +72,6 @@ export default function App() {
   // surface, and the slide-out sheet all share it. `sheetTargetHex` stores the
   // tapped player's canonical hex; the row itself is re-derived so the sheet stays
   // reactive to name/character/online changes while open.
-  const [isPartyOpen, setIsPartyOpen] = useState(false);
   const [sheetTargetHex, setSheetTargetHex] = useState<string | null>(null);
   // Invite ids whose transient toast has been dismissed (expired at ~10s, or acted
   // on). A dismissed toast never re-appears, but the invite stays in the Settings
@@ -298,12 +296,6 @@ export default function App() {
       : iAmLeader
         ? 'Vadība pāries citam biedram.'
         : undefined;
-
-  // Online players other than me — the conflict-free tap surface (avatar raycast
-  // collides with click-to-attack, deferred) that opens the .player-sheet.
-  const onlinePlayers = players.filter(
-    player => player.online && player.identity.toHexString() !== myIdentityHex
-  );
 
   // The tapped target for the slide-out sheet, re-derived from the live player rows.
   const sheetTarget = sheetTargetHex
@@ -706,9 +698,6 @@ export default function App() {
         partyHealthById={partyHealthById}
         activeCharacterId={myPlayer?.activeCharacterId ?? ''}
         hudState={hudState}
-        partyCount={myPartyCount}
-        inPlayerParty={isInParty}
-        onOpenParty={() => setIsPartyOpen(true)}
         onSelectPartySlot={slotIndex => {
           const characterId = partyCharacterIds[slotIndex];
           if (characterId) selectCharacter(characterId);
@@ -801,47 +790,6 @@ export default function App() {
           handleLogout();
         }}
       />
-      <Modal
-        open={isPartyOpen}
-        onOpenChange={setIsPartyOpen}
-        title={isInParty ? `Bars · ${myPartyCount}/${RAID_PARTY_SIZE}` : 'Bars'}
-      >
-        <PartyRoster myRoster={myRoster} leaderHex={myPartyLeaderHex} players={players} />
-        <p className="party-invites__kicker">TIEŠSAISTES SPĒLĒTĀJI</p>
-        {onlinePlayers.length === 0 ? (
-          <p className="online-players__empty">Nav citu spēlētāju tiešsaistē.</p>
-        ) : (
-          <ul className="online-players">
-            {onlinePlayers.map(player => {
-              const hex = player.identity.toHexString();
-              const character = CHARACTERS[player.activeCharacterId];
-              const element = character ? ELEMENTS[character.element] : null;
-              return (
-                <li key={hex}>
-                  <button
-                    type="button"
-                    className="online-players__row"
-                    onClick={() => {
-                      setSheetTargetHex(hex);
-                      setIsPartyOpen(false);
-                    }}
-                  >
-                    <span className="online-players__dot" aria-hidden="true">
-                      ●
-                    </span>
-                    <span className="online-players__name">{player.name}</span>
-                    {character && element && (
-                      <span className="online-players__char" style={{ color: element.cssColor }}>
-                        {character.displayName}
-                      </span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Modal>
       {sheetTarget && (
         <PlayerSheet
           name={sheetTarget.name}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CHARACTERS } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
-import { MAX_HEALTH, RAID_PARTY_SIZE } from '../game/data/constants';
+import { MAX_HEALTH } from '../game/data/constants';
 import type { HudState } from '../game/createGame';
 import { VirtualJoystick } from './VirtualJoystick';
 
@@ -77,15 +77,10 @@ interface HudProps {
   partyHealthById: Record<string, number>;
   activeCharacterId: string;
   hudState: HudState;
-  /** Number of members in the viewer's player party (Bars). */
-  partyCount: number;
-  /** Whether the viewer is currently in a player party. */
-  inPlayerParty: boolean;
   onSelectPartySlot(slotIndex: number): void;
   onOpenSettings(): void;
   onOpenGacha(tab: 'banners' | 'party'): void;
   onOpenCharacters(): void;
-  onOpenParty(): void;
   onJoystickMove(x: number, z: number): void;
   onTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   onTouchButtonRelease(button: 'attack'): void;
@@ -99,13 +94,10 @@ export function Hud({
   partyHealthById,
   activeCharacterId,
   hudState,
-  partyCount,
-  inPlayerParty,
   onSelectPartySlot,
   onOpenSettings,
   onOpenGacha,
   onOpenCharacters,
-  onOpenParty,
   onJoystickMove,
   onTouchButton,
   onTouchButtonRelease,
@@ -169,11 +161,6 @@ export function Hud({
           <span className={`hud__zone ${hudState.inSafeZone ? 'hud__zone--safe' : 'hud__zone--pvp'}`}>
             {hudState.inSafeZone ? 'DROŠĀ ZONA' : 'PVP ZONA'}
           </span>
-          {/* Player-party (Bars) entry chip — distinct from the ⚑ "Komanda"
-              character-team quick-button; opens the online-players party surface. */}
-          <button type="button" className="hud__party-chip" onClick={onOpenParty} aria-label="Bars">
-            {inPlayerParty ? `BARS ${partyCount}/${RAID_PARTY_SIZE}` : 'BARS'}
-          </button>
         </div>
       </div>
 

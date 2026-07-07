@@ -22,9 +22,11 @@ interface PartyFramesProps {
 // (details + leader kick). Hidden entirely when the viewer is solo. All data
 // reads from already-subscribed rows; max health comes from client CHARACTERS.
 export function PartyFrames({ myRoster, leaderHex, players, myHex, onSelect }: PartyFramesProps) {
-  if (myRoster.length === 0) return null;
+  // Show teammates only — the viewer's own health lives in the main HUD.
+  const others = myRoster.filter(m => m.identity.toHexString() !== myHex);
+  if (others.length === 0) return null;
 
-  const ordered = [...myRoster].sort((a, b) => {
+  const ordered = [...others].sort((a, b) => {
     const aLeader = a.identity.toHexString() === leaderHex;
     const bLeader = b.identity.toHexString() === leaderHex;
     if (aLeader !== bLeader) return aLeader ? -1 : 1;
@@ -46,7 +48,6 @@ export function PartyFrames({ myRoster, leaderHex, players, myHex, onSelect }: P
         const curHealth = Math.max(0, Math.round(player?.currentHealth ?? 0));
         const pct = maxHealth > 0 ? Math.min(100, Math.max(0, (curHealth / maxHealth) * 100)) : 0;
         const isLeader = hex === leaderHex;
-        const isMe = hex === myHex;
 
         return (
           <button
@@ -66,27 +67,24 @@ export function PartyFrames({ myRoster, leaderHex, players, myHex, onSelect }: P
                     ♛
                   </span>
                 )}
-                {name}
-                {isMe && <span className="party-frames__me"> (tu)</span>}
-              </span>
-              <span className="party-frames__hp">
-                <span className="party-frames__hp-track">
-                  <span
-                    className="party-frames__hp-fill"
-                    style={{
-                      width: `${pct}%`,
-                      background:
-                        pct > 50
-                          ? 'var(--hp-ok, #4ade80)'
-                          : pct > 20
-                            ? 'var(--hp-warn, #facc15)'
-                            : 'var(--hp-low, #ef4444)',
-                    }}
-                  />
-                </span>
+                <span className="party-frames__label">{name}</span>
                 <span className="party-frames__hp-num">
                   {curHealth}/{maxHealth}
                 </span>
+              </span>
+              <span className="party-frames__hp-track">
+                <span
+                  className="party-frames__hp-fill"
+                  style={{
+                    width: `${pct}%`,
+                    background:
+                      pct > 50
+                        ? 'var(--hp-ok, #4ade80)'
+                        : pct > 20
+                          ? 'var(--hp-warn, #facc15)'
+                          : 'var(--hp-low, #ef4444)',
+                  }}
+                />
               </span>
             </span>
           </button>

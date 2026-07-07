@@ -509,17 +509,16 @@ button {
 
 .stats-overlay__item {
   font: 600 11px var(--font-body);
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  background: rgba(10, 16, 8, 0.5);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 2px 7px;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  opacity: 0.72;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
 .stats-overlay__item b {
   color: var(--accent);
   font-weight: 700;
+  margin-right: 3px;
 }
 
 /* ---------- Focus visibility (a11y) ---------- */
@@ -4604,7 +4603,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: min(210px, 50vw);
+  width: min(158px, 44vw);
   pointer-events: none;
 }
 
@@ -4661,31 +4660,25 @@ button {
 
 .party-frames__name {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 4px;
   font: 600 12px var(--font-body);
   color: var(--text);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.party-frames__label {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
 .party-frames__crown {
   flex: none;
   color: var(--gold);
   font-size: 11px;
-}
-
-.party-frames__me {
-  color: var(--muted);
-  font-weight: 400;
-}
-
-.party-frames__hp {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .party-frames__hp-track {
@@ -4703,9 +4696,10 @@ button {
 }
 
 .party-frames__hp-num {
+  flex: none;
   font: 600 9px var(--font-body);
   color: var(--text);
-  opacity: 0.85;
+  opacity: 0.8;
   white-space: nowrap;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
