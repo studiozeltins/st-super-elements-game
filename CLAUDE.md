@@ -612,6 +612,25 @@ conn.db.user.onUpdate((ctx, oldUser, newUser) => console.log('Updated:', newUser
 
 ---
 
+# Code Style: No Monolith Files, No Legacy Code
+
+Keep files short, readable, and single-purpose. **Target ≤ 300 LOC of functional code per file** (comments/blank lines don't count). When a file grows past that, split by responsibility:
+
+- Extract cohesive groups (a feature's reducers, a subsystem's helpers, a UI concern) into their own module and import them back.
+- One module = one clear job. Prefer many small files over one large one.
+- Applies to server (`spacetimedb/src/`) and client (`src/`) alike.
+
+> `spacetimedb/src/index.ts` is the current worst offender (monolith) — carve new work into sibling modules rather than growing it, and refactor existing chunks out when you touch them.
+
+**Never keep legacy / dead code.** This is a new project with no external users — there is nothing to stay backward-compatible with. So:
+
+- Delete unused code the moment it becomes unused (dead branches, unreferenced props/exports, superseded helpers, commented-out blocks). No "just in case".
+- Prefer refactoring the existing code over layering a new path beside it. Change it in place; don't leave the old version behind.
+- Optimize for clean code **and game performance** — remove indirection, dead state, and per-frame waste when you touch a system.
+- When a change makes something obsolete, removing it is part of that same change, not a follow-up.
+
+---
+
 # This Project: Environments & Deployment (super-elements)
 
 ## The two environments
