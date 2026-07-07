@@ -1,9 +1,8 @@
-import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { CHARACTERS, ROLE_META } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { Button } from './Button';
-import { Modal } from './Modal';
+import { hpFillColor } from './hp';
 
 interface PlayerSheetProps {
   /** Target player's display name. */
@@ -14,52 +13,30 @@ interface PlayerSheetProps {
   currentHealth?: number;
   /** Whether the target is currently online. */
   online: boolean;
-  /** Whether the viewer and the target already share a party (D-02: show only Leave). */
-  sharesParty: boolean;
-  /** Whether this sheet is the viewer's own card (shared party → show Leave, not Kick). */
-  isSelf?: boolean;
-  /** Whether the viewer is their own party's leader (own card → offer Disband). */
-  isLeader?: boolean;
-  /** Whether the viewer may kick this member (leader viewing another member). */
-  canKick?: boolean;
+  /** Whether the VIEWER is already in a party (disables ask-to-join — can't join two). */
+  amInParty?: boolean;
   /** Whether the viewer's own party is full (disables the invite action). */
   partyFull: boolean;
-  /** Optional confirm-dialog body describing the consequence of leaving. */
-  leaveConfirmBody?: string;
   onInvite(): void;
   onRequestJoin(): void;
-  onLeave(): void;
-  onKick?(): void;
-  onDisband?(): void;
   onClose(): void;
 }
 
-// Right-docked slide-out sheet for a tapped player. Focus-trap / ESC / ARIA come
-// from Radix Dialog (the same primitive Modal wraps) — no hand-rolled focus. The
-// symmetric actions mirror D-02: invite + ask-to-join when unrelated, and only
-// "Pamest baru" (behind a confirm) when the viewer already shares the party. The
-// role badge reuses the shipped ROLE_META + .sheet__role box — no new server field.
+// Right-docked slide-out sheet for a tapped player OUTSIDE my party (in-party taps
+// open PartySheet instead). Two symmetric moves: pull them into my party, or ask to
+// join theirs. Focus-trap / ESC / ARIA come from Radix Dialog; the role badge reuses
+// the shipped ROLE_META + .sheet__role box.
 export function PlayerSheet({
   name,
   activeCharacterId,
   currentHealth,
   online,
-  sharesParty,
-  isSelf = false,
-  isLeader = false,
-  canKick = false,
+  amInParty = false,
   partyFull,
-  leaveConfirmBody,
   onInvite,
   onRequestJoin,
-  onLeave,
-  onKick,
-  onDisband,
   onClose,
 }: PlayerSheetProps) {
-  const [confirmLeave, setConfirmLeave] = useState(false);
-  const [confirmKick, setConfirmKick] = useState(false);
-  const [confirmDisband, setConfirmDisband] = useState(false);
   const character = CHARACTERS[activeCharacterId];
   const element = character ? ELEMENTS[character.element] : null;
   const role = character ? ROLE_META[character.role] : null;
@@ -125,15 +102,7 @@ export function PlayerSheet({
               <div className="player-sheet__hp-track">
                 <div
                   className="player-sheet__hp-fill"
-                  style={{
-                    width: `${hpPct}%`,
-                    background:
-                      hpPct > 50
-                        ? 'var(--hp-ok, #4ade80)'
-                        : hpPct > 20
-                          ? 'var(--hp-warn, #facc15)'
-                          : 'var(--hp-low, #ef4444)',
-                  }}
+                  style={{ width: `${hpPct}%`, background: hpFillColor(hpPct) }}
                 />
               </div>
               <span className="player-sheet__hp-num">
@@ -142,112 +111,21 @@ export function PlayerSheet({
             </div>
           )}
 
+          {/* Pull them into MINE (I lead — server merges their squad if they're a
+              leader, poach/forward if a member), or ask to join THEIRS (they lead).
+              We only gate the impossible: no invite when full, no join when I'm partied. */}
           <div className="player-sheet__actions">
-            {sharesParty ? (
-              isSelf ? (
-                <>
-                  <Button variant="danger" onClick={() => setConfirmLeave(true)}>
-                    Pamest baru
-                  </Button>
-                  {isLeader && (
-                    <Button variant="ghost" onClick={() => setConfirmDisband(true)}>
-                      Izformēt baru
-                    </Button>
-                  )}
-                </>
-              ) : canKick ? (
-                <Button variant="danger" onClick={() => setConfirmKick(true)}>
-                  Izmest no bara
-                </Button>
-              ) : (
-                <span className="player-sheet__hint">Bara biedrs</span>
-              )
-            ) : (
-              <>
-                <Button variant="primary" disabled={partyFull} onClick={onInvite}>
-                  Uzaicināt savā barā
-                </Button>
-                {partyFull && <span className="player-sheet__hint">Bars ir pilns (4/4)</span>}
-                <Button variant="ghost" onClick={onRequestJoin}>
-                  Lūgt pievienoties baram
-                </Button>
-              </>
-            )}
+            <Button variant="primary" disabled={partyFull} onClick={onInvite}>
+              Aicināt savā barā
+            </Button>
+            {partyFull && <span className="player-sheet__hint">Bars ir pilns (4/4)</span>}
+            <Button variant="ghost" disabled={amInParty} onClick={onRequestJoin}>
+              Lūgt pievienoties viņa baram
+            </Button>
+            {amInParty && <span className="player-sheet__hint">Tu jau esi barā</span>}
           </div>
         </Dialog.Content>
       </Dialog.Portal>
-
-      <Modal
-        open={confirmLeave}
-        onOpenChange={setConfirmLeave}
-        title="Pamest baru?"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmLeave(false)}>
-              Atcelt
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                setConfirmLeave(false);
-                onLeave();
-              }}
-            >
-              Pamest
-            </Button>
-          </>
-        }
-      >
-        {leaveConfirmBody ? <p className="player-sheet__confirm-body">{leaveConfirmBody}</p> : null}
-      </Modal>
-
-      <Modal
-        open={confirmKick}
-        onOpenChange={setConfirmKick}
-        title="Izmest no bara?"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmKick(false)}>
-              Atcelt
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                setConfirmKick(false);
-                onKick?.();
-              }}
-            >
-              Izmest
-            </Button>
-          </>
-        }
-      >
-        <p className="player-sheet__confirm-body">{name} tiks izņemts no tava bara.</p>
-      </Modal>
-
-      <Modal
-        open={confirmDisband}
-        onOpenChange={setConfirmDisband}
-        title="Izformēt baru?"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setConfirmDisband(false)}>
-              Atcelt
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                setConfirmDisband(false);
-                onDisband?.();
-              }}
-            >
-              Izformēt
-            </Button>
-          </>
-        }
-      >
-        <p className="player-sheet__confirm-body">Viss bars tiks izformēts un visi biedri atbrīvoti.</p>
-      </Modal>
     </Dialog.Root>
   );
 }

@@ -10,6 +10,7 @@ import { AuthScreen } from './ui/AuthScreen';
 import { deriveKey } from './auth/hash';
 import { Modal } from './ui/Modal';
 import { PlayerSheet } from './ui/PlayerSheet';
+import { PartySheet } from './ui/PartySheet';
 import { PartyToast } from './ui/PartyToast';
 import { PartyFrames } from './ui/PartyFrames';
 import { Hud } from './ui/Hud';
@@ -293,14 +294,28 @@ export default function App() {
       ? parties.find(party => party.id === myPartyId)?.leaderIdentity.toHexString() ?? null
       : null;
   const iAmLeader = myPartyLeaderHex !== null && myPartyLeaderHex === myIdentityHex;
-  // Confirm-dialog consequence copy (D-05): leaving as the last member disbands the
-  // party; a leaving leader with others promotes the oldest-joined member.
-  const leaveConfirmBody =
-    myPartyCount <= 1
-      ? 'Bars tiks izformēts.'
-      : iAmLeader
-        ? 'Vadība pāries citam biedram.'
-        : undefined;
+  // All my party members on one page (leader first, then oldest-joined) for the
+  // party-management sheet. Player row supplies name / character / online / health.
+  const partyMemberViews = [...myRoster]
+    .sort((a, b) => {
+      const aLeader = a.identity.toHexString() === myPartyLeaderHex;
+      const bLeader = b.identity.toHexString() === myPartyLeaderHex;
+      if (aLeader !== bLeader) return aLeader ? -1 : 1;
+      return a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1;
+    })
+    .map(member => {
+      const hex = member.identity.toHexString();
+      const player = players.find(p => p.identity.toHexString() === hex);
+      return {
+        hex,
+        name: player?.name ?? 'Spēlētājs',
+        activeCharacterId: player?.activeCharacterId ?? '',
+        online: player?.online ?? false,
+        currentHealth: player?.currentHealth ?? 0,
+        isLeader: hex === myPartyLeaderHex,
+        isSelf: hex === myIdentityHex,
+      };
+    });
 
   // The tapped target for the slide-out sheet, re-derived from the live player rows.
   const sheetTarget = sheetTargetHex
@@ -325,19 +340,46 @@ export default function App() {
   // ready-to-render Latvian message). kind is DISPLAY only: 'request' = the joiner
   // asked to join MY party (name = joiner); 'invite' = a leader invited ME (name =
   // that party's leader). Shared by the toast AND the Settings missed list.
+  // Classify each pending row into a resolution FLOW from my current party state.
+  // The flow drives both the toast copy and which action buttons render (onClick is
+  // attached at render time, where the reducer callbacks are in scope).
+  type InviteFlow = 'accept' | 'merge' | 'poach_forward' | 'forward' | 'promote';
   const invitesWithNames = myPendingInvites.map(invite => {
-    const isRequest = invite.kind === 'request';
-    const otherHex = isRequest
-      ? invite.joinerIdentity.toHexString()
-      : parties.find(party => party.id === invite.partyId)?.leaderIdentity.toHexString() ?? null;
+    const kind = invite.kind as 'invite' | 'request' | 'promote';
+    const partyLeaderHex = parties
+      .find(party => party.id === invite.partyId)
+      ?.leaderIdentity.toHexString();
+    // For invites the "other" is the inviting party's leader; for request/promote
+    // it's the joiner (the one asking).
+    const otherHex =
+      kind === 'invite' ? partyLeaderHex ?? null : invite.joinerIdentity.toHexString();
     const name =
       players.find(player => player.identity.toHexString() === otherHex)?.name ?? 'Spēlētājs';
-    const kind: 'invite' | 'request' = isRequest ? 'request' : 'invite';
+
+    let flow: InviteFlow;
+    if (kind === 'promote') {
+      flow = 'promote';
+    } else if (kind === 'request') {
+      // I can accept only if I lead that party; otherwise I relay it to the leader.
+      flow = partyLeaderHex === myIdentityHex ? 'accept' : 'forward';
+    } else {
+      // An invite into another party — resolve by my own standing.
+      flow = !isInParty ? 'accept' : iAmLeader ? 'merge' : 'poach_forward';
+    }
+
     const message =
-      kind === 'request'
-        ? `${name} lūdz pievienoties tavam baram`
-        : `${name} aicina tevi savā barā`;
-    return { id: invite.id, kind, name, message };
+      flow === 'merge'
+        ? `${name} aicina apvienot barus`
+        : flow === 'poach_forward'
+          ? `${name} aicina savā barā — pievienoties vai nodot vadonim?`
+          : flow === 'forward'
+            ? `${name} lūdz pievienoties — nodot vadonim?`
+            : flow === 'promote'
+              ? `${name} lūdz iecelt par vadoni`
+              : kind === 'request'
+                ? `${name} lūdz pievienoties tavam baram`
+                : `${name} aicina tevi savā barā`;
+    return { id: invite.id, kind, name, message, flow };
   });
 
   // Live toasts = pending invites not yet toast-dismissed. The Settings missed list
@@ -418,11 +460,38 @@ export default function App() {
     },
     [connection]
   );
-  const kickMember = useCallback(
-    (targetIdentity: Player['identity']) => {
-      connection?.reducers.kickMember({ targetIdentity });
+  const forwardRequest = useCallback(
+    (inviteId: bigint) => {
+      connection?.reducers.forwardRequest({ inviteId });
     },
     [connection]
+  );
+  const acceptMerge = useCallback(
+    (inviteId: bigint) => connection?.reducers.acceptMerge({ inviteId }),
+    [connection]
+  );
+  const acceptPoach = useCallback(
+    (inviteId: bigint) => connection?.reducers.acceptPoach({ inviteId }),
+    [connection]
+  );
+  const forwardInviteToLeader = useCallback(
+    (inviteId: bigint) => connection?.reducers.forwardInviteToLeader({ inviteId }),
+    [connection]
+  );
+  const acceptPromotion = useCallback(
+    (inviteId: bigint) => connection?.reducers.acceptPromotion({ inviteId }),
+    [connection]
+  );
+  const requestPromotion = useCallback(
+    () => connection?.reducers.requestPromotion({}),
+    [connection]
+  );
+  const kickMemberByHex = useCallback(
+    (hex: string) => {
+      const target = players.find(player => player.identity.toHexString() === hex);
+      if (target) connection?.reducers.kickMember({ targetIdentity: target.identity });
+    },
+    [connection, players]
   );
   const disbandPlayerParty = useCallback(() => {
     connection?.reducers.disbandParty({});
@@ -430,6 +499,38 @@ export default function App() {
   const leavePlayerParty = useCallback(() => {
     connection?.reducers.leaveParty({});
   }, [connection]);
+  const promoteLeaderByHex = useCallback(
+    (hex: string) => {
+      const target = players.find(player => player.identity.toHexString() === hex);
+      if (target) connection?.reducers.promoteLeader({ targetIdentity: target.identity });
+    },
+    [connection, players]
+  );
+
+  // Map an invite's resolution flow to the toast's positive action button(s). Each
+  // fires its reducer then dismisses the toast; decline is added by PartyToast.
+  const toastActionsFor = (flow: InviteFlow, id: bigint) => {
+    const act = (fn: (inviteId: bigint) => unknown) => () => {
+      fn(id);
+      dismissToast(id);
+    };
+    switch (flow) {
+      case 'merge':
+        return [{ key: 'merge', icon: '⚑', label: 'Apvienot barus', onClick: act(acceptMerge) }];
+      case 'poach_forward':
+        return [
+          { key: 'poach', icon: '⇄', label: 'Pievienoties (pamest pašreizējo baru)', onClick: act(acceptPoach) },
+          { key: 'fwd', icon: '⤴', label: 'Nodot savam vadonim', onClick: act(forwardInviteToLeader) },
+        ];
+      case 'forward':
+        return [{ key: 'fwd', icon: '⤴', label: 'Nodot vadonim', onClick: act(forwardRequest) }];
+      case 'promote':
+        return [{ key: 'promo', icon: '♛', label: 'Iecelt par vadoni', onClick: act(acceptPromotion) }];
+      case 'accept':
+      default:
+        return [{ key: 'accept', icon: '✓', label: 'Pieņemt', onClick: act(acceptInvite) }];
+    }
+  };
 
   const handleRegister = useCallback(
     async (username: string, email: string, password: string) => {
@@ -683,13 +784,10 @@ export default function App() {
             // animation replays per toast (clone of the shard-toast remount trick).
             <PartyToast
               key={invite.id.toString()}
-              kind={invite.kind}
               inviterName={invite.name}
+              message={invite.message}
               inviteId={invite.id}
-              onAccept={id => {
-                acceptInvite(id);
-                dismissToast(id);
-              }}
+              actions={toastActionsFor(invite.flow, invite.id)}
               onDecline={id => {
                 declineInvite(id);
                 dismissToast(id);
@@ -801,40 +899,43 @@ export default function App() {
           handleLogout();
         }}
       />
-      {sheetTarget && (
-        <PlayerSheet
-          name={sheetTarget.name}
-          activeCharacterId={sheetTarget.activeCharacterId}
-          currentHealth={sheetTarget.currentHealth}
-          online={sheetTarget.online}
-          sharesParty={sharesPartyWithTarget}
-          isSelf={sheetTargetHex === myIdentityHex}
-          isLeader={isInParty && myPartyLeaderHex === myIdentityHex}
-          canKick={
-            sharesPartyWithTarget &&
-            myPartyLeaderHex === myIdentityHex &&
-            sheetTargetHex !== myIdentityHex
-          }
-          partyFull={isPartyFull}
-          leaveConfirmBody={leaveConfirmBody}
-          onKick={() => {
-            kickMember(sheetTarget.identity);
+      {sheetTarget && sharesPartyWithTarget && (
+        // Tapping anyone in my party (incl. myself) opens the one-page management
+        // sheet — roster + per-member promote + leave/disband, no page switching.
+        <PartySheet
+          members={partyMemberViews}
+          iAmLeader={iAmLeader}
+          onPromote={promoteLeaderByHex}
+          onKick={kickMemberByHex}
+          onLeave={() => {
+            leavePlayerParty();
             setSheetTargetHex(null);
           }}
           onDisband={() => {
             disbandPlayerParty();
             setSheetTargetHex(null);
           }}
+          onRequestPromotion={() => {
+            requestPromotion();
+            setSheetTargetHex(null);
+          }}
+          onClose={() => setSheetTargetHex(null)}
+        />
+      )}
+      {sheetTarget && !sharesPartyWithTarget && (
+        <PlayerSheet
+          name={sheetTarget.name}
+          activeCharacterId={sheetTarget.activeCharacterId}
+          currentHealth={sheetTarget.currentHealth}
+          online={sheetTarget.online}
+          amInParty={isInParty}
+          partyFull={isPartyFull}
           onInvite={() => {
             invitePlayer(sheetTarget.identity);
             setSheetTargetHex(null);
           }}
           onRequestJoin={() => {
             requestJoin(sheetTarget.identity);
-            setSheetTargetHex(null);
-          }}
-          onLeave={() => {
-            leavePlayerParty();
             setSheetTargetHex(null);
           }}
           onClose={() => setSheetTargetHex(null)}

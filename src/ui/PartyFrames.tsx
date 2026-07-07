@@ -1,5 +1,6 @@
 import { CHARACTERS } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
+import { hpFillColor } from './hp';
 import type { Player, PartyMember } from '../module_bindings/types';
 
 interface PartyFramesProps {
@@ -18,9 +19,9 @@ interface PartyFramesProps {
 // Persistent left-side party panel, anchored above the mobile controller. One
 // borderless Frost-light row per member — a character icon (initial in element
 // color), the name, and a slim health bar with numeric cur/max — styled like the
-// character switcher, no card chrome. Tapping a row opens the PlayerSheet
-// (details + leader kick). Hidden entirely when the viewer is solo. All data
-// reads from already-subscribed rows; max health comes from client CHARACTERS.
+// character switcher, no card chrome. Tapping a teammate row opens their sheet
+// (details + "Pamest baru" leave + leader kick/disband). Hidden entirely when the
+// viewer is solo. All data reads from already-subscribed rows; max health from CHARACTERS.
 export function PartyFrames({ myRoster, leaderHex, players, myHex, onSelect }: PartyFramesProps) {
   // Show teammates only — the viewer's own health lives in the main HUD.
   const others = myRoster.filter(m => m.identity.toHexString() !== myHex);
@@ -75,15 +76,7 @@ export function PartyFrames({ myRoster, leaderHex, players, myHex, onSelect }: P
               <span className="party-frames__hp-track">
                 <span
                   className="party-frames__hp-fill"
-                  style={{
-                    width: `${pct}%`,
-                    background:
-                      pct > 50
-                        ? 'var(--hp-ok, #4ade80)'
-                        : pct > 20
-                          ? 'var(--hp-warn, #facc15)'
-                          : 'var(--hp-low, #ef4444)',
-                  }}
+                  style={{ width: `${pct}%`, background: hpFillColor(pct) }}
                 />
               </span>
             </span>
