@@ -3,6 +3,18 @@ import type { WeaponId } from './weapons';
 
 export type SkillKind = 'projectile' | 'nova' | 'dash' | 'ring' | 'volley';
 
+// Intrinsic combat role (mirrored in server CHARACTER_STATS; enforced in Phase 6).
+export type Role = 'tank' | 'dps' | 'healer' | 'support';
+
+// Single source of role → display metadata (label/color-token/aria) for both
+// HUD surfaces (CharacterScreen + CharacterSheet). Do NOT hard-code per character.
+export const ROLE_META: Record<Role, { label: string; token: string; aria: string }> = {
+  tank: { label: 'SARGS', token: '--role-tank', aria: 'Sargs' },
+  dps: { label: 'UZBRUCĒJS', token: '--role-dps', aria: 'Uzbrucējs' },
+  healer: { label: 'DZIEDNIEKS', token: '--role-healer', aria: 'Dziednieks' },
+  support: { label: 'ATBALSTS', token: '--role-support', aria: 'Atbalsts' },
+};
+
 // Incoming-damage channels a character can resist. Mirrors DamageType in
 // spacetimedb/src/resistances.ts. A multiplier < 1 means damage is reduced
 // (0.7 = takes 70%, i.e. 30% resisted); an omitted channel is normal (1.0).
@@ -33,6 +45,8 @@ export interface CharacterDefinition {
   maxHealth: number;
   /** Passive health regenerated per second (0 = no regen). */
   healthRegen: number;
+  /** Intrinsic combat role (mirrored in server CHARACTER_STATS). */
+  role: Role;
   hairColor: number;
   /** Incoming-damage resistances (multipliers). Absent = no resistances. */
   resistances?: ResistanceProfile;
@@ -60,7 +74,7 @@ function skill(
   };
 }
 
-// Keep ids/stars/maxHealth/healthRegen in sync with CHARACTER_STATS in spacetimedb/src/index.ts.
+// Keep ids/stars/maxHealth/healthRegen/role in sync with CHARACTER_STATS in spacetimedb/src/index.ts.
 export const CHARACTERS: Record<string, CharacterDefinition> = {
   aeris: {
     id: 'aeris',
@@ -72,6 +86,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 7.5,
     maxHealth: 950,
     healthRegen: 0,
+    role: 'support',
     hairColor: 0xd8f5e8,
     skill: skill('wind-spiral', 'Vēja spirāle', 'dash', 140, 6, { radius: 2.5 }),
   },
@@ -85,6 +100,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 6,
     maxHealth: 1400,
     healthRegen: 0,
+    role: 'tank',
     hairColor: 0x6b4a2f,
     skill: skill('earthquake', 'Zemestrīce', 'nova', 220, 10, { radius: 5 }),
   },
@@ -98,6 +114,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 6.8,
     maxHealth: 1000,
     healthRegen: 0,
+    role: 'dps',
     hairColor: 0x7a4fd8,
     skill: skill('lightning-lances', 'Zibens šķēpi', 'volley', 90, 8, {
       projectileCount: 5,
@@ -115,6 +132,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 7,
     maxHealth: 1050,
     healthRegen: 8,
+    role: 'dps',
     hairColor: 0x3f7d2c,
     skill: skill('life-arrow', 'Dzīvības bulta', 'projectile', 180, 7, {
       projectileSpeed: 26,
@@ -131,6 +149,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 6.8,
     maxHealth: 1150,
     healthRegen: 12,
+    role: 'healer',
     hairColor: 0x2c5f9e,
     skill: skill('water-ring', 'Ūdens aplis', 'ring', 45, 12, { radius: 4, durationSeconds: 4 }),
   },
@@ -144,6 +163,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 6.2,
     maxHealth: 1300,
     healthRegen: 0,
+    role: 'tank',
     hairColor: 0xb32a10,
     skill: skill('firestorm', 'Uguns vētra', 'nova', 200, 9, { radius: 4.5 }),
   },
@@ -157,6 +177,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 7.2,
     maxHealth: 1000,
     healthRegen: 0,
+    role: 'dps',
     hairColor: 0xe8f6ff,
     skill: skill('ice-needles', 'Ledus adatas', 'volley', 70, 6, {
       projectileCount: 3,
@@ -174,6 +195,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 7.2,
     maxHealth: 1120,
     healthRegen: 14,
+    role: 'healer',
     hairColor: 0x2fb6d8,
     // Water cushions her: enemy blows land at 70% (30% resisted).
     resistances: { contact: 0.7 },
@@ -192,6 +214,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 7.6,
     maxHealth: 1080,
     healthRegen: 0,
+    role: 'dps',
     hairColor: 0x9d5cff,
     // Blink-fast: hard to pin (ranged 50%) and slips most blows (contact 85%).
     resistances: { ranged: 0.5, contact: 0.85 },
@@ -207,6 +230,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 5.8,
     maxHealth: 1550,
     healthRegen: 0,
+    role: 'tank',
     hairColor: 0xbfeaff,
     // A walking glacier: heavy ice armor cuts melee blows to 55% (45% resisted).
     resistances: { contact: 0.55 },
@@ -222,6 +246,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 7.2,
     maxHealth: 900,
     healthRegen: 0,
+    role: 'support',
     hairColor: 0x8fd8c0,
     skill: skill('vortex-orb', 'Virpuļsfēra', 'projectile', 110, 5, {
       projectileSpeed: 14,
@@ -238,6 +263,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 6.4,
     maxHealth: 1200,
     healthRegen: 0,
+    role: 'tank',
     hairColor: 0x9c7b52,
     skill: skill('stone-strike', 'Akmens trieciens', 'dash', 130, 7, { radius: 2.2 }),
   },
@@ -251,6 +277,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 7,
     maxHealth: 1000,
     healthRegen: 0,
+    role: 'dps',
     hairColor: 0x4a3a6e,
     skill: skill('static-field', 'Statiskais lauks', 'nova', 120, 6, { radius: 3.5 }),
   },
@@ -264,6 +291,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 6.6,
     maxHealth: 950,
     healthRegen: 15,
+    role: 'healer',
     hairColor: 0x86b04a,
     skill: skill('spore-cloud', 'Sporu mākonis', 'ring', 35, 10, {
       radius: 3.5,
@@ -280,6 +308,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 7,
     maxHealth: 1000,
     healthRegen: 10,
+    role: 'healer',
     hairColor: 0x74b6e8,
     skill: skill('water-drop', 'Ūdens lāse', 'projectile', 140, 5, {
       projectileSpeed: 22,
@@ -296,6 +325,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 7,
     maxHealth: 1000,
     healthRegen: 0,
+    role: 'dps',
     hairColor: 0xe07a30,
     skill: skill('flame-lunge', 'Liesmu izklupiens', 'dash', 150, 6, { radius: 2.4 }),
   },
@@ -309,6 +339,7 @@ export const CHARACTERS: Record<string, CharacterDefinition> = {
     moveSpeed: 7,
     maxHealth: 950,
     healthRegen: 0,
+    role: 'dps',
     hairColor: 0xcfe8f0,
     skill: skill('frost-shot', 'Sala šāviens', 'projectile', 150, 6, {
       projectileSpeed: 24,

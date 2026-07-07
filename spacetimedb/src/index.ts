@@ -33,33 +33,34 @@ interface CharacterStat {
   stars: 4 | 5;
   maxHealth: number;
   healthRegen: number;
+  role: 'tank' | 'dps' | 'healer' | 'support';
   healType: HealType;
   healMode: HealMode;
   healPower: number;
 }
 const NO_HEAL = { healType: 'none' as HealType, healMode: 'flat' as HealMode, healPower: 0 };
 const CHARACTER_STATS: Record<string, CharacterStat> = {
-  aeris: { stars: 5, maxHealth: 950, healthRegen: 0, ...NO_HEAL },
-  terron: { stars: 5, maxHealth: 1400, healthRegen: 0, ...NO_HEAL },
-  volta: { stars: 5, maxHealth: 1000, healthRegen: 0, ...NO_HEAL },
-  silva: { stars: 5, maxHealth: 1050, healthRegen: 8, ...NO_HEAL },
+  aeris: { stars: 5, maxHealth: 950, healthRegen: 0, role: 'support', ...NO_HEAL },
+  terron: { stars: 5, maxHealth: 1400, healthRegen: 0, role: 'tank', ...NO_HEAL },
+  volta: { stars: 5, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
+  silva: { stars: 5, maxHealth: 1050, healthRegen: 8, role: 'dps', ...NO_HEAL },
   // Marina: active healer — her water ring heals the whole party for 20% of each pool.
-  marina: { stars: 5, maxHealth: 1150, healthRegen: 12, healType: 'active', healMode: 'percent', healPower: 0.2 },
-  ignis: { stars: 5, maxHealth: 1300, healthRegen: 0, ...NO_HEAL },
-  sarma: { stars: 5, maxHealth: 1000, healthRegen: 0, ...NO_HEAL },
+  marina: { stars: 5, maxHealth: 1150, healthRegen: 12, role: 'healer', healType: 'active', healMode: 'percent', healPower: 0.2 },
+  ignis: { stars: 5, maxHealth: 1300, healthRegen: 0, role: 'tank', ...NO_HEAL },
+  sarma: { stars: 5, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
   // Nereīda: active healer — her tide arrows mend the party for 20% of each pool.
-  nereida: { stars: 5, maxHealth: 1120, healthRegen: 14, healType: 'active', healMode: 'percent', healPower: 0.2 },
-  vesper: { stars: 5, maxHealth: 1080, healthRegen: 0, ...NO_HEAL },
-  glacia: { stars: 5, maxHealth: 1550, healthRegen: 0, ...NO_HEAL },
-  zefs: { stars: 4, maxHealth: 900, healthRegen: 0, ...NO_HEAL },
-  petra: { stars: 4, maxHealth: 1200, healthRegen: 0, ...NO_HEAL },
-  zibo: { stars: 4, maxHealth: 1000, healthRegen: 0, ...NO_HEAL },
+  nereida: { stars: 5, maxHealth: 1120, healthRegen: 14, role: 'healer', healType: 'active', healMode: 'percent', healPower: 0.2 },
+  vesper: { stars: 5, maxHealth: 1080, healthRegen: 0, role: 'dps', ...NO_HEAL },
+  glacia: { stars: 5, maxHealth: 1550, healthRegen: 0, role: 'tank', ...NO_HEAL },
+  zefs: { stars: 4, maxHealth: 900, healthRegen: 0, role: 'support', ...NO_HEAL },
+  petra: { stars: 4, maxHealth: 1200, healthRegen: 0, role: 'tank', ...NO_HEAL },
+  zibo: { stars: 4, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
   // Lapa (dendro): active healer — spore burst heal scales with the combo count.
-  lapa: { stars: 4, maxHealth: 950, healthRegen: 15, healType: 'active', healMode: 'combo', healPower: 6 },
+  lapa: { stars: 4, maxHealth: 950, healthRegen: 15, role: 'healer', healType: 'active', healMode: 'combo', healPower: 6 },
   // Rasa (hydro): passive healer — water aura heals the party 10 HP/sec while on field.
-  rasa: { stars: 4, maxHealth: 1000, healthRegen: 10, healType: 'passive', healMode: 'flat', healPower: 10 },
-  dzirkste: { stars: 4, maxHealth: 1000, healthRegen: 0, ...NO_HEAL },
-  stindzis: { stars: 4, maxHealth: 950, healthRegen: 0, ...NO_HEAL },
+  rasa: { stars: 4, maxHealth: 1000, healthRegen: 10, role: 'healer', healType: 'passive', healMode: 'flat', healPower: 10 },
+  dzirkste: { stars: 4, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
+  stindzis: { stars: 4, maxHealth: 950, healthRegen: 0, role: 'dps', ...NO_HEAL },
 };
 const MAX_COMBO_FOR_HEAL = 50;
 const CHARACTER_POOL = Object.entries(CHARACTER_STATS).map(([characterId, s]) => ({
@@ -147,7 +148,7 @@ const REGEN_INTERVAL_MICROS = 1_000_000n;
 const MAX_HIT_DAMAGE = 400;
 
 function statsFor(characterId: string) {
-  return CHARACTER_STATS[characterId] ?? { stars: 4 as const, maxHealth: DEFAULT_MAX_HEALTH, healthRegen: 0, ...NO_HEAL };
+  return CHARACTER_STATS[characterId] ?? { stars: 4 as const, maxHealth: DEFAULT_MAX_HEALTH, healthRegen: 0, role: 'dps' as const, ...NO_HEAL };
 }
 
 // 5★ probability of a pull, given how many pulls have happened since the last
