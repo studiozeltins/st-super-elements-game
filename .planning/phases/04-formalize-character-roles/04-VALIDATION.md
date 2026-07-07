@@ -1,9 +1,9 @@
 ---
 phase: 4
 slug: formalize-character-roles
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-07
 ---
 
@@ -38,11 +38,15 @@ created: 2026-07-07
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 4-01-01 | 01 | 1 | REQ-combat-roles | — | N/A (read-only role data) | unit | `pnpm test` | ✅ | ⬜ pending |
+| 4-01-01 | 01 | 1 | REQ-combat-roles | — | N/A (compile-time union data) | build | `pnpm build` | ✅ | ⬜ pending |
+| 4-01-02 | 01 | 1 | REQ-combat-roles | — | N/A (parity assertion, no input) | unit | `pnpm test` | ✅ | ⬜ pending |
+| 4-01-03 | 01 | 1 | REQ-combat-roles | — | N/A (additive local publish) | manual | `spacetime publish … --server local` | ✅ | ⬜ pending |
+| 4-02-01 | 02 | 2 | REQ-combat-roles | — | N/A (static CSS tokens) | build | `pnpm build` | ✅ | ⬜ pending |
+| 4-02-02 | 02 | 2 | REQ-combat-roles | — | N/A (read-only display span) | build | `pnpm build` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
-*The planner owns the authoritative per-task map. Row above is a seed; planner expands it against the final task breakdown (role enum, per-character seeding, CHARACTER_STATS mirror, serverSync coverage, badge render).*
+*Sampling continuity: no window of 3 consecutive tasks lacks an automated gate — 4-01-03 (manual publish) sits between test-covered 4-01-02 and build-covered 4-02-01. Badge visual placement is the sole manual verify (see below).*
 
 ---
 
@@ -64,11 +68,11 @@ created: 2026-07-07
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (none — existing infra covers all)
+- [x] No watch-mode flags
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-07-07

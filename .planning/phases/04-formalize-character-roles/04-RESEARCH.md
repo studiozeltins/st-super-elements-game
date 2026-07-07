@@ -452,20 +452,22 @@ planner's discretion.)
 All other claims are `[VERIFIED]` against the codebase or `[CITED]` from REQUIREMENTS.md /
 04-UI-SPEC.md / CLAUDE.md.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **`aria-label` Title-case source**
+1. **`aria-label` Title-case source** — RESOLVED
    - What we know: UI-SPEC wants uppercase visible label (`SARGS`) + Title-case aria (`Loma: Sargs`).
    - What's unclear: whether to store both forms in `ROLE_META` or derive Title-case at render.
    - Recommendation: add an `aria` field to `ROLE_META` (e.g. `aria: 'Sargs'`) — one map, no
      runtime string munging. Planner's discretion.
+   - **RESOLVED:** Plan 04-01 adds an `aria` field to `ROLE_META` (shape `{ label; token; aria }`).
 
-2. **Deploy targets for the additive publish**
+2. **Deploy targets for the additive publish** — RESOLVED
    - What we know: local publish is safe and expected; maincloud is a paused DB (Phase 02).
    - What's unclear: whether this phase publishes to maincloud now or defers to Phase 7's full
      migrate pass.
    - Recommendation: publish local this phase; defer maincloud to the Phase 7 deploy per the
      established pattern. Confirm during planning.
+   - **RESOLVED:** Plan 04-01 Task 3 publishes local only; maincloud deferred to Phase 7 per Phase 02 paused-DB precedent.
 
 ## Environment Availability
 
