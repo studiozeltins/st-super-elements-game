@@ -2859,6 +2859,16 @@ button {
   gap: 4px;
   padding: 12px 6px;
   border-right: 1px solid var(--line);
+  /* Tabs can outnumber the vertical space on short/mobile screens — scroll the rail
+     (native touch drag) instead of clipping. min-height:0 lets the flex child shrink. */
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.cscreen__rail::-webkit-scrollbar {
+  display: none;
 }
 
 /* Main menu rail: pinned to the screen edge — left padding clears the iPhone
