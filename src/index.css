@@ -2861,8 +2861,8 @@ button {
 }
 
 .roster-chip__name {
-  font-size: 11px;
-  letter-spacing: 0.03em;
+  /* Character names always use the display font (matches cident/csheet names). */
+  font: 700 11px var(--font-display);
   white-space: nowrap;
 }
 
@@ -4244,8 +4244,8 @@ button {
 }
 
 .team-chip__name {
-  font-size: 11px;
-  letter-spacing: 0.03em;
+  /* Character names always use the display font (matches cident/csheet names). */
+  font: 700 11px var(--font-display);
   white-space: nowrap;
 }
 
@@ -5189,7 +5189,8 @@ button {
 .csheet__section,
 .ctab__section,
 .csheet__title,
-.roster-chip__name {
+.roster-chip__name,
+.team-chip__name {
   font-size: calc(11px * var(--ui-scale));
 }
 .ctab__soon,
@@ -5214,8 +5215,7 @@ button {
   font-size: calc(13px * var(--ui-scale));
 }
 .cident__name,
-.inv-card__name,
-.team-chip__name {
+.inv-card__name {
   font-size: calc(14px * var(--ui-scale));
 }
 .gacha__title,
