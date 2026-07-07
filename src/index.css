@@ -4356,13 +4356,13 @@ button {
   border-left: 1px solid var(--line);
   border-radius: 12px 0 0 12px;
   background: var(--panel);
-  animation: player-sheet-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: player-sheet-in 0.18s ease-out both;
 }
 
 @keyframes player-sheet-in {
   from {
     opacity: 0;
-    transform: translateX(100%);
+    transform: translateX(28px);
   }
 }
 
