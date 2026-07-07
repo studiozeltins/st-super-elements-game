@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 03
-current_phase_name: Shards at risk
+current_phase: 4
+current_phase_name: Formalize character roles
 status: executing
 stopped_at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
-last_updated: "2026-07-07T08:45:49.191Z"
+last_updated: "2026-07-07T08:53:34.680Z"
 last_activity: 2026-07-07
-last_activity_desc: Phase 03 plan 01 complete (applyDeathShardPenalty helper + spec)
+last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 15
-  completed_plans: 14
-  percent: 38
+  completed_plans: 15
+  percent: 50
 ---
 
 # Project State
@@ -30,10 +30,10 @@ floor).
 
 ## Current Position
 
-Phase: 03 — Shards at risk
-Plan: 5 of 5 complete; plan 02 next
+Phase: 4 — Formalize character roles
+Plan: Not started
 Status: Ready to execute
-Last activity: 2026-07-07 — Phase 03 plan 01 complete (applyDeathShardPenalty helper + spec)
+Last activity: 2026-07-07 — Phase 03 complete, transitioned to Phase 4
 
 Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 
@@ -41,7 +41,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 
 **Velocity:**
 
-- Total plans completed: 9 (Phase A shipped outside GSD tracking, commit `8236de4`)
+- Total plans completed: 14 (Phase A shipped outside GSD tracking, commit `8236de4`)
 - Average duration: —
 - Total execution time: —
 
@@ -52,6 +52,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 | A | shipped | — | — |
 | 01 | 4 | - | - |
 | 02 | 5 | - | - |
+| 03 | 5 | - | - |
 
 **Recent Trend:**
 

@@ -243,7 +243,7 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | 0. Lock transcendence constants | 1/1 | Complete   | 2026-07-06 |
 | 1. Constellation shard currency | 4/4 | Complete    | 2026-07-06 |
 | 2. Transcendence install | 5/5 | Complete    | 2026-07-06 |
-| 3. Shards at risk | 5/5 | Complete   | 2026-07-07 |
+| 3. Shards at risk | 5/5 | Complete    | 2026-07-07 |
 | 4. Formalize character roles | 0/TBD | Not started | - |
 | 5. Multiplayer party | 0/TBD | Not started | - |
 | 6. Raid boss | 0/TBD | Not started | - |
