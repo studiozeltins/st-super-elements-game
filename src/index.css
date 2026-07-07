@@ -1058,7 +1058,9 @@ button {
 .gacha {
   position: absolute;
   inset: 0;
-  z-index: 10;
+  /* Fullscreen Wish screen must cover HUD elements incl. .party-frames (z 40);
+     stays under the modal/dialog layer (60+). */
+  z-index: 50;
   display: flex;
   flex-direction: column;
   background:
@@ -2694,7 +2696,8 @@ button {
 .cscreen {
   position: absolute;
   inset: 0;
-  z-index: 16;
+  /* Fullscreen screen layer — covers HUD incl. .party-frames (z 40), under modals (60+). */
+  z-index: 50;
   display: flex;
   flex-direction: column;
   background:
