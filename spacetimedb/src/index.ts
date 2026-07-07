@@ -605,6 +605,47 @@ const accountLink = table(
   }
 );
 
+// ---- Multiplayer party (raid squad) -----------------------------------------
+// Server-authoritative grouping (D-01..D-08). Invite-only entry: a party_member
+// row is ONLY ever inserted from a matching pending party_invite the recipient
+// accepts — there is deliberately NO joinParty(rawId) reducer.
+const party = table(
+  { name: 'party', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    leaderIdentity: t.identity(),
+    createdAt: t.timestamp(),
+  }
+);
+
+// One membership row per player. identity is UNIQUE — the atomic one-party-per-
+// player backstop (D-06): concurrent accepts can't double-insert the same player.
+const partyMember = table(
+  { name: 'party_member', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    partyId: t.u64().index('btree'),
+    identity: t.identity().unique(),
+    joinedAt: t.timestamp(),
+  }
+);
+
+// A pending join negotiation. joinerIdentity = who gets ADDED on accept
+// (invite→target, request→me); recipientIdentity = who must ACCEPT (always the
+// target). kind ∈ {'invite','request'} is DISPLAY COPY ONLY — accept/decline authz
+// must never branch on it, keeping the recipient guard symmetric across both paths.
+const partyInvite = table(
+  { name: 'party_invite', public: true },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    partyId: t.u64().index('btree'),
+    joinerIdentity: t.identity().index('btree'),
+    recipientIdentity: t.identity().index('btree'),
+    kind: t.string(),
+    createdAt: t.timestamp(),
+  }
+);
+
 const spacetimedb = schema({
   account,
   accountLink,
@@ -624,6 +665,9 @@ const spacetimedb = schema({
   healEvent,
   regenTimer,
   worldTimer,
+  party,
+  partyMember,
+  partyInvite,
 });
 export default spacetimedb;
 
