@@ -169,22 +169,31 @@ the raid can later enforce.
 
 ### Phase 5: Multiplayer party
 
-**Goal**: Players can form a party of up to four, join by code, and see a live roster of each
-member's active character and role.
+**Goal**: Players can form a party of up to four by invite / ask-to-join (invite-only, no join
+codes — CONTEXT D-01), and see a live roster of each member's active character and role.
 **Depends on**: Phase 4
 **Requirements**: REQ-multiplayer-party
 **Success Criteria** (what must be TRUE):
 
-  1. A player can create a party, share the join code (= party id), and others can join by
-     code up to `RAID_PARTY_SIZE = 4`.
+  1. A player can invite another player (or ask to join theirs) by tapping them in the
+     online-players list; the recipient accepts, forming a party up to `RAID_PARTY_SIZE = 4`
+     (CONTEXT D-01/D-02/D-03).
 
-  2. Leaving empties membership cleanly and the party auto-disbands when the last member
-     leaves; a disconnect cleans up membership.
+  2. Leaving promotes the oldest-joined member when the leader leaves and disbands (party +
+     pending invites) only when the last member leaves; a disconnect PERSISTS membership and
+     shows the member offline (CONTEXT D-04/D-05).
 
-  3. One identity cannot be in two parties or double-join.
+  3. One identity cannot be in two parties or double-join (enforced at accept time — D-06).
   4. Two clients in a party both see the roster with each member's active character + role.
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+- [ ] 05-01-PLAN.md — Wave 0: RAID_PARTY_SIZE constant + parity + pure partyRules.ts helpers (nextLeader, canAccept) + tests
+- [ ] 05-02-PLAN.md — Server: party/party_member/party_invite tables + 5 reducers (invite/request/accept/decline/leave) with authz, cap, promotion, disband, state-based invalidation
+- [ ] 05-03-PLAN.md — [BLOCKING] Additive migrate-publish to local + regenerate bindings
+- [ ] 05-04-PLAN.md — Client: subscribe + reducer wiring + online-players list + slide-out PlayerSheet + HUD party chip
+- [ ] 05-05-PLAN.md — Client: invite toast (10s) + missed-invites (Settings) + party roster (role/crown/online)
+- [ ] 05-06-PLAN.md — Validation: full suite + build + two-client playtest + PROGRESS.md update
 **UI hint**: yes
 
 ### Phase 6: Raid boss
@@ -249,6 +258,6 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | 2. Transcendence install | 5/5 | Complete    | 2026-07-06 |
 | 3. Shards at risk | 5/5 | Complete    | 2026-07-07 |
 | 4. Formalize character roles | 2/2 | Complete   | 2026-07-07 |
-| 5. Multiplayer party | 0/TBD | Not started | - |
+| 5. Multiplayer party | 0/6 | Planned | - |
 | 6. Raid boss | 0/TBD | Not started | - |
 | 7. Role enforcement + balance | 0/TBD | Not started | - |
