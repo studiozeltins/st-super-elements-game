@@ -65,3 +65,46 @@ export default tseslint.config({
   },
 });
 ```
+
+# Adding a test bot player (local multiplayer testing)
+
+To test the party (Bars) features — invite by tapping a nameplate, roster
+frames, kick, disband — you need a second online player. `scripts/party-bot.py`
+drives a real second browser client with Playwright: it registers (or logs in
+to) an account, comes online as a normal player next to you, and auto-accepts
+any party invite it receives. It joins the **same** SpacetimeDB your own client
+uses (the page resolves `localhost` → the local STDB), so it shows up in your
+world and you can invite it.
+
+**One-time setup:**
+
+```bash
+pip install playwright
+python -m playwright install chromium
+```
+
+**Run it** (dev server up via `pnpm dev`, local SpacetimeDB running):
+
+```bash
+# Default: user "PartyBot", online ~10 min, headless
+python scripts/party-bot.py
+
+# Custom name / longer session / watch the window
+python scripts/party-bot.py --user Bots2 --minutes 15 --headed
+
+# Point at a LAN host instead of localhost
+python scripts/party-bot.py --url http://192.168.1.32:5173
+```
+
+Then in your own client: tap the bot's floating nameplate → **Uzaicināt savā
+barā**. The bot accepts within ~1s and appears in your party frames. Stop the
+bot with Ctrl+C.
+
+Flags: `--url` (app URL, default `http://localhost:5173`), `--user`,
+`--password`, `--email` (register only), `--minutes` (online duration),
+`--headed` (show the browser). Run several bots at once with different
+`--user` values to fill a 4-player Bars.
+
+> Note: registering a bot creates a real `account` row in the **local** DB.
+> These are not in the backup set — only ever run this against `local`, never
+> a DB with real accounts.
