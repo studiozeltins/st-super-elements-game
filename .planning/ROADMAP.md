@@ -187,13 +187,27 @@ codes — CONTEXT D-01), and see a live roster of each member's active character
   4. Two clients in a party both see the roster with each member's active character + role.
 
 **Plans**: 6 plans
+**Wave 1**
 
 - [ ] 05-01-PLAN.md — Wave 0: RAID_PARTY_SIZE constant + parity + pure partyRules.ts helpers (nextLeader, canAccept) + tests
 - [ ] 05-02-PLAN.md — Server: party/party_member/party_invite tables + 5 reducers (invite/request/accept/decline/leave) with authz, cap, promotion, disband, state-based invalidation
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 05-03-PLAN.md — [BLOCKING] Additive migrate-publish to local + regenerate bindings
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 05-04-PLAN.md — Client: subscribe + reducer wiring + online-players list + slide-out PlayerSheet + HUD party chip
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 05-05-PLAN.md — Client: invite toast (10s) + missed-invites (Settings) + party roster (role/crown/online)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 05-06-PLAN.md — Validation: full suite + build + two-client playtest + PROGRESS.md update
+
 **UI hint**: yes
 
 ### Phase 6: Raid boss

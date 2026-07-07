@@ -27,7 +27,7 @@ NO text join codes; disconnect does NOT remove membership).
 - **D-01: Invite-only, NO text join codes.** The only way into a party is by tapping a
   player on screen and using the slide-out sheet. Drop the phase file's "party id as join
   code" entirely.
-- **D-02: Two symmetric actions on the player sheet:**
+- **D-02: Two symmetric actions on the player sheet.**
   - **"Invite to my party"** → target joins *my* party. If I have no party, one is created
     with **me** as leader, then the invite is sent to the target.
   - **"Ask to join their party"** → I join *their* party. If the target has no party, one is

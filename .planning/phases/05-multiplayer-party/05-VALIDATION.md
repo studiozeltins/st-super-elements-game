@@ -1,8 +1,8 @@
 ---
 phase: 05
 slug: multiplayer-party
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-07
 ---
@@ -36,11 +36,17 @@ created: 2026-07-07
 
 ## Per-Task Verification Map
 
-| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 05-01-01 | 01 | 0 | REQ-multiplayer-party | — | pure rule helpers unit-testable | unit | `pnpm vitest run spacetimedb/src/partyRules.test.ts` | ❌ W0 | ⬜ pending |
-| 05-02-01 | 02 | 1 | REQ-multiplayer-party | T-05-01 | accept enforces one-party + cap | unit | `pnpm vitest run spacetimedb/src/partyRules.test.ts` | ❌ W0 | ⬜ pending |
-| 05-03-01 | 03 | 2 | REQ-multiplayer-party | — | roster renders both clients | manual | two-client playtest | — | ⬜ pending |
+*Authoritative per-task `<automated>` verifies live in each PLAN.md; this map summarizes them.*
+*Test placement: `src/game/data/__tests__/partyRules.test.ts` (cross-package import, deathPenalty precedent).*
+
+| Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | Status |
+|------|------|-------------|------------|-----------------|-----------|-------------------|--------|
+| 05-01 | 0 | REQ-multiplayer-party | — | pure rule helpers unit-testable (`nextLeader`, `canAccept`) | unit | `pnpm vitest run src/game/data/__tests__/partyRules.test.ts` | ⬜ pending |
+| 05-02 | 1 | REQ-multiplayer-party | T-05-01..04 | reducers enforce authz + one-party + cap + promotion + invalidation | unit (helpers) + manual (reducers) | `pnpm vitest run` + Plan 06 playtest | ⬜ pending |
+| 05-03 | 2 | REQ-multiplayer-party | — | additive migrate-publish, no wipe; bindings regenerate | auto | `spacetime publish ... ` + `pnpm spacetime:generate` + tsc/grep | ⬜ pending |
+| 05-04 | 3 | REQ-multiplayer-party | T-05-03 | send-side: subscribe + reducer callers + PlayerSheet + HUD chip | build | `pnpm build` | ⬜ pending |
+| 05-05 | 4 | REQ-multiplayer-party | T-05-02 | receive-side: toast (10s) + missed-invites (Settings) + roster | build | `pnpm build` | ⬜ pending |
+| 05-06 | 5 | REQ-multiplayer-party | T-05-01..04 | full suite + build green; two-client roster/invite playtest | manual | `pnpm vitest run` + `pnpm build` + two-client playtest | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -75,4 +81,4 @@ created: 2026-07-07
 - [ ] Feedback latency < 15s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-07-07
