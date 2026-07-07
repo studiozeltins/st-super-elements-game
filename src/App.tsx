@@ -771,6 +771,12 @@ export default function App() {
         onTogglePing={setShowPing}
         hudTheme={hudTheme}
         onHudThemeChange={setHudTheme}
+        missedInvites={invitesWithNames.map(invite => ({
+          id: invite.id,
+          message: invite.message,
+        }))}
+        onAcceptInvite={acceptInvite}
+        onDeclineInvite={declineInvite}
         onLogout={() => {
           setIsSettingsOpen(false);
           handleLogout();

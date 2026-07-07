@@ -4591,3 +4591,36 @@ button {
   font: 400 14px var(--font-body);
   color: var(--muted);
 }
+
+/* Missed-invites list under Settings (NOKAVĒTIE AICINĀJUMI) — a calm fallback for
+   invites whose toast was dismissed/expired. Reuses the .settings__section kicker +
+   the shipped panel row box; no new tokens. */
+.missed-invites {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+  list-style: none;
+}
+.missed-invites__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.missed-invites__msg {
+  font: 400 14px var(--font-body);
+  color: var(--text);
+}
+.missed-invites__actions {
+  display: flex;
+  gap: 8px;
+}
+.missed-invites__empty {
+  margin-bottom: 8px;
+  font: 400 14px var(--font-body);
+  color: var(--muted);
+}
