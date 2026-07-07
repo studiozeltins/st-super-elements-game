@@ -12,7 +12,7 @@ status box and tick the boxes as phases land.
 | 0 | [phase-0-constants.md](./phase-0-constants.md) | ✅ DONE | A | `10f3fa6` |
 | 1 | [phase-1-shards.md](./phase-1-shards.md) | ⬜ TODO | 0 | — |
 | 2 | [phase-2-transcendence.md](./phase-2-transcendence.md) | ⬜ TODO | 1 | — |
-| 3 | [phase-3-shard-risk.md](./phase-3-shard-risk.md) | ⬜ TODO | 2 | — |
+| 3 | [phase-3-shard-risk.md](./phase-3-shard-risk.md) | ✅ DONE | 2 | `93d071b` |
 | 4 | [phase-4-roles.md](./phase-4-roles.md) | ⬜ TODO | 0 | — |
 | 5 | [phase-5-party.md](./phase-5-party.md) | ⬜ TODO | 4 | — |
 | 6 | [phase-6-raid.md](./phase-6-raid.md) | ⬜ TODO | 2, 5 | — |
@@ -35,7 +35,7 @@ Phase A (rename + wipe) first. Then transcendence spine (0→1→2→3) and co-o
 - [x] **0** — lock transcendence constants (no behavior change)
 - [ ] **1** — constellation shard currency + mint on C6-overflow dupe
 - [ ] **2** — transcendence install + power scaling past C6
-- [ ] **3** — shards at risk on death + PVP steal + erosion
+- [x] **3** — shards at risk on death + PVP steal + erosion
 - [ ] **4** — formalize character roles (tank/dps/healer/support)
 - [ ] **5** — multiplayer party
 - [ ] **6** — raid boss (party-gated shard faucet)
