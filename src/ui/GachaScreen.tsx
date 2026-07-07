@@ -48,6 +48,7 @@ interface GachaScreenProps {
   partyCharacterIds: string[];
   constellationById: Record<string, number>;
   activatedById: Record<string, number>;
+  transcendById: Record<string, number>;
   pityByBanner: Record<string, PityInfo>;
   pullResults: PullView[] | null;
   /** Which tab to open on. */
@@ -79,6 +80,7 @@ export function GachaScreen({
   partyCharacterIds,
   constellationById,
   activatedById,
+  transcendById,
   pityByBanner,
   pullResults,
   initialTab = 'banners',
@@ -491,6 +493,7 @@ export function GachaScreen({
             ? activatedById[infoCharacterId] ?? constellationById[infoCharacterId] ?? 0
             : 0
         }
+        transcendLevel={infoCharacterId ? transcendById[infoCharacterId] ?? 0 : 0}
         onOpenFull={characterId => {
           setInfoCharacterId(null);
           onOpenCharacterPage(characterId);

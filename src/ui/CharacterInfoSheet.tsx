@@ -1,8 +1,13 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { CHARACTERS } from '../game/data/characters';
+import { CHARACTERS, healSpecFor } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { WEAPONS } from '../game/data/weapons';
 import { constellationBonuses } from '../game/data/constellations';
+import {
+  MAX_TRANSCEND_LEVEL,
+  TRANSCEND_DAMAGE_STEP,
+  TRANSCEND_HEAL_STEP,
+} from '../game/data/constants';
 import { loreFor } from '../game/data/characterLore';
 import { CharacterPreview } from './CharacterPreview';
 
@@ -17,6 +22,8 @@ interface CharacterInfoSheetProps {
   unlocked?: number;
   /** Currently-active constellation. */
   activated?: number;
+  /** Installed transcend (Būsts) levels past C6. */
+  transcendLevel?: number;
   /** Open the full character page (owned only). Omit to hide that footer action. */
   onOpenFull?(characterId: string): void;
   onClose(): void;
@@ -38,11 +45,16 @@ export function CharacterInfoSheet({
   level = 1,
   unlocked = 0,
   activated = 0,
+  transcendLevel = 0,
   onOpenFull,
   onClose,
 }: CharacterInfoSheetProps) {
   const character = characterId ? CHARACTERS[characterId] : null;
   const open = Boolean(character);
+  // Būsts preview (read-only): damage applies to all, healing only to healers.
+  const isHealer = character ? healSpecFor(character.id).type !== 'none' : false;
+  const transcendDmgPct = Math.round(transcendLevel * TRANSCEND_DAMAGE_STEP * 100);
+  const transcendHealPct = Math.round(transcendLevel * TRANSCEND_HEAL_STEP * 100);
 
   return (
     <Dialog.Root open={open} onOpenChange={next => !next && onClose()}>
@@ -174,7 +186,7 @@ export function CharacterInfoSheet({
                 <span className="csheet__section">STĀSTS</span>
                 <p className="csheet__lore">{loreFor(character.id)}</p>
 
-                {/* Block: constellations (flat list) */}
+                {/* Block: constellations (2-col grid — less vertical space) */}
                 <span className="csheet__section">ZVAIGZNES</span>
                 <ol className="csheet__cons">
                   {constellationBonuses(character).map(bonus => {
@@ -187,6 +199,27 @@ export function CharacterInfoSheet({
                     );
                   })}
                 </ol>
+
+                {/* Block: transcendence (Būsts) — the boost past C6. */}
+                <span className="csheet__section">BŪSTS</span>
+                <div className="csheet__stats">
+                  <div className="csheet__stat">
+                    <span className="csheet__stat-label">LĪMENIS</span>
+                    <span className="csheet__stat-value">
+                      B{transcendLevel}/{MAX_TRANSCEND_LEVEL}
+                    </span>
+                  </div>
+                  <div className="csheet__stat">
+                    <span className="csheet__stat-label">BOJĀJUMS</span>
+                    <span className="csheet__stat-value">+{transcendDmgPct}%</span>
+                  </div>
+                  {isHealer && (
+                    <div className="csheet__stat">
+                      <span className="csheet__stat-label">DZIEDIN.</span>
+                      <span className="csheet__stat-value">+{transcendHealPct}%</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Sticky footer: always closes; owned characters can jump to the

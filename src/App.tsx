@@ -844,6 +844,7 @@ export default function App() {
           partyCharacterIds={partyCharacterIds}
           constellationById={constellationById}
           activatedById={activatedById}
+          transcendById={transcendById}
           pityByBanner={pityByBanner}
           pullResults={pullResults}
           initialTab={gachaTab}
