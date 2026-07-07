@@ -329,14 +329,12 @@ export function CharacterScreen({
               />
             </button>
             <div className="cchar__id">
+              {/* No card ring here — the big clickable cchar__ring below owns it. */}
               <CharacterIdentity
                 character={character}
                 className="cident--lg"
                 showRole
                 transcendLevel={transcendLevel}
-                showRing
-                unlocked={unlocked}
-                activated={activated}
               />
             </div>
           </section>
