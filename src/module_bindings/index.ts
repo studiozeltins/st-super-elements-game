@@ -34,20 +34,25 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
+import AcceptInviteReducer from "./accept_invite_reducer";
 import AttackEnemiesReducer from "./attack_enemies_reducer";
 import AttackPlayerReducer from "./attack_player_reducer";
 import AttackRayReducer from "./attack_ray_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
 import CollectGemReducer from "./collect_gem_reducer";
 import CollectShardReducer from "./collect_shard_reducer";
+import DeclineInviteReducer from "./decline_invite_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import HealPartyReducer from "./heal_party_reducer";
+import InvitePlayerReducer from "./invite_player_reducer";
+import LeavePartyReducer from "./leave_party_reducer";
 import LoginReducer from "./login_reducer";
 import LogoutReducer from "./logout_reducer";
 import PingReducer from "./ping_reducer";
 import PullBannerReducer from "./pull_banner_reducer";
 import RegisterReducer from "./register_reducer";
+import RequestJoinReducer from "./request_join_reducer";
 import RestoreBannerPityReducer from "./restore_banner_pity_reducer";
 import RestoreOwnedCharactersReducer from "./restore_owned_characters_reducer";
 import RestorePlayersReducer from "./restore_players_reducer";
@@ -71,6 +76,9 @@ import GemDropRow from "./gem_drop_table";
 import GoliathRow from "./goliath_table";
 import HealEventRow from "./heal_event_table";
 import OwnedCharacterRow from "./owned_character_table";
+import PartyRow from "./party_table";
+import PartyInviteRow from "./party_invite_table";
+import PartyMemberRow from "./party_member_table";
 import PlayerRow from "./player_table";
 import PullResultRow from "./pull_result_table";
 import PvpHitRow from "./pvp_hit_table";
@@ -182,6 +190,55 @@ const tablesSchema = __schema({
       { name: 'owned_character_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, OwnedCharacterRow),
+  party: __table({
+    name: 'party',
+    indexes: [
+      { accessor: 'id', name: 'party_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'party_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, PartyRow),
+  partyInvite: __table({
+    name: 'party_invite',
+    indexes: [
+      { accessor: 'id', name: 'party_invite_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'joinerIdentity', name: 'party_invite_joiner_identity_idx_btree', algorithm: 'btree', columns: [
+        'joinerIdentity',
+      ] },
+      { accessor: 'partyId', name: 'party_invite_party_id_idx_btree', algorithm: 'btree', columns: [
+        'partyId',
+      ] },
+      { accessor: 'recipientIdentity', name: 'party_invite_recipient_identity_idx_btree', algorithm: 'btree', columns: [
+        'recipientIdentity',
+      ] },
+    ],
+    constraints: [
+      { name: 'party_invite_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, PartyInviteRow),
+  partyMember: __table({
+    name: 'party_member',
+    indexes: [
+      { accessor: 'id', name: 'party_member_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'identity', name: 'party_member_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+      { accessor: 'partyId', name: 'party_member_party_id_idx_btree', algorithm: 'btree', columns: [
+        'partyId',
+      ] },
+    ],
+    constraints: [
+      { name: 'party_member_id_key', constraint: 'unique', columns: ['id'] },
+      { name: 'party_member_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, PartyMemberRow),
   player: __table({
     name: 'player',
     indexes: [
@@ -254,20 +311,25 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
+  __reducerSchema("accept_invite", AcceptInviteReducer),
   __reducerSchema("attack_enemies", AttackEnemiesReducer),
   __reducerSchema("attack_player", AttackPlayerReducer),
   __reducerSchema("attack_ray", AttackRayReducer),
   __reducerSchema("cast_skill", CastSkillReducer),
   __reducerSchema("collect_gem", CollectGemReducer),
   __reducerSchema("collect_shard", CollectShardReducer),
+  __reducerSchema("decline_invite", DeclineInviteReducer),
   __reducerSchema("fall_to_death", FallToDeathReducer),
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("heal_party", HealPartyReducer),
+  __reducerSchema("invite_player", InvitePlayerReducer),
+  __reducerSchema("leave_party", LeavePartyReducer),
   __reducerSchema("login", LoginReducer),
   __reducerSchema("logout", LogoutReducer),
   __reducerSchema("ping", PingReducer),
   __reducerSchema("pull_banner", PullBannerReducer),
   __reducerSchema("register", RegisterReducer),
+  __reducerSchema("request_join", RequestJoinReducer),
   __reducerSchema("restore_banner_pity", RestoreBannerPityReducer),
   __reducerSchema("restore_owned_characters", RestoreOwnedCharactersReducer),
   __reducerSchema("restore_players", RestorePlayersReducer),

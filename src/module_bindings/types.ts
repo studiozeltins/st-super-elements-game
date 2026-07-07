@@ -122,6 +122,31 @@ export const OwnedCharacter = __t.object("OwnedCharacter", {
 });
 export type OwnedCharacter = __Infer<typeof OwnedCharacter>;
 
+export const Party = __t.object("Party", {
+  id: __t.u64(),
+  leaderIdentity: __t.identity(),
+  createdAt: __t.timestamp(),
+});
+export type Party = __Infer<typeof Party>;
+
+export const PartyInvite = __t.object("PartyInvite", {
+  id: __t.u64(),
+  partyId: __t.u64(),
+  joinerIdentity: __t.identity(),
+  recipientIdentity: __t.identity(),
+  kind: __t.string(),
+  createdAt: __t.timestamp(),
+});
+export type PartyInvite = __Infer<typeof PartyInvite>;
+
+export const PartyMember = __t.object("PartyMember", {
+  id: __t.u64(),
+  partyId: __t.u64(),
+  identity: __t.identity(),
+  joinedAt: __t.timestamp(),
+});
+export type PartyMember = __Infer<typeof PartyMember>;
+
 export const Player = __t.object("Player", {
   identity: __t.identity(),
   name: __t.string(),
