@@ -529,6 +529,8 @@ export default function App() {
       const characterId = partyRef.current[slotIndex];
       if (characterId) selectCharacter(characterId);
     };
+    // Tap/click a remote player's floating nameplate → open their slide-out sheet.
+    game.setOnSelectPlayer(hex => setSheetTargetHex(hex));
     game.start();
     gameRef.current = game;
 

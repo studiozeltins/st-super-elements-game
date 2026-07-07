@@ -137,6 +137,8 @@ export interface Game {
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
+  /** Register a handler fired when a remote player's floating nameplate is clicked/tapped. */
+  setOnSelectPlayer(handler: ((identityHex: string) => void) | null): void;
   setInputEnabled(enabled: boolean): void;
   onPartySlotRequested: ((slotIndex: number) => void) | null;
 }
@@ -264,6 +266,41 @@ export function createGame(
   let swingIndex = 0;
   const skillReadyAtByCharacter = new Map<string, number>();
   const remotePlayers = new Map<string, RemotePlayerView>();
+
+  // --- Nameplate picking: click/tap a remote player's floating name to open the
+  // player sheet (invite / ask-to-join / kick / details). Registered on window
+  // CAPTURE so a nameplate hit runs BEFORE the canvas attack listener and can
+  // suppress the attack via stopPropagation. Clicks on DOM/HUD (target !== canvas)
+  // and misses fall through untouched, so world attacks are unaffected.
+  let onSelectPlayer: ((identityHex: string) => void) | null = null;
+  const pickRaycaster = new THREE.Raycaster();
+  pickRaycaster.layers.enableAll(); // nameplates live on OVERLAY_LAYER
+  const pickNdc = new THREE.Vector2();
+  function handleNameplatePick(event: PointerEvent) {
+    if (!onSelectPlayer || event.target !== canvas || !event.isPrimary) return;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    pickNdc.set(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    pickRaycaster.setFromCamera(pickNdc, pixelRenderer.camera);
+    const sprites: THREE.Sprite[] = [];
+    const bySprite = new Map<THREE.Sprite, string>();
+    for (const [hex, view] of remotePlayers) {
+      sprites.push(view.nameSprite);
+      bySprite.set(view.nameSprite, hex);
+    }
+    if (sprites.length === 0) return;
+    const hit = pickRaycaster.intersectObjects(sprites, false)[0];
+    if (!hit) return;
+    const hex = bySprite.get(hit.object as THREE.Sprite);
+    if (!hex) return;
+    event.stopPropagation();
+    event.preventDefault();
+    onSelectPlayer(hex);
+  }
+  window.addEventListener('pointerdown', handleNameplatePick, true);
   const gemDrops = new Map<
     string,
     {
@@ -896,6 +933,7 @@ export function createGame(
     },
     dispose() {
       cancelAnimationFrame(animationFrameHandle);
+      window.removeEventListener('pointerdown', handleNameplatePick, true);
       inputSystem.dispose();
       effectSystem.dispose();
       damageNumbers.dispose();
@@ -908,6 +946,9 @@ export function createGame(
       boostOrbit.dispose();
       world.dispose();
       pixelRenderer.dispose();
+    },
+    setOnSelectPlayer(handler) {
+      onSelectPlayer = handler;
     },
     setActiveCharacter(characterId) {
       const nextCharacter = CHARACTERS[characterId];
