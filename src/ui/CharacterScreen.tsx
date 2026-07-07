@@ -119,7 +119,6 @@ export function CharacterScreen({
   ];
   const openStatRow = infoStats.find(row => row.key === openStat) ?? null;
   const owned = ownedCharacterIds.has(characterId);
-  const isActive = characterId === activeCharacterId;
   const unlocked = constellationById[characterId] ?? 0; // ceiling earned from pulls
   const activated = activatedById[characterId] ?? unlocked; // stars currently on
   const transcendLevel = transcendById[characterId] ?? 0; // installed levels past C6
@@ -327,7 +326,6 @@ export function CharacterScreen({
             </button>
             <div className="cchar__id">
               <CharacterIdentity character={character} className="cident--lg" />
-              {isActive && <span className="cchar__active-tag">AKTĪVS VARONIS</span>}
               {ROLE_META[character.role] && (
                 <span
                   className="cchar__role-tag"

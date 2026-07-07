@@ -3032,18 +3032,7 @@ button {
   font-size: 30px;
 }
 
-.cchar__active-tag {
-  align-self: flex-start;
-  margin-top: 10px;
-  padding: 5px 10px;
-  font: 700 10px var(--font-display);
-  letter-spacing: 0.12em;
-  color: var(--accent);
-  border: 1px solid currentColor;
-}
-
-/* Transcend status tag — purple (--shard) clone of the green active tag.
-   The two colors read as two facts: green = active character, purple = transcended. */
+/* Transcend status tag — purple (--shard) chip. */
 .cchar__transcend-tag {
   align-self: flex-start;
   margin-top: 10px;
@@ -3054,7 +3043,7 @@ button {
   border: 1px solid currentColor;
 }
 
-/* Role badge — third sibling of .cchar__active-tag / .cchar__transcend-tag.
+/* Role badge — sibling of .cchar__transcend-tag.
    Color set inline per role via var(--role-*); border inherits currentColor. */
 .cchar__role-tag {
   align-self: flex-start;
