@@ -1050,6 +1050,12 @@ export const attackPlayer = spacetimedb.reducer(
     const target = ctx.db.player.identity.find(targetIdentity);
     if (!target) throw new SenderError('Target not found');
     if (target.identity.equals(attacker.identity)) throw new SenderError('Cannot attack yourself');
+    // No friendly fire: party members in the same Bars cannot damage each other.
+    const attackerMember = ctx.db.partyMember.identity.find(attacker.identity);
+    const targetMember = ctx.db.partyMember.identity.find(target.identity);
+    if (attackerMember && targetMember && attackerMember.partyId === targetMember.partyId) {
+      return; // same party → attack passes through harmlessly
+    }
     if (isInsideSafeZone(attacker.positionX, attacker.positionZ)) {
       throw new SenderError('No PVP inside the safe zone');
     }

@@ -282,6 +282,11 @@ export default function App() {
     myPartyId !== null ? partyMembers.filter(member => member.partyId === myPartyId) : [];
   const myPartyCount = myRoster.length;
   const isInParty = myPartyId !== null;
+  // Stable key of my party's identities → pushed to the game so PVP skips allies.
+  const partyAllyKey = myRoster
+    .map(member => member.identity.toHexString())
+    .sort()
+    .join(',');
   const isPartyFull = myPartyCount >= RAID_PARTY_SIZE;
   const myPartyLeaderHex =
     myPartyId !== null
@@ -547,6 +552,10 @@ export default function App() {
   useEffect(() => {
     gameRef.current?.syncShardDrops(shardDropRows);
   }, [shardDropRows]);
+
+  useEffect(() => {
+    gameRef.current?.setPartyAllies(partyAllyKey ? partyAllyKey.split(',') : []);
+  }, [partyAllyKey]);
 
   useEffect(() => {
     gameRef.current?.syncEnemies(enemyRows);

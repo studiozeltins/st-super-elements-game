@@ -139,6 +139,8 @@ export interface Game {
   releaseTouchButton(button: 'attack'): void;
   /** Register a handler fired when a remote player's floating nameplate is clicked/tapped. */
   setOnSelectPlayer(handler: ((identityHex: string) => void) | null): void;
+  /** Set the identity hexes of my party (Bars) so PVP skips friendly fire. */
+  setPartyAllies(identityHexes: readonly string[]): void;
   setInputEnabled(enabled: boolean): void;
   onPartySlotRequested: ((slotIndex: number) => void) | null;
 }
@@ -273,6 +275,8 @@ export function createGame(
   // suppress the attack via stopPropagation. Clicks on DOM/HUD (target !== canvas)
   // and misses fall through untouched, so world attacks are unaffected.
   let onSelectPlayer: ((identityHex: string) => void) | null = null;
+  // Identity hexes of my current party (Bars) — excluded from PVP friendly fire.
+  let partyAllyHexes = new Set<string>();
   const pickRaycaster = new THREE.Raycaster();
   pickRaycaster.layers.enableAll(); // nameplates live on OVERLAY_LAYER
   const pickNdc = new THREE.Vector2();
@@ -412,7 +416,9 @@ export function createGame(
   ): boolean {
     if (isInsideSafeZone(playerPosition.x, playerPosition.z)) return false;
     let hitSomeone = false;
-    for (const remotePlayer of remotePlayers.values()) {
+    for (const [remoteHex, remotePlayer] of remotePlayers) {
+      // No friendly fire: skip players in my own party (Bars).
+      if (partyAllyHexes.has(remoteHex)) continue;
       const remotePosition = remotePlayer.model.group.position;
       if (isInsideSafeZone(remotePosition.x, remotePosition.z)) continue;
       if (elapsedSeconds < remotePlayer.lastPvpHitAt + PVP_HIT_COOLDOWN_SECONDS) continue;
@@ -949,6 +955,9 @@ export function createGame(
     },
     setOnSelectPlayer(handler) {
       onSelectPlayer = handler;
+    },
+    setPartyAllies(identityHexes) {
+      partyAllyHexes = new Set(identityHexes);
     },
     setActiveCharacter(characterId) {
       const nextCharacter = CHARACTERS[characterId];
