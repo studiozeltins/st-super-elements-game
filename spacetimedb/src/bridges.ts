@@ -144,16 +144,25 @@ export function nextGoliathWaypoint(
   const currentIsland = islandIndexAt(px, pz);
   if (currentIsland === targetIsland) return { x: targetX, z: targetZ }; // same island → direct
 
-  // On the city hub → head to the mouth of the target island's bridge.
+  // On the city hub → walk to the target bridge's mouth, then once standing on
+  // that bridge's deck (the mouth sits INSIDE the city footprint, so islandIndexAt
+  // still reports 0 there) cross to the far end. Without the deck check the goliath
+  // reaches the mouth, keeps re-targeting the same point, and gets stuck (#bridge).
   if (currentIsland === 0) {
     const bridge = BRIDGES[targetIsland - 1];
-    return { x: bridge.startX, z: bridge.startZ };
+    return bridgeIndexAt(px, pz) === targetIsland - 1
+      ? { x: bridge.endX, z: bridge.endZ }
+      : { x: bridge.startX, z: bridge.startZ };
   }
 
-  // On an outer island (not the target's) → head down its own bridge toward the city.
+  // On an outer island (not the target's) → walk to its bridge mouth, then once on
+  // that deck cross back toward the city (bridge.start). Same stuck-at-the-mouth fix
+  // as the city-hub branch, mirrored for the outer-island → city direction.
   if (currentIsland > 0) {
     const bridge = BRIDGES[currentIsland - 1];
-    return { x: bridge.endX, z: bridge.endZ };
+    return bridgeIndexAt(px, pz) === currentIsland - 1
+      ? { x: bridge.startX, z: bridge.startZ }
+      : { x: bridge.endX, z: bridge.endZ };
   }
 
   // Over the void: if on a bridge corridor, walk to the far end that advances the

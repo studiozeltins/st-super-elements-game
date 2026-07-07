@@ -153,6 +153,30 @@ describe('nextGoliathWaypoint routing', () => {
     expect(waypoint.z).toBeCloseTo(bridges[0].startZ, 9);
   });
 
+  it('at a city-side bridge mouth, crosses to the far end (no stuck-at-mouth)', () => {
+    // Regression: the mouth sits inside island 0, so islandIndexAt still reports 0
+    // there. The waypoint must advance to the outer end instead of re-returning the
+    // mouth (which froze the goliath at the bridge entrance).
+    const bridges = serverGetBridges();
+    for (let outer = 1; outer < ISLANDS.length; outer++) {
+      const bridge = bridges[outer - 1];
+      const target = outerCenter(outer);
+      const waypoint = nextGoliathWaypoint(bridge.startX, bridge.startZ, target.x, target.z);
+      expect(waypoint.x).toBeCloseTo(bridge.endX, 9);
+      expect(waypoint.z).toBeCloseTo(bridge.endZ, 9);
+    }
+  });
+
+  it('at an outer bridge mouth, crosses back toward the city (no stuck-at-mouth)', () => {
+    const bridges = serverGetBridges();
+    for (let outer = 1; outer < ISLANDS.length; outer++) {
+      const bridge = bridges[outer - 1];
+      const waypoint = nextGoliathWaypoint(bridge.endX, bridge.endZ, cityCenter.x, cityCenter.z);
+      expect(waypoint.x).toBeCloseTo(bridge.startX, 9);
+      expect(waypoint.z).toBeCloseTo(bridge.startZ, 9);
+    }
+  });
+
   it('on bridge B with a B target heads to B`s outer end', () => {
     const bridges = serverGetBridges();
     const midB = bridgeMidpoint(1);
