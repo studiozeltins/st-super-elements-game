@@ -264,6 +264,11 @@ const GOLIATH_SPLASH_RANGE = 4.0; // the largest raider hits everything in here
 const GOLIATH_ENGAGE_RANGE = 8.0;
 const ENEMY_PLAYER_CONTACT_RANGE = 1.8; // camp member ↔ player it is chasing
 const GOLIATH_PLAYER_CONTACT_RANGE = 2.6; // goliath ↔ a player who provoked it (bigger reach)
+// Idle patrol: an un-aggro'd camp member walks a slow deterministic loop around its
+// home post instead of standing frozen at the fire. Radius + period are shared by
+// all members; each member's phase is derived from its id so the camp fans out.
+const ENEMY_PATROL_RADIUS = 1.7;
+const ENEMY_PATROL_PERIOD_MICROS = 11_000_000n; // ~11s per lap — a calm patrol
 // A camp member notices an open-field player within this range and MIGHT turn
 // aggressive — rolled per tick so a camp feels alive (some members lock on fast,
 // some hang back) rather than every member snapping on the instant you arrive.
@@ -2483,18 +2488,31 @@ export const worldTick = spacetimedb.reducer(
       const expired = aggroExpired(enemyRow.aggroExpiresAtMicros, now);
       let targetX = enemyRow.homeX;
       let targetZ = enemyRow.homeZ;
+      let patrolling = true;
       if (!expired && enemyRow.aggroKind === AGGRO_GOLIATH) {
         const chased = goliathPosition.get(enemyRow.aggroGoliathId);
         if (chased) {
           targetX = chased.x;
           targetZ = chased.z;
+          patrolling = false;
         }
       } else if (!expired && enemyRow.aggroKind === AGGRO_PLAYER && enemyRow.aggroPlayer) {
         const chased = playerByHex.get(enemyRow.aggroPlayer.toHexString());
         if (chased) {
           targetX = chased.positionX;
           targetZ = chased.positionZ;
+          patrolling = false;
         }
+      }
+      if (patrolling) {
+        // Deterministic slow orbit around the member's home post — no RNG/wall clock.
+        // Phase from the enemy id spreads members around the loop; angle advances with
+        // world time. The isWalkable step guard below keeps the loop on solid ground.
+        const phase = (Number(enemyRow.enemyId % 628n) / 628) * Math.PI * 2;
+        const lap = Number(now % ENEMY_PATROL_PERIOD_MICROS) / Number(ENEMY_PATROL_PERIOD_MICROS);
+        const angle = phase + lap * Math.PI * 2;
+        targetX = enemyRow.homeX + Math.cos(angle) * ENEMY_PATROL_RADIUS;
+        targetZ = enemyRow.homeZ + Math.sin(angle) * ENEMY_PATROL_RADIUS;
       }
       const moveSpeed = ENEMY_ARCHETYPE_STATS[enemyRow.archetypeId as CampArchetypeId].moveSpeed;
       const moved = stepToward(enemyRow.positionX, enemyRow.positionZ, targetX, targetZ, moveSpeed * (Number(tick) / 1_000_000));
