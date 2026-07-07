@@ -84,6 +84,7 @@ const TRANSCEND_HEAL_STEP = 0.08;
 const SHARD_PER_OVERFLOW_DUPE = 1;
 const SHARD_DEATH_LOSS = 1;
 const RAID_SHARD_PAYOUT = 6;
+const RAID_PARTY_SIZE = 4; // player-party (raid squad) cap per D-06, DISTINCT from PARTY_SIZE (character team)
 const TRANSCEND_SHARD_COST = (n: number): number => n; // installing level n costs n shards
 
 // ---- Wish banners + weapon catalog + pity (mirror src/game/data/gacha.ts) ----
@@ -116,7 +117,10 @@ const HARD_PITY = 90;
 const SOFT_PITY_STEP = 0.06;
 const FOUR_STAR_RATE = 0.051;
 const FOUR_STAR_PITY = 10;
-const FEATURED_5STAR_WIN = 0.5;
+// Capturing Radiance: the consolidated chance a character-banner 5★ is the
+// featured character when you are not already on a guarantee. HoYo's published
+// figure is ~55% (a 50/50 base lifted by the anti-streak radiance mechanic).
+const FEATURED_5STAR_WIN = 0.55;
 const FOUR_STAR_CHARACTER_SHARE = 0.5;
 const MAX_PULLS_PER_REQUEST = 10;
 // Keep in sync with src/game/data/constants.ts (archipelago extent).
@@ -171,6 +175,26 @@ function pickWeaponId(ctx: { random: any }, rarity: number) {
 function pickFourStarCharacterId(ctx: { random: any }) {
   const pool = Object.keys(CHARACTER_STATS).filter(id => CHARACTER_STATS[id].stars === 4);
   return pool[ctx.random.integerInRange(0, pool.length - 1)];
+}
+
+// Genshin's character-banner "lost 50/50" pool: the permanent standard 5★s.
+// That's every 5★ character NOT featured on a limited banner, plus the 5★
+// weapons — drawn uniformly. Modelling it this way keeps the 5★ weapons
+// obtainable (this game has no separate weapon banner) and matches Genshin,
+// where a lost 50/50 yields a random standard 5★ character OR weapon.
+const FEATURED_5STAR_IDS = new Set(Object.values(BANNERS).map(banner => banner.featuredCharacterId));
+const STANDARD_5STAR_POOL: Array<{ kind: 'character' | 'weapon'; id: string }> = [
+  ...Object.keys(CHARACTER_STATS)
+    .filter(id => CHARACTER_STATS[id].stars === 5 && !FEATURED_5STAR_IDS.has(id))
+    .map(id => ({ kind: 'character' as const, id })),
+  ...GACHA_WEAPONS.filter(weapon => weapon.rarity === 5).map(weapon => ({
+    kind: 'weapon' as const,
+    id: weapon.id,
+  })),
+];
+
+function pickStandardFiveStar(ctx: { random: any }) {
+  return STANDARD_5STAR_POOL[ctx.random.integerInRange(0, STANDARD_5STAR_POOL.length - 1)];
 }
 // Bow projectiles fly up to ~45 units; server range check must cover them.
 const MAX_HIT_RANGE = 45;
@@ -1812,10 +1836,21 @@ export const pullBanner = spacetimedb.reducer(
           slotShard = result.shardMinted;
           shardsMinted += result.shardMinted;
         } else {
-          // Lost the 50/50 → a 5★ weapon, and the next 5★ is guaranteed featured.
+          // Lost the 50/50 → a random standard 5★ (character or weapon), and the
+          // next banner 5★ is guaranteed to be the featured character.
           guaranteed = true;
-          itemId = pickWeaponId(ctx, 5);
-          grantWeapon(ctx, currentPlayer.identity, itemId, 5);
+          const standard = pickStandardFiveStar(ctx);
+          itemId = standard.id;
+          if (standard.kind === 'character') {
+            kind = 'character';
+            const result = grantCharacter(ctx, currentPlayer.identity, itemId);
+            isNew = result.isNew;
+            constellation = result.constellation;
+            slotShard = result.shardMinted;
+            shardsMinted += result.shardMinted;
+          } else {
+            grantWeapon(ctx, currentPlayer.identity, itemId, 5);
+          }
         }
       } else if (sinceFour >= FOUR_STAR_PITY || ctx.random() < FOUR_STAR_RATE) {
         sinceFour = 0;

@@ -11,6 +11,7 @@ export const TRANSCEND_HEAL_STEP = 0.08; // server
 export const SHARD_PER_OVERFLOW_DUPE = 1; // server
 export const SHARD_DEATH_LOSS = 1; // server
 export const RAID_SHARD_PAYOUT = 6; // server
+export const RAID_PARTY_SIZE = 4; // server — player-party cap, distinct from PARTY_SIZE (character team)
 /** Installing transcend level n costs n shards. Mirrors the server helper. */
 export const TRANSCEND_SHARD_COST = (n: number): number => n;
 

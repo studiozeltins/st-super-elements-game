@@ -15,6 +15,7 @@ import {
   GACHA_PULL_COST,
   MAX_HEALTH,
   MAX_TRANSCEND_LEVEL,
+  RAID_PARTY_SIZE,
   RAID_SHARD_PAYOUT,
   SAFE_ZONE_RADIUS,
   SHARD_DEATH_LOSS,
@@ -153,6 +154,7 @@ describe('server constants stay in sync with client constants', () => {
     ['SHARD_PER_OVERFLOW_DUPE', SHARD_PER_OVERFLOW_DUPE],
     ['SHARD_DEATH_LOSS', SHARD_DEATH_LOSS],
     ['RAID_SHARD_PAYOUT', RAID_SHARD_PAYOUT],
+    ['RAID_PARTY_SIZE', RAID_PARTY_SIZE],
   ] as const)('%s matches', (name, clientValue) => {
     expect(extractServerConstant(name)).toBe(clientValue);
   });
