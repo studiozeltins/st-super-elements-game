@@ -31,10 +31,13 @@ interface ServerStat {
   stars: number;
   maxHealth: number;
   healthRegen: number;
+  role: string;
   healType: string;
   healMode: string;
   healPower: number;
 }
+
+const VALID_ROLES = ['tank', 'dps', 'healer', 'support'] as const;
 
 function readField(body: string, name: string): string | null {
   const match = new RegExp(`${name}:\\s*'?([\\w.]+)'?`).exec(body);
@@ -53,6 +56,7 @@ function extractServerStats(): Record<string, ServerStat> {
       stars: Number(readField(body, 'stars')),
       maxHealth: Number(readField(body, 'maxHealth')),
       healthRegen: Number(readField(body, 'healthRegen')),
+      role: readField(body, 'role') ?? 'dps',
       // Non-healers spread ...NO_HEAL, so these fields are absent → defaults.
       healType: readField(body, 'healType') ?? 'none',
       healMode: readField(body, 'healMode') ?? 'flat',
@@ -96,6 +100,20 @@ describe('server CHARACTER_STATS stays in sync with client CHARACTERS', () => {
         healMode: serverStats[id].healMode,
         healPower: serverStats[id].healPower,
       }).toEqual({ healType: spec.type, healMode: spec.mode, healPower: spec.power });
+    }
+  );
+
+  it.each(Object.values(CHARACTERS).map(character => [character.id] as const))(
+    '%s has a valid role',
+    id => {
+      expect(VALID_ROLES).toContain(CHARACTERS[id].role);
+    }
+  );
+
+  it.each(Object.values(CHARACTERS).map(character => [character.id] as const))(
+    '%s role matches server CHARACTER_STATS',
+    id => {
+      expect(serverStats[id].role).toBe(CHARACTERS[id].role);
     }
   );
 });
