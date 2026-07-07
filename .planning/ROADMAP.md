@@ -23,7 +23,7 @@ parallel spines that converge at Phase 6.
 - [x] **Phase 1: Constellation shard currency** - Mint 1 shard per C6-overflow dupe (replaces 800-gem refund) (completed 2026-07-06)
 - [x] **Phase 2: Transcendence install** - Spend shards to transcend a C6 character past C6 for real power (completed 2026-07-06)
 - [x] **Phase 3: Shards at risk** - Death loss + PVP steal + erosion order (transcend-- then C--) (completed 2026-07-07)
-- [ ] **Phase 4: Formalize character roles** - Tag every character tank/dps/healer/support
+- [x] **Phase 4: Formalize character roles** - Tag every character tank/dps/healer/support (completed 2026-07-07)
 - [ ] **Phase 5: Multiplayer party** - Create/join/leave parties with a live role roster
 - [ ] **Phase 6: Raid boss** - Party-summoned boss that drops shards (the recoverable faucet)
 - [ ] **Phase 7: Role enforcement + balance** - Raid role mechanics + balance pass + full-loop validation
@@ -160,10 +160,10 @@ the raid can later enforce.
   3. A role badge is visible on the character sheet / character screen.
   4. `pnpm test` and `pnpm build` are green.
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans complete
 
 - [x] 04-01-PLAN.md — Role data mirror (client + server CHARACTER_STATS) + serverSync parity tests + additive local publish (Wave 1)
-- [ ] 04-02-PLAN.md — Role badge UI: --role-* tokens + badge on CharacterScreen/CharacterSheet (Wave 2)
+- [x] 04-02-PLAN.md — Role badge UI: --role-* tokens + badge on CharacterScreen/CharacterSheet (Wave 2)
 
 **UI hint**: yes
 
@@ -248,7 +248,7 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | 1. Constellation shard currency | 4/4 | Complete    | 2026-07-06 |
 | 2. Transcendence install | 5/5 | Complete    | 2026-07-06 |
 | 3. Shards at risk | 5/5 | Complete    | 2026-07-07 |
-| 4. Formalize character roles | 1/2 | In Progress|  |
+| 4. Formalize character roles | 2/2 | Complete   | 2026-07-07 |
 | 5. Multiplayer party | 0/TBD | Not started | - |
 | 6. Raid boss | 0/TBD | Not started | - |
 | 7. Role enforcement + balance | 0/TBD | Not started | - |
