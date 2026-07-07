@@ -3068,7 +3068,7 @@ button {
 .cchar__id {
   position: absolute;
   left: 16px;
-  bottom: 14px;
+  top: calc(14px + env(safe-area-inset-top));
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -3950,8 +3950,8 @@ button {
 
 .csheet__pill {
   position: absolute;
-  top: calc(14px + env(safe-area-inset-top));
-  left: 16px;
+  top: calc(16px + env(safe-area-inset-top));
+  right: 60px;
   z-index: 2;
   font: 700 10px var(--font-display);
   letter-spacing: 0.12em;
@@ -3961,7 +3961,7 @@ button {
 .csheet__id {
   position: absolute;
   left: 16px;
-  bottom: 14px;
+  top: calc(14px + env(safe-area-inset-top));
   z-index: 2;
   display: flex;
   flex-direction: column;
