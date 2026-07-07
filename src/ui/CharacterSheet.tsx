@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CHARACTERS } from '../game/data/characters';
+import { CHARACTERS, ROLE_META } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { WEAPONS } from '../game/data/weapons';
 import { constellationBonuses, MAX_CONSTELLATION } from '../game/data/constellations';
@@ -90,6 +90,15 @@ export function CharacterSheet({
               {'✦'.repeat(character.stars)}
             </span>
             <span className="sheet__weapon">{WEAPONS[character.weapon].displayName}</span>
+            {ROLE_META[character.role] && (
+              <span
+                className="sheet__role"
+                style={{ color: `var(${ROLE_META[character.role].token})` }}
+                aria-label={`Loma: ${ROLE_META[character.role].aria}`}
+              >
+                {ROLE_META[character.role].label}
+              </span>
+            )}
             <span className="sheet__level">
               C{constellation} / C{MAX_CONSTELLATION}
             </span>

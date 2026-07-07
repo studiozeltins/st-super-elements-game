@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { CHARACTER_LIST, CHARACTERS, healSpecFor } from '../game/data/characters';
+import { CHARACTER_LIST, CHARACTERS, healSpecFor, ROLE_META } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { WEAPONS } from '../game/data/weapons';
 import { constellationBonuses } from '../game/data/constellations';
@@ -328,6 +328,15 @@ export function CharacterScreen({
             <div className="cchar__id">
               <CharacterIdentity character={character} className="cident--lg" />
               {isActive && <span className="cchar__active-tag">AKTĪVS VARONIS</span>}
+              {ROLE_META[character.role] && (
+                <span
+                  className="cchar__role-tag"
+                  style={{ color: `var(${ROLE_META[character.role].token})` }}
+                  aria-label={`Loma: ${ROLE_META[character.role].aria}`}
+                >
+                  {ROLE_META[character.role].label}
+                </span>
+              )}
               {transcendLevel > 0 && (
                 <span
                   className="cchar__transcend-tag"
