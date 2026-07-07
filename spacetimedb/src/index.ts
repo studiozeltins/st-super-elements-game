@@ -1386,6 +1386,27 @@ export const kickMember = spacetimedb.reducer(
   }
 );
 
+// Disband my whole party (leader-only). Unlike leaveParty (which promotes the
+// oldest-joined member), this dissolves the party entirely: every member is
+// removed, all pending invites cleared, and the party row deleted. Authz keys off
+// accountIdentity(ctx) via requirePlayer; only the current leader may disband.
+export const disbandParty = spacetimedb.reducer(ctx => {
+  const me = requirePlayer(ctx);
+  const mine = ctx.db.partyMember.identity.find(me.identity);
+  if (!mine) throw new SenderError('Neesi nevienā barā');
+  const party = ctx.db.party.id.find(mine.partyId);
+  if (!party) throw new SenderError('Bars vairs nav spēkā');
+  if (!party.leaderIdentity.equals(me.identity))
+    throw new SenderError('Tikai vadonis var izformēt baru');
+  for (const m of [...ctx.db.partyMember.partyId.filter(mine.partyId)]) {
+    ctx.db.partyMember.id.delete(m.id);
+  }
+  for (const inv of [...ctx.db.partyInvite.partyId.filter(mine.partyId)]) {
+    ctx.db.partyInvite.id.delete(inv.id);
+  }
+  ctx.db.party.id.delete(mine.partyId);
+});
+
 // Sets the ordered party (membership + order). Keeps only owned, unique ids up
 // to PARTY_SIZE, and makes sure the active character stays inside the party.
 export const setParty = spacetimedb.reducer(

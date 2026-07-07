@@ -427,6 +427,9 @@ export default function App() {
     },
     [connection]
   );
+  const disbandPlayerParty = useCallback(() => {
+    connection?.reducers.disbandParty({});
+  }, [connection]);
   const leavePlayerParty = useCallback(() => {
     connection?.reducers.leaveParty({});
   }, [connection]);
@@ -847,6 +850,7 @@ export default function App() {
           online={sheetTarget.online}
           sharesParty={sharesPartyWithTarget}
           isSelf={sheetTargetHex === myIdentityHex}
+          isLeader={isInParty && myPartyLeaderHex === myIdentityHex}
           canKick={
             sharesPartyWithTarget &&
             myPartyLeaderHex === myIdentityHex &&
@@ -856,6 +860,10 @@ export default function App() {
           leaveConfirmBody={leaveConfirmBody}
           onKick={() => {
             kickMember(sheetTarget.identity);
+            setSheetTargetHex(null);
+          }}
+          onDisband={() => {
+            disbandPlayerParty();
             setSheetTargetHex(null);
           }}
           onInvite={() => {
