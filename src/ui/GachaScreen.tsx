@@ -400,7 +400,6 @@ export function GachaScreen({
                         <CharacterPreview characterId={character.id} />
                       </button>
                       <span className="team-slot__index">{slotIndex + 1}</span>
-                      {isActive && <span className="team-slot__active">AKTĪVS</span>}
                       {partyCharacterIds.length > 1 && (
                         <button
                           className="team-slot__remove"

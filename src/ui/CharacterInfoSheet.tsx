@@ -10,6 +10,7 @@ import {
 } from '../game/data/constants';
 import { loreFor } from '../game/data/characterLore';
 import { CharacterPreview } from './CharacterPreview';
+import { CharacterIdentity } from './CharacterIdentity';
 
 interface CharacterInfoSheetProps {
   /** Character to show, or null to keep the sheet closed. */
@@ -81,13 +82,16 @@ export function CharacterInfoSheet({
                 <span className={`csheet__pill ${owned ? 'csheet__pill--own' : ''}`}>
                   {owned ? `LĪMENIS ${level}` : '◈ VĒL NEPIEDER'}
                 </span>
+                <Dialog.Title asChild>
+                  <span className="csheet__sr-title">{character.displayName}</span>
+                </Dialog.Title>
                 <div className="csheet__id">
-                  <span className="csheet__element">{ELEMENTS[character.element].displayName}</span>
-                  <Dialog.Title className="csheet__name">{character.displayName}</Dialog.Title>
-                  <span className="csheet__title">{character.title}</span>
-                  <span className={`csheet__stars rarity-${character.stars}`}>
-                    {'✦'.repeat(character.stars)}
-                  </span>
+                  <CharacterIdentity
+                    character={character}
+                    className="cident--lg"
+                    showRole
+                    transcendLevel={transcendLevel}
+                  />
                 </div>
               </div>
 

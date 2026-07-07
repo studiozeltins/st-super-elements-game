@@ -329,24 +329,12 @@ export function CharacterScreen({
               />
             </button>
             <div className="cchar__id">
-              <CharacterIdentity character={character} className="cident--lg" />
-              {ROLE_META[character.role] && (
-                <span
-                  className="cchar__role-tag"
-                  style={{ color: `var(${ROLE_META[character.role].token})` }}
-                  aria-label={`Loma: ${ROLE_META[character.role].aria}`}
-                >
-                  {ROLE_META[character.role].label}
-                </span>
-              )}
-              {transcendLevel > 0 && (
-                <span
-                  className="cchar__transcend-tag"
-                  aria-label={`Būsts līmenis B${transcendLevel}, sešas cieņas zvaigznes`}
-                >
-                  C6 · B{transcendLevel}
-                </span>
-              )}
+              <CharacterIdentity
+                character={character}
+                className="cident--lg"
+                showRole
+                transcendLevel={transcendLevel}
+              />
             </div>
           </section>
 

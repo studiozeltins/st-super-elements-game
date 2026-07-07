@@ -3206,26 +3206,28 @@ button {
 }
 
 /* Transcend status tag — purple (--shard) chip. */
-.cchar__transcend-tag {
-  align-self: flex-start;
-  margin-top: 10px;
-  padding: 5px 10px;
+/* Shared identity tag row (combat role + Būsts level) — used by every cident. */
+.cident__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.cident__role,
+.cident__boost {
+  padding: 4px 9px;
   font: 700 10px var(--font-display);
   letter-spacing: 0.12em;
-  color: var(--shard);
   border: 1px solid currentColor;
+}
+
+.cident__boost {
+  color: var(--shard);
 }
 
 /* Role badge — sibling of .cchar__transcend-tag.
    Color set inline per role via var(--role-*); border inherits currentColor. */
-.cchar__role-tag {
-  align-self: flex-start;
-  margin-top: 10px;
-  padding: 5px 10px;
-  font: 700 10px var(--font-display);
-  letter-spacing: 0.12em;
-  border: 1px solid currentColor;
-}
 
 /* Inline row chip variant for the character-card .sheet__meta row —
    same box model as .cchar__role-tag but without the stacked-column offsets. */
@@ -3967,28 +3969,14 @@ button {
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
 }
 
-.csheet__element {
-  font-size: 10px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--element-color);
-}
-
-.csheet__name {
-  font: 700 clamp(22px, 6vw, 30px) var(--font-display);
-  line-height: 1.05;
-}
-
-.csheet__title {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.csheet__stars {
-  margin-top: 3px;
-  font-size: 18px;
-  line-height: 1;
-  color: var(--gold);
+/* Screen-reader-only Dialog title (the visible name comes from CharacterIdentity). */
+.csheet__sr-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .csheet__scroll {
@@ -4363,18 +4351,6 @@ button {
   text-overflow: ellipsis;
 }
 
-.team-slot__active {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
-  font: 700 8px var(--font-display);
-  letter-spacing: 0.1em;
-  color: var(--accent);
-  border: 1px solid currentColor;
-  padding: 2px 5px;
-}
-
 .team-slot__remove {
   position: absolute;
   bottom: 8px;
@@ -4453,35 +4429,6 @@ button {
    PLAYER PARTY (Bars) — phase 5. Reuses the shipped HUD tokens
    verbatim (no new color tokens). See 05-UI-SPEC §1 / §5.
    ============================================================ */
-
-/* HUD entry chip — clones the .hud__zone box language (panel bg, line border,
-   10px/700 uppercase); distinct from the ⚑ "Komanda" character-team button. */
-.hud__party-chip {
-  align-self: flex-start;
-  padding: 3px 9px;
-  font: 700 10px var(--font-display);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text);
-  border: 1px solid var(--line);
-  background: var(--panel);
-  transition: border-color 0.12s, transform 0.12s;
-}
-
-.hud__party-chip:hover,
-.hud__party-chip:focus-visible {
-  border-color: var(--accent);
-  transform: translateY(-1px);
-}
-
-/* Guarantee a ≥44px tap target on touch without bloating the pill visually. */
-@media (pointer: coarse) {
-  .hud__party-chip {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-  }
-}
 
 /* Right-docked slide-out sheet. Portaled to <body> via Radix Dialog; absolute
    inset:0 resolves against the viewport there. Motion is transform/opacity only,
@@ -5181,14 +5128,13 @@ button {
 .rail-tab__label {
   font-size: calc(9px * var(--ui-scale));
 }
-.cchar__role-tag,
-.cchar__transcend-tag,
+.cident__role,
+.cident__boost,
 .csheet__pill {
   font-size: calc(10px * var(--ui-scale));
 }
 .csheet__section,
 .ctab__section,
-.csheet__title,
 .roster-chip__name,
 .team-chip__name {
   font-size: calc(11px * var(--ui-scale));
@@ -5229,8 +5175,4 @@ button {
 }
 .stat-cell__value {
   font-size: calc(18px * var(--ui-scale));
-}
-/* Big character name keeps its fluid low end, scales its ceiling with the UI. */
-.csheet__name {
-  font-size: clamp(22px, 6vw, calc(30px * var(--ui-scale)));
 }
