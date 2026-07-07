@@ -53,6 +53,24 @@ button {
   cursor: pointer;
 }
 
+/* Handjet (pixel display) renders its glyphs tight — untracked numbers/names run
+   together. Give the number-value classes and big names a little breathing room.
+   Rules that already set their own letter-spacing (labels, tabs) keep it. */
+.pity__value,
+.pull-btn__cost,
+.pull-btn__count,
+.splash__count,
+.stat-cell__value,
+.stat-pop__value,
+.resist-chip__value,
+.csheet__stat-value,
+.csheet__name,
+.party-sheet__hp-num,
+.roster-chip__name,
+.team-chip__name {
+  letter-spacing: 0.06em;
+}
+
 .app {
   position: relative;
   height: 100vh;
