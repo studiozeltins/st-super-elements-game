@@ -186,7 +186,7 @@ codes — CONTEXT D-01), and see a live roster of each member's active character
   3. One identity cannot be in two parties or double-join (enforced at accept time — D-06).
   4. Two clients in a party both see the roster with each member's active character + role.
 
-**Plans**: 4/6 plans executed
+**Plans**: 5/6 plans executed
 **Wave 1**
 
 - [x] 05-01-PLAN.md — Wave 0: RAID_PARTY_SIZE constant + parity + pure partyRules.ts helpers (nextLeader, canAccept) + tests
@@ -202,7 +202,7 @@ codes — CONTEXT D-01), and see a live roster of each member's active character
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 05-05-PLAN.md — Client: invite toast (10s) + missed-invites (Settings) + party roster (role/crown/online)
+- [x] 05-05-PLAN.md — Client: invite toast (10s) + missed-invites (Settings) + party roster (role/crown/online)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -272,6 +272,6 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | 2. Transcendence install | 5/5 | Complete    | 2026-07-06 |
 | 3. Shards at risk | 5/5 | Complete    | 2026-07-07 |
 | 4. Formalize character roles | 2/2 | Complete   | 2026-07-07 |
-| 5. Multiplayer party | 4/6 | In Progress|  |
+| 5. Multiplayer party | 5/6 | In Progress|  |
 | 6. Raid boss | 0/TBD | Not started | - |
 | 7. Role enforcement + balance | 0/TBD | Not started | - |
