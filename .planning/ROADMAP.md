@@ -24,7 +24,7 @@ parallel spines that converge at Phase 6.
 - [x] **Phase 2: Transcendence install** - Spend shards to transcend a C6 character past C6 for real power (completed 2026-07-06)
 - [x] **Phase 3: Shards at risk** - Death loss + PVP steal + erosion order (transcend-- then C--) (completed 2026-07-07)
 - [x] **Phase 4: Formalize character roles** - Tag every character tank/dps/healer/support (completed 2026-07-07)
-- [ ] **Phase 5: Multiplayer party** - Create/join/leave parties with a live role roster
+- [x] **Phase 5: Multiplayer party** - Create/join/leave parties with a live role roster (completed 2026-07-07)
 - [ ] **Phase 6: Raid boss** - Party-summoned boss that drops shards (the recoverable faucet)
 - [ ] **Phase 7: Role enforcement + balance** - Raid role mechanics + balance pass + full-loop validation
 
@@ -206,7 +206,7 @@ codes — CONTEXT D-01), and see a live roster of each member's active character
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 05-06-PLAN.md — Validation: full suite + build + two-client playtest + PROGRESS.md update
+- [x] 05-06-PLAN.md — Validation: full suite + build + two-client playtest + PROGRESS.md update
 
 **UI hint**: yes
 
@@ -272,6 +272,6 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | 2. Transcendence install | 5/5 | Complete    | 2026-07-06 |
 | 3. Shards at risk | 5/5 | Complete    | 2026-07-07 |
 | 4. Formalize character roles | 2/2 | Complete   | 2026-07-07 |
-| 5. Multiplayer party | 5/6 | In Progress|  |
+| 5. Multiplayer party | 6/6 | Complete    | 2026-07-07 |
 | 6. Raid boss | 0/TBD | Not started | - |
 | 7. Role enforcement + balance | 0/TBD | Not started | - |

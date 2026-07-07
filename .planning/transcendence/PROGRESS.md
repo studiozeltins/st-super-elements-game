@@ -14,7 +14,7 @@ status box and tick the boxes as phases land.
 | 2 | [phase-2-transcendence.md](./phase-2-transcendence.md) | ⬜ TODO | 1 | — |
 | 3 | [phase-3-shard-risk.md](./phase-3-shard-risk.md) | ✅ DONE | 2 | `93d071b` |
 | 4 | [phase-4-roles.md](./phase-4-roles.md) | ⬜ TODO | 0 | — |
-| 5 | [phase-5-party.md](./phase-5-party.md) | ⬜ TODO | 4 | — |
+| 5 | [phase-5-party.md](./phase-5-party.md) | ✅ DONE | 4 | `feat/transcendence` |
 | 6 | [phase-6-raid.md](./phase-6-raid.md) | ⬜ TODO | 2, 5 | — |
 | 7 | [phase-7-balance.md](./phase-7-balance.md) | ⬜ TODO | 3, 6 | — |
 
@@ -37,7 +37,7 @@ Phase A (rename + wipe) first. Then transcendence spine (0→1→2→3) and co-o
 - [ ] **2** — transcendence install + power scaling past C6
 - [x] **3** — shards at risk on death + PVP steal + erosion
 - [ ] **4** — formalize character roles (tank/dps/healer/support)
-- [ ] **5** — multiplayer party
+- [x] **5** — multiplayer party (invite-only, cap 4, roster/frames, promote/disband, persists across disconnect)
 - [ ] **6** — raid boss (party-gated shard faucet)
 - [ ] **7** — role enforcement in raid + balance + full validation
 
@@ -80,6 +80,18 @@ Phase A (rename + wipe) first. Then transcendence spine (0→1→2→3) and co-o
   PVP death transfers the shard directly to the killer.
 - **Wipe, don't migrate** for destructive schema ops (done once in Phase A).
 - All work on branch **`feat/transcendence`** (cut from `master`).
+
+### Party contract (Phase 5 shipped → Phase 6 raid consumer MUST gate on this)
+- **Tables:** `party` (accessor `party`, `leaderIdentity` = current leader) and `party_member`
+  (accessor `partyMember`, `identity` **unique** — one party per player; carries `partyId`, join order).
+- **Reducers (invite-only, no open join):** `invitePlayer`, `requestJoin`, `acceptInvite`,
+  `leaveParty`. Pending invites live in `party_invite`. Every reducer authorizes via
+  `requirePlayer(ctx)` on `ctx.sender` — never trust a passed identity.
+- **Cap:** `RAID_PARTY_SIZE` = 4 (single source of truth; raid faucet split reuses it).
+- **Leader succession:** on leader leave, `nextLeader` promotes oldest-joined member; last member
+  leaving disbands the party. Membership persists across disconnect (`onDisconnect` does NOT drop members).
+- **Phase 6 gate:** summon the raid boss only when `ctx.sender` is a `party_member`; the party-summoned
+  shard faucet pays `RAID_SHARD_PAYOUT` split across live `party_member` rows of that `partyId`.
 
 ### Workflow per phase
 - `pnpm`, never `npm`.
