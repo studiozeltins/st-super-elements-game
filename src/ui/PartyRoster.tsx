@@ -21,9 +21,9 @@ export function PartyRoster({ myRoster, leaderHex, players }: PartyRosterProps) 
   if (myRoster.length === 0) {
     return (
       <div className="party-roster__empty">
-        <p className="party-roster__empty-head">Tu neesi nevienā pulkā</p>
+        <p className="party-roster__empty-head">Tu neesi nevienā barā</p>
         <p className="party-roster__empty-body">
-          Piesit spēlētājam, lai izveidotu pulku vai tam pievienotos.
+          Piesit spēlētājam, lai izveidotu baru vai tam pievienotos.
         </p>
       </div>
     );
@@ -78,7 +78,7 @@ export function PartyRoster({ myRoster, leaderHex, players }: PartyRosterProps) 
               <span
                 className="party-roster__crown"
                 style={{ color: 'var(--gold)' }}
-                aria-label="Pulka vadonis"
+                aria-label="Bara vadonis"
               >
                 ♛
               </span>

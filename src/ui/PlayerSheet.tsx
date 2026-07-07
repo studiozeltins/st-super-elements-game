@@ -27,7 +27,7 @@ interface PlayerSheetProps {
 // Right-docked slide-out sheet for a tapped player. Focus-trap / ESC / ARIA come
 // from Radix Dialog (the same primitive Modal wraps) — no hand-rolled focus. The
 // symmetric actions mirror D-02: invite + ask-to-join when unrelated, and only
-// "Pamest pulku" (behind a confirm) when the viewer already shares the party. The
+// "Pamest baru" (behind a confirm) when the viewer already shares the party. The
 // role badge reuses the shipped ROLE_META + .sheet__role box — no new server field.
 export function PlayerSheet({
   name,
@@ -102,16 +102,16 @@ export function PlayerSheet({
           <div className="player-sheet__actions">
             {sharesParty ? (
               <Button variant="danger" onClick={() => setConfirmLeave(true)}>
-                Pamest pulku
+                Pamest baru
               </Button>
             ) : (
               <>
                 <Button variant="primary" disabled={partyFull} onClick={onInvite}>
-                  Aicināt manā pulkā
+                  Uzaicināt savā barā
                 </Button>
-                {partyFull && <span className="player-sheet__hint">Pulks ir pilns (4/4)</span>}
+                {partyFull && <span className="player-sheet__hint">Bars ir pilns (4/4)</span>}
                 <Button variant="ghost" onClick={onRequestJoin}>
-                  Lūgt pievienoties pulkam
+                  Lūgt pievienoties baram
                 </Button>
               </>
             )}
@@ -122,7 +122,7 @@ export function PlayerSheet({
       <Modal
         open={confirmLeave}
         onOpenChange={setConfirmLeave}
-        title="Pamest pulku?"
+        title="Pamest baru?"
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmLeave(false)}>

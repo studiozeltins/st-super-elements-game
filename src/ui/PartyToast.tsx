@@ -61,8 +61,8 @@ export function PartyToast({
 
   const message =
     kind === 'request'
-      ? `${inviterName} lūdz pievienoties tavam pulkam`
-      : `${inviterName} aicina tevi savā pulkā`;
+      ? `${inviterName} lūdz pievienoties tavam baram`
+      : `${inviterName} aicina tevi savā barā`;
 
   return (
     <div

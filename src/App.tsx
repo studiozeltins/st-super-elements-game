@@ -68,7 +68,7 @@ export default function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
-  // Player-party (Pulks) UI state, lifted here so the HUD chip, the online-players
+  // Player-party (Bars) UI state, lifted here so the HUD chip, the online-players
   // surface, and the slide-out sheet all share it. `sheetTargetHex` stores the
   // tapped player's canonical hex; the row itself is re-derived so the sheet stays
   // reactive to name/character/online changes while open.
@@ -273,7 +273,7 @@ export default function App() {
     .filter(row => row.owner.toHexString() === myIdentityHex)
     .map(row => ({ weaponId: row.weaponId, rarity: row.rarity }));
 
-  // ---- Player-party (Pulks) derivations — all identity comparisons key off the
+  // ---- Player-party (Bars) derivations — all identity comparisons key off the
   // canonical myIdentityHex, since party_member.identity is the canonical id. ----
   const myMembership = partyMembers.find(
     member => member.identity.toHexString() === myIdentityHex
@@ -293,7 +293,7 @@ export default function App() {
   // party; a leaving leader with others promotes the oldest-joined member.
   const leaveConfirmBody =
     myPartyCount <= 1
-      ? 'Pulks tiks izformēts.'
+      ? 'Bars tiks izformēts.'
       : iAmLeader
         ? 'Vadība pāries citam biedram.'
         : undefined;
@@ -337,8 +337,8 @@ export default function App() {
     const kind: 'invite' | 'request' = isRequest ? 'request' : 'invite';
     const message =
       kind === 'request'
-        ? `${name} lūdz pievienoties tavam pulkam`
-        : `${name} aicina tevi savā pulkā`;
+        ? `${name} lūdz pievienoties tavam baram`
+        : `${name} aicina tevi savā barā`;
     return { id: invite.id, kind, name, message };
   });
 
@@ -393,7 +393,7 @@ export default function App() {
     [connection]
   );
 
-  // ---- Player-party (Pulks) reducer callers ----
+  // ---- Player-party (Bars) reducer callers ----
   // The client only ever supplies targetIdentity/inviteId as a lookup; the server
   // resolves the authenticated actor from ctx.sender (T-05-01, Spoofing).
   const invitePlayer = useCallback(
@@ -785,7 +785,7 @@ export default function App() {
       <Modal
         open={isPartyOpen}
         onOpenChange={setIsPartyOpen}
-        title={isInParty ? `Pulks · ${myPartyCount}/${RAID_PARTY_SIZE}` : 'Pulks'}
+        title={isInParty ? `Bars · ${myPartyCount}/${RAID_PARTY_SIZE}` : 'Bars'}
       >
         <PartyRoster myRoster={myRoster} leaderHex={myPartyLeaderHex} players={players} />
         <p className="party-invites__kicker">TIEŠSAISTES SPĒLĒTĀJI</p>

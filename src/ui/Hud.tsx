@@ -77,7 +77,7 @@ interface HudProps {
   partyHealthById: Record<string, number>;
   activeCharacterId: string;
   hudState: HudState;
-  /** Number of members in the viewer's player party (Pulks). */
+  /** Number of members in the viewer's player party (Bars). */
   partyCount: number;
   /** Whether the viewer is currently in a player party. */
   inPlayerParty: boolean;
@@ -169,10 +169,10 @@ export function Hud({
           <span className={`hud__zone ${hudState.inSafeZone ? 'hud__zone--safe' : 'hud__zone--pvp'}`}>
             {hudState.inSafeZone ? 'DROŠĀ ZONA' : 'PVP ZONA'}
           </span>
-          {/* Player-party (Pulks) entry chip — distinct from the ⚑ "Komanda"
+          {/* Player-party (Bars) entry chip — distinct from the ⚑ "Komanda"
               character-team quick-button; opens the online-players party surface. */}
-          <button type="button" className="hud__party-chip" onClick={onOpenParty} aria-label="Pulks">
-            {inPlayerParty ? `PULKS ${partyCount}/${RAID_PARTY_SIZE}` : 'PULKS'}
+          <button type="button" className="hud__party-chip" onClick={onOpenParty} aria-label="Bars">
+            {inPlayerParty ? `BARS ${partyCount}/${RAID_PARTY_SIZE}` : 'BARS'}
           </button>
         </div>
       </div>

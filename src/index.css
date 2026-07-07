@@ -4300,7 +4300,7 @@ button {
 }
 
 /* ============================================================
-   PLAYER PARTY (Pulks) — phase 5. Reuses the shipped HUD tokens
+   PLAYER PARTY (Bars) — phase 5. Reuses the shipped HUD tokens
    verbatim (no new color tokens). See 05-UI-SPEC §1 / §5.
    ============================================================ */
 
@@ -4444,7 +4444,7 @@ button {
   }
 }
 
-/* Online-players + received-invites lists inside the Pulks Modal. */
+/* Online-players + received-invites lists inside the Bars Modal. */
 .party-invites__kicker {
   margin: 4px 0 8px;
   font: 700 10px var(--font-display);

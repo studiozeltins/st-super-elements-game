@@ -1193,7 +1193,7 @@ export const invitePlayer = spacetimedb.reducer(
     const target = ctx.db.player.identity.find(targetIdentity);
     if (!target) throw new SenderError('Spēlētājs nav atrasts');
     if (ctx.db.partyMember.identity.find(targetIdentity))
-      throw new SenderError(`${target.name} jau ir citā pulkā`);
+      throw new SenderError(`${target.name} jau ir citā barā`);
 
     // Ensure my party exists with me as leader.
     const mine = ctx.db.partyMember.identity.find(me.identity);
@@ -1207,7 +1207,7 @@ export const invitePlayer = spacetimedb.reducer(
     }
 
     const roster = [...ctx.db.partyMember.partyId.filter(partyId)];
-    if (roster.length >= RAID_PARTY_SIZE) throw new SenderError('Pulks ir pilns (4/4)');
+    if (roster.length >= RAID_PARTY_SIZE) throw new SenderError('Bars ir pilns (4/4)');
 
     // Dedupe: don't stack a second pending invite for this joiner in this party (T-05-06).
     const dupe = [...ctx.db.partyInvite.partyId.filter(partyId)]
@@ -1235,7 +1235,7 @@ export const requestJoin = spacetimedb.reducer(
     const target = ctx.db.player.identity.find(targetIdentity);
     if (!target) throw new SenderError('Spēlētājs nav atrasts');
     if (ctx.db.partyMember.identity.find(me.identity))
-      throw new SenderError('jau esi citā pulkā');
+      throw new SenderError('jau esi citā barā');
 
     // Ensure the target's party exists with the target as leader.
     const theirs = ctx.db.partyMember.identity.find(targetIdentity);
@@ -1249,7 +1249,7 @@ export const requestJoin = spacetimedb.reducer(
     }
 
     const roster = [...ctx.db.partyMember.partyId.filter(partyId)];
-    if (roster.length >= RAID_PARTY_SIZE) throw new SenderError('Pulks ir pilns (4/4)');
+    if (roster.length >= RAID_PARTY_SIZE) throw new SenderError('Bars ir pilns (4/4)');
 
     // Dedupe: don't stack a second pending request from me into this party (T-05-06).
     const dupe = [...ctx.db.partyInvite.partyId.filter(partyId)]
@@ -1282,8 +1282,8 @@ export const acceptInvite = spacetimedb.reducer(
     const joinerAlreadyPartied = !!ctx.db.partyMember.identity.find(inv.joinerIdentity);
     const decision = canAccept(rosterSize, joinerAlreadyPartied, RAID_PARTY_SIZE);
     if (!decision.ok) {
-      if (decision.reason === 'already_partied') throw new SenderError('jau esi citā pulkā');
-      throw new SenderError('pulks ir pilns');
+      if (decision.reason === 'already_partied') throw new SenderError('jau esi citā barā');
+      throw new SenderError('bars ir pilns');
     }
 
     // Add the joiner. party_member.identity.unique() is the atomic race backstop.
@@ -1328,7 +1328,7 @@ export const declineInvite = spacetimedb.reducer(
 export const leaveParty = spacetimedb.reducer(ctx => {
   const me = requirePlayer(ctx);
   const mine = ctx.db.partyMember.identity.find(me.identity);
-  if (!mine) throw new SenderError('Neesi nevienā pulkā');
+  if (!mine) throw new SenderError('Neesi nevienā barā');
   const partyId = mine.partyId;
   ctx.db.partyMember.id.delete(mine.id);
 
