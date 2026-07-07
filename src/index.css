@@ -4530,3 +4530,64 @@ button {
   color: var(--muted);
   text-align: center;
 }
+
+/* Party roster — one row per member (online dot · name · active character · role
+   badge · leader crown). Row box clones the .toggle/.online-players row for parity;
+   the role badge reuses .sheet__role. No new tokens (♛ gold is the documented
+   status-glyph exception). */
+.party-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  list-style: none;
+}
+.party-roster__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.party-roster__row--offline {
+  opacity: 0.5;
+}
+.party-roster__dot {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--accent);
+}
+.party-roster__row--offline .party-roster__dot {
+  color: var(--muted);
+}
+.party-roster__name {
+  margin-right: auto;
+  font: 700 14px var(--font-body);
+  color: var(--text);
+}
+.party-roster__char {
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.04em;
+}
+.party-roster__crown {
+  font-size: 14px;
+  line-height: 1;
+}
+.party-roster__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 32px 16px;
+  text-align: center;
+}
+.party-roster__empty-head {
+  font: 700 18px var(--font-display);
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+.party-roster__empty-body {
+  font: 400 14px var(--font-body);
+  color: var(--muted);
+}

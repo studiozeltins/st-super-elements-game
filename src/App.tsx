@@ -11,6 +11,7 @@ import { deriveKey } from './auth/hash';
 import { Modal } from './ui/Modal';
 import { PlayerSheet } from './ui/PlayerSheet';
 import { PartyToast } from './ui/PartyToast';
+import { PartyRoster } from './ui/PartyRoster';
 import { Hud } from './ui/Hud';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
@@ -780,6 +781,7 @@ export default function App() {
         onOpenChange={setIsPartyOpen}
         title={isInParty ? `Pulks · ${myPartyCount}/${RAID_PARTY_SIZE}` : 'Pulks'}
       >
+        <PartyRoster myRoster={myRoster} leaderHex={myPartyLeaderHex} players={players} />
         <p className="party-invites__kicker">TIEŠSAISTES SPĒLĒTĀJI</p>
         {onlinePlayers.length === 0 ? (
           <p className="online-players__empty">Nav citu spēlētāju tiešsaistē.</p>
