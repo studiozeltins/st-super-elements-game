@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CHARACTERS } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import { MAX_HEALTH } from '../game/data/constants';
@@ -77,6 +77,8 @@ interface HudProps {
   partyHealthById: Record<string, number>;
   activeCharacterId: string;
   hudState: HudState;
+  /** Optional inline stats (FPS/ping) rendered next to the zone badge. */
+  statsSlot?: ReactNode;
   onSelectPartySlot(slotIndex: number): void;
   onOpenSettings(): void;
   onOpenGacha(tab: 'banners' | 'party'): void;
@@ -94,6 +96,7 @@ export function Hud({
   partyHealthById,
   activeCharacterId,
   hudState,
+  statsSlot,
   onSelectPartySlot,
   onOpenSettings,
   onOpenGacha,
@@ -161,6 +164,7 @@ export function Hud({
           <span className={`hud__zone ${hudState.inSafeZone ? 'hud__zone--safe' : 'hud__zone--pvp'}`}>
             {hudState.inSafeZone ? 'DROŠĀ ZONA' : 'PVP ZONA'}
           </span>
+          {statsSlot}
         </div>
       </div>
 

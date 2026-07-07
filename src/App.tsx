@@ -698,6 +698,9 @@ export default function App() {
         partyHealthById={partyHealthById}
         activeCharacterId={myPlayer?.activeCharacterId ?? ''}
         hudState={hudState}
+        statsSlot={
+          <StatsOverlay connection={connection} showFps={showFps} showPing={showPing} />
+        }
         onSelectPartySlot={slotIndex => {
           const characterId = partyCharacterIds[slotIndex];
           if (characterId) selectCharacter(characterId);
@@ -769,7 +772,6 @@ export default function App() {
           onClose={() => setCharacterPageId(null)}
         />
       )}
-      <StatsOverlay connection={connection} showFps={showFps} showPing={showPing} />
       <SettingsScreen
         open={isSettingsOpen}
         onOpenChange={setIsSettingsOpen}
