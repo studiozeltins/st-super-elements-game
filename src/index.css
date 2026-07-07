@@ -4592,6 +4592,153 @@ button {
   color: var(--muted);
 }
 
+/* Left-side party frames — persistent member namecards (name + HP bar + numeric
+   cur/max + role), anchored above the mobile joystick (124px @ bottom:26px). Each
+   card is a button that opens the PlayerSheet (details + leader kick). Hidden when
+   solo. Desktop anchors bottom-left; coarse pointer lifts above the stick. */
+.party-frames {
+  position: fixed;
+  left: max(12px, env(safe-area-inset-left));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(220px, 52vw);
+  pointer-events: none;
+}
+
+@media (pointer: coarse) {
+  .party-frames {
+    bottom: calc(26px + 124px + 14px + env(safe-area-inset-bottom));
+  }
+}
+
+.party-frames__card {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.party-frames__card:hover,
+.party-frames__card:focus-visible {
+  border-color: var(--gold);
+  transform: translateX(2px);
+  outline: none;
+}
+
+.party-frames__card--offline {
+  opacity: 0.55;
+}
+
+.party-frames__top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.party-frames__crown {
+  font-size: 12px;
+}
+
+.party-frames__dot {
+  font-size: 10px;
+  color: #4ade80;
+}
+
+.party-frames__dot[data-online='false'] {
+  color: var(--muted);
+}
+
+.party-frames__name {
+  flex: 1;
+  min-width: 0;
+  font: 600 13px var(--font-body);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.party-frames__me {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.party-frames__role {
+  font: 600 10px var(--font-body);
+  letter-spacing: 0.04em;
+}
+
+.party-frames__hp {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.party-frames__hp-track {
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.party-frames__hp-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.25s ease;
+}
+
+.party-frames__hp-num {
+  font: 600 10px var(--font-body);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.party-frames__hp-sep {
+  margin: 0 1px;
+  opacity: 0.6;
+}
+
+/* PlayerSheet detail HP bar — role badge already renders in .player-sheet__meta. */
+.player-sheet__hp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.player-sheet__hp-track {
+  flex: 1;
+  height: 9px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.player-sheet__hp-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.25s ease;
+}
+
+.player-sheet__hp-num {
+  font: 600 12px var(--font-body);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 /* Missed-invites list under Settings (NOKAVĒTIE AICINĀJUMI) — a calm fallback for
    invites whose toast was dismissed/expired. Reuses the .settings__section kicker +
    the shipped panel row box; no new tokens. */

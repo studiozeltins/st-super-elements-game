@@ -12,6 +12,7 @@ import { Modal } from './ui/Modal';
 import { PlayerSheet } from './ui/PlayerSheet';
 import { PartyToast } from './ui/PartyToast';
 import { PartyRoster } from './ui/PartyRoster';
+import { PartyFrames } from './ui/PartyFrames';
 import { Hud } from './ui/Hud';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
@@ -715,6 +716,13 @@ export default function App() {
         onTouchButton={button => gameRef.current?.pressTouchButton(button)}
         onTouchButtonRelease={button => gameRef.current?.releaseTouchButton(button)}
       />
+      <PartyFrames
+        myRoster={myRoster}
+        leaderHex={myPartyLeaderHex}
+        players={players}
+        myHex={myIdentityHex}
+        onSelect={hex => setSheetTargetHex(hex)}
+      />
       {isGachaOpen && (
         <GachaScreen
           gems={myPlayer?.gems ?? 0}
@@ -827,6 +835,7 @@ export default function App() {
         <PlayerSheet
           name={sheetTarget.name}
           activeCharacterId={sheetTarget.activeCharacterId}
+          currentHealth={sheetTarget.currentHealth}
           online={sheetTarget.online}
           sharesParty={sharesPartyWithTarget}
           partyFull={isPartyFull}

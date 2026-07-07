@@ -10,6 +10,8 @@ interface PlayerSheetProps {
   name: string;
   /** Target's active character id (drives character name + element color + role badge). */
   activeCharacterId: string;
+  /** Target's live health (of the active character); drives the detail HP bar + numbers. */
+  currentHealth?: number;
   /** Whether the target is currently online. */
   online: boolean;
   /** Whether the viewer and the target already share a party (D-02: show only Leave). */
@@ -32,6 +34,7 @@ interface PlayerSheetProps {
 export function PlayerSheet({
   name,
   activeCharacterId,
+  currentHealth,
   online,
   sharesParty,
   partyFull,
@@ -45,6 +48,9 @@ export function PlayerSheet({
   const character = CHARACTERS[activeCharacterId];
   const element = character ? ELEMENTS[character.element] : null;
   const role = character ? ROLE_META[character.role] : null;
+  const maxHealth = character?.maxHealth ?? 0;
+  const curHealth = Math.max(0, Math.round(currentHealth ?? 0));
+  const hpPct = maxHealth > 0 ? Math.min(100, Math.max(0, (curHealth / maxHealth) * 100)) : 0;
 
   return (
     <Dialog.Root
@@ -98,6 +104,28 @@ export function PlayerSheet({
               {online ? '●' : '○'}
             </span>
           </div>
+
+          {character && (
+            <div className="player-sheet__hp" aria-label={`Veselība: ${curHealth} no ${maxHealth}`}>
+              <div className="player-sheet__hp-track">
+                <div
+                  className="player-sheet__hp-fill"
+                  style={{
+                    width: `${hpPct}%`,
+                    background:
+                      hpPct > 50
+                        ? 'var(--hp-ok, #4ade80)'
+                        : hpPct > 20
+                          ? 'var(--hp-warn, #facc15)'
+                          : 'var(--hp-low, #ef4444)',
+                  }}
+                />
+              </div>
+              <span className="player-sheet__hp-num">
+                {curHealth} / {maxHealth} HP
+              </span>
+            </div>
+          )}
 
           <div className="player-sheet__actions">
             {sharesParty ? (
