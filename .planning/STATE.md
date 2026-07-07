@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 4
-current_phase_name: Formalize character roles
+current_phase: 04
+current_phase_name: formalize-character-roles
 status: executing
-stopped_at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
-last_updated: "2026-07-07T08:53:34.680Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-07-07T10:15:25.312Z"
 last_activity: 2026-07-07
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
+last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 17
+  completed_plans: 16
   percent: 50
 ---
 
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 **Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor).
-**Current focus:** Phase 03 — shards-at-risk
+**Current focus:** Phase 04 — formalize-character-roles
 
 ## Current Position
 
-Phase: 4 — Formalize character roles
-Plan: Not started
+Phase: 04 (formalize-character-roles) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-07 — Phase 03 complete, transitioned to Phase 4
+Last activity: 2026-07-07 — Phase 04 execution started
 
 Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 
@@ -73,6 +73,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 | Phase 03 P03 | ~3m | 1 tasks | 5 files |
 | Phase 03 P04 | 20m | 3 tasks | 5 files |
 | Phase 03 P05 | 9 min | 2 tasks | 1 files |
+| Phase 04 P01 | 3 min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,7 @@ Recent decisions affecting current work:
 - [Phase ?]: Shard counter flash threaded to CharacterScreen + GachaScreen chips via shardFlashClass prop; loss shown by --drain shrink (motion) not --danger (hue).
 - [Phase ?]: [Phase 03]: shards-at-risk verified end-to-end via two-client playtest — all 5 scenarios pass (PVP steal +1 exact, PVE purple drop + 1.2s grace + no camp vacuum, erosion order transcend-- then one C-level with C0-C6 floor held, 0-shard PVP kill mints nothing, 0-gem shard carrier still transfers); vitest 339 green + build green. Phase 3 done.
 - [Phase ?]: [Phase 03][follow-up]: emergent — shard_drop reuses the gem magnet/collect loop, so drops are re-grabbable and enemies can also pick them up (killing that enemy re-drops the shard). Tester approved; flag for a future phase vs the 'camps must not vacuum a drop' invariant. No fix now.
+- [Phase 04]: [Phase 04][04-01]: role added as const design data on CHARACTER_STATS (client characters.ts + server mirror), NOT a table — no migration/column/seed/binding-regen. Required field = compile-time exhaustive seeding. ROLE_META (label/token/aria) single source for Plan 02 UI. serverSync gains valid-role + per-id parity (INV-5). Additive local publish; maincloud deferred to Phase 7.
 
 ### Pending Todos
 
@@ -122,6 +124,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-07T08:45:15.564Z
-Stopped at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
-Resume file: .planning/phases/03-shards-at-risk/03-01-SUMMARY.md
+Last session: 2026-07-07T10:15:25.026Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None
