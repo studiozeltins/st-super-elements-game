@@ -23,6 +23,11 @@
   --gold: #f2c14e;
   --shard: #9333ea; /* transcend-shard purple — distinct from gold gems */
   --danger: #ff5c3c;
+  /* Combat-role hues (04-UI-SPEC Color table) — dedicated channel, do NOT repurpose the reserved hues above. */
+  --role-tank: #4a8fd8;
+  --role-dps: #f0476b;
+  --role-healer: #2fd8a6;
+  --role-support: #7c8cf8;
   --font-display: 'Pixelify Sans', monospace;
   --font-body: 'Chakra Petch', sans-serif;
 }
@@ -3046,6 +3051,26 @@ button {
   font: 700 10px var(--font-display);
   letter-spacing: 0.12em;
   color: var(--shard);
+  border: 1px solid currentColor;
+}
+
+/* Role badge — third sibling of .cchar__active-tag / .cchar__transcend-tag.
+   Color set inline per role via var(--role-*); border inherits currentColor. */
+.cchar__role-tag {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 5px 10px;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.12em;
+  border: 1px solid currentColor;
+}
+
+/* Inline row chip variant for the character-card .sheet__meta row —
+   same box model as .cchar__role-tag but without the stacked-column offsets. */
+.sheet__role {
+  padding: 5px 10px;
+  font: 700 10px var(--font-display);
+  letter-spacing: 0.12em;
   border: 1px solid currentColor;
 }
 
