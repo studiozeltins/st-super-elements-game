@@ -6,13 +6,28 @@ export type SkillKind = 'projectile' | 'nova' | 'dash' | 'ring' | 'volley';
 // Intrinsic combat role (mirrored in server CHARACTER_STATS; enforced in Phase 6).
 export type Role = 'tank' | 'dps' | 'healer' | 'support';
 
-// Single source of role → display metadata (label/color-token/aria) for both
+// Single source of role → display metadata (label/color-token/aria/desc) for both
 // HUD surfaces (CharacterScreen + CharacterSheet). Do NOT hard-code per character.
-export const ROLE_META: Record<Role, { label: string; token: string; aria: string }> = {
-  tank: { label: 'SARGS', token: '--role-tank', aria: 'Sargs' },
-  dps: { label: 'UZBRUCĒJS', token: '--role-dps', aria: 'Uzbrucējs' },
-  healer: { label: 'DZIEDNIEKS', token: '--role-healer', aria: 'Dziednieks' },
-  support: { label: 'ATBALSTS', token: '--role-support', aria: 'Atbalsts' },
+// `desc` = practical, plain-language explanation of what the role does in play.
+// Where the mechanical payoff lands in a later phase (raid role bonuses = Phase 6/7),
+// the text says so honestly ("vēl top" = work in progress) rather than overpromising.
+export const ROLE_META: Record<Role, { label: string; token: string; aria: string; desc: string }> = {
+  tank: {
+    label: 'SARGS', token: '--role-tank', aria: 'Sargs',
+    desc: 'Priekšlīnija — iztur vairāk bojājumu, pateicoties izturībai, un notur pretiniekus, lai komanda izdzīvo. Reidu lomu bonusi vēl top.',
+  },
+  dps: {
+    label: 'UZBRUCĒJS', token: '--role-dps', aria: 'Uzbrucējs',
+    desc: 'Galvenais bojājumu avots — ātri nogāž pretiniekus, bet ir trausls un paļaujas uz komandu aizsardzībai. Reidu lomu bonusi vēl top.',
+  },
+  healer: {
+    label: 'DZIEDNIEKS', token: '--role-healer', aria: 'Dziednieks',
+    desc: 'Uztur komandu kaujā, atjaunojot dzīvību. Komandas dziedēšana ieslēgsies ar daudzspēlētāju reidiem — pagaidām darbojas pašatjaunošanās.',
+  },
+  support: {
+    label: 'ATBALSTS', token: '--role-support', aria: 'Atbalsts',
+    desc: 'Pastiprina komandu ar bonusiem un notur pretiniekus grožos. Efekti ieslēgsies ar reidu lomām — vēl top.',
+  },
 };
 
 // Incoming-damage channels a character can resist. Mirrors DamageType in

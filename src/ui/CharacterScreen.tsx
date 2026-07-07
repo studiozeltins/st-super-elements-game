@@ -109,7 +109,9 @@ export function CharacterScreen({
   const weapon = WEAPONS[character.weapon];
 
   // Info-tab stats as data so the grid and the tap-to-explain popover share one source.
+  const roleMeta = ROLE_META[character.role];
   const infoStats: { key: string; label: string; value: string; info: string }[] = [
+    ...(roleMeta ? [{ key: 'role', label: 'LOMA', value: roleMeta.label, info: roleMeta.desc }] : []),
     { key: 'level', label: 'LĪMENIS', value: '1', info: 'Varoņa līmenis. Augstāki līmeņi vēlāk dos vairāk dzīvības un uzbrukuma.' },
     { key: 'hp', label: 'DZĪVĪBA', value: String(character.maxHealth), info: 'Maksimālā dzīvība. Kad tā sasniedz 0, varonis krīt un atdzimst drošajā zonā.' },
     { key: 'atk', label: 'UZBRUKUMS', value: String(weapon.damage), info: 'Bāzes bojājums vienam ieroča sitienam — pirms kombo un zvaigžņu bonusiem.' },
