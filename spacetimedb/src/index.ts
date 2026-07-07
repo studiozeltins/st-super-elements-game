@@ -21,6 +21,7 @@ import { chooseGoliathTargetCamp, headingFromStep, hasReachedCamp, isWithinForwa
 import { resolveTranscendInstall } from './transcendInstall';
 import { resolveDupeGrant } from './gachaOverflow';
 import { applyDeathShardPenalty } from './deathPenalty';
+import { nextLeader, canAccept } from './partyRules';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -1265,6 +1266,96 @@ export const requestJoin = spacetimedb.reducer(
     });
   }
 );
+
+// Accept a pending invite/request (D-03, D-06). Only the recipient may accept, and
+// the same guard covers both kinds — authz never branches on inv.kind (T-05-02).
+export const acceptInvite = spacetimedb.reducer(
+  { inviteId: t.u64() },
+  (ctx, { inviteId }) => {
+    const me = requirePlayer(ctx);
+    const inv = ctx.db.partyInvite.id.find(inviteId);
+    if (!inv) throw new SenderError('Aicinājums vairs nav spēkā');
+    if (!inv.recipientIdentity.equals(me.identity)) throw new SenderError('unauthorized');
+
+    // Eligibility decided by Plan 01's pure helper (cap + no-double-join, T-05-04).
+    const rosterSize = [...ctx.db.partyMember.partyId.filter(inv.partyId)].length;
+    const joinerAlreadyPartied = !!ctx.db.partyMember.identity.find(inv.joinerIdentity);
+    const decision = canAccept(rosterSize, joinerAlreadyPartied, RAID_PARTY_SIZE);
+    if (!decision.ok) {
+      if (decision.reason === 'already_partied') throw new SenderError('jau esi citā pulkā');
+      throw new SenderError('pulks ir pilns');
+    }
+
+    // Add the joiner. party_member.identity.unique() is the atomic race backstop.
+    ctx.db.partyMember.insert({
+      id: 0n,
+      partyId: inv.partyId,
+      identity: inv.joinerIdentity,
+      joinedAt: ctx.timestamp,
+    });
+
+    // State-based invalidation (D-08): the joiner now has a party, so drop every
+    // OTHER pending invite that would add them elsewhere.
+    for (const other of [...ctx.db.partyInvite.joinerIdentity.filter(inv.joinerIdentity)]) {
+      if (other.id !== inv.id) ctx.db.partyInvite.id.delete(other.id);
+    }
+    // If the roster is now full, drop this party's remaining pending invites.
+    const nowSize = [...ctx.db.partyMember.partyId.filter(inv.partyId)].length;
+    if (nowSize >= RAID_PARTY_SIZE) {
+      for (const stale of [...ctx.db.partyInvite.partyId.filter(inv.partyId)]) {
+        if (stale.id !== inv.id) ctx.db.partyInvite.id.delete(stale.id);
+      }
+    }
+    // Finally consume the accepted invite.
+    ctx.db.partyInvite.id.delete(inv.id);
+  }
+);
+
+// Decline a pending invite/request: same recipient-only guard, no membership change.
+export const declineInvite = spacetimedb.reducer(
+  { inviteId: t.u64() },
+  (ctx, { inviteId }) => {
+    const me = requirePlayer(ctx);
+    const inv = ctx.db.partyInvite.id.find(inviteId);
+    if (!inv) throw new SenderError('Aicinājums vairs nav spēkā');
+    if (!inv.recipientIdentity.equals(me.identity)) throw new SenderError('unauthorized');
+    ctx.db.partyInvite.id.delete(inv.id);
+  }
+);
+
+// Leave my party (D-05). Last member out disbands the party + its invites (D-08);
+// a leaving leader promotes the oldest-joined remaining member via nextLeader.
+export const leaveParty = spacetimedb.reducer(ctx => {
+  const me = requirePlayer(ctx);
+  const mine = ctx.db.partyMember.identity.find(me.identity);
+  if (!mine) throw new SenderError('Neesi nevienā pulkā');
+  const partyId = mine.partyId;
+  ctx.db.partyMember.id.delete(mine.id);
+
+  const remaining = [...ctx.db.partyMember.partyId.filter(partyId)];
+  if (remaining.length === 0) {
+    // Disband: last member left.
+    ctx.db.party.id.delete(partyId);
+    for (const inv of [...ctx.db.partyInvite.partyId.filter(partyId)]) {
+      ctx.db.partyInvite.id.delete(inv.id);
+    }
+    return;
+  }
+
+  const party = ctx.db.party.id.find(partyId);
+  if (party && party.leaderIdentity.equals(me.identity)) {
+    const leaderHex = nextLeader(
+      remaining.map(m => ({
+        identityHex: m.identity.toHexString(),
+        joinedAtMicros: m.joinedAt.microsSinceUnixEpoch,
+      }))
+    );
+    const promoted = remaining.find(m => m.identity.toHexString() === leaderHex);
+    if (promoted) {
+      ctx.db.party.id.update({ ...party, leaderIdentity: promoted.identity });
+    }
+  }
+});
 
 // Sets the ordered party (membership + order). Keeps only owned, unique ids up
 // to PARTY_SIZE, and makes sure the active character stays inside the party.
