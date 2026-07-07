@@ -6,14 +6,14 @@ current_phase: 05
 current_phase_name: multiplayer-party
 status: executing
 stopped_at: "Completed 05-02: party model + reducers"
-last_updated: "2026-07-07T13:54:40.974Z"
+last_updated: "2026-07-07T14:00:42.997Z"
 last_activity: 2026-07-07
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 23
-  completed_plans: 19
+  completed_plans: 20
   percent: 63
 ---
 
@@ -31,7 +31,7 @@ floor).
 ## Current Position
 
 Phase: 05 (multiplayer-party) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-07-07 — Phase 05 execution started
 
@@ -77,6 +77,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 | Phase 04 P02 | 8min | 2 tasks | 3 files |
 | Phase 05 P01 | 3 min | 2 tasks | 5 files |
 | Phase 05 P02 | 5 min | 3 tasks | 1 files |
+| Phase 05 P03 | 4min | 1 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,7 @@ Recent decisions affecting current work:
 - [Phase 04]: [Phase 04][04-01]: role added as const design data on CHARACTER_STATS (client characters.ts + server mirror), NOT a table — no migration/column/seed/binding-regen. Required field = compile-time exhaustive seeding. ROLE_META (label/token/aria) single source for Plan 02 UI. serverSync gains valid-role + per-id parity (INV-5). Additive local publish; maincloud deferred to Phase 7.
 - [Phase ?]: [Phase 05][05-01]: RAID_PARTY_SIZE declared as a distinct one-line const (not PARTY_SIZE) with client/server parity (INV-5); partyRules.ts nextLeader (oldest-joined, lexicographic tie-break, D-05) + canAccept (already_partied before cap, D-06/T-05-04) extracted as pure dependency-free helpers, test-first, before any reducer wiring.
 - [Phase 05]: [Phase 05][05-02]: party/party_member/party_invite tables + 5 reducers (invitePlayer/requestJoin/acceptInvite/declineInvite/leaveParty). party_member.identity unique = atomic one-party-per-player (D-06); accept/decline guard recipientIdentity==actor symmetrically, never branch on kind (T-05-02); cap+no-double-join via canAccept, promotion via nextLeader (Plan 01 helpers, D-05); invite-only entry, no joinParty reducer (T-05-03); onDisconnect untouched (D-04).
+- [Phase ?]: [Phase 05][05-03]: party schema published to LOCAL via additive migrate (no --delete-data; account/account_link + players intact); bindings regenerated exposing party/partyMember/partyInvite tables + invitePlayer/requestJoin/acceptInvite/declineInvite/leaveParty reducers, tsc -b clean. Client plans 04-05 unblocked; maincloud deferred to Phase 7.
 
 ### Pending Todos
 
@@ -129,6 +131,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-07T13:54:40.953Z
+Last session: 2026-07-07T14:00:34.300Z
 Stopped at: Completed 05-02: party model + reducers
 Resume file: None
