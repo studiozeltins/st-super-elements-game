@@ -1,7 +1,7 @@
 /* ============================================================
    SUPER ELEMENTS — quiet-glass minimal HUD over pixel-art 3D
-   Fonts: Pixelify Sans (display), Chakra Petch (body) — both self-hosted with
-   the latin-ext subset so Latvian diacritics don't fall back to another font.
+   Fonts: Handjet Variable (display, readable pixel numerals), Chakra Petch (body)
+   — both self-hosted with the latin-ext subset so Latvian diacritics stay in font.
    Motion: transform/opacity only (60–144 fps safe)
    ============================================================ */
 
@@ -28,7 +28,7 @@
   --role-dps: #f0476b;
   --role-healer: #2fd8a6;
   --role-support: #7c8cf8;
-  --font-display: 'Pixelify Sans', monospace;
+  --font-display: 'Handjet Variable', monospace;
   --font-body: 'Chakra Petch', sans-serif;
 }
 

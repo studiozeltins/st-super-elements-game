@@ -3,8 +3,7 @@ import { createRoot } from 'react-dom/client';
 // Self-hosted fonts (bundled by Vite — no external CDN, works offline on LAN).
 // Both families ship the latin-ext subset, so Latvian diacritics (ā ē ī ū č ģ ķ ļ
 // ņ š ž) render in the same font as the rest of the text.
-import '@fontsource/pixelify-sans/400.css';
-import '@fontsource/pixelify-sans/700.css';
+import '@fontsource-variable/handjet/wght.css';
 import '@fontsource/chakra-petch/400.css';
 import '@fontsource/chakra-petch/600.css';
 import '@fontsource/chakra-petch/700.css';
