@@ -4340,9 +4340,9 @@ button {
   position: absolute;
   inset: 0;
   z-index: 14;
-  background: rgba(4, 7, 5, 0.82);
+  background: rgba(4, 7, 5, 0.32);
   cursor: pointer;
-  animation: player-sheet-fade 0.22s ease-out both;
+  animation: player-sheet-fade 0.2s ease-out both;
 }
 
 .player-sheet__panel {
@@ -4360,7 +4360,7 @@ button {
   border-left: 1px solid var(--line);
   border-radius: 12px 0 0 12px;
   background: var(--panel);
-  animation: player-sheet-in 0.22s cubic-bezier(0.2, 0.9, 0.2, 1) both;
+  animation: player-sheet-in 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 @keyframes player-sheet-in {
@@ -4592,10 +4592,10 @@ button {
   color: var(--muted);
 }
 
-/* Left-side party frames — persistent member namecards (name + HP bar + numeric
-   cur/max + role), anchored above the mobile joystick (124px @ bottom:26px). Each
-   card is a button that opens the PlayerSheet (details + leader kick). Hidden when
-   solo. Desktop anchors bottom-left; coarse pointer lifts above the stick. */
+/* Left-side party frames — Frost-light member rows anchored above the mobile
+   joystick (124px @ bottom:26px). No card chrome: just a character icon, name,
+   and a slim HP bar (like the character switcher). Each row opens the PlayerSheet.
+   Hidden when solo. Desktop anchors bottom-left; coarse pointer lifts above stick. */
 .party-frames {
   position: fixed;
   left: max(12px, env(safe-area-inset-left));
@@ -4603,81 +4603,83 @@ button {
   z-index: 40;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: min(220px, 52vw);
+  gap: 8px;
+  width: min(210px, 50vw);
   pointer-events: none;
 }
 
 @media (pointer: coarse) {
   .party-frames {
-    bottom: calc(26px + 124px + 14px + env(safe-area-inset-bottom));
+    bottom: calc(26px + 124px + 16px + env(safe-area-inset-bottom));
   }
 }
 
-.party-frames__card {
+.party-frames__row {
   pointer-events: auto;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--panel);
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: none;
   text-align: left;
   cursor: pointer;
   transition:
-    border-color 0.15s ease,
-    transform 0.15s ease;
+    transform 0.15s ease,
+    opacity 0.15s ease;
 }
 
-.party-frames__card:hover,
-.party-frames__card:focus-visible {
-  border-color: var(--gold);
+.party-frames__row:hover,
+.party-frames__row:focus-visible {
   transform: translateX(2px);
   outline: none;
 }
 
-.party-frames__card--offline {
-  opacity: 0.55;
+.party-frames__row--offline {
+  opacity: 0.5;
 }
 
-.party-frames__top {
+.party-frames__icon {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 700 14px var(--font-display);
+  border: 1.5px solid currentColor;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.party-frames__body {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.party-frames__crown {
-  font-size: 12px;
-}
-
-.party-frames__dot {
-  font-size: 10px;
-  color: #4ade80;
-}
-
-.party-frames__dot[data-online='false'] {
-  color: var(--muted);
+  flex-direction: column;
+  gap: 3px;
 }
 
 .party-frames__name {
-  flex: 1;
-  min-width: 0;
-  font: 600 13px var(--font-body);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 12px var(--font-body);
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.party-frames__crown {
+  flex: none;
+  color: var(--gold);
+  font-size: 11px;
 }
 
 .party-frames__me {
   color: var(--muted);
   font-weight: 400;
-}
-
-.party-frames__role {
-  font: 600 10px var(--font-body);
-  letter-spacing: 0.04em;
 }
 
 .party-frames__hp {
@@ -4688,27 +4690,24 @@ button {
 
 .party-frames__hp-track {
   flex: 1;
-  height: 7px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.35);
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
   overflow: hidden;
 }
 
 .party-frames__hp-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: 3px;
   transition: width 0.25s ease;
 }
 
 .party-frames__hp-num {
-  font: 600 10px var(--font-body);
-  color: var(--muted);
+  font: 600 9px var(--font-body);
+  color: var(--text);
+  opacity: 0.85;
   white-space: nowrap;
-}
-
-.party-frames__hp-sep {
-  margin: 0 1px;
-  opacity: 0.6;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
 /* PlayerSheet detail HP bar — role badge already renders in .player-sheet__meta. */

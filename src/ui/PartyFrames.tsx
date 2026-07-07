@@ -1,4 +1,4 @@
-import { CHARACTERS, ROLE_META } from '../game/data/characters';
+import { CHARACTERS } from '../game/data/characters';
 import { ELEMENTS } from '../game/data/elements';
 import type { Player, PartyMember } from '../module_bindings/types';
 
@@ -16,11 +16,11 @@ interface PartyFramesProps {
 }
 
 // Persistent left-side party panel, anchored above the mobile controller. One
-// clickable namecard per member: online dot, name, role badge (ROLE_META), a
-// health bar with numeric cur/max, and a leader crown. Tapping a card opens the
-// PlayerSheet (details + leader kick). Hidden entirely when the viewer is solo.
-// All data reads from already-subscribed rows (player.currentHealth /
-// activeCharacterId); max health comes from the client CHARACTERS table.
+// borderless Frost-light row per member — a character icon (initial in element
+// color), the name, and a slim health bar with numeric cur/max — styled like the
+// character switcher, no card chrome. Tapping a row opens the PlayerSheet
+// (details + leader kick). Hidden entirely when the viewer is solo. All data
+// reads from already-subscribed rows; max health comes from client CHARACTERS.
 export function PartyFrames({ myRoster, leaderHex, players, myHex, onSelect }: PartyFramesProps) {
   if (myRoster.length === 0) return null;
 
@@ -40,7 +40,8 @@ export function PartyFrames({ myRoster, leaderHex, players, myHex, onSelect }: P
         const name = player?.name ?? 'Spēlētājs';
         const character = player ? CHARACTERS[player.activeCharacterId] : undefined;
         const element = character ? ELEMENTS[character.element] : null;
-        const role = character ? ROLE_META[character.role] : null;
+        const elementColor = element?.cssColor ?? 'var(--muted)';
+        const initial = (character?.displayName ?? name).charAt(0).toUpperCase();
         const maxHealth = character?.maxHealth ?? 0;
         const curHealth = Math.max(0, Math.round(player?.currentHealth ?? 0));
         const pct = maxHealth > 0 ? Math.min(100, Math.max(0, (curHealth / maxHealth) * 100)) : 0;
@@ -51,58 +52,43 @@ export function PartyFrames({ myRoster, leaderHex, players, myHex, onSelect }: P
           <button
             type="button"
             key={hex}
-            className={`party-frames__card ${online ? '' : 'party-frames__card--offline'}`}
+            className={`party-frames__row ${online ? '' : 'party-frames__row--offline'}`}
             onClick={() => onSelect(hex)}
             aria-label={`${name}${isLeader ? ' (vadonis)' : ''} — ${curHealth}/${maxHealth} HP`}
           >
-            <div className="party-frames__top">
-              {isLeader && (
-                <span className="party-frames__crown" style={{ color: 'var(--gold)' }} aria-hidden="true">
-                  ♛
-                </span>
-              )}
-              <span
-                className="party-frames__dot"
-                aria-hidden="true"
-                data-online={online ? 'true' : 'false'}
-              >
-                {online ? '●' : '○'}
-              </span>
+            <span className="party-frames__icon" style={{ color: elementColor }} aria-hidden="true">
+              {initial}
+            </span>
+            <span className="party-frames__body">
               <span className="party-frames__name">
+                {isLeader && (
+                  <span className="party-frames__crown" aria-hidden="true">
+                    ♛
+                  </span>
+                )}
                 {name}
                 {isMe && <span className="party-frames__me"> (tu)</span>}
               </span>
-              {role && (
-                <span
-                  className="party-frames__role"
-                  style={{ color: `var(${role.token})` }}
-                  aria-label={`Loma: ${role.aria}`}
-                >
-                  {role.label}
+              <span className="party-frames__hp">
+                <span className="party-frames__hp-track">
+                  <span
+                    className="party-frames__hp-fill"
+                    style={{
+                      width: `${pct}%`,
+                      background:
+                        pct > 50
+                          ? 'var(--hp-ok, #4ade80)'
+                          : pct > 20
+                            ? 'var(--hp-warn, #facc15)'
+                            : 'var(--hp-low, #ef4444)',
+                    }}
+                  />
                 </span>
-              )}
-            </div>
-            <div className="party-frames__hp">
-              <div className="party-frames__hp-track">
-                <div
-                  className="party-frames__hp-fill"
-                  style={{
-                    width: `${pct}%`,
-                    background:
-                      pct > 50
-                        ? 'var(--hp-ok, #4ade80)'
-                        : pct > 20
-                          ? 'var(--hp-warn, #facc15)'
-                          : 'var(--hp-low, #ef4444)',
-                  }}
-                />
-              </div>
-              <span className="party-frames__hp-num">
-                {curHealth}
-                <span className="party-frames__hp-sep">/</span>
-                {maxHealth}
+                <span className="party-frames__hp-num">
+                  {curHealth}/{maxHealth}
+                </span>
               </span>
-            </div>
+            </span>
           </button>
         );
       })}
