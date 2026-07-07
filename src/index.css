@@ -4353,9 +4353,12 @@ button {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  border-left: 1px solid var(--line);
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px 0 0 12px;
-  background: var(--panel);
+  background: rgba(20, 30, 36, 0.55);
+  backdrop-filter: blur(20px) saturate(1.1);
+  -webkit-backdrop-filter: blur(20px) saturate(1.1);
+  color: #f4fbff;
   animation: player-sheet-in 0.18s ease-out both;
 }
 
@@ -4381,8 +4384,69 @@ button {
 
 .player-sheet__name {
   font: 700 18px var(--font-display);
-  letter-spacing: 0.08em;
-  color: var(--text);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f4fbff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+/* Frost: minimal close ✕ — no box, take as little space as possible. */
+.player-sheet__head .icon-btn {
+  width: auto;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  font-size: 18px;
+  color: var(--muted);
+}
+
+.player-sheet__head .icon-btn:hover {
+  color: #f4fbff;
+  border-color: transparent;
+  transform: none;
+}
+
+/* Frost buttons: hairline frostglass, icy-cyan primary, no loud fills. */
+.player-sheet__actions .btn {
+  min-height: 46px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #f4fbff;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.player-sheet__actions .btn--primary {
+  color: #eaffff;
+  background: rgba(134, 226, 255, 0.1);
+  border-color: color-mix(in srgb, #86e2ff 60%, rgba(255, 255, 255, 0.16));
+}
+
+.player-sheet__actions .btn--primary:hover:not(:disabled) {
+  background: rgba(134, 226, 255, 0.18);
+  border-color: #86e2ff;
+}
+
+.player-sheet__actions .btn--ghost:hover:not(:disabled) {
+  color: #86e2ff;
+  border-color: #86e2ff;
+}
+
+.player-sheet__actions .btn--danger {
+  color: #ffcccc;
+  background: rgba(255, 107, 107, 0.09);
+  border-color: color-mix(in srgb, #ff6b6b 55%, rgba(255, 255, 255, 0.16));
+}
+
+.player-sheet__actions .btn--danger:hover:not(:disabled) {
+  color: #fff;
+  background: rgba(255, 107, 107, 0.22);
+  border-color: #ff6b6b;
 }
 
 .player-sheet__meta {
@@ -4400,7 +4464,7 @@ button {
 .player-sheet__online {
   font-size: 12px;
   line-height: 1;
-  color: var(--accent);
+  color: #86e2ff;
 }
 
 .player-sheet__online--off {
@@ -4679,10 +4743,10 @@ button {
 }
 
 .party-frames__hp-track {
-  flex: 1;
+  width: 100%;
   height: 5px;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.18);
   overflow: hidden;
 }
 
@@ -4713,7 +4777,7 @@ button {
   flex: 1;
   height: 9px;
   border-radius: 5px;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(255, 255, 255, 0.14);
   overflow: hidden;
 }
 
