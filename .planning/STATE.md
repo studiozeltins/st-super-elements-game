@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_phase: 04
+current_phase: 05
+current_phase_name: multiplayer-party
 status: executing
-stopped_at: Phase 5 UI-SPEC approved
-last_updated: "2026-07-07T13:39:42.051Z"
+stopped_at: "Completed 05-01: party-rules foundation"
+last_updated: "2026-07-07T13:46:38.038Z"
 last_activity: 2026-07-07
-last_activity_desc: Phase 04 marked complete
+last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 23
+  completed_plans: 18
   percent: 63
-current_phase_name: formalize-character-roles
 ---
 
 # Project State
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 **Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor).
-**Current focus:** Phase 04 — formalize-character-roles
+**Current focus:** Phase 05 — multiplayer-party
 
 ## Current Position
 
-Phase: 04 — COMPLETE
-Plan: 2 of 2
+Phase: 05 (multiplayer-party) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-07-07 — Phase 04 marked complete
+Last activity: 2026-07-07 — Phase 05 execution started
 
 Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 
@@ -75,6 +75,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 | Phase 03 P05 | 9 min | 2 tasks | 1 files |
 | Phase 04 P01 | 3 min | 3 tasks | 3 files |
 | Phase 04 P02 | 8min | 2 tasks | 3 files |
+| Phase 05 P01 | 3 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 03]: shards-at-risk verified end-to-end via two-client playtest — all 5 scenarios pass (PVP steal +1 exact, PVE purple drop + 1.2s grace + no camp vacuum, erosion order transcend-- then one C-level with C0-C6 floor held, 0-shard PVP kill mints nothing, 0-gem shard carrier still transfers); vitest 339 green + build green. Phase 3 done.
 - [Phase ?]: [Phase 03][follow-up]: emergent — shard_drop reuses the gem magnet/collect loop, so drops are re-grabbable and enemies can also pick them up (killing that enemy re-drops the shard). Tester approved; flag for a future phase vs the 'camps must not vacuum a drop' invariant. No fix now.
 - [Phase 04]: [Phase 04][04-01]: role added as const design data on CHARACTER_STATS (client characters.ts + server mirror), NOT a table — no migration/column/seed/binding-regen. Required field = compile-time exhaustive seeding. ROLE_META (label/token/aria) single source for Plan 02 UI. serverSync gains valid-role + per-id parity (INV-5). Additive local publish; maincloud deferred to Phase 7.
+- [Phase ?]: [Phase 05][05-01]: RAID_PARTY_SIZE declared as a distinct one-line const (not PARTY_SIZE) with client/server parity (INV-5); partyRules.ts nextLeader (oldest-joined, lexicographic tie-break, D-05) + canAccept (already_partied before cap, D-06/T-05-04) extracted as pure dependency-free helpers, test-first, before any reducer wiring.
 
 ### Pending Todos
 
@@ -125,6 +127,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-07T12:46:09.392Z
-Stopped at: Phase 5 UI-SPEC approved
-Resume file: .planning/phases/05-multiplayer-party/05-UI-SPEC.md
+Last session: 2026-07-07T13:46:38.011Z
+Stopped at: Completed 05-01: party-rules foundation
+Resume file: None

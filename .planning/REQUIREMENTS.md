@@ -184,7 +184,7 @@ then `6 → 7`.
 | REQ-transcend-install | Phase 2 | Complete |
 | REQ-shard-risk | Phase 3 | Complete |
 | REQ-combat-roles | Phase 4 | Complete |
-| REQ-multiplayer-party | Phase 5 | Pending |
+| REQ-multiplayer-party | Phase 5 | Complete |
 | REQ-raid-boss | Phase 6 | Pending |
 | REQ-raid-roles-balance | Phase 7 | Pending |
 
