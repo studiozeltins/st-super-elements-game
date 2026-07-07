@@ -3067,7 +3067,8 @@ button {
 
 .cchar__id {
   position: absolute;
-  left: 16px;
+  /* Second column: sits just right of the top-left ring (ring is clamp 52–70px). */
+  left: calc(24px + clamp(52px, 10vw, 70px));
   top: calc(14px + env(safe-area-inset-top));
   z-index: 2;
   display: flex;
@@ -3158,7 +3159,7 @@ button {
 .cchar__ring {
   position: absolute;
   top: 12px;
-  right: 12px;
+  left: 12px;
   z-index: 3;
   width: clamp(52px, 10vw, 70px);
   height: clamp(52px, 10vw, 70px);
@@ -3241,29 +3242,23 @@ button {
   border: 1px solid currentColor;
 }
 
-/* Būsts chip: gold "C6" + purple "Bn", neutral hairline border. Clickable variant
-   opens the dedicated tab/page. */
-.cident__boost {
-  color: var(--muted);
-  border-color: color-mix(in srgb, var(--gold) 40%, var(--shard) 40%);
-}
-
-.cident__boost-c6 {
+/* Two separate Būsts chips: gold "C6" (→ cieņa) + purple "Bn" (→ būsts). */
+.cident__boost--c6 {
   color: var(--gold);
 }
 
-.cident__boost-b {
+.cident__boost--b {
   color: var(--shard);
 }
 
 .cident__boost--btn {
   cursor: pointer;
-  transition: transform 0.12s, border-color 0.12s;
+  transition: transform 0.12s, filter 0.12s;
 }
 
 .cident__boost--btn:hover {
   transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--gold) 60%, var(--shard) 60%);
+  filter: brightness(1.2);
 }
 
 /* Role badge — sibling of .cchar__transcend-tag.

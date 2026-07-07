@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ELEMENTS } from '../game/data/elements';
 import { ROLE_META, type CharacterDefinition } from '../game/data/characters';
 import { ConstellationRing } from './ConstellationRing';
@@ -19,8 +20,10 @@ export function CharacterIdentity({
   /** Ring data (unlocked ceiling + currently-active stars). */
   unlocked = 0,
   activated = 0,
-  /** If given, the Būsts chip becomes a button opening the dedicated tab/page. */
+  /** Click the purple "Bn" chip → dedicated Būsts tab/page. */
   onBoostClick,
+  /** Click the gold "C6" chip → dedicated constellation tab/page. */
+  onConClick,
 }: {
   character: CharacterDefinition;
   className?: string;
@@ -30,6 +33,7 @@ export function CharacterIdentity({
   unlocked?: number;
   activated?: number;
   onBoostClick?: () => void;
+  onConClick?: () => void;
 }) {
   const element = ELEMENTS[character.element];
   const role = ROLE_META[character.role];
@@ -64,26 +68,50 @@ export function CharacterIdentity({
                 {role.label}
               </span>
             )}
-            {transcendLevel > 0 &&
-              (onBoostClick ? (
-                <button
-                  type="button"
-                  className="cident__boost cident__boost--btn"
+            {transcendLevel > 0 && (
+              <>
+                <Chip className="cident__boost cident__boost--c6" onClick={onConClick} label="C6 — atvērt cieņu">
+                  C6
+                </Chip>
+                <Chip
+                  className="cident__boost cident__boost--b"
                   onClick={onBoostClick}
-                  aria-label={`Būsts B${transcendLevel} — atvērt`}
+                  label={`Būsts B${transcendLevel} — atvērt`}
                 >
-                  <span className="cident__boost-c6">C6</span> ·{' '}
-                  <span className="cident__boost-b">B{transcendLevel}</span>
-                </button>
-              ) : (
-                <span className="cident__boost" aria-label={`Būsts B${transcendLevel}`}>
-                  <span className="cident__boost-c6">C6</span> ·{' '}
-                  <span className="cident__boost-b">B{transcendLevel}</span>
-                </span>
-              ))}
+                  B{transcendLevel}
+                </Chip>
+              </>
+            )}
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// A tag chip that becomes a button when it has a click handler (opens a tab/page),
+// otherwise a plain span. Keeps the boost chips clickable only where it makes sense.
+function Chip({
+  className,
+  onClick,
+  label,
+  children,
+}: {
+  className: string;
+  onClick?: () => void;
+  label: string;
+  children: ReactNode;
+}) {
+  if (onClick) {
+    return (
+      <button type="button" className={`${className} cident__boost--btn`} onClick={onClick} aria-label={label}>
+        {children}
+      </button>
+    );
+  }
+  return (
+    <span className={className} aria-label={label}>
+      {children}
+    </span>
   );
 }

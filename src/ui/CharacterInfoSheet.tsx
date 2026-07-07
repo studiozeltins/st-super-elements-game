@@ -97,6 +97,7 @@ export function CharacterInfoSheet({
                     onBoostClick={
                       owned && onOpenFull ? () => onOpenFull(character.id) : undefined
                     }
+                    onConClick={owned && onOpenFull ? () => onOpenFull(character.id) : undefined}
                   />
                 </div>
               </div>

@@ -335,6 +335,7 @@ export function CharacterScreen({
                 className="cident--lg"
                 showRole
                 transcendLevel={transcendLevel}
+                onConClick={() => setTab('constellation')}
                 onBoostClick={() => setTab('transcend')}
               />
             </div>
