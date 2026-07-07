@@ -4,8 +4,8 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 6
 current_phase_name: Raid boss
-status: executing
-stopped_at: "Completed 05-02: party model + reducers"
+status: planning
+stopped_at: "Phase 05 complete + verified (VERIFICATION passed); ready to plan Phase 6"
 last_updated: "2026-07-07T23:15:48.830Z"
 last_activity: 2026-07-07
 last_activity_desc: Phase 05 complete, transitioned to Phase 6
@@ -26,16 +26,16 @@ See: .planning/PROJECT.md (updated 2026-07-06)
 **Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor).
-**Current focus:** Phase 05 — multiplayer-party
+**Current focus:** Phase 6 — Raid boss
 
 ## Current Position
 
 Phase: 6 — Raid boss
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-07-07 — Phase 05 complete, transitioned to Phase 6
+Status: Ready to plan
+Last activity: 2026-07-07 — Phase 05 complete + verified, transitioned to Phase 6
 
-Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
+Progress: [███████░░░] 75% (6 of 8 phases complete)
 
 ## Performance Metrics
 
