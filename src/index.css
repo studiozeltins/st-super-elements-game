@@ -2713,6 +2713,9 @@ button {
   padding: calc(8px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 8px
     max(20px, env(safe-area-inset-left));
   border-bottom: 1px solid var(--line);
+  /* Constant height across tabs: sized to the tallest state (the roster chip row,
+     ~42px + padding). Tabs without a roster no longer collapse the header. */
+  min-height: calc(60px + env(safe-area-inset-top));
 }
 
 .cscreen__title {
