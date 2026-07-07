@@ -40,8 +40,8 @@ export function CharacterPreview({ characterId }: { characterId: string }) {
     scene.add(rim);
 
     const model = createCharacterModel(character);
-    // Sit the model lower in frame (closer to the ground) across every card.
-    model.group.position.y = -0.6;
+    // Sit the model a touch lower in frame (closer to the ground) across every card.
+    model.group.position.y = -0.3;
     scene.add(model.group);
 
     let raf = 0;
