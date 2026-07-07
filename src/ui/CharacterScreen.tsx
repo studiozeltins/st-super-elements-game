@@ -334,6 +334,9 @@ export function CharacterScreen({
                 className="cident--lg"
                 showRole
                 transcendLevel={transcendLevel}
+                showRing
+                unlocked={unlocked}
+                activated={activated}
               />
             </div>
           </section>

@@ -91,6 +91,9 @@ export function CharacterInfoSheet({
                     className="cident--lg"
                     showRole
                     transcendLevel={transcendLevel}
+                    showRing
+                    unlocked={unlocked}
+                    activated={activated}
                   />
                 </div>
               </div>
