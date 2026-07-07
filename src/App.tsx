@@ -421,6 +421,12 @@ export default function App() {
     },
     [connection]
   );
+  const kickMember = useCallback(
+    (targetIdentity: Player['identity']) => {
+      connection?.reducers.kickMember({ targetIdentity });
+    },
+    [connection]
+  );
   const leavePlayerParty = useCallback(() => {
     connection?.reducers.leaveParty({});
   }, [connection]);
@@ -838,8 +844,18 @@ export default function App() {
           currentHealth={sheetTarget.currentHealth}
           online={sheetTarget.online}
           sharesParty={sharesPartyWithTarget}
+          isSelf={sheetTargetHex === myIdentityHex}
+          canKick={
+            sharesPartyWithTarget &&
+            myPartyLeaderHex === myIdentityHex &&
+            sheetTargetHex !== myIdentityHex
+          }
           partyFull={isPartyFull}
           leaveConfirmBody={leaveConfirmBody}
+          onKick={() => {
+            kickMember(sheetTarget.identity);
+            setSheetTargetHex(null);
+          }}
           onInvite={() => {
             invitePlayer(sheetTarget.identity);
             setSheetTargetHex(null);

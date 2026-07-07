@@ -1357,6 +1357,35 @@ export const leaveParty = spacetimedb.reducer(ctx => {
   }
 });
 
+// Kick a member from my party (leader-only). The leader cannot kick themselves
+// (they use leaveParty, which promotes the oldest-joined member). Removing a
+// non-leader never triggers promotion or disband — the leader always remains, so
+// the party stays alive. Authz keys off accountIdentity(ctx) via requirePlayer:
+// targetIdentity is a lookup only, never a trusted actor.
+export const kickMember = spacetimedb.reducer(
+  { targetIdentity: t.identity() },
+  (ctx, { targetIdentity }) => {
+    const me = requirePlayer(ctx);
+    const mine = ctx.db.partyMember.identity.find(me.identity);
+    if (!mine) throw new SenderError('Neesi nevienā barā');
+    const party = ctx.db.party.id.find(mine.partyId);
+    if (!party) throw new SenderError('Bars vairs nav spēkā');
+    if (!party.leaderIdentity.equals(me.identity))
+      throw new SenderError('Tikai vadonis var izmest no bara');
+    if (me.identity.equals(targetIdentity))
+      throw new SenderError('Nevar izmest sevi — pamet baru');
+    const target = ctx.db.partyMember.identity.find(targetIdentity);
+    if (!target || target.partyId !== mine.partyId)
+      throw new SenderError('Spēlētājs nav tavā barā');
+    ctx.db.partyMember.id.delete(target.id);
+    // Drop any pending invite naming the kicked player as joiner into this party,
+    // so a stale request can't re-add them without a fresh invite.
+    for (const inv of [...ctx.db.partyInvite.partyId.filter(mine.partyId)]) {
+      if (inv.joinerIdentity.equals(targetIdentity)) ctx.db.partyInvite.id.delete(inv.id);
+    }
+  }
+);
+
 // Sets the ordered party (membership + order). Keeps only owned, unique ids up
 // to PARTY_SIZE, and makes sure the active character stays inside the party.
 export const setParty = spacetimedb.reducer(

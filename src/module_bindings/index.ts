@@ -46,6 +46,7 @@ import FallToDeathReducer from "./fall_to_death_reducer";
 import HealInSafeZoneReducer from "./heal_in_safe_zone_reducer";
 import HealPartyReducer from "./heal_party_reducer";
 import InvitePlayerReducer from "./invite_player_reducer";
+import KickMemberReducer from "./kick_member_reducer";
 import LeavePartyReducer from "./leave_party_reducer";
 import LoginReducer from "./login_reducer";
 import LogoutReducer from "./logout_reducer";
@@ -323,6 +324,7 @@ const reducersSchema = __reducers(
   __reducerSchema("heal_in_safe_zone", HealInSafeZoneReducer),
   __reducerSchema("heal_party", HealPartyReducer),
   __reducerSchema("invite_player", InvitePlayerReducer),
+  __reducerSchema("kick_member", KickMemberReducer),
   __reducerSchema("leave_party", LeavePartyReducer),
   __reducerSchema("login", LoginReducer),
   __reducerSchema("logout", LogoutReducer),

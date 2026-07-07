@@ -16,6 +16,10 @@ interface PlayerSheetProps {
   online: boolean;
   /** Whether the viewer and the target already share a party (D-02: show only Leave). */
   sharesParty: boolean;
+  /** Whether this sheet is the viewer's own card (shared party → show Leave, not Kick). */
+  isSelf?: boolean;
+  /** Whether the viewer may kick this member (leader viewing another member). */
+  canKick?: boolean;
   /** Whether the viewer's own party is full (disables the invite action). */
   partyFull: boolean;
   /** Optional confirm-dialog body describing the consequence of leaving. */
@@ -23,6 +27,7 @@ interface PlayerSheetProps {
   onInvite(): void;
   onRequestJoin(): void;
   onLeave(): void;
+  onKick?(): void;
   onClose(): void;
 }
 
@@ -37,14 +42,18 @@ export function PlayerSheet({
   currentHealth,
   online,
   sharesParty,
+  isSelf = false,
+  canKick = false,
   partyFull,
   leaveConfirmBody,
   onInvite,
   onRequestJoin,
   onLeave,
+  onKick,
   onClose,
 }: PlayerSheetProps) {
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmKick, setConfirmKick] = useState(false);
   const character = CHARACTERS[activeCharacterId];
   const element = character ? ELEMENTS[character.element] : null;
   const role = character ? ROLE_META[character.role] : null;
@@ -129,9 +138,17 @@ export function PlayerSheet({
 
           <div className="player-sheet__actions">
             {sharesParty ? (
-              <Button variant="danger" onClick={() => setConfirmLeave(true)}>
-                Pamest baru
-              </Button>
+              isSelf ? (
+                <Button variant="danger" onClick={() => setConfirmLeave(true)}>
+                  Pamest baru
+                </Button>
+              ) : canKick ? (
+                <Button variant="danger" onClick={() => setConfirmKick(true)}>
+                  Izmest no bara
+                </Button>
+              ) : (
+                <span className="player-sheet__hint">Bara biedrs</span>
+              )
             ) : (
               <>
                 <Button variant="primary" disabled={partyFull} onClick={onInvite}>
@@ -169,6 +186,30 @@ export function PlayerSheet({
         }
       >
         {leaveConfirmBody ? <p className="player-sheet__confirm-body">{leaveConfirmBody}</p> : null}
+      </Modal>
+
+      <Modal
+        open={confirmKick}
+        onOpenChange={setConfirmKick}
+        title="Izmest no bara?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmKick(false)}>
+              Atcelt
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setConfirmKick(false);
+                onKick?.();
+              }}
+            >
+              Izmest
+            </Button>
+          </>
+        }
+      >
+        <p className="player-sheet__confirm-body">{name} tiks izņemts no tava bara.</p>
       </Modal>
     </Dialog.Root>
   );
