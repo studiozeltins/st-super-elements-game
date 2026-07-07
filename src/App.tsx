@@ -4,9 +4,13 @@ import { tables, type DbConnection } from './module_bindings';
 import type { Player } from './module_bindings/types';
 import { createGame, type Game, type HudState } from './game/createGame';
 import { CHARACTERS } from './game/data/characters';
-import { MAX_HEALTH } from './game/data/constants';
+import { ELEMENTS } from './game/data/elements';
+import { MAX_HEALTH, RAID_PARTY_SIZE } from './game/data/constants';
 import { AuthScreen } from './ui/AuthScreen';
 import { deriveKey } from './auth/hash';
+import { Modal } from './ui/Modal';
+import { Button } from './ui/Button';
+import { PlayerSheet } from './ui/PlayerSheet';
 import { Hud } from './ui/Hud';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
@@ -63,6 +67,12 @@ export default function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
+  // Player-party (Pulks) UI state, lifted here so the HUD chip, the online-players
+  // surface, and the slide-out sheet all share it. `sheetTargetHex` stores the
+  // tapped player's canonical hex; the row itself is re-derived so the sheet stays
+  // reactive to name/character/online changes while open.
+  const [isPartyOpen, setIsPartyOpen] = useState(false);
+  const [sheetTargetHex, setSheetTargetHex] = useState<string | null>(null);
   // Shard loss/gain feedback: a --pulse (gain) / --drain (loss) flash on the shard
   // counter and a self-facing toast on a real shard MOVEMENT. Disambiguated purely
   // client-side (no new broadcast table): a recent pvpHit on me marks a DOWN as a
@@ -75,6 +85,16 @@ export default function App() {
     null
   );
   const [shardToast, setShardToast] = useState<{ text: string; key: number } | null>(null);
+
+  // Resolve this device to its account's canonical identity BEFORE building the
+  // subscription. The party_invite filter keys off the canonical recipient, and
+  // every ownership/event comparison downstream uses this canonical hex — never
+  // the per-device anonymous identity.
+  const [accountLinks] = useTable(tables.accountLink);
+  const myLink = accountLinks.find(link => link.identity.toHexString() === deviceIdentityHex);
+  const myIdentityHex = myLink?.canonicalIdentity.toHexString() ?? null;
+  const myCanonicalIdentity = myLink?.canonicalIdentity ?? null;
+  myIdentityRef.current = myIdentityHex;
 
   useEffect(() => {
     if (!connection || !isActive || !identity) {
@@ -101,6 +121,13 @@ export default function App() {
         tables.shardDrop,
         tables.enemy,
         tables.goliath,
+        tables.party,
+        tables.partyMember,
+        // Only invites addressed to ME (canonical recipient) — a player must never
+        // receive invites meant for others (T-05-05, Information Disclosure).
+        ...(myCanonicalIdentity
+          ? [tables.partyInvite.where(row => row.recipientIdentity.eq(myCanonicalIdentity))]
+          : []),
       ]);
     return () => {
       try {
@@ -109,7 +136,10 @@ export default function App() {
         // Subscription may already be gone when the connection dropped.
       }
     };
-  }, [connection, isActive, identity]);
+    // Re-subscribe once the canonical identity resolves so the party_invite filter
+    // binds to the real recipient (myCanonicalIdentity read via closure).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection, isActive, identity, myIdentityHex]);
 
   const [players] = useTable(tables.player);
   const [ownedCharacterRows] = useTable(tables.ownedCharacter);
@@ -120,14 +150,9 @@ export default function App() {
   const [shardDropRows] = useTable(tables.shardDrop);
   const [enemyRows] = useTable(tables.enemy);
   const [goliathRows] = useTable(tables.goliath);
-  const [accountLinks] = useTable(tables.accountLink);
-
-  // Resolve this device to its account's canonical identity. All downstream
-  // ownership/event filters use myIdentityHex, so they key off the account, not
-  // the per-device anonymous identity.
-  const myLink = accountLinks.find(link => link.identity.toHexString() === deviceIdentityHex);
-  const myIdentityHex = myLink?.canonicalIdentity.toHexString() ?? null;
-  myIdentityRef.current = myIdentityHex;
+  const [parties] = useTable(tables.party);
+  const [partyMembers] = useTable(tables.partyMember);
+  const [myInvites] = useTable(tables.partyInvite);
 
   useTable(tables.skillCast, {
     onInsert: cast => {
@@ -243,6 +268,53 @@ export default function App() {
     .filter(row => row.owner.toHexString() === myIdentityHex)
     .map(row => ({ weaponId: row.weaponId, rarity: row.rarity }));
 
+  // ---- Player-party (Pulks) derivations — all identity comparisons key off the
+  // canonical myIdentityHex, since party_member.identity is the canonical id. ----
+  const myMembership = partyMembers.find(
+    member => member.identity.toHexString() === myIdentityHex
+  );
+  const myPartyId = myMembership?.partyId ?? null;
+  const myRoster =
+    myPartyId !== null ? partyMembers.filter(member => member.partyId === myPartyId) : [];
+  const myPartyCount = myRoster.length;
+  const isInParty = myPartyId !== null;
+  const isPartyFull = myPartyCount >= RAID_PARTY_SIZE;
+  const myPartyLeaderHex =
+    myPartyId !== null
+      ? parties.find(party => party.id === myPartyId)?.leaderIdentity.toHexString() ?? null
+      : null;
+  const iAmLeader = myPartyLeaderHex !== null && myPartyLeaderHex === myIdentityHex;
+  // Confirm-dialog consequence copy (D-05): leaving as the last member disbands the
+  // party; a leaving leader with others promotes the oldest-joined member.
+  const leaveConfirmBody =
+    myPartyCount <= 1
+      ? 'Pulks tiks izformēts.'
+      : iAmLeader
+        ? 'Vadība pāries citam biedram.'
+        : undefined;
+
+  // Online players other than me — the conflict-free tap surface (avatar raycast
+  // collides with click-to-attack, deferred) that opens the .player-sheet.
+  const onlinePlayers = players.filter(
+    player => player.online && player.identity.toHexString() !== myIdentityHex
+  );
+
+  // The tapped target for the slide-out sheet, re-derived from the live player rows.
+  const sheetTarget = sheetTargetHex
+    ? players.find(player => player.identity.toHexString() === sheetTargetHex) ?? null
+    : null;
+  const targetMembership = sheetTargetHex
+    ? partyMembers.find(member => member.identity.toHexString() === sheetTargetHex)
+    : undefined;
+  const sharesPartyWithTarget =
+    isInParty && targetMembership !== undefined && targetMembership.partyId === myPartyId;
+
+  // Invites addressed to me (the subscription already filters to my canonical id;
+  // the extra guard keeps the derivation correct against any cache overlap).
+  const myPendingInvites = myInvites.filter(
+    invite => invite.recipientIdentity.toHexString() === myIdentityHex
+  );
+
   const pullBanner = useCallback(
     (bannerId: string, count: number) => {
       pullBufferRef.current = [];
@@ -280,6 +352,37 @@ export default function App() {
     },
     [connection]
   );
+
+  // ---- Player-party (Pulks) reducer callers ----
+  // The client only ever supplies targetIdentity/inviteId as a lookup; the server
+  // resolves the authenticated actor from ctx.sender (T-05-01, Spoofing).
+  const invitePlayer = useCallback(
+    (targetIdentity: Player['identity']) => {
+      connection?.reducers.invitePlayer({ targetIdentity });
+    },
+    [connection]
+  );
+  const requestJoin = useCallback(
+    (targetIdentity: Player['identity']) => {
+      connection?.reducers.requestJoin({ targetIdentity });
+    },
+    [connection]
+  );
+  const acceptInvite = useCallback(
+    (inviteId: bigint) => {
+      connection?.reducers.acceptInvite({ inviteId });
+    },
+    [connection]
+  );
+  const declineInvite = useCallback(
+    (inviteId: bigint) => {
+      connection?.reducers.declineInvite({ inviteId });
+    },
+    [connection]
+  );
+  const leavePlayerParty = useCallback(() => {
+    connection?.reducers.leaveParty({});
+  }, [connection]);
 
   const handleRegister = useCallback(
     async (username: string, email: string, password: string) => {
@@ -528,6 +631,9 @@ export default function App() {
         partyHealthById={partyHealthById}
         activeCharacterId={myPlayer?.activeCharacterId ?? ''}
         hudState={hudState}
+        partyCount={myPartyCount}
+        inPlayerParty={isInParty}
+        onOpenParty={() => setIsPartyOpen(true)}
         onSelectPartySlot={slotIndex => {
           const characterId = partyCharacterIds[slotIndex];
           if (characterId) selectCharacter(characterId);
@@ -607,6 +713,104 @@ export default function App() {
           handleLogout();
         }}
       />
+      <Modal
+        open={isPartyOpen}
+        onOpenChange={setIsPartyOpen}
+        title={isInParty ? `Pulks · ${myPartyCount}/${RAID_PARTY_SIZE}` : 'Pulks'}
+      >
+        {myPendingInvites.length > 0 && (
+          <div className="party-invites">
+            <p className="party-invites__kicker">SAŅEMTIE AICINĀJUMI</p>
+            <ul className="party-invites__list">
+              {myPendingInvites.map(invite => {
+                // kind is display copy only. request → the joiner asked to join MY
+                // party; invite → the party leader invited ME.
+                const isRequest = invite.kind === 'request';
+                const otherHex = isRequest
+                  ? invite.joinerIdentity.toHexString()
+                  : parties.find(party => party.id === invite.partyId)?.leaderIdentity.toHexString() ??
+                    null;
+                const otherName =
+                  players.find(player => player.identity.toHexString() === otherHex)?.name ??
+                  'Spēlētājs';
+                const message = isRequest
+                  ? `${otherName} lūdz pievienoties tavam pulkam`
+                  : `${otherName} aicina tevi savā pulkā`;
+                return (
+                  <li key={invite.id.toString()} className="party-invites__item">
+                    <span className="party-invites__msg">{message}</span>
+                    <div className="party-invites__actions">
+                      <Button variant="primary" onClick={() => acceptInvite(invite.id)}>
+                        Pieņemt
+                      </Button>
+                      <Button variant="ghost" onClick={() => declineInvite(invite.id)}>
+                        Noraidīt
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+        <p className="party-invites__kicker">TIEŠSAISTES SPĒLĒTĀJI</p>
+        {onlinePlayers.length === 0 ? (
+          <p className="online-players__empty">Nav citu spēlētāju tiešsaistē.</p>
+        ) : (
+          <ul className="online-players">
+            {onlinePlayers.map(player => {
+              const hex = player.identity.toHexString();
+              const character = CHARACTERS[player.activeCharacterId];
+              const element = character ? ELEMENTS[character.element] : null;
+              return (
+                <li key={hex}>
+                  <button
+                    type="button"
+                    className="online-players__row"
+                    onClick={() => {
+                      setSheetTargetHex(hex);
+                      setIsPartyOpen(false);
+                    }}
+                  >
+                    <span className="online-players__dot" aria-hidden="true">
+                      ●
+                    </span>
+                    <span className="online-players__name">{player.name}</span>
+                    {character && element && (
+                      <span className="online-players__char" style={{ color: element.cssColor }}>
+                        {character.displayName}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Modal>
+      {sheetTarget && (
+        <PlayerSheet
+          name={sheetTarget.name}
+          activeCharacterId={sheetTarget.activeCharacterId}
+          online={sheetTarget.online}
+          sharesParty={sharesPartyWithTarget}
+          partyFull={isPartyFull}
+          leaveConfirmBody={leaveConfirmBody}
+          onInvite={() => {
+            invitePlayer(sheetTarget.identity);
+            setSheetTargetHex(null);
+          }}
+          onRequestJoin={() => {
+            requestJoin(sheetTarget.identity);
+            setSheetTargetHex(null);
+          }}
+          onLeave={() => {
+            leavePlayerParty();
+            setSheetTargetHex(null);
+          }}
+          onClose={() => setSheetTargetHex(null)}
+        />
+      )}
     </div>
   );
 }
