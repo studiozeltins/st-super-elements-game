@@ -108,3 +108,22 @@ Flags: `--url` (app URL, default `http://localhost:5173`), `--user`,
 > Note: registering a bot creates a real `account` row in the **local** DB.
 > These are not in the backup set — only ever run this against `local`, never
 > a DB with real accounts.
+
+### Make a bot follow you (server-driven training dummy)
+
+Headless keyboard movement is unreliable. Instead, mark an online player as a
+server-driven **puppet** — the world tick steers it toward the nearest real
+player (like an enemy), and `updatePosition` ignores its client so the server
+owns its movement:
+
+```bash
+# bot online in one terminal:
+python scripts/party-bot.py --user PulkaBots
+
+# then, once you are also in-game, make it chase you (local only):
+spacetime call 2d-impact-game-fr9ti debug_set_puppet '"PulkaBots"' 'true'  --server local
+# stop chasing:
+spacetime call 2d-impact-game-fr9ti debug_set_puppet '"PulkaBots"' 'false' --server local
+```
+
+`debug_set_puppet(name, enabled)` is a **dev/test** reducer — local use only.

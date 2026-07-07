@@ -269,6 +269,9 @@ const GOLIATH_PLAYER_CONTACT_RANGE = 2.6; // goliath ↔ a player who provoked i
 // all members; each member's phase is derived from its id so the camp fans out.
 const ENEMY_PATROL_RADIUS = 1.7;
 const ENEMY_PATROL_PERIOD_MICROS = 11_000_000n; // ~11s per lap — a calm patrol
+// DEV puppet (training dummy) chase tuning.
+const PUPPET_SPEED = 6; // units/sec toward the nearest real player
+const PUPPET_STOP_RADIUS = 1.8; // stop this close so it stays in melee reach
 // A camp member notices an open-field player within this range and MIGHT turn
 // aggressive — rolled per tick so a camp feels alive (some members lock on fast,
 // some hang back) rather than every member snapping on the instant you arrive.
@@ -652,6 +655,14 @@ const partyInvite = table(
   }
 );
 
+// DEV/TEST: a player marked here is a server-driven "puppet" (training dummy) —
+// the world tick steers it toward the nearest real player like an enemy, and
+// updatePosition ignores its client so the server owns its movement. Local only.
+const puppet = table(
+  { name: 'puppet', public: true },
+  { identity: t.identity().primaryKey() }
+);
+
 const spacetimedb = schema({
   account,
   accountLink,
@@ -674,6 +685,7 @@ const spacetimedb = schema({
   party,
   partyMember,
   partyInvite,
+  puppet,
 });
 export default spacetimedb;
 
@@ -1019,6 +1031,8 @@ export const updatePosition = spacetimedb.reducer(
   { positionX: t.f32(), positionY: t.f32(), positionZ: t.f32(), rotationY: t.f32() },
   (ctx, { positionX, positionY, positionZ, rotationY }) => {
     const currentPlayer = requirePlayer(ctx);
+    // A puppet (training dummy) is server-driven — ignore its client's position.
+    if (ctx.db.puppet.identity.find(currentPlayer.identity)) return;
     const stepX = positionX - currentPlayer.positionX;
     const stepZ = positionZ - currentPlayer.positionZ;
     const stepDistance = Math.hypot(stepX, stepZ);
@@ -2387,6 +2401,19 @@ function respawnEnemies(ctx: { db: any }, nowMicros: bigint) {
   }
 }
 
+// DEV/TEST: toggle a player (by name) as a server-driven puppet (training dummy)
+// that the world tick steers toward the nearest real player. Local testing only.
+export const debugSetPuppet = spacetimedb.reducer(
+  { name: t.string(), enabled: t.bool() },
+  (ctx, { name, enabled }) => {
+    const target = [...ctx.db.player.iter()].find(p => p.name === name);
+    if (!target) throw new SenderError('No player with that name');
+    const existing = ctx.db.puppet.identity.find(target.identity);
+    if (enabled && !existing) ctx.db.puppet.insert({ identity: target.identity });
+    if (!enabled && existing) ctx.db.puppet.identity.delete(target.identity);
+  }
+);
+
 // The heart of the server-authoritative fight. Each tick: spawn/retire goliaths,
 // move everyone, resolve REAL contact damage (goliaths grind camps, camps grind
 // back, aggroed enemies bite the player), pay out deaths, vacuum loose gems, and
@@ -2406,6 +2433,43 @@ export const worldTick = spacetimedb.reducer(
     const players = [...ctx.db.player.iter()].filter(playerRow => playerRow.online);
     const playerByHex = new Map<string, any>();
     for (const playerRow of players) playerByHex.set(playerRow.identity.toHexString(), playerRow);
+
+    // Puppet pass (DEV) — server-driven training dummies chase the nearest real
+    // player, reusing the same stepToward + walkable guard as enemies.
+    const puppetHexes = new Set([...ctx.db.puppet.iter()].map(p => p.identity.toHexString()));
+    if (puppetHexes.size > 0) {
+      const realPlayers = players.filter(p => !puppetHexes.has(p.identity.toHexString()));
+      for (const pupHex of puppetHexes) {
+        const pup = playerByHex.get(pupHex);
+        if (!pup) continue;
+        let nearest: any = null;
+        let nearestDistance = Infinity;
+        for (const rp of realPlayers) {
+          const d = distanceBetween(pup.positionX, pup.positionZ, rp.positionX, rp.positionZ);
+          if (d < nearestDistance) {
+            nearestDistance = d;
+            nearest = rp;
+          }
+        }
+        if (!nearest || nearestDistance <= PUPPET_STOP_RADIUS) continue;
+        const moved = stepToward(
+          pup.positionX,
+          pup.positionZ,
+          nearest.positionX,
+          nearest.positionZ,
+          PUPPET_SPEED * (Number(tick) / 1_000_000)
+        );
+        const nx = clampToWorld(moved.x);
+        const nz = clampToWorld(moved.z);
+        if (!isWalkable(nx, nz)) continue;
+        ctx.db.player.identity.update({
+          ...pup,
+          positionX: nx,
+          positionZ: nz,
+          rotationY: Math.atan2(nearest.positionX - pup.positionX, nearest.positionZ - pup.positionZ),
+        });
+      }
+    }
 
     // Pass 1 — goliaths raid a STABLE camp target (chasing a provoker takes over).
     const goliathTarget = new Map<bigint, number>();

@@ -41,6 +41,7 @@ import AttackRayReducer from "./attack_ray_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
 import CollectGemReducer from "./collect_gem_reducer";
 import CollectShardReducer from "./collect_shard_reducer";
+import DebugSetPuppetReducer from "./debug_set_puppet_reducer";
 import DeclineInviteReducer from "./decline_invite_reducer";
 import DisbandPartyReducer from "./disband_party_reducer";
 import FallToDeathReducer from "./fall_to_death_reducer";
@@ -83,6 +84,7 @@ import PartyInviteRow from "./party_invite_table";
 import PartyMemberRow from "./party_member_table";
 import PlayerRow from "./player_table";
 import PullResultRow from "./pull_result_table";
+import PuppetRow from "./puppet_table";
 import PvpHitRow from "./pvp_hit_table";
 import RangedAttackRow from "./ranged_attack_table";
 import ShardDropRow from "./shard_drop_table";
@@ -260,6 +262,17 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, PullResultRow),
+  puppet: __table({
+    name: 'puppet',
+    indexes: [
+      { accessor: 'identity', name: 'puppet_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'puppet_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, PuppetRow),
   pvpHit: __table({
     name: 'pvp_hit',
     indexes: [
@@ -320,6 +333,7 @@ const reducersSchema = __reducers(
   __reducerSchema("cast_skill", CastSkillReducer),
   __reducerSchema("collect_gem", CollectGemReducer),
   __reducerSchema("collect_shard", CollectShardReducer),
+  __reducerSchema("debug_set_puppet", DebugSetPuppetReducer),
   __reducerSchema("decline_invite", DeclineInviteReducer),
   __reducerSchema("disband_party", DisbandPartyReducer),
   __reducerSchema("fall_to_death", FallToDeathReducer),

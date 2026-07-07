@@ -180,6 +180,11 @@ export const PullResult = __t.object("PullResult", {
 });
 export type PullResult = __Infer<typeof PullResult>;
 
+export const Puppet = __t.object("Puppet", {
+  identity: __t.identity(),
+});
+export type Puppet = __Infer<typeof Puppet>;
+
 export const PvpHit = __t.object("PvpHit", {
   target: __t.identity(),
   amount: __t.u32(),
