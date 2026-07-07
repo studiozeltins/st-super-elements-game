@@ -192,7 +192,9 @@ export function CharacterScreen({
       </button>
 
       <header className="cscreen__topbar">
-        <h2 className="cscreen__title">VAROŅI</h2>
+        <h2 className="cscreen__title">
+          {MAIN_MENU.find(entry => entry.id === 'profile')?.label ?? 'VARONIS'}
+        </h2>
         {/* Roster selector — scrolls in the header (wheel + drag on desktop). */}
         <nav
           className="cscreen__roster drag-scroll"

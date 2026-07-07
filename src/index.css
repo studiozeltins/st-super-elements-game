@@ -1075,12 +1075,16 @@ button {
   }
 }
 
+/* Compact, constant-height header (mobile-first): tight vertical padding + a
+   min-height sized to the tallest child (a selector chip) so it never exceeds
+   ~53px or jumps between tabs. Shared shape with .cscreen__topbar. */
 .gacha__header {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: calc(8px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 8px
-    max(20px, env(safe-area-inset-left));
+  gap: 12px;
+  padding: calc(4px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 4px
+    max(16px, env(safe-area-inset-left));
+  min-height: calc(52px + env(safe-area-inset-top));
   border-bottom: 1px solid var(--line);
 }
 
@@ -2706,16 +2710,15 @@ button {
   animation: gacha-fade 0.22s ease-out both;
 }
 
+/* Same compact shape as .gacha__header — constant height, ~52px, never jumps. */
 .cscreen__topbar {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: calc(8px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 8px
-    max(20px, env(safe-area-inset-left));
+  gap: 12px;
+  padding: calc(4px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 4px
+    max(16px, env(safe-area-inset-left));
+  min-height: calc(52px + env(safe-area-inset-top));
   border-bottom: 1px solid var(--line);
-  /* Constant height across tabs: sized to the tallest state (the roster chip row,
-     ~42px + padding). Tabs without a roster no longer collapse the header. */
-  min-height: calc(60px + env(safe-area-inset-top));
 }
 
 .cscreen__title {
@@ -2789,7 +2792,7 @@ button {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 12px 5px 6px;
+  padding: 3px 12px 3px 6px;
   scroll-snap-align: start;
   border: 1px solid var(--line);
   border-left: 3px solid var(--element-color);
@@ -4130,7 +4133,7 @@ button {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 4px 12px 4px 5px;
+  padding: 3px 12px 3px 5px;
   border: 1px solid var(--line);
   border-left: 3px solid var(--rarity, var(--line));
   background: var(--panel);

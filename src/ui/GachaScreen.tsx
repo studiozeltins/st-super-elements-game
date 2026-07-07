@@ -171,7 +171,10 @@ export function GachaScreen({
         ✕
       </button>
       <header className="gacha__header">
-        <h2 className="gacha__title">VĒLĒŠANĀS</h2>
+        {/* Title tracks the active section (rail label), so it never stays "VĒLĒŠANĀS". */}
+        <h2 className="gacha__title">
+          {MAIN_MENU.find(entry => entry.id === tab)?.label ?? 'VĒLĒŠANĀS'}
+        </h2>
         {/* Banner selector — scrolls in the middle of the header (banners tab). */}
         {tab === 'banners' ? (
           <nav
