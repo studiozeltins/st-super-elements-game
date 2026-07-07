@@ -11,3 +11,7 @@ WhatsApp Image*.jpeg
 
 # Snapshot dumps (contain player identities) — do not commit
 backup/
+
+# Python bytecode (test-bot script)
+scripts/__pycache__/
+__pycache__/
