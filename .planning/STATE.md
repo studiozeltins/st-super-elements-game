@@ -6,7 +6,7 @@ current_phase: 03
 current_phase_name: Shards at risk
 status: executing
 stopped_at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
-last_updated: "2026-07-06T23:09:42.170Z"
+last_updated: "2026-07-07T08:45:49.191Z"
 last_activity: 2026-07-07
 last_activity_desc: Phase 03 plan 01 complete (applyDeathShardPenalty helper + spec)
 progress:
@@ -31,7 +31,7 @@ floor).
 ## Current Position
 
 Phase: 03 — Shards at risk
-Plan: 4 of 5 complete; plan 02 next
+Plan: 5 of 5 complete; plan 02 next
 Status: Ready to execute
 Last activity: 2026-07-07 — Phase 03 plan 01 complete (applyDeathShardPenalty helper + spec)
 
@@ -71,6 +71,7 @@ Progress: [█░░░░░░░░░] 11% (1 of 9 phases complete)
 | Phase 03 P02 | 6 min | 2 tasks | 1 files |
 | Phase 03 P03 | ~3m | 1 tasks | 5 files |
 | Phase 03 P04 | 20m | 3 tasks | 5 files |
+| Phase 03 P05 | 9 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,8 @@ Recent decisions affecting current work:
 - [Phase ?]: 03-03: Regenerated bindings expose tables.shardDrop + reducers.collectShard — gates Plan 04 client work.
 - [Phase ?]: Shard-movement toast disambiguated client-side with no new broadcast table: DOWN+recent pvpHit = stolen, DOWN otherwise = PVE drop, UP with no recent local collect = kill-steal, plain pickup = pulse only.
 - [Phase ?]: Shard counter flash threaded to CharacterScreen + GachaScreen chips via shardFlashClass prop; loss shown by --drain shrink (motion) not --danger (hue).
+- [Phase ?]: [Phase 03]: shards-at-risk verified end-to-end via two-client playtest — all 5 scenarios pass (PVP steal +1 exact, PVE purple drop + 1.2s grace + no camp vacuum, erosion order transcend-- then one C-level with C0-C6 floor held, 0-shard PVP kill mints nothing, 0-gem shard carrier still transfers); vitest 339 green + build green. Phase 3 done.
+- [Phase ?]: [Phase 03][follow-up]: emergent — shard_drop reuses the gem magnet/collect loop, so drops are re-grabbable and enemies can also pick them up (killing that enemy re-drops the shard). Tester approved; flag for a future phase vs the 'camps must not vacuum a drop' invariant. No fix now.
 
 ### Pending Todos
 
@@ -118,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-06T23:09:02.578Z
+Last session: 2026-07-07T08:45:15.564Z
 Stopped at: Completed 03-01-PLAN.md; plan 02 (shard_drop table + spillShards + collectShard) next
 Resume file: .planning/phases/03-shards-at-risk/03-01-SUMMARY.md

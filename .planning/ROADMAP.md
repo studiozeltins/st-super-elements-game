@@ -22,7 +22,7 @@ parallel spines that converge at Phase 6.
 - [x] **Phase 0: Lock transcendence constants** - Add + mirror all `SHARD_*` / `TRANSCEND_*` constants, no logic (completed 2026-07-06)
 - [x] **Phase 1: Constellation shard currency** - Mint 1 shard per C6-overflow dupe (replaces 800-gem refund) (completed 2026-07-06)
 - [x] **Phase 2: Transcendence install** - Spend shards to transcend a C6 character past C6 for real power (completed 2026-07-06)
-- [ ] **Phase 3: Shards at risk** - Death loss + PVP steal + erosion order (transcend-- then C--)
+- [x] **Phase 3: Shards at risk** - Death loss + PVP steal + erosion order (transcend-- then C--) (completed 2026-07-07)
 - [ ] **Phase 4: Formalize character roles** - Tag every character tank/dps/healer/support
 - [ ] **Phase 5: Multiplayer party** - Create/join/leave parties with a live role roster
 - [ ] **Phase 6: Raid boss** - Party-summoned boss that drops shards (the recoverable faucet)
@@ -134,14 +134,14 @@ and with no shards the active character erodes in the locked order.
 
   4. The player sees a shard lost/stolen toast, an updated counter, and a steal-feed hint.
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans complete
 **UI hint**: yes
 
 - [x] 03-01-PLAN.md — Pure `applyDeathShardPenalty` helper + cross-import unit test (Nyquist Wave 0)
 - [x] 03-02-PLAN.md — Server: `shard_drop` table + `spillShards` + `collectShard`, wire penalty into 3 death paths (keep gem spill, PVP credits `shardsLost`)
 - [x] 03-03-PLAN.md — [BLOCKING] Additive migrate-publish to local + regenerate bindings (gates client)
 - [x] 03-04-PLAN.md — Client: purple shard-drop renderer + subscribe/bridge + lost/stolen toast + counter loss/gain flash
-- [ ] 03-05-PLAN.md — Validation: suite + build green, two-client playtest, PROGRESS.md tracker update
+- [x] 03-05-PLAN.md — Validation: suite + build green, two-client playtest, PROGRESS.md tracker update
 
 ### Phase 4: Formalize character roles
 
@@ -243,7 +243,7 @@ parallel after Phase 0; they converge at Phase 6 and finish at Phase 7.
 | 0. Lock transcendence constants | 1/1 | Complete   | 2026-07-06 |
 | 1. Constellation shard currency | 4/4 | Complete    | 2026-07-06 |
 | 2. Transcendence install | 5/5 | Complete    | 2026-07-06 |
-| 3. Shards at risk | 4/5 | In Progress|  |
+| 3. Shards at risk | 5/5 | Complete   | 2026-07-07 |
 | 4. Formalize character roles | 0/TBD | Not started | - |
 | 5. Multiplayer party | 0/TBD | Not started | - |
 | 6. Raid boss | 0/TBD | Not started | - |
