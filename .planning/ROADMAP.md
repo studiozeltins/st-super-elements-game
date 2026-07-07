@@ -160,7 +160,9 @@ the raid can later enforce.
   3. A role badge is visible on the character sheet / character screen.
   4. `pnpm test` and `pnpm build` are green.
 
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 04-01-PLAN.md — Role data mirror (client + server CHARACTER_STATS) + serverSync parity tests + additive local publish (Wave 1)
+- [ ] 04-02-PLAN.md — Role badge UI: --role-* tokens + badge on CharacterScreen/CharacterSheet (Wave 2)
 **UI hint**: yes
 
 ### Phase 5: Multiplayer party
