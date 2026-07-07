@@ -1,11 +1,12 @@
 ---
 phase: 04-formalize-character-roles
 verified: 2026-07-07T13:25:00Z
-status: human_needed
+status: passed
 score: 4/4 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Open the CharacterScreen (full-page) and the CharacterSheet (character card) for characters of each role."
     expected: "A role pill is visible — CharacterScreen in the .cchar__id stack ordered AKTĪVS VARONIS -> role -> transcend; CharacterSheet in the .sheet__meta row before the level chip (not stranded flush-right). Correct Latvian uppercase label (SARGS/UZBRUCĒJS/DZIEDNIEKS/ATBALSTS) with the matching per-role outline color, box model matching the sibling active tag."
     why_human: "Visual placement, per-role color rendering, and pixel-parity with the existing HUD tags cannot be asserted programmatically (04-VALIDATION.md manual-only UAT). Code is present and wired; only the rendered appearance needs a human eye."
