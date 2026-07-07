@@ -1176,6 +1176,96 @@ export const transcendCharacter = spacetimedb.reducer(
   }
 );
 
+// ---- Multiplayer party reducers ---------------------------------------------
+// Invite-only entry (D-01): a party_member row is only ever inserted from a
+// matching pending party_invite the recipient accepts. Every reducer resolves the
+// ACTOR via requirePlayer(ctx); targetIdentity is a lookup target only, never
+// trusted as the caller (T-05-01 Spoofing, CLAUDE.md rule 5).
+
+// D-02 invite branch: ensure MY party (me = leader), then leave a pending invite
+// the target must accept.
+export const invitePlayer = spacetimedb.reducer(
+  { targetIdentity: t.identity() },
+  (ctx, { targetIdentity }) => {
+    const me = requirePlayer(ctx);
+    if (me.identity.equals(targetIdentity)) throw new SenderError('Nevar aicināt sevi');
+    const target = ctx.db.player.identity.find(targetIdentity);
+    if (!target) throw new SenderError('Spēlētājs nav atrasts');
+    if (ctx.db.partyMember.identity.find(targetIdentity))
+      throw new SenderError(`${target.name} jau ir citā pulkā`);
+
+    // Ensure my party exists with me as leader.
+    const mine = ctx.db.partyMember.identity.find(me.identity);
+    let partyId: bigint;
+    if (mine) {
+      partyId = mine.partyId;
+    } else {
+      const p = ctx.db.party.insert({ id: 0n, leaderIdentity: me.identity, createdAt: ctx.timestamp });
+      partyId = p.id;
+      ctx.db.partyMember.insert({ id: 0n, partyId, identity: me.identity, joinedAt: ctx.timestamp });
+    }
+
+    const roster = [...ctx.db.partyMember.partyId.filter(partyId)];
+    if (roster.length >= RAID_PARTY_SIZE) throw new SenderError('Pulks ir pilns (4/4)');
+
+    // Dedupe: don't stack a second pending invite for this joiner in this party (T-05-06).
+    const dupe = [...ctx.db.partyInvite.partyId.filter(partyId)]
+      .some(inv => inv.joinerIdentity.equals(targetIdentity));
+    if (dupe) return;
+
+    ctx.db.partyInvite.insert({
+      id: 0n,
+      partyId,
+      joinerIdentity: targetIdentity,
+      recipientIdentity: targetIdentity,
+      kind: 'invite',
+      createdAt: ctx.timestamp,
+    });
+  }
+);
+
+// D-02 ask-to-join branch (the mirror of invitePlayer): ensure the TARGET's party
+// (target = leader), then leave a pending request the target must accept.
+export const requestJoin = spacetimedb.reducer(
+  { targetIdentity: t.identity() },
+  (ctx, { targetIdentity }) => {
+    const me = requirePlayer(ctx);
+    if (me.identity.equals(targetIdentity)) throw new SenderError('Nevar aicināt sevi');
+    const target = ctx.db.player.identity.find(targetIdentity);
+    if (!target) throw new SenderError('Spēlētājs nav atrasts');
+    if (ctx.db.partyMember.identity.find(me.identity))
+      throw new SenderError('jau esi citā pulkā');
+
+    // Ensure the target's party exists with the target as leader.
+    const theirs = ctx.db.partyMember.identity.find(targetIdentity);
+    let partyId: bigint;
+    if (theirs) {
+      partyId = theirs.partyId;
+    } else {
+      const p = ctx.db.party.insert({ id: 0n, leaderIdentity: targetIdentity, createdAt: ctx.timestamp });
+      partyId = p.id;
+      ctx.db.partyMember.insert({ id: 0n, partyId, identity: targetIdentity, joinedAt: ctx.timestamp });
+    }
+
+    const roster = [...ctx.db.partyMember.partyId.filter(partyId)];
+    if (roster.length >= RAID_PARTY_SIZE) throw new SenderError('Pulks ir pilns (4/4)');
+
+    // Dedupe: don't stack a second pending request from me into this party (T-05-06).
+    const dupe = [...ctx.db.partyInvite.partyId.filter(partyId)]
+      .some(inv => inv.joinerIdentity.equals(me.identity));
+    if (dupe) return;
+
+    ctx.db.partyInvite.insert({
+      id: 0n,
+      partyId,
+      joinerIdentity: me.identity,
+      recipientIdentity: targetIdentity,
+      kind: 'request',
+      createdAt: ctx.timestamp,
+    });
+  }
+);
+
 // Sets the ordered party (membership + order). Keeps only owned, unique ids up
 // to PARTY_SIZE, and makes sure the active character stays inside the party.
 export const setParty = spacetimedb.reducer(
