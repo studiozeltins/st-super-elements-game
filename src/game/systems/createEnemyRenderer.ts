@@ -15,7 +15,6 @@ import {
   type EntityAnimation,
   type EntityKindAdapter,
   type EntityRenderer,
-  type HealthDropReporter,
 } from './createEntityRenderer';
 
 // Camp enemies wink out instantly on death (the burst is the only flourish), so
@@ -56,8 +55,7 @@ function createEnemyAnimation(
 /** Renders the server-authoritative camp enemies from the `enemy` table rows. */
 export function createEnemyRenderer(
   scene: THREE.Scene,
-  effectSystem: EffectSystem,
-  onHealthDrop: HealthDropReporter
+  effectSystem: EffectSystem
 ): EntityRenderer<Enemy> {
   const adapter: EntityKindAdapter<Enemy> = {
     deathDurationSeconds: ENEMY_DEATH_DURATION_SECONDS,
@@ -82,5 +80,5 @@ export function createEnemyRenderer(
     },
     onKilled: worldPosition => effectSystem.spawnBurst(worldPosition, 0xffffff, 26),
   };
-  return createEntityRenderer({ scene, adapter, onHealthDrop });
+  return createEntityRenderer({ scene, adapter });
 }

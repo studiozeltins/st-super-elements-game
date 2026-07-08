@@ -24,7 +24,7 @@ import { createInputSystem } from './systems/createInputSystem';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
 import { createGoliathRenderer } from './systems/createGoliathRenderer';
-import { createDamageNumbers } from './systems/createDamageNumbers';
+import { createDamageNumbers, type DamageNumberHandle } from './systems/createDamageNumbers';
 import {
   comboWindowSeconds,
   regularAttackMultiplier,
@@ -124,6 +124,14 @@ export interface Game {
   handleRemotePlayerAttack(attack: RangedAttack): void;
   /** Floats a number over the local player — PVP damage taken, or heals. */
   spawnSelfNumber(amount: number, kind: DamageKind): void;
+  /** Floats a server-driven number at an arbitrary world spot (another player's enemy hit). */
+  spawnWorldNumber(positionX: number, positionZ: number, amount: number, kind: DamageKind): void;
+  /**
+   * Promotes the attacker's OWN already-drawn predicted number in place to the
+   * big server crit (never a second sprite); falls back to a single spawn if the
+   * predicted number already expired.
+   */
+  upgradeOwnCritNumber(amount: number): void;
   /** Shows a remote player's health bar for a few seconds (they were hit). */
   flashRemoteHealth(identityHex: string): void;
   /** Syncs the gem drops lying in the world (walk over to collect). */
@@ -233,14 +241,15 @@ export function createGame(
   const damageNumbers = createDamageNumbers(scene);
   // Enemies and goliaths are now server-authoritative: these renderers only draw
   // the `enemy`/`goliath` table rows and interpolate them. Damage/HP/economy all
-  // live on the server, reached through network.sendAttackEnemies. Floating
-  // numbers come from the accurate server-driven health drop in syncRows.
-  const enemyRenderer = createEnemyRenderer(scene, effectSystem, (position, amount) =>
-    damageNumbers.spawn(position, amount, 'normal')
-  );
-  const goliathRenderer = createGoliathRenderer(scene, (position, amount) =>
-    damageNumbers.spawn(position, amount, 'normal')
-  );
+  // live on the server, reached through network.sendAttackEnemies. The floating
+  // NUMBERS are no longer driven by the server HP-delta (that double-drew against
+  // the local prediction + the enemy_hit event) — the renderers still flash the
+  // health bar on any HP drop (lastDamagedAt, set independently of this callback).
+  const enemyRenderer = createEnemyRenderer(scene, effectSystem);
+  const goliathRenderer = createGoliathRenderer(scene);
+  // Tracks the attacker's OWN predicted number so an incoming enemy_hit crit can
+  // PROMOTE it in place instead of spawning a second sprite (D2-01 / W1).
+  let lastOwnPredicted: { handle: DamageNumberHandle; position: THREE.Vector3 } | null = null;
   const inputSystem = createInputSystem(canvas);
 
   let activeCharacter: CharacterDefinition = CHARACTERS.zibo;
@@ -522,8 +531,9 @@ export function createGame(
         false,
         combo
       );
+      const launchPosition = playerPosition.clone().setY(playerPosition.y + 1.2);
       effectSystem.spawnProjectile({
-        origin: playerPosition.clone().setY(playerPosition.y + 1.2),
+        origin: launchPosition.clone(),
         direction,
         speed: weapon.projectileSpeed,
         damage: amount,
@@ -532,6 +542,7 @@ export function createGame(
         applyDamage: applyRangedProjectileHit,
         damageKind: kind,
       });
+      predictOwnNumber(launchPosition, amount);
       return;
     }
 
@@ -542,6 +553,16 @@ export function createGame(
     };
     effectSystem.spawnMeleeSlash(playerPosition, playerRotationY, elementColor);
     applyAttackDamage(hitCenter, weapon.range * 0.75, amount, activeCharacter.element, kind);
+    predictOwnNumber(new THREE.Vector3(hitCenter.x, hitCenter.y, hitCenter.z), amount);
+  }
+
+  // Own-hit local prediction (D2-01): draw ONE instant display-only 'normal'
+  // number per swing/cast and remember its handle so an incoming enemy_hit crit
+  // can PROMOTE it in place (never a second sprite). The kind is always 'normal'
+  // here — crit is the server's call, applied via upgradeOwnCritNumber.
+  function predictOwnNumber(position: THREE.Vector3, amount: number) {
+    const handle = damageNumbers.spawn(position, Math.round(amount), 'normal');
+    lastOwnPredicted = handle ? { handle, position: position.clone() } : null;
   }
 
   function performSkill() {
@@ -551,6 +572,10 @@ export function createGame(
     skillReadyAtByCharacter.set(activeCharacter.id, elapsedSeconds + skill.cooldownSeconds);
     faceNearestTarget(16);
     const direction = facingDirection();
+    const weapon = WEAPONS[activeCharacter.weapon];
+    const skillDamageMultiplier =
+      skillAttackMultiplier(combo) *
+      transcendDamageMultiplier(activeConstellation, activeTranscend);
 
     if (skill.kind === 'dash') {
       const substep = DASH_DISTANCE / DASH_SUBSTEPS;
@@ -567,12 +592,16 @@ export function createGame(
       direction,
       applyDamage: applySkillDamage,
       // The combo's real payoff: the skill scales strongly and uncapped.
-      damageMultiplier:
-        skillAttackMultiplier(combo) *
-        transcendDamageMultiplier(activeConstellation, activeTranscend),
+      damageMultiplier: skillDamageMultiplier,
       followPosition: () => playerPosition,
     });
     network.sendCastSkill(skill.id, playerPosition.x, playerPosition.z, direction.x, direction.z);
+    // Own-hit prediction for the cast: one instant 'skill'-scaled 'normal' number
+    // at the skill origin, promotable in place by an incoming enemy_hit crit.
+    predictOwnNumber(
+      playerPosition.clone().setY(playerPosition.y + 1),
+      weapon.damage * skillDamageMultiplier
+    );
 
     // Active healers (e.g. Marina, Lapa) heal the whole owned party on cast.
     if (healSpecFor(activeCharacter.id).type === 'active') {
@@ -1059,6 +1088,16 @@ export function createGame(
       // Account PvP damage so the synced HP drop isn't re-floated as a "taken" number.
       if (kind === 'pvp') pvpDamageSinceSync += amount;
       damageNumbers.spawn(playerPosition.clone().setY(playerPosition.y + 1.4), amount, kind);
+    },
+    spawnWorldNumber(positionX, positionZ, amount, kind) {
+      damageNumbers.spawn(new THREE.Vector3(positionX, 1.2, positionZ), amount, kind);
+    },
+    upgradeOwnCritNumber(amount) {
+      // Re-texture the predicted 'normal' number in place to the big crit; only
+      // spawn a fresh one if the prediction already expired/recycled (W1).
+      if (lastOwnPredicted && damageNumbers.promote(lastOwnPredicted.handle, amount, 'crit')) return;
+      const position = lastOwnPredicted?.position ?? playerPosition.clone().setY(playerPosition.y + 1);
+      damageNumbers.spawn(position, amount, 'crit');
     },
     flashRemoteHealth(identityHex) {
       const view = remotePlayers.get(identityHex);

@@ -62,7 +62,7 @@ describe('createEnemyRenderer', () => {
   it('spawns a real enemy model and interpolates it from the table row', () => {
     const scene = new THREE.Scene();
     const effectSystem = createEffectSystem(scene);
-    const renderer = createEnemyRenderer(scene, effectSystem, vi.fn());
+    const renderer = createEnemyRenderer(scene, effectSystem);
 
     renderer.syncRows([enemyRow()]);
     expect(groupCount(scene)).toBeGreaterThan(0);
@@ -75,7 +75,7 @@ describe('createEnemyRenderer', () => {
   it('scales boss enemies up and pulls its display base gems from gemRewards', () => {
     const scene = new THREE.Scene();
     const effectSystem = createEffectSystem(scene);
-    const renderer = createEnemyRenderer(scene, effectSystem, vi.fn());
+    const renderer = createEnemyRenderer(scene, effectSystem);
 
     renderer.syncRows([enemyRow({ isBoss: true, rewardTier: 3 })]);
     renderer.update(0.016, () => 0);
@@ -91,7 +91,7 @@ describe('createEnemyRenderer', () => {
     const scene = new THREE.Scene();
     const effectSystem = createEffectSystem(scene);
     const burstSpy = vi.spyOn(effectSystem, 'spawnBurst');
-    const renderer = createEnemyRenderer(scene, effectSystem, vi.fn());
+    const renderer = createEnemyRenderer(scene, effectSystem);
     renderer.syncRows([enemyRow({ alive: true })]);
     renderer.update(0.016, () => 0);
 
@@ -108,7 +108,7 @@ describe('createEnemyRenderer', () => {
 describe('createGoliathRenderer', () => {
   it('spawns a real goliath model with animated limbs and topples it on death', () => {
     const scene = new THREE.Scene();
-    const renderer = createGoliathRenderer(scene, vi.fn());
+    const renderer = createGoliathRenderer(scene);
 
     renderer.syncRows([goliathRow({ sizeIndex: 2 })]);
     expect(groupCount(scene)).toBe(1);

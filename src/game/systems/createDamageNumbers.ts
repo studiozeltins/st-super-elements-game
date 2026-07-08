@@ -2,8 +2,30 @@ import * as THREE from 'three';
 import { DAMAGE_KIND_STYLES, type DamageKind } from '../combat/damageKind';
 import { OVERLAY_LAYER } from '../data/constants';
 
+/**
+ * Opaque token identifying a single spawned number AND its generation. `promote`
+ * only re-textures the sprite if it is still the SAME spawn (not recycled to a
+ * newer number), which is how an own crit upgrades its predicted number in place
+ * without ever drawing a second sprite.
+ */
+export interface DamageNumberHandle {
+  entry: FloatingNumber;
+  token: number;
+}
+
 export interface DamageNumbers {
-  spawn(worldPosition: THREE.Vector3, amount: number, kind: DamageKind, color?: number): void;
+  spawn(
+    worldPosition: THREE.Vector3,
+    amount: number,
+    kind: DamageKind,
+    color?: number
+  ): DamageNumberHandle | null;
+  /**
+   * Re-textures an already-drawn number to a new kind/amount in place. Returns
+   * true if the handle's spawn is still alive (promoted); false if it already
+   * expired or was recycled (caller should fall back to a fresh spawn).
+   */
+  promote(handle: DamageNumberHandle, amount: number, kind: DamageKind): boolean;
   update(deltaSeconds: number): void;
   dispose(): void;
 }
@@ -16,6 +38,8 @@ interface FloatingNumber {
   baseScaleY: number;
   ageSeconds: number;
   active: boolean;
+  /** Bumped on every (re)spawn; a handle whose token drifts has been recycled. */
+  token: number;
 }
 
 interface CanvasHardware {
@@ -70,6 +94,14 @@ function toCssColor(color: number): string {
 export function createDamageNumbers(scene: THREE.Scene): DamageNumbers {
   const pool: FloatingNumber[] = [];
   let spawnCounter = 0;
+  let tokenCounter = 0;
+
+  function applyScale(entry: FloatingNumber, kind: DamageKind) {
+    const worldScale = 2.1 * DAMAGE_KIND_STYLES[kind].fontScale;
+    entry.baseScaleX = worldScale;
+    entry.baseScaleY = worldScale * (CANVAS_HEIGHT / CANVAS_WIDTH);
+    entry.sprite.scale.set(entry.baseScaleX, entry.baseScaleY, 1);
+  }
 
   function acquire(): FloatingNumber | null {
     const reused = pool.find(entry => !entry.active);
@@ -93,6 +125,7 @@ export function createDamageNumbers(scene: THREE.Scene): DamageNumbers {
       baseScaleY: 0,
       ageSeconds: 0,
       active: false,
+      token: 0,
     };
     pool.push(entry);
     return entry;
@@ -101,16 +134,13 @@ export function createDamageNumbers(scene: THREE.Scene): DamageNumbers {
   return {
     spawn(worldPosition, amount, kind, color) {
       const entry = acquire();
-      if (!entry) return;
+      if (!entry) return null;
       const roundedAmount = Math.max(1, Math.round(amount));
       drawNumber(entry.context, roundedAmount, kind, color === undefined ? null : toCssColor(color));
       entry.texture.needsUpdate = true;
 
       // Bumped up from 1.4 so numbers stay legible on small/high-DPI mobile screens.
-      const worldScale = 2.1 * DAMAGE_KIND_STYLES[kind].fontScale;
-      entry.baseScaleX = worldScale;
-      entry.baseScaleY = worldScale * (CANVAS_HEIGHT / CANVAS_WIDTH);
-      entry.sprite.scale.set(entry.baseScaleX, entry.baseScaleY, 1);
+      applyScale(entry, kind);
       entry.sprite.position.copy(worldPosition);
       entry.sprite.position.y += BASE_WORLD_HEIGHT;
       // Fan successive spawns sideways so simultaneous equal hits do not stack.
@@ -119,6 +149,21 @@ export function createDamageNumbers(scene: THREE.Scene): DamageNumbers {
       entry.sprite.visible = true;
       entry.ageSeconds = 0;
       entry.active = true;
+      entry.token = ++tokenCounter;
+      return { entry, token: entry.token };
+    },
+    promote(handle, amount, kind) {
+      const { entry } = handle;
+      // Only upgrade if THIS exact spawn is still alive (not recycled to a newer
+      // number) — otherwise the caller falls back to a fresh spawn.
+      if (!entry.active || entry.token !== handle.token) return false;
+      const roundedAmount = Math.max(1, Math.round(amount));
+      drawNumber(entry.context, roundedAmount, kind, null);
+      entry.texture.needsUpdate = true;
+      applyScale(entry, kind);
+      // Reset the age so the promoted number re-pops at its new (bigger) scale.
+      entry.ageSeconds = 0;
+      return true;
     },
     update(deltaSeconds) {
       for (const entry of pool) {

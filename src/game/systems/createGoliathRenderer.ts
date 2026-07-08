@@ -8,7 +8,6 @@ import {
   type EntityAnimation,
   type EntityKindAdapter,
   type EntityRenderer,
-  type HealthDropReporter,
 } from './createEntityRenderer';
 
 // A goliath topples sideways over this window before it stays hidden.
@@ -44,10 +43,7 @@ function createGoliathAnimation(model: EnemyModel): EntityAnimation {
 }
 
 /** Renders the server-authoritative goliath raiders from the `goliath` table rows. */
-export function createGoliathRenderer(
-  scene: THREE.Scene,
-  onHealthDrop: HealthDropReporter
-): EntityRenderer<Goliath> {
+export function createGoliathRenderer(scene: THREE.Scene): EntityRenderer<Goliath> {
   const adapter: EntityKindAdapter<Goliath> = {
     deathDurationSeconds: GOLIATH_DEATH_DURATION_SECONDS,
     readId: row => row.goliathId,
@@ -69,5 +65,5 @@ export function createGoliathRenderer(
       };
     },
   };
-  return createEntityRenderer({ scene, adapter, onHealthDrop });
+  return createEntityRenderer({ scene, adapter });
 }
