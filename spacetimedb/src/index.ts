@@ -1924,6 +1924,15 @@ export const attackEnemies = spacetimedb.reducer(
       // Server owns the number: base + crit are computed here per target (each gets
       // its own crit roll — correct and acceptable), never sent by the client.
       const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'melee');
+      // Every landed hit floats a number — INCLUDING the killing blow (which shows
+      // the full computed hit strength, ARPG-style, not the sliver of HP left).
+      ctx.db.enemyHit.insert({
+        attacker: currentPlayer.identity,
+        positionX: enemyRow.positionX,
+        positionZ: enemyRow.positionZ,
+        amount,
+        isCrit,
+      });
       const remaining = enemyRow.health - Math.min(amount, enemyRow.health);
       if (remaining > 0) {
         ctx.db.enemy.enemyId.update({
@@ -1932,13 +1941,6 @@ export const attackEnemies = spacetimedb.reducer(
           aggroKind: AGGRO_PLAYER,
           aggroPlayer: currentPlayer.identity,
           aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
-        });
-        ctx.db.enemyHit.insert({
-          attacker: currentPlayer.identity,
-          positionX: enemyRow.positionX,
-          positionZ: enemyRow.positionZ,
-          amount,
-          isCrit,
         });
         continue;
       }
@@ -1950,6 +1952,13 @@ export const attackEnemies = spacetimedb.reducer(
       if (!goliathRow.alive) continue;
       if (distanceBetween(goliathRow.positionX, goliathRow.positionZ, centerX, centerZ) > boundedRadius) continue;
       const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'melee');
+      ctx.db.enemyHit.insert({
+        attacker: currentPlayer.identity,
+        positionX: goliathRow.positionX,
+        positionZ: goliathRow.positionZ,
+        amount,
+        isCrit,
+      });
       const remaining = goliathRow.health - Math.min(amount, goliathRow.health);
       if (remaining > 0) {
         ctx.db.goliath.goliathId.update({
@@ -1957,13 +1966,6 @@ export const attackEnemies = spacetimedb.reducer(
           health: remaining,
           aggroPlayer: currentPlayer.identity,
           aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
-        });
-        ctx.db.enemyHit.insert({
-          attacker: currentPlayer.identity,
-          positionX: goliathRow.positionX,
-          positionZ: goliathRow.positionZ,
-          amount,
-          isCrit,
         });
         continue;
       }
@@ -2074,6 +2076,14 @@ export const attackRay = spacetimedb.reducer(
       // Server owns the number: resolvePlayerHit applies GOLIATH_RESISTANCES ranged
       // (0.10) to the server-computed raw — the client sends no damage.
       const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'ranged', GOLIATH_RESISTANCES);
+      // Killing blow floats a number too — full computed hit strength, ARPG-style.
+      ctx.db.enemyHit.insert({
+        attacker: currentPlayer.identity,
+        positionX: goliathRow.positionX,
+        positionZ: goliathRow.positionZ,
+        amount,
+        isCrit,
+      });
       const remaining = goliathRow.health - Math.min(amount, goliathRow.health);
       if (remaining > 0) {
         ctx.db.goliath.goliathId.update({
@@ -2081,13 +2091,6 @@ export const attackRay = spacetimedb.reducer(
           health: remaining,
           aggroPlayer: currentPlayer.identity,
           aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
-        });
-        ctx.db.enemyHit.insert({
-          attacker: currentPlayer.identity,
-          positionX: goliathRow.positionX,
-          positionZ: goliathRow.positionZ,
-          amount,
-          isCrit,
         });
       } else {
         const base = Math.round(enemyBaseGems(true, goliathRow.sizeIndex, 0, false) * comboScale);
@@ -2106,6 +2109,13 @@ export const attackRay = spacetimedb.reducer(
     } else {
       const enemyRow = aliveEnemies[enemyHit.index];
       const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'melee');
+      ctx.db.enemyHit.insert({
+        attacker: currentPlayer.identity,
+        positionX: enemyRow.positionX,
+        positionZ: enemyRow.positionZ,
+        amount,
+        isCrit,
+      });
       const remaining = enemyRow.health - Math.min(amount, enemyRow.health);
       if (remaining > 0) {
         ctx.db.enemy.enemyId.update({
@@ -2114,13 +2124,6 @@ export const attackRay = spacetimedb.reducer(
           aggroKind: AGGRO_PLAYER,
           aggroPlayer: currentPlayer.identity,
           aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
-        });
-        ctx.db.enemyHit.insert({
-          attacker: currentPlayer.identity,
-          positionX: enemyRow.positionX,
-          positionZ: enemyRow.positionZ,
-          amount,
-          isCrit,
         });
       } else {
         const base = Math.round(enemyBaseGems(false, 0, enemyRow.rewardTier, enemyRow.isBoss) * comboScale);
