@@ -72,7 +72,10 @@ roll crit — the data + logic foundation, wired to nothing yet.
      `damage.ts` (`computeBaseDamage` from mirrored `WEAPONS` + combo/skill/transcend multipliers).
   4. No runtime behavior change yet (client still rolls its old crit) — this phase is data + tested
      logic only; grep-gate stays green (no `Math.random`/`Date.now` in `spacetimedb/src`).
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 01-01-PLAN.md — zero-import pure helpers `crit.ts` (`rollCrit`) + `damage.ts` (`computeBaseDamage`, `WEAPONS`/multiplier mirror) with cross-boundary vitest (wave 1)
+- [ ] 01-02-PLAN.md — distinct role-coherent `critRate`/`critDmg` on all 17 characters + `CHARACTER_STATS` mirror + `characters.test.ts` distinctness (wave 1)
+- [ ] 01-03-PLAN.md — extend `serverSync.test.ts`: crit parity (regex) + weapon/multiplier/CONSTELLATION_DAMAGE_STEP parity (import-and-compare) (wave 2)
 **Notes**: Pure foundation, ships alone. Mirroring `WEAPONS` + the multiplier funcs
 (`regularAttackMultiplier`, `skillAttackMultiplier`, combo scale, `transcendDamageMultiplier`,
 `skill.damage`) server-side is the bulk of Option B's cost, landed here as tested pure code before
@@ -218,7 +221,7 @@ do NOT elevate an untrusted bool to a state trigger.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Crit stats + server damage foundation | 0/TBD | Not started | - |
+| 1. Crit stats + server damage foundation | 0/3 | Not started | - |
 | 2. Server-authoritative damage + crit on enemies | 0/TBD | Not started | - |
 | 3. PVP crit | 0/TBD | Not started | - |
 | 4. Attack state machine + leapSlam + delete drain | 0/TBD | Not started | - |
