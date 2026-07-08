@@ -36,7 +36,7 @@ attack state machine / telegraphs / poise (Phases 4 & 7); weapon/constellation c
 ### Crit stat design (CRIT-01)
 - **D-01:** `critRate`/`critDmg` are **role-seeded then hand-tuned per character**. Baseline by
   role (dps ~30–35% rate / high critDmg, tank ~12%, healer/support ~18%), then tune each of the
-  18 characters for identity. Must be DISTINCT per character (CRIT-01) and coherent with the
+  17 characters for identity. Must be DISTINCT per character (CRIT-01) and coherent with the
   existing `Role` system. Values live on `CharacterDefinition` (client) and are mirrored into
   server `CHARACTER_STATS` (INV-5 parity).
 - **D-02:** Executor may pick the concrete per-character numbers (role-seeded) as a first pass;
@@ -111,7 +111,7 @@ attack state machine / telegraphs / poise (Phases 4 & 7); weapon/constellation c
 - `src/game/createGame.ts` — `rollDamage`/`CRIT_CHANCE`/`CRIT_MULTIPLIER` (~478, DELETE the global
   roll), `performAttack` (~490), `performSkill` (~552), `dealDamage`/`applyAttackDamage`/
   `applySkillDamage` (~387), `applyPvpDamage` (~410, `sendAttackPlayer`).
-- `src/game/data/characters.ts` — `CharacterDefinition` (add `critRate`/`critDmg`), 18-char roster,
+- `src/game/data/characters.ts` — `CharacterDefinition` (add `critRate`/`critDmg`), 17-char roster,
   `Role` + `ROLE_META`.
 - `src/game/data/weapons.ts` — `WEAPONS` registry (must mirror server-side for D-05).
 - `src/game/combat/damageKind.ts` — `DamageKind 'crit'` + `DAMAGE_KIND_STYLES` (crit number style).
@@ -181,7 +181,7 @@ Dependency-forced. Test-first pure helpers (Phase 1) precede all wiring; server 
 resolution on enemies (Phase 2) lands before PVP (Phase 3). No-monolith holds throughout: server
 logic lives in `crit.ts`/`damage.ts` siblings; `index.ts` gains only table defs + reducer-arg changes.
 
-- **Phase 1 (this phase) — foundation.** Stats on `CharacterDefinition` (role-seeded, 18 chars) +
+- **Phase 1 (this phase) — foundation.** Stats on `CharacterDefinition` (role-seeded, 17 chars) +
   mirror into `CHARACTER_STATS`; mirror `WEAPONS` + multiplier funcs (`regularAttackMultiplier`,
   `skillAttackMultiplier`, combo scale, `transcendDamageMultiplier`, `skill.damage`); zero-import
   vitest helpers `crit.ts` (`rollCrit`) + `damage.ts` (`computeBaseDamage`); extend
