@@ -214,17 +214,14 @@ export default function App() {
       }
     },
   });
-  // Server-authoritative enemy/goliath hit → the {amount, isCrit} truth (Plan 02).
-  // Own hits are drawn once by local prediction (createGame): an own CRIT promotes
-  // that single sprite in place, an own non-crit is already drawn so we skip the
-  // echo (D2-02 double-draw suppression). Other players' hits float event-driven
-  // numbers for shared co-op visibility.
+  // Server-authoritative enemy/goliath hit → the {amount, isCrit, position} truth
+  // (Plan 02). EVERY hit — my own and other players' — floats its number at the
+  // ENEMY's exact position, colored by the server's isCrit (never a client crit
+  // roll). Rendering own hits from the same event (not a player-anchored local
+  // prediction) is what puts the yellow crit ON the enemy that took it; LAN
+  // latency makes the tiny delay imperceptible.
   useTable(tables.enemyHit, {
     onInsert: hit => {
-      if (hit.attacker.toHexString() === myIdentityRef.current) {
-        if (hit.isCrit) gameRef.current?.upgradeOwnCritNumber(hit.amount);
-        return;
-      }
       gameRef.current?.spawnWorldNumber(
         hit.positionX,
         hit.positionZ,
