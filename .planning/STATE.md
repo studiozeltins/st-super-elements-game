@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
 current_phase: 02
-current_phase_name: server-authoritative-damage-crit-on-enemies
-status: executing
+status: completed
 stopped_at: Phase 2 context gathered
-last_updated: "2026-07-08T17:35:56.449Z"
+last_updated: "2026-07-08T19:17:05.568Z"
 last_activity: 2026-07-08
-last_activity_desc: Phase 02 execution started
+last_activity_desc: Phase 02 marked complete
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 3
-  percent: 14
+  completed_plans: 6
+  percent: 29
+current_phase_name: server-authoritative-damage-crit-on-enemies
 ---
 
 # Project State
@@ -27,15 +27,14 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor). This milestone deepens *combat feel*: enemy attacks become dodgeable and crit becomes a
 real per-character stat, so power investment (crit) buys tempo, not just damage.
-**Current focus:** Phase 02 — server-authoritative-damage-crit-on-enemies
-Phase 1 (Crit stats + server damage foundation) with `/gsd-plan-phase 1`.
+**Current focus:** Phase 02 complete + verified (15/15). Next: plan Phase 3 (PVP crit) with `/gsd-plan-phase 3`. Outstanding: maincloud additive publish deferred to prod point.
 
 ## Current Position
 
-Phase: 02 (server-authoritative-damage-crit-on-enemies) — EXECUTING
+Phase: 02 — COMPLETE
 Plan: 1 of 3
-Status: Executing Phase 02
-Last activity: 2026-07-08 — Phase 02 execution started
+Status: Phase 02 complete
+Last activity: 2026-07-08 — Phase 02 marked complete
 
 ## Roadmap Summary
 
