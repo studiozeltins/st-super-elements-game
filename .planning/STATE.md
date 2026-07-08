@@ -7,9 +7,9 @@ status: roadmapped
 stopped_at: Phase 1 context gathered
 last_updated: "2026-07-08T11:48:36.893Z"
 last_activity: 2026-07-08
-last_activity_desc: v0.2.0-alpha Combat Depth roadmap created (5 phases, 25/25 reqs mapped)
+last_activity_desc: Phase 1 discussed; crit work split into Phases 1–3 (server-authoritative base damage); milestone now 7 phases, 27/27 reqs mapped
 progress:
-  total_phases: 5
+  total_phases: 7
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -26,28 +26,31 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor). This milestone deepens *combat feel*: enemy attacks become dodgeable and crit becomes a
 real per-character stat, so power investment (crit) buys tempo, not just damage.
-**Current focus:** v0.2.0-alpha Combat Depth roadmapped (5 phases). Next: plan Phase 1 (Crit
-foundation) with `/gsd-plan-phase 1`.
+**Current focus:** v0.2.0-alpha Combat Depth roadmapped (7 phases; Phase 1 discussed). Next: plan
+Phase 1 (Crit stats + server damage foundation) with `/gsd-plan-phase 1`.
 
 ## Current Position
 
-Phase: 1 — Crit foundation (not started)
+Phase: 1 — Crit stats + server damage foundation (not started; context gathered)
 Plan: —
-Status: Roadmap complete, awaiting phase planning
-Last activity: 2026-07-08 — v0.2.0-alpha Combat Depth roadmap created (5 phases, 25/25 reqs mapped)
+Status: Phase 1 context captured + crit work split across Phases 1–3; awaiting phase planning
+Last activity: 2026-07-08 — Phase 1 discussed; chose full server-authoritative base damage (Option
+B), split crit into Phases 1–3, added CRIT-06/07, milestone now 7 phases (27/27 reqs mapped)
 
 ## Roadmap Summary
 
 | Phase | Goal | Requirements |
 |-------|------|--------------|
-| 1. Crit foundation | Per-character server-rolled crit + `isCrit` signal | CRIT-01..05 |
-| 2. FSM + leapSlam + delete drain | Unit-agnostic attack FSM proven on ONE circle attack; contact drain deleted | FSM-01..06, ATK-01/05/06, ANIM-01..04, HIT-01 |
-| 3. swordSwing → swordSwirl combo | Cone shape + immediate chaining | ATK-02, ATK-03 |
-| 4. shieldDash lane | Travelling-hitbox lane gap-closer | ATK-04 |
-| 5. Crit poise interrupt | Crit-in-windup → cancel + visible stagger (un-spoofable) | POISE-01..03 |
+| 1. Crit stats + server damage foundation | Distinct per-character crit stats mirrored server-side + tested base-damage/crit pure helpers (no wiring) | CRIT-01, CRIT-03 |
+| 2. Server-authoritative damage + crit on enemies | Server computes base damage + rolls crit (`ctx.random`); client sends intent; old client roll deleted; crit event table | CRIT-02, CRIT-04, CRIT-05, CRIT-06 |
+| 3. PVP crit | Same server damage/crit path extended to `attackPlayer` | CRIT-07 |
+| 4. Attack state machine + leapSlam + delete drain | Unit-agnostic attack state machine (windup→strike→recovery) proven on ONE circle attack; contact drain deleted | FSM-01..06, ATK-01/05/06, ANIM-01..04, HIT-01 |
+| 5. swordSwing → swordSwirl combo | Cone shape + immediate chaining | ATK-02, ATK-03 |
+| 6. shieldDash lane | Travelling-hitbox lane gap-closer | ATK-04 |
+| 7. Crit poise interrupt | Crit-in-windup → cancel + visible stagger (un-spoofable) | POISE-01..03 |
 
-Dependency order is FORCED: crit (1) before the interrupt (5); one shape (2) proven before the
-rest multiply (3, 4). Do not re-order.
+Dependency order is FORCED: crit stats/resolution (1–3) before the interrupt (7); one shape (4)
+proven before the rest multiply (5, 6). Do not re-order.
 
 ## Performance Metrics
 
@@ -66,6 +69,8 @@ rest multiply (3, 4). Do not re-order.
 | 3 | TBD | - | - |
 | 4 | TBD | - | - |
 | 5 | TBD | - | - |
+| 6 | TBD | - | - |
+| 7 | TBD | - | - |
 
 *Updated after each plan completion.*
 
@@ -76,14 +81,31 @@ rest multiply (3, 4). Do not re-order.
 Decisions are logged in PROJECT.md Key Decisions table. Locked for this milestone:
 
 - [Crit trust boundary]: Crit roll is SERVER-SIDE via `ctx.random` (option b) — the only choice
-  that makes the Phase-5 poise interrupt un-spoofable. Phase 1 mirrors crit stats into the server
-  `CHARACTER_STATS`. Add a server-side `damage` sanity clamp as defense-in-depth.
+  that makes the Phase-7 poise interrupt un-spoofable. Phase 1 mirrors crit stats into the server
+  `CHARACTER_STATS`; Phase 2 resolves the roll + records `isCrit`.
 
-- [Scope]: Enemies only (goliaths). The `unit_attack` FSM is built unit-agnostic (`unitKind`/
-  `unitId`) so camp enemies + heroes reuse it later with ZERO schema change; heroes stay on the
-  current client swing this milestone.
+- [Damage authority — Option B, from Phase-1 discuss]: Base damage is computed SERVER-SIDE
+  (CRIT-06) — the server mirrors `WEAPONS` + combo/skill/transcend math (Phase 1) and the reducers
+  drop the client `damage` arg for intent (Phase 2), closing the PVP damage-spoof hole. Chosen over
+  client-sends-damage. `MAX_HIT_DAMAGE` clamp kept as defense-in-depth.
 
-- [Contact drain]: The goliath→player per-tick contact drain is DELETED (Phase 2) in the same
+- ["No new tables" waived]: A crit event table IS added (Phase 2) so the server-owned `isCrit`
+  reaches all clients truthfully (mirrors `skill_cast`/`ranged_attack`). The roadmap's original
+  Phase-1 "no new tables" note is explicitly superseded by user decision.
+
+- [PVP crit in scope — CRIT-07]: The same server crit/damage path extends to `attackPlayer`
+  (Phase 3), promoted from decision D-06 to a first-class requirement.
+
+- [Crit split into Phases 1–3]: Option B grew the crit work past one phase, so it is split —
+  1: stats + mirror + pure helpers (no wiring); 2: server-authoritative resolution on enemies;
+  3: PVP. No-monolith holds: server logic carves into `crit.ts`/`damage.ts` siblings, `index.ts`
+  gains only table defs + reducer-arg changes.
+
+- [Scope]: Enemies only (goliaths). The `unit_attack` attack state machine is built unit-agnostic
+  (`unitKind`/`unitId`) so camp enemies + heroes reuse it later with ZERO schema change; heroes
+  stay on the current client swing this milestone.
+
+- [Contact drain]: The goliath→player per-tick contact drain is DELETED (Phase 4) in the same
   slice that guarantees the selection fn returns an attack in every distance band. Camp and
   goliath→enemy drains are untouched. Keeping both drain + strikes is an explicit anti-feature.
 
@@ -105,11 +127,12 @@ None yet.
   iterating the *unit* tables, never the empty attack table. Each phase's done-criteria needs a
   "rows exist after a real engage on a MIGRATED (not freshly-seeded) DB" check.
 
-- **INV-5 mirror parity:** `serverSync.test.ts` is stat-only today; Phase 2 extends it to assert
-  `ATTACKS` duration/shape parity, kept green through every later shape. A failing parity assertion
-  is release-blocking (silent client/server drift breaks dodge fairness).
+- **INV-5 mirror parity:** `serverSync.test.ts` is stat-only today; Phase 1 extends it to assert
+  crit + weapon-damage/multiplier parity, and Phase 4 further extends it to `ATTACKS` duration/shape
+  parity, kept green through every later shape. A failing parity assertion is release-blocking
+  (silent client/server drift breaks dodge fairness).
 
-- **Latency fairness:** the active-window + dodge-grace model is chosen at Phase 2 and MUST be
+- **Latency fairness:** the active-window + dodge-grace model is chosen at Phase 4 and MUST be
   validated over real maincloud RTT (LAN hides the unfairness) via a two-client playtest.
 
 - **Determinism:** no `Math.random`/`Date.now` in `spacetimedb/src` (grep-gate); windups authored as

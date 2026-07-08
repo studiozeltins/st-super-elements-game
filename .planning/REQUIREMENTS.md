@@ -21,6 +21,8 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 - [ ] **CRIT-03**: Per-character crit stats are mirrored into the server `CHARACTER_STATS`, and `serverSync.test.ts` asserts client/server crit-value parity (INV-5).
 - [ ] **CRIT-04**: A crit hit floats the `kind:'crit'` damage number, driven by the real server roll (no visual regression).
 - [ ] **CRIT-05**: `attackEnemies`/`attackRay` resolve crit server-side and record `isCrit` on the hit so the poise system can consume it.
+- [ ] **CRIT-06**: Base damage is computed SERVER-SIDE from mirrored `WEAPONS` + combo/skill/transcend math — `attackEnemies`/`attackRay` drop the client `damage` arg and receive intent instead, so a modified client can no longer inflate damage (closes the PVP damage-spoof hole; chosen over client-sends-damage in discuss-phase). Promoted from decision D-05.
+- [ ] **CRIT-07**: PVP hits (`attackPlayer`) resolve base damage + crit server-side via the same path and emit the crit event, so PVP crit numbers are truthful and un-spoofable. Promoted from decision D-06.
 
 ### Attack State Machine (FSM) — unit-agnostic core
 
@@ -89,42 +91,45 @@ Explicitly excluded. Anti-features from research documented to prevent scope cre
 
 ## Traceability
 
-Which phases cover which requirements. Confirmed during roadmap creation (v0.2.0-alpha Combat Depth,
-forced dependency-ordered 5-phase sequence).
+Which phases cover which requirements. v0.2.0-alpha Combat Depth, forced dependency-ordered 7-phase
+sequence (crit split across Phases 1–3 after discuss-phase chose full server-authoritative base
+damage; attack shapes + interrupt in Phases 4–7).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | CRIT-01 | Phase 1 | Pending |
-| CRIT-02 | Phase 1 | Pending |
 | CRIT-03 | Phase 1 | Pending |
-| CRIT-04 | Phase 1 | Pending |
-| CRIT-05 | Phase 1 | Pending |
-| FSM-01 | Phase 2 | Pending |
-| FSM-02 | Phase 2 | Pending |
-| FSM-03 | Phase 2 | Pending |
-| FSM-04 | Phase 2 | Pending |
-| FSM-05 | Phase 2 | Pending |
-| FSM-06 | Phase 2 | Pending |
-| ATK-01 | Phase 2 | Pending |
-| ATK-05 | Phase 2 | Pending |
-| ATK-06 | Phase 2 | Pending |
-| ANIM-01 | Phase 2 | Pending |
-| ANIM-02 | Phase 2 | Pending |
-| ANIM-03 | Phase 2 | Pending |
-| ANIM-04 | Phase 2 | Pending |
-| HIT-01 | Phase 2 | Pending |
-| ATK-02 | Phase 3 | Pending |
-| ATK-03 | Phase 3 | Pending |
-| ATK-04 | Phase 4 | Pending |
-| POISE-01 | Phase 5 | Pending |
-| POISE-02 | Phase 5 | Pending |
-| POISE-03 | Phase 5 | Pending |
+| CRIT-02 | Phase 2 | Pending |
+| CRIT-04 | Phase 2 | Pending |
+| CRIT-05 | Phase 2 | Pending |
+| CRIT-06 | Phase 2 | Pending |
+| CRIT-07 | Phase 3 | Pending |
+| FSM-01 | Phase 4 | Pending |
+| FSM-02 | Phase 4 | Pending |
+| FSM-03 | Phase 4 | Pending |
+| FSM-04 | Phase 4 | Pending |
+| FSM-05 | Phase 4 | Pending |
+| FSM-06 | Phase 4 | Pending |
+| ATK-01 | Phase 4 | Pending |
+| ATK-05 | Phase 4 | Pending |
+| ATK-06 | Phase 4 | Pending |
+| ANIM-01 | Phase 4 | Pending |
+| ANIM-02 | Phase 4 | Pending |
+| ANIM-03 | Phase 4 | Pending |
+| ANIM-04 | Phase 4 | Pending |
+| HIT-01 | Phase 4 | Pending |
+| ATK-02 | Phase 5 | Pending |
+| ATK-03 | Phase 5 | Pending |
+| ATK-04 | Phase 6 | Pending |
+| POISE-01 | Phase 7 | Pending |
+| POISE-02 | Phase 7 | Pending |
+| POISE-03 | Phase 7 | Pending |
 
 **Coverage:**
-- v1 requirements: 25 total
-- Mapped to phases: 25
+- v1 requirements: 27 total
+- Mapped to phases: 27
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-08*
-*Last updated: 2026-07-08 — traceability confirmed at roadmap creation (5-phase Combat Depth sequence)*
+*Last updated: 2026-07-08 — added CRIT-06 (server-authoritative base damage) + CRIT-07 (PVP crit) from Phase-1 discuss-phase; crit work split into Phases 1–3, milestone now 7 phases (27/27 mapped)*

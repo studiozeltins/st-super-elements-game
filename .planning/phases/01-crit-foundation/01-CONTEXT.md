@@ -6,20 +6,28 @@
 <domain>
 ## Phase Boundary
 
-Per-character crit becomes a real, **server-rolled, server-owned** stat. Replace the global
-client roll (`createGame.ts:478` `Math.random()<0.22 → ×1.9`) with per-character
-`critRate`/`critDmg`; the server rolls crit via `ctx.random`, owns the `isCrit` flag (so
-Phase 5's poise interrupt is un-spoofable), and floats the truthful `kind:'crit'` number to
-clients. Covers CRIT-01..05.
+> **This CONTEXT covers the whole crit trilogy (Phases 1–3); it was gathered in one discuss-phase.**
+> The crit work was split because the user chose full server-authoritative base damage (Option B),
+> which grew it past a single phase. The decisions below span all three; each is tagged with its
+> landing phase. **Phase 1 (this phase) is the FOUNDATION slice only** — see boundary below.
 
-**Scope decision (this phase went DEEPER than the roadmap's minimal framing):** the phase also
-takes **full server-authoritative base damage** (Option B). The server computes base damage from
-mirrored weapon/combo/transcend math — the client sends *intent*, not a damage number. This
-closes the PVP damage-spoof hole now rather than deferring it. Ships alone (no FSM), but is a
-bigger phase than "just move the crit roll." See D-05 for the full cost.
+**Crit trilogy (why + split):** per-character crit becomes a real, **server-rolled, server-owned**
+stat, and (Option B) the server owns base-damage computation too. Split:
+- **Phase 1 — foundation (this phase):** add distinct per-character `critRate`/`critDmg` on
+  `CharacterDefinition`, mirror into server `CHARACTER_STATS`, mirror `WEAPONS` + combo/skill/
+  transcend multipliers server-side, and build zero-import tested pure helpers (`crit.ts` `rollCrit`,
+  `damage.ts` `computeBaseDamage`). Extend `serverSync.test.ts` for crit + weapon parity (INV-5).
+  **No reducer wiring, no runtime behavior change.** Covers **CRIT-01, CRIT-03**.
+- **Phase 2 — resolution on enemies:** wire the helpers into `attackEnemies`/`attackRay` (drop the
+  `damage` arg → intent; server rolls crit via `ctx.random`), delete the client roll
+  (`createGame.ts:478` `Math.random()<0.22 → ×1.9`), add the crit event table + truthful crit number.
+  Covers **CRIT-02, CRIT-04, CRIT-05, CRIT-06**.
+- **Phase 3 — PVP:** extend the same path to `attackPlayer`. Covers **CRIT-07**.
 
-Still in scope: crit applies to enemies AND PVP (`attackPlayer`). Out of scope: FSM / attack
-telegraphs / poise accrual (Phases 2 & 5); weapon/constellation crit *contributions* (XCMB-02).
+**Phase 1 boundary (this phase):** data + tested pure logic ONLY. Out of scope for Phase 1:
+reducer wiring, the crit event table, deleting the client roll (all Phase 2); PVP (Phase 3); the
+attack state machine / telegraphs / poise (Phases 4 & 7); weapon/constellation crit *contributions*
+(XCMB-02, v2).
 </domain>
 
 <decisions>
@@ -53,8 +61,10 @@ telegraphs / poise accrual (Phases 2 & 5); weapon/constellation crit *contributi
   `skillAttackMultiplier`, combo scale, `transcendDamageMultiplier`) + skill damage into
   `spacetimedb/src`, computes base, then rolls+applies crit and keeps a sanity clamp
   (belt-and-suspenders). This kills the client-sent-damage spoof class (relevant because PVP
-  shard theft is a live cheat incentive). **Cost accepted:** significant Phase 1 growth +
-  `serverSync.test.ts` parity extends to weapon damage + multiplier constants.
+  shard theft is a live cheat incentive). **Cost accepted:** grew the crit work past one phase
+  (→ split into Phases 1–3; the weapon/multiplier MIRROR lands in Phase 1, the reducer WIRING in
+  Phase 2, PVP in Phase 3) + `serverSync.test.ts` parity extends to weapon damage + multiplier
+  constants.
   - Planner MUST verify what the server already knows vs must be passed: `activeCharacterId`
     (known), transcend/constellation level (check `owned_character`/transcend tables — may be
     server-tracked already), combo (currently CLIENT-side → must be passed, already bounded by
@@ -91,7 +101,8 @@ telegraphs / poise accrual (Phases 2 & 5); weapon/constellation crit *contributi
 ### Requirements & milestone constraints
 - `.planning/REQUIREMENTS.md` — CRIT-01..05, Locked decisions (crit roll SERVER-SIDE via
   `ctx.random`), Out-of-scope table, XCMB-02 (deferred weapon/constellation crit contributions).
-- `.planning/ROADMAP.md` §"Phase 1: Crit foundation" + §"Cross-Cutting Constraints" (additive
+- `.planning/ROADMAP.md` §"Phase 1: Crit stats + server damage foundation" (+ Phases 2–3 for the
+  full crit trilogy) + §"Cross-Cutting Constraints" (additive
   schema, server-authoritative, INV-5 mirror parity, test-first pure helpers, ≤300 LOC/file,
   one atomic commit, deploy steps).
 - `.planning/PROJECT.md` — PVP shard-theft loop (why full damage authority matters).
@@ -163,45 +174,37 @@ telegraphs / poise accrual (Phases 2 & 5); weapon/constellation crit *contributi
 a deeper-authority HOW decision on the same feature, not a new capability.*
 </deferred>
 
-<plan_breakdown>
-## Plan Breakdown (Phase 1 split — Option B makes this multi-plan)
+<phase_split>
+## Crit trilogy — phase split (was one phase, now Phases 1–3)
 
-Ordered, dependency-forced. Test-first pure helpers precede reducer wiring; server authority
-lands before the client roll is deleted; PVP after enemies; deploy/verify last.
+Dependency-forced. Test-first pure helpers (Phase 1) precede all wiring; server authority + crit
+resolution on enemies (Phase 2) lands before PVP (Phase 3). No-monolith holds throughout: server
+logic lives in `crit.ts`/`damage.ts` siblings; `index.ts` gains only table defs + reducer-arg changes.
 
-- **Plan 1 — Stats + server pure helpers + parity (data only, no reducer wiring).**
-  Add `critRate`/`critDmg` to `CharacterDefinition` (role-seeded, 18 chars) + mirror into server
-  `CHARACTER_STATS`. Mirror `WEAPONS` + multiplier funcs (`regularAttackMultiplier`,
-  `skillAttackMultiplier`, combo scale, `transcendDamageMultiplier`, `skill.damage`) into
-  `spacetimedb/src`. Extract zero-import vitest helpers: `crit.ts` (`rollCrit(critRate,critDmg,rng)`)
-  + `damage.ts` (`computeBaseDamage(...)`). Extend `serverSync.test.ts` to assert client↔server
-  crit values AND weapon/multiplier parity. No behavior change yet. (CRIT-01, CRIT-03)
+- **Phase 1 (this phase) — foundation.** Stats on `CharacterDefinition` (role-seeded, 18 chars) +
+  mirror into `CHARACTER_STATS`; mirror `WEAPONS` + multiplier funcs (`regularAttackMultiplier`,
+  `skillAttackMultiplier`, combo scale, `transcendDamageMultiplier`, `skill.damage`); zero-import
+  vitest helpers `crit.ts` (`rollCrit`) + `damage.ts` (`computeBaseDamage`); extend
+  `serverSync.test.ts` for crit + weapon/multiplier parity. **No wiring, no behavior change.**
+  → CRIT-01, CRIT-03. Plans: TBD (set at `/gsd-plan-phase 1`).
+  - **Handoff pre-check for Phase 2:** verify what the server already knows (`activeCharacterId`;
+    transcend/constellation level — check `owned_character`/transcend tables) vs what Phase 2 must
+    pass (combo is client-side today → pass, already bounded).
 
-- **Plan 2 — Crit event table + client render path.** New event table (`isCrit`, amount, target,
-  attacker) mirroring `skill_cast`/`ranged_attack` (`onInsert`-only). All clients subscribe;
-  `createDamageNumbers` pops the big red crit number from the event. Regenerate bindings. (CRIT-04)
+- **Phase 2 — server-authoritative resolution on enemies.** Wire helpers into
+  `attackEnemies`/`attackRay`: drop `damage` arg → intent, server rolls crit via `ctx.random`,
+  applies `critDmg`, records `isCrit`, keeps `MAX_HIT_DAMAGE` clamp; add the crit event table
+  (`isCrit`/amount/target/attacker, `onInsert`-only, all clients subscribe) → `createDamageNumbers`
+  pops the truthful red crit number; DELETE client `rollDamage`/`CRIT_CHANCE`/`CRIT_MULTIPLIER`.
+  → CRIT-02, CRIT-04, CRIT-05, CRIT-06.
 
-- **Plan 3 — Server-authoritative damage + crit on enemies (`attackEnemies`/`attackRay`).**
-  Drop the `damage` arg → accept intent (characterId/combo/basic-vs-skill). Server computes base via
-  `damage.ts`, rolls crit via `ctx.random` from mirrored stats, applies `critDmg`, emits the crit
-  event, records `isCrit`, keeps `MAX_HIT_DAMAGE` clamp. Update client `network.send*`; DELETE
-  client `rollDamage`/`CRIT_CHANCE`/`CRIT_MULTIPLIER`. Grep-gate: no `Math.random` in
-  `spacetimedb/src`. (CRIT-02, CRIT-05)
-  - **Blocking pre-check (from scope note):** verify what the server already knows
-    (`activeCharacterId` yes; transcend/constellation level — check `owned_character`/transcend
-    tables) vs must be passed (combo is client-side today → pass, already bounded).
+- **Phase 3 — PVP.** Extend the same server base-damage + crit + event path to `attackPlayer`;
+  update client `applyPvpDamage`/`sendAttackPlayer`. Deploy + two-client verify capstone.
+  → CRIT-07.
 
-- **Plan 4 — PVP crit (`attackPlayer`).** Same server base-damage + `ctx.random` crit + crit event
-  on PVP hits. Update client `applyPvpDamage`/`sendAttackPlayer`. (D-06)
-
-- **Plan 5 — Deploy + verify.** `spacetime publish 2d-impact-game-fr9ti --module-path spacetimedb
-  --server local --yes` → `pnpm run spacetime:generate` → `pnpm build`. Migrated-DB (not fresh-seed)
-  check; two-client playtest: distinct per-character crit frequency/magnitude, truthful red crit
-  number on enemies + PVP, no visual regression. (all Success Criteria)
-
-**Commit note:** roadmap constraint is one atomic commit per phase — executor may stage plans and
-squash, or commit per plan then confirm the phase's single-commit intent at ship.
-</plan_breakdown>
+**Deploy per phase:** `spacetime publish 2d-impact-game-fr9ti --module-path spacetimedb --server
+local --yes` → `pnpm run spacetime:generate` → `pnpm build`; migrated-DB (not fresh-seed) check.
+</phase_split>
 
 ---
 
