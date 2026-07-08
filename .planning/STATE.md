@@ -5,8 +5,8 @@ milestone_name: Combat Depth
 current_phase: 1
 current_phase_name: in progress; wave 1 plan 01 complete
 status: roadmapped
-stopped_at: Phase 1 context gathered
-last_updated: "2026-07-08T15:43:37.362Z"
+stopped_at: Phase 2 context gathered
+last_updated: "2026-07-08T16:28:32.521Z"
 last_activity: 2026-07-08
 progress:
   total_phases: 7
@@ -163,9 +163,9 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-08T15:23:10.428Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-crit-foundation/01-CONTEXT.md
+Last session: 2026-07-08T16:28:32.498Z
+Stopped at: Phase 2 context gathered
+Resume file: .planning/phases/02-server-authoritative-damage-crit-on-enemies/02-CONTEXT.md
 
 ## Operator Next Steps
 
