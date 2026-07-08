@@ -356,10 +356,10 @@ The zero-import discipline (LEARNINGS: the grep gate matches `import`/`Math.rand
 
 ## Open Questions
 
-1. **Skill hit-window size.** What `SKILL_HIT_WINDOW_MICROS` covers every skill's damage lifetime (ring/nova `durationSeconds` ≤ 4s + projectile travel) without giving a spoofer a long basic-at-skill-scaling window? Recommendation: ≈4.5–5s; validate against the longest-lived skill in playtest. Full server-authoritative skill tracking is the Deferred path.
-2. **Reject vs downgrade** the out-of-window `isSkill` hit (A2). Recommend downgrade; user may prefer reject for strictness.
-3. **Raise `MAX_HIT_DAMAGE`?** (A5) Now that damage is trustworthy, 400 clips legit skill crits. Keep for Phase 2 (no-regression) or raise as a tuning follow-up.
-4. **`skillReadyAt` storage:** new `.default(0n)` columns on `player` vs a dedicated `skill_cooldown` table. Column is simplest; a table avoids `player`-row churn. Either is additive-safe.
+1. **Skill hit-window size. (RESOLVED — Plan 02: `SKILL_HIT_WINDOW_MICROS = 5_000_000n`.)** Covers the ≤4s ring/nova lifetime + projectile travel. Plan 03 Task 3 playtest check 5 verifies a long/DoT skill's LATE hits still land skill-scaled (window not too short); raise it if late hits downgrade. Full server-authoritative skill tracking remains the Deferred path.
+2. **Reject vs downgrade the out-of-window `isSkill` hit (A2). (RESOLVED — DOWNGRADE to basic.)** Keeps HP moving with the local predicted number (cleaner feel); the event reconciles the true amount. Implemented in Plan 02 `resolvePlayerHit`.
+3. **Raise `MAX_HIT_DAMAGE`? (A5) (RESOLVED — KEEP 400 for Phase 2.)** No-regression (matches current enemy behavior); flagged as a deferred tuning follow-up since it now also bounds legit server crits. Plan 02 emits the POST-clamp amount so the floated number equals the HP drop.
+4. **`skillReadyAt` storage. (RESOLVED — two `.default(0n)` columns on `player`.)** `skillReadyAtMicros` + `skillWindowEndsAtMicros`, appended at the end of the column list (additive migrate backfills populated rows). Implemented in Plan 02.
 
 ## State of the Art
 
