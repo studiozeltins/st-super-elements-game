@@ -121,7 +121,6 @@ export default function App() {
         tables.pullResult,
         tables.pvpHit,
         tables.rangedAttack,
-        tables.enemyHit,
         tables.healEvent,
         tables.gemDrop,
         tables.shardDrop,
@@ -218,8 +217,13 @@ export default function App() {
   // (Plan 02). EVERY hit — my own and other players' — floats its number at the
   // ENEMY's exact position, colored by the server's isCrit (never a client crit
   // roll). Rendering own hits from the same event (not a player-anchored local
-  // prediction) is what puts the yellow crit ON the enemy that took it; LAN
-  // latency makes the tiny delay imperceptible.
+  // prediction) is what puts the crit ON the enemy that took it; LAN latency
+  // makes the tiny delay imperceptible.
+  //
+  // enemy_hit is an EVENT table, so it must NOT also appear in the manual
+  // subscription list above — useTable already opens its own subscription, and a
+  // second overlapping subscription would deliver each event row twice, firing
+  // this onInsert twice (two numbers ~0.16u apart). One subscription = one number.
   useTable(tables.enemyHit, {
     onInsert: hit => {
       gameRef.current?.spawnWorldNumber(
