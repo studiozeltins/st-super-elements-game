@@ -6,6 +6,7 @@
 **Scope:** ENEMIES ONLY (goliaths). The attack FSM is built unit-agnostic (`unit_attack` keyed by `unitKind`) so camp enemies and heroes reuse it later with ZERO schema change, but only goliaths are converted this milestone. Heroes keep the current client swing. All schema additive (new `unit_attack` + `attack_strike` tables + server-side crit) — safe migrate-publish, never `--delete-data` on a DB with real accounts.
 
 **Locked decisions (this milestone):**
+
 - **Crit roll is SERVER-SIDE** — the server decides whether a hit crit, using SpacetimeDB's deterministic server-side randomness (`ctx.random`; `ctx` is the reducer context — the server-function argument that exposes `sender`/`db`/`timestamp`/`random`). The server owns the `isCrit` flag, computed from the mirrored per-character `critRate`/`critDmg`; cheat-proof, the only option that makes the poise interrupt un-spoofable.
 - **Goliaths only** — camp-enemy conversion deferred (SPEC non-goal); FSM proven reusable.
 - **Knockback/stun on strike hit IS in scope** — landed strikes have weight.
@@ -16,9 +17,9 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### Crit (CRIT) — per-character, server-authoritative
 
-- [ ] **CRIT-01**: Each character has distinct `critRate`/`critDmg` stats, replacing the global `Math.random()<0.22 → ×1.9` roll.
+- [x] **CRIT-01**: Each character has distinct `critRate`/`critDmg` stats, replacing the global `Math.random()<0.22 → ×1.9` roll.
 - [ ] **CRIT-02**: The server rolls crit using SpacetimeDB's deterministic server randomness (`ctx.random`) from the acting character's `critRate` and applies `critDmg` — the client no longer decides whether a hit crit.
-- [ ] **CRIT-03**: Per-character crit stats are mirrored into the server `CHARACTER_STATS`, and `serverSync.test.ts` asserts client/server crit-value parity (INV-5).
+- [x] **CRIT-03**: Per-character crit stats are mirrored into the server `CHARACTER_STATS`, and `serverSync.test.ts` asserts client/server crit-value parity (INV-5).
 - [ ] **CRIT-04**: A crit hit floats the `kind:'crit'` damage number, driven by the real server roll (no visual regression).
 - [ ] **CRIT-05**: `attackEnemies`/`attackRay` resolve crit server-side and record `isCrit` on the hit so the poise system can consume it.
 - [ ] **CRIT-06**: Base damage is computed SERVER-SIDE from mirrored `WEAPONS` + combo/skill/transcend math — `attackEnemies`/`attackRay` drop the client `damage` arg and receive intent instead, so a modified client can no longer inflate damage (closes the PVP damage-spoof hole; chosen over client-sends-damage in discuss-phase). Promoted from decision D-05.
@@ -97,8 +98,8 @@ damage; attack shapes + interrupt in Phases 4–7).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CRIT-01 | Phase 1 | Pending |
-| CRIT-03 | Phase 1 | Pending |
+| CRIT-01 | Phase 1 | Complete |
+| CRIT-03 | Phase 1 | Complete |
 | CRIT-02 | Phase 2 | Pending |
 | CRIT-04 | Phase 2 | Pending |
 | CRIT-05 | Phase 2 | Pending |
@@ -126,6 +127,7 @@ damage; attack shapes + interrupt in Phases 4–7).
 | POISE-03 | Phase 7 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 27 total
 - Mapped to phases: 27
 - Unmapped: 0 ✓

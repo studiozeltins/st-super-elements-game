@@ -3,16 +3,17 @@ gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
 current_phase: 1
+current_phase_name: not started; context gathered
 status: roadmapped
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-08T11:48:36.893Z"
+last_updated: "2026-07-08T15:13:25.709Z"
 last_activity: 2026-07-08
-last_activity_desc: Phase 1 discussed; crit work split into Phases 1–3 (server-authoritative base damage); milestone now 7 phases, 27/27 reqs mapped
+last_activity_desc: Phase 1 discussed; chose full server-authoritative base damage (Option
 progress:
   total_phases: 7
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
 ---
 
@@ -31,11 +32,10 @@ Phase 1 (Crit stats + server damage foundation) with `/gsd-plan-phase 1`.
 
 ## Current Position
 
-Phase: 1 — Crit stats + server damage foundation (not started; context gathered)
-Plan: —
-Status: Phase 1 context captured + crit work split across Phases 1–3; awaiting phase planning
-Last activity: 2026-07-08 — Phase 1 discussed; chose full server-authoritative base damage (Option
-B), split crit into Phases 1–3, added CRIT-06/07, milestone now 7 phases (27/27 reqs mapped)
+Phase: 1 — Crit stats + server damage foundation (in progress; wave 1 plan 01 complete)
+Plan: 01 of 3 complete (crit.ts + damage.ts pure helpers landed, tested)
+Status: 01-01 executed — zero-import rollCrit + computeBaseDamage siblings + cross-boundary vitest (403 tests green). Plans 01-02/01-03 remain.
+Last activity: 2026-07-08 — Executed 01-01: rollCrit (D-08 injected rng) + damage.ts WEAPONS/multiplier mirror (D-05 P1/D-07), 4 files, RED→GREEN TDD, CRIT-01/CRIT-03 satisfied
 
 ## Roadmap Summary
 
@@ -56,15 +56,15 @@ proven before the rest multiply (5, 6). Do not re-order.
 
 **Velocity:**
 
-- Total plans completed (this milestone): 0
-- Average duration: —
-- Total execution time: —
+- Total plans completed (this milestone): 1
+- Average duration: ~4 min
+- Total execution time: ~4 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | TBD | - | - |
+| 1 | 1/3 | ~4 min | ~4 min |
 | 2 | TBD | - | - |
 | 3 | TBD | - | - |
 | 4 | TBD | - | - |
@@ -158,7 +158,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-08T11:48:36.869Z
+Last session: 2026-07-08T15:13:25.689Z
 Stopped at: Phase 1 context gathered
 Resume file: .planning/phases/01-crit-foundation/01-CONTEXT.md
 
