@@ -2,16 +2,17 @@
 gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
-current_phase: 1
-current_phase_name: in progress; wave 1 plan 01 complete
-status: roadmapped
+current_phase: 02
+current_phase_name: server-authoritative-damage-crit-on-enemies
+status: executing
 stopped_at: Phase 2 context gathered
-last_updated: "2026-07-08T16:28:32.521Z"
+last_updated: "2026-07-08T17:35:56.449Z"
 last_activity: 2026-07-08
+last_activity_desc: Phase 02 execution started
 progress:
   total_phases: 7
   completed_phases: 1
-  total_plans: 3
+  total_plans: 6
   completed_plans: 3
   percent: 14
 ---
@@ -26,15 +27,15 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor). This milestone deepens *combat feel*: enemy attacks become dodgeable and crit becomes a
 real per-character stat, so power investment (crit) buys tempo, not just damage.
-**Current focus:** v0.2.0-alpha Combat Depth roadmapped (7 phases; Phase 1 discussed). Next: plan
+**Current focus:** Phase 02 — server-authoritative-damage-crit-on-enemies
 Phase 1 (Crit stats + server damage foundation) with `/gsd-plan-phase 1`.
 
 ## Current Position
 
-Phase: 1 — Crit stats + server damage foundation (in progress; wave 1 plan 01 complete)
-Plan: 3 of 3 complete (crit.ts + damage.ts pure helpers landed, tested)
-Status: 01-01 executed — zero-import rollCrit + computeBaseDamage siblings + cross-boundary vitest (403 tests green). Plans 01-02/01-03 remain.
-Last activity: 2026-07-08
+Phase: 02 (server-authoritative-damage-crit-on-enemies) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 02
+Last activity: 2026-07-08 — Phase 02 execution started
 
 ## Roadmap Summary
 
@@ -123,7 +124,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ### Pending Todos
 
-None yet.
+6 pending (see `.planning/todos/pending/`). Latest: Miss/evasion system decision (accuracy vs evasion vs none) — needs user pros/cons decision before any milestone slot.
 
 ### Blockers/Concerns
 
