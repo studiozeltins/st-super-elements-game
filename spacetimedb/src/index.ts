@@ -35,33 +35,35 @@ interface CharacterStat {
   maxHealth: number;
   healthRegen: number;
   role: 'tank' | 'dps' | 'healer' | 'support';
+  critRate: number;
+  critDmg: number;
   healType: HealType;
   healMode: HealMode;
   healPower: number;
 }
 const NO_HEAL = { healType: 'none' as HealType, healMode: 'flat' as HealMode, healPower: 0 };
 const CHARACTER_STATS: Record<string, CharacterStat> = {
-  aeris: { stars: 5, maxHealth: 950, healthRegen: 0, role: 'support', ...NO_HEAL },
-  terron: { stars: 5, maxHealth: 1400, healthRegen: 0, role: 'tank', ...NO_HEAL },
-  volta: { stars: 5, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
-  silva: { stars: 5, maxHealth: 1050, healthRegen: 8, role: 'dps', ...NO_HEAL },
+  aeris: { stars: 5, maxHealth: 950, healthRegen: 0, role: 'support', critRate: 0.20, critDmg: 1.60, ...NO_HEAL },
+  terron: { stars: 5, maxHealth: 1400, healthRegen: 0, role: 'tank', critRate: 0.12, critDmg: 1.50, ...NO_HEAL },
+  volta: { stars: 5, maxHealth: 1000, healthRegen: 0, role: 'dps', critRate: 0.34, critDmg: 1.90, ...NO_HEAL },
+  silva: { stars: 5, maxHealth: 1050, healthRegen: 8, role: 'dps', critRate: 0.33, critDmg: 2.00, ...NO_HEAL },
   // Marina: active healer — her water ring heals the whole party for 20% of each pool.
-  marina: { stars: 5, maxHealth: 1150, healthRegen: 12, role: 'healer', healType: 'active', healMode: 'percent', healPower: 0.2 },
-  ignis: { stars: 5, maxHealth: 1300, healthRegen: 0, role: 'tank', ...NO_HEAL },
-  sarma: { stars: 5, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
+  marina: { stars: 5, maxHealth: 1150, healthRegen: 12, role: 'healer', critRate: 0.18, critDmg: 1.60, healType: 'active', healMode: 'percent', healPower: 0.2 },
+  ignis: { stars: 5, maxHealth: 1300, healthRegen: 0, role: 'tank', critRate: 0.13, critDmg: 1.55, ...NO_HEAL },
+  sarma: { stars: 5, maxHealth: 1000, healthRegen: 0, role: 'dps', critRate: 0.32, critDmg: 1.95, ...NO_HEAL },
   // Nereīda: active healer — her tide arrows mend the party for 20% of each pool.
-  nereida: { stars: 5, maxHealth: 1120, healthRegen: 14, role: 'healer', healType: 'active', healMode: 'percent', healPower: 0.2 },
-  vesper: { stars: 5, maxHealth: 1080, healthRegen: 0, role: 'dps', ...NO_HEAL },
-  glacia: { stars: 5, maxHealth: 1550, healthRegen: 0, role: 'tank', ...NO_HEAL },
-  zefs: { stars: 4, maxHealth: 900, healthRegen: 0, role: 'support', ...NO_HEAL },
-  petra: { stars: 4, maxHealth: 1200, healthRegen: 0, role: 'tank', ...NO_HEAL },
-  zibo: { stars: 4, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
+  nereida: { stars: 5, maxHealth: 1120, healthRegen: 14, role: 'healer', critRate: 0.19, critDmg: 1.65, healType: 'active', healMode: 'percent', healPower: 0.2 },
+  vesper: { stars: 5, maxHealth: 1080, healthRegen: 0, role: 'dps', critRate: 0.36, critDmg: 2.10, ...NO_HEAL },
+  glacia: { stars: 5, maxHealth: 1550, healthRegen: 0, role: 'tank', critRate: 0.10, critDmg: 1.45, ...NO_HEAL },
+  zefs: { stars: 4, maxHealth: 900, healthRegen: 0, role: 'support', critRate: 0.22, critDmg: 1.70, ...NO_HEAL },
+  petra: { stars: 4, maxHealth: 1200, healthRegen: 0, role: 'tank', critRate: 0.14, critDmg: 1.50, ...NO_HEAL },
+  zibo: { stars: 4, maxHealth: 1000, healthRegen: 0, role: 'dps', critRate: 0.30, critDmg: 1.85, ...NO_HEAL },
   // Lapa (dendro): active healer — spore burst heal scales with the combo count.
-  lapa: { stars: 4, maxHealth: 950, healthRegen: 15, role: 'healer', healType: 'active', healMode: 'combo', healPower: 6 },
+  lapa: { stars: 4, maxHealth: 950, healthRegen: 15, role: 'healer', critRate: 0.17, critDmg: 1.55, healType: 'active', healMode: 'combo', healPower: 6 },
   // Rasa (hydro): passive healer — water aura heals the party 10 HP/sec while on field.
-  rasa: { stars: 4, maxHealth: 1000, healthRegen: 10, role: 'healer', healType: 'passive', healMode: 'flat', healPower: 10 },
-  dzirkste: { stars: 4, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
-  stindzis: { stars: 4, maxHealth: 950, healthRegen: 0, role: 'dps', ...NO_HEAL },
+  rasa: { stars: 4, maxHealth: 1000, healthRegen: 10, role: 'healer', critRate: 0.16, critDmg: 1.50, healType: 'passive', healMode: 'flat', healPower: 10 },
+  dzirkste: { stars: 4, maxHealth: 1000, healthRegen: 0, role: 'dps', critRate: 0.31, critDmg: 1.90, ...NO_HEAL },
+  stindzis: { stars: 4, maxHealth: 950, healthRegen: 0, role: 'dps', critRate: 0.35, critDmg: 2.05, ...NO_HEAL },
 };
 const MAX_COMBO_FOR_HEAL = 50;
 const CHARACTER_POOL = Object.entries(CHARACTER_STATS).map(([characterId, s]) => ({
