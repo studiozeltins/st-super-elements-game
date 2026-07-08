@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
-status: planning
-last_updated: "2026-07-08T09:16:52.675Z"
+status: roadmapped
+last_updated: "2026-07-08T00:00:00.000Z"
 last_activity: 2026-07-08
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,22 +21,36 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 
 **Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
-floor).
-**Current focus:** Planning next milestone — raid boss (Phase 6) + balance (Phase 7), which
-carry INV-4 (the ganked-player recovery faucet).
+floor). This milestone deepens *combat feel*: enemy attacks become dodgeable and crit becomes a
+real per-character stat, so power investment (crit) buys tempo, not just damage.
+**Current focus:** v0.2.0-alpha Combat Depth roadmapped (5 phases). Next: plan Phase 1 (Crit
+foundation) with `/gsd-plan-phase 1`.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 1 — Crit foundation (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-08 — Milestone v0.2.0-alpha started
+Status: Roadmap complete, awaiting phase planning
+Last activity: 2026-07-08 — v0.2.0-alpha Combat Depth roadmap created (5 phases, 25/25 reqs mapped)
+
+## Roadmap Summary
+
+| Phase | Goal | Requirements |
+|-------|------|--------------|
+| 1. Crit foundation | Per-character server-rolled crit + `isCrit` signal | CRIT-01..05 |
+| 2. FSM + leapSlam + delete drain | Unit-agnostic attack FSM proven on ONE circle attack; contact drain deleted | FSM-01..06, ATK-01/05/06, ANIM-01..04, HIT-01 |
+| 3. swordSwing → swordSwirl combo | Cone shape + immediate chaining | ATK-02, ATK-03 |
+| 4. shieldDash lane | Travelling-hitbox lane gap-closer | ATK-04 |
+| 5. Crit poise interrupt | Crit-in-windup → cancel + visible stagger (un-spoofable) | POISE-01..03 |
+
+Dependency order is FORCED: crit (1) before the interrupt (5); one shape (2) proven before the
+rest multiply (3, 4). Do not re-order.
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 20 (Phase A shipped outside GSD tracking, commit `8236de4`)
+- Total plans completed (this milestone): 0
 - Average duration: —
 - Total execution time: —
 
@@ -44,71 +58,34 @@ Last activity: 2026-07-08 — Milestone v0.2.0-alpha started
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| A | shipped | — | — |
-| 01 | 4 | - | - |
-| 02 | 5 | - | - |
-| 03 | 5 | - | - |
-| 05 | 6 | - | - |
+| 1 | TBD | - | - |
+| 2 | TBD | - | - |
+| 3 | TBD | - | - |
+| 4 | TBD | - | - |
+| 5 | TBD | - | - |
 
-**Recent Trend:**
-
-- Last 5 plans: —
-- Trend: Stable
-
-*Updated after each plan completion*
-| Phase 01 P01 | 2 min | 2 tasks | 2 files |
-| Phase 01 P02 | 4min | 2 tasks | 2 files |
-| Phase 01 P03 | 5 min | 2 tasks | 3 files |
-| Phase 01 P04 | 8 min | 2 tasks | 4 files |
-| Phase 02 P01 | 3 min | 2 tasks | 4 files |
-| Phase 02 P02 | 3min | 2 tasks | 1 files |
-| Phase 02 P03 | 2min | 2 tasks | 5 files |
-| Phase 02 P04 | 3min | 2 tasks | 3 files |
-| Phase 03 P01 | 5 min | 2 tasks | 2 files |
-| Phase 03 P02 | 6 min | 2 tasks | 1 files |
-| Phase 03 P03 | ~3m | 1 tasks | 5 files |
-| Phase 03 P04 | 20m | 3 tasks | 5 files |
-| Phase 03 P05 | 9 min | 2 tasks | 1 files |
-| Phase 04 P01 | 3 min | 3 tasks | 3 files |
-| Phase 04 P02 | 8min | 2 tasks | 3 files |
-| Phase 05 P01 | 3 min | 2 tasks | 5 files |
-| Phase 05 P02 | 5 min | 3 tasks | 1 files |
-| Phase 05 P03 | 4min | 1 tasks | 11 files |
-| Phase 05 P04 | 12 min | 3 tasks | 4 files |
-| Phase 05 P05 | 14 min | 3 tasks | 5 files |
+*Updated after each plan completion.*
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+Decisions are logged in PROJECT.md Key Decisions table. Locked for this milestone:
 
-- [Naming]: Two-tier `gems` / `transcendShards` economy with a verbatim identifier contract (LOCKED).
-- [Phase A]: Wipe (not migrate) accepted for the primogems→gems rename; all later phases are additive schema.
-- [Death]: PVE-death shard = ground collectible; PVP-death shard = stolen by killer.
-- [Tunables]: `MAX_TRANSCEND_LEVEL=10`, `TRANSCEND_DAMAGE_STEP=0.05`, `RAID_SHARD_PAYOUT=6`, etc. finalized in Phase 0.
-- [Phase 01]: resolveDupeGrant extracted as a pure dependency-free helper so the C6-overflow mint semantics are unit-testable via cross-import before any reducer wiring.
-- [Phase ?]: transcendShards wired: C6-overflow dupe mints 1 shard via resolveDupeGrant, gems unchanged; DUPLICATE_REFUND removed
-- [Phase ?]: [Phase 01]: transcendShards deployed to LOCAL via additive migrate; .default(0) required to backfill existing rows without a wipe; bindings regenerated so player.transcendShards is typed
-- [Phase ?]: [Phase 02]: resolveTranscendInstall + transcendDamageMultiplier extracted as pure dependency-free helpers, test-first, before any reducer/game-loop wiring
-- [Phase 02]: transcendCharacter reducer is the sole server-side enforcement point for the shard currency (C6/cap/cost/ownership); owned_character.transcendLevel added as additive .default(0) column; healParty scales by healer transcendLevel
-- [Phase ?]: [Phase 02]: transcend module published additively to LOCAL (transcend_level column, no wipe; player=1/owned_character=8 intact); bindings regenerated so transcendLevel + transcendCharacter client-typed. maincloud deferred (paused DB, no recovery-wipe).
-- [Phase 02]: transcend level scales client damage: createGame consumes pure transcendDamageMultiplier(activeConstellation, activeTranscend) behind setActiveTranscend; App.tsx builds owner-filtered transcendById, feeds the loop, threads transcendById + onTranscend to CharacterScreen (plan 05 UI)
-- [Phase 03]: applyDeathShardPenalty extracted as a pure dependency-free helper (branch order = u32 underflow safety; shardsLost 0 on erosion = A1 economy invariant), test-first before any reducer wiring
-- [Phase ?]: [Phase 03]: shard-drop economy wired — shard_drop table + spillShards (single count-1 piece) + collectShard (reuses gemIsCollectible grace); applyDeathShardPenalty additively wired into all 3 death paths keeping gem spill; PVP killer credit folded with gem credit (gate stolen>0 || shardsLost>0) so a 0-gem shard carrier still transfers its shard (A1). D3: no un-clamped activatedConstellation consumer, no extra activation write.
-- [Phase ?]: 03-03: Published shard_drop additively to local (no --delete-data); migration ADD-only, player data intact.
-- [Phase ?]: 03-03: Regenerated bindings expose tables.shardDrop + reducers.collectShard — gates Plan 04 client work.
-- [Phase ?]: Shard-movement toast disambiguated client-side with no new broadcast table: DOWN+recent pvpHit = stolen, DOWN otherwise = PVE drop, UP with no recent local collect = kill-steal, plain pickup = pulse only.
-- [Phase ?]: Shard counter flash threaded to CharacterScreen + GachaScreen chips via shardFlashClass prop; loss shown by --drain shrink (motion) not --danger (hue).
-- [Phase ?]: [Phase 03]: shards-at-risk verified end-to-end via two-client playtest — all 5 scenarios pass (PVP steal +1 exact, PVE purple drop + 1.2s grace + no camp vacuum, erosion order transcend-- then one C-level with C0-C6 floor held, 0-shard PVP kill mints nothing, 0-gem shard carrier still transfers); vitest 339 green + build green. Phase 3 done.
-- [Phase ?]: [Phase 03][follow-up]: emergent — shard_drop reuses the gem magnet/collect loop, so drops are re-grabbable and enemies can also pick them up (killing that enemy re-drops the shard). Tester approved; flag for a future phase vs the 'camps must not vacuum a drop' invariant. No fix now.
-- [Phase 04]: [Phase 04][04-01]: role added as const design data on CHARACTER_STATS (client characters.ts + server mirror), NOT a table — no migration/column/seed/binding-regen. Required field = compile-time exhaustive seeding. ROLE_META (label/token/aria) single source for Plan 02 UI. serverSync gains valid-role + per-id parity (INV-5). Additive local publish; maincloud deferred to Phase 7.
-- [Phase ?]: [Phase 05][05-01]: RAID_PARTY_SIZE declared as a distinct one-line const (not PARTY_SIZE) with client/server parity (INV-5); partyRules.ts nextLeader (oldest-joined, lexicographic tie-break, D-05) + canAccept (already_partied before cap, D-06/T-05-04) extracted as pure dependency-free helpers, test-first, before any reducer wiring.
-- [Phase 05]: [Phase 05][05-02]: party/party_member/party_invite tables + 5 reducers (invitePlayer/requestJoin/acceptInvite/declineInvite/leaveParty). party_member.identity unique = atomic one-party-per-player (D-06); accept/decline guard recipientIdentity==actor symmetrically, never branch on kind (T-05-02); cap+no-double-join via canAccept, promotion via nextLeader (Plan 01 helpers, D-05); invite-only entry, no joinParty reducer (T-05-03); onDisconnect untouched (D-04).
-- [Phase ?]: [Phase 05][05-03]: party schema published to LOCAL via additive migrate (no --delete-data; account/account_link + players intact); bindings regenerated exposing party/partyMember/partyInvite tables + invitePlayer/requestJoin/acceptInvite/declineInvite/leaveParty reducers, tsc -b clean. Client plans 04-05 unblocked; maincloud deferred to Phase 7.
-- [Phase ?]: Plan 04: received-invites list added to Pulks Modal so all 5 reducer callers stay live under noUnusedLocals; Plan 05 migrates it to toast + Settings surfaces
-- [Phase ?]: PlayerSheet uses Radix Dialog primitives directly (right-docked) not the centered Modal; leave-confirm reuses Modal
+- [Crit trust boundary]: Crit roll is SERVER-SIDE via `ctx.random` (option b) — the only choice
+  that makes the Phase-5 poise interrupt un-spoofable. Phase 1 mirrors crit stats into the server
+  `CHARACTER_STATS`. Add a server-side `damage` sanity clamp as defense-in-depth.
+- [Scope]: Enemies only (goliaths). The `unit_attack` FSM is built unit-agnostic (`unitKind`/
+  `unitId`) so camp enemies + heroes reuse it later with ZERO schema change; heroes stay on the
+  current client swing this milestone.
+- [Contact drain]: The goliath→player per-tick contact drain is DELETED (Phase 2) in the same
+  slice that guarantees the selection fn returns an attack in every distance band. Camp and
+  goliath→enemy drains are untouched. Keeping both drain + strikes is an explicit anti-feature.
+- [Zero new deps]: Hand-roll on existing seams (worldTick, combatMath, goliathAI, createEffectSystem,
+  createEntityRenderer, resistances, hitscan). Refuse xstate, tween libs, physics engines, ECS libs,
+  THREE.AnimationMixer. `THREE.MathUtils` (bundled) is the only interpolation helper.
+- [Pass ordering]: `runUnitAttacks` MUST sit between worldTick's position-build pass and the single
+  `playerDamage` apply, landing strike damage in that shared map (reuses resistance/death/shard/respawn).
 
 ### Pending Todos
 
@@ -116,10 +93,20 @@ None yet.
 
 ### Blockers/Concerns
 
-- [01-04 GATE] Blocking human-verify playtest pending: confirm ◈ chip on all Gacha tabs + Character topbar, and that a C6-dupe mints exactly 1 shard with gems unchanged (see 01-04-SUMMARY.md "Human Verification Pending").
-- All work must land on `feat/transcendence` (off `master`, not `main`).
-- pnpm only; server module path is `./spacetimedb` (the `spacetime:publish` npm scripts point at the wrong `server` path — ignore them).
-- Every data change must keep client/server mirrors in sync (`serverSync.test.ts`) — INV-5.
+- **Migrated-DB verification (per phase):** the new `unit_attack`/`attack_strike` tables start EMPTY
+  on a live migrated DB (`init` only runs on a fresh DB). The FSM must lazily create attack state by
+  iterating the *unit* tables, never the empty attack table. Each phase's done-criteria needs a
+  "rows exist after a real engage on a MIGRATED (not freshly-seeded) DB" check.
+- **INV-5 mirror parity:** `serverSync.test.ts` is stat-only today; Phase 2 extends it to assert
+  `ATTACKS` duration/shape parity, kept green through every later shape. A failing parity assertion
+  is release-blocking (silent client/server drift breaks dodge fairness).
+- **Latency fairness:** the active-window + dodge-grace model is chosen at Phase 2 and MUST be
+  validated over real maincloud RTT (LAN hides the unfairness) via a two-client playtest.
+- **Determinism:** no `Math.random`/`Date.now` in `spacetimedb/src` (grep-gate); windups authored as
+  exact tick multiples (≥0.35s / ≥2 ticks); a passed strike deadline is resolved, never dropped.
+- **Ops invariants:** pnpm only; server module path is `./spacetimedb` (ignore the wrong-path
+  `spacetime:publish` npm scripts). Additive migrate-publish only; never `--delete-data` on a DB with
+  real accounts. Maincloud deploy deferred to a user-facing prod point.
 
 ## Deferred Items
 
@@ -128,15 +115,19 @@ None yet.
 | Feature | Elemental resistance system | Deferred to future milestone | 2026-07-06 |
 | Feature | XP/levelling for players + enemies | Deferred to future milestone | 2026-07-06 |
 | Feature | Email password reset | Deferred (needs external service) | 2026-07-06 |
-| Phase | Phase 6 — Raid boss (party-gated shard faucet) | Deferred to future milestone; spec at `.planning/todos/pending/2026-07-08-phase-6-raid-boss-DEFERRED.md` | 2026-07-08 |
-| Phase | Phase 7 — Role enforcement + balance + full validation | Deferred to future milestone; spec at `.planning/todos/pending/2026-07-08-phase-7-role-enforcement-balance-DEFERRED.md` | 2026-07-08 |
+| Phase | Raid boss (party-gated shard faucet, INV-4) | Reserved for a later milestone; spec at `.planning/todos/pending/2026-07-08-phase-6-raid-boss-DEFERRED.md` | 2026-07-08 |
+| Phase | Role enforcement + balance + full validation | Reserved for a later milestone; spec at `.planning/todos/pending/2026-07-08-phase-7-role-enforcement-balance-DEFERRED.md` | 2026-07-08 |
+| Combat | Convert camp enemies to the same FSM (XCMB-01) | v2 — after goliath feel dialed in | 2026-07-08 |
+| Combat | Weapon/constellation crit contributions (XCMB-02) | v2 | 2026-07-08 |
+| Combat | Hero attack FSM + i-frame/parry (XCMB-04) | v2 | 2026-07-08 |
+| Combat | Tiered poise/hyperarmor/break (XCMB-05) | v2 | 2026-07-08 |
 
 ## Session Continuity
 
-Last session: 2026-07-07T14:28:52.573Z
-Stopped at: Completed 05-02: party model + reducers
+Last session: 2026-07-08
+Stopped at: v0.2.0-alpha Combat Depth roadmap created (ROADMAP.md, STATE.md, REQUIREMENTS.md traceability)
 Resume file: None
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Plan Phase 1 (Crit foundation) with `/gsd-plan-phase 1`.

@@ -89,7 +89,8 @@ Explicitly excluded. Anti-features from research documented to prevent scope cre
 
 ## Traceability
 
-Which phases cover which requirements. Populated/adjusted during roadmap creation.
+Which phases cover which requirements. Confirmed during roadmap creation (v0.2.0-alpha Combat Depth,
+forced dependency-ordered 5-phase sequence).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -126,4 +127,4 @@ Which phases cover which requirements. Populated/adjusted during roadmap creatio
 
 ---
 *Requirements defined: 2026-07-08*
-*Last updated: 2026-07-08 after initial definition (v0.2.0-alpha Combat Depth)*
+*Last updated: 2026-07-08 — traceability confirmed at roadmap creation (5-phase Combat Depth sequence)*
