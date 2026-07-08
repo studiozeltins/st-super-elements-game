@@ -5,9 +5,8 @@ milestone_name: Combat Depth
 current_phase: 02
 status: completed
 stopped_at: Phase 2 context gathered
-last_updated: "2026-07-08T19:17:05.568Z"
+last_updated: "2026-07-08T20:37:06.729Z"
 last_activity: 2026-07-08
-last_activity_desc: Phase 02 marked complete
 progress:
   total_phases: 7
   completed_phases: 2
@@ -34,7 +33,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 Phase: 02 — COMPLETE
 Plan: 1 of 3
 Status: Phase 02 complete
-Last activity: 2026-07-08 — Phase 02 marked complete
+Last activity: 2026-07-08
 
 ## Roadmap Summary
 
