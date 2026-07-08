@@ -11,6 +11,20 @@ import {
   regularEnemyBaseGems,
 } from '../gemRewards';
 import { GOLIATH_ARCHETYPES_BY_SIZE } from '../goliathArchetypes';
+import { WEAPONS as CLIENT_WEAPONS } from '../weapons';
+import {
+  regularAttackMultiplier as clientRegular,
+  skillAttackMultiplier as clientSkill,
+} from '../../combat/comboSystem';
+import { transcendDamageMultiplier as clientTranscend } from '../../combat/transcendScaling';
+// Import the server damage mirror across the package boundary and compare OUTPUTS,
+// not source regex (RESEARCH Pitfall 4) — the robust parity path.
+import {
+  WEAPONS as SERVER_WEAPONS,
+  regularAttackMultiplier as serverRegular,
+  skillAttackMultiplier as serverSkill,
+  transcendDamageMultiplier as serverTranscend,
+} from '../../../../spacetimedb/src/damage';
 import {
   GACHA_PULL_COST,
   MAX_HEALTH,
@@ -262,5 +276,40 @@ describe('client goliath archetypes derive gems and splash from size', () => {
       false,
       true,
     ]);
+  });
+});
+
+// D-05 / CRIT-03: the server damage.ts mirror must match the client base-damage
+// math exactly. Unlike the string-scraping parity above, this imports both sides
+// and compares OUTPUTS (RESEARCH Pitfall 4) — the only robust way to catch a
+// drifted mirror, since inlined server constants have no index.ts regex path.
+describe('server damage.ts mirror stays in sync', () => {
+  it('WEAPONS deep-equal the client WEAPONS (all 5, incl. displayName)', () => {
+    expect(SERVER_WEAPONS).toEqual(CLIENT_WEAPONS);
+  });
+
+  it.each([0, 1, 5, 10, 50, 100] as const)(
+    'regular/skill attack multipliers match client at combo=%s',
+    combo => {
+      expect(serverRegular(combo)).toBe(clientRegular(combo));
+      expect(serverSkill(combo)).toBe(clientSkill(combo));
+    }
+  );
+
+  it.each([
+    [0, 0],
+    [1, 0],
+    [0, 1],
+    [6, 4],
+  ] as const)('transcend multiplier matches client at (c=%s, t=%s)', (constellation, transcend) => {
+    expect(serverTranscend(constellation, transcend)).toBe(clientTranscend(constellation, transcend));
+  });
+
+  it('pins the inlined server CONSTELLATION_DAMAGE_STEP (0.08) via transcend(1,0) === 1.08', () => {
+    // C1, no transcend isolates one constellation step: 1 + 1*0.08 = 1.08.
+    // This is the ONLY parity guard for the server's inlined CONSTELLATION_DAMAGE_STEP,
+    // which — unlike TRANSCEND_DAMAGE_STEP — has no index.ts constant regex path.
+    expect(serverTranscend(1, 0)).toBe(clientTranscend(1, 0));
+    expect(serverTranscend(1, 0)).toBe(1.08);
   });
 });
