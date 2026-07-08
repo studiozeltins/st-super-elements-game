@@ -65,11 +65,23 @@ crit visuals become truthful and the `isCrit` signal the poise interrupt later c
      server `CHARACTER_STATS` mirror (INV-5).
   4. `attackEnemies`/`attackRay` resolve crit server-side (via `ctx.random`) and record `isCrit`
      on the hit; a modified client can no longer decide whether a hit crit.
-**Plans**: TBD
-**Notes**: Ships alone, no FSM and no new tables. Locked decision (b): crit roll is SERVER-SIDE
-via `ctx.random` — the only option that makes the Phase-5 interrupt un-spoofable — so this phase
-mirrors crit stats into the server `CHARACTER_STATS`. Add a server-side `damage` sanity clamp as
-defense-in-depth. Grep-gate: no `Math.random`/`Date.now` in `spacetimedb/src`.
+**Plans** (5, dependency-ordered — see `phases/01-crit-foundation/01-CONTEXT.md` §Plan Breakdown):
+  1. Stats + server pure helpers (`crit.ts`/`damage.ts`) + `CHARACTER_STATS`/`WEAPONS`/multiplier
+     mirror + extended `serverSync` parity (data only, no wiring).
+  2. Crit event table + client render path (all clients subscribe; big red crit number).
+  3. Server-authoritative damage + crit on `attackEnemies`/`attackRay` (drop `damage` arg → intent;
+     server computes base + `ctx.random` crit; delete client roll).
+  4. PVP crit (`attackPlayer`) — same server path.
+  5. Deploy (local publish → generate → build) + migrated-DB + two-client verify.
+**Notes**: Ships alone, no FSM. **Split into 5 plans** because the discuss-phase chose Option B —
+FULL server-authoritative base damage (server mirrors `WEAPONS` + combo/skill/transcend math, client
+sends intent, not a damage number) — which closes the PVP damage-spoof hole but grows this phase well
+past "move the crit roll." Roadmap's original "no new tables" note is **waived** (user): a crit event
+table is added so the server-owned `isCrit` reaches clients truthfully. Crit stats mirrored into
+`CHARACTER_STATS`; crit + PVP both server-rolled via `ctx.random` (the only path that makes the
+Phase-5 interrupt un-spoofable). Server base-damage subsumes the old `damage` sanity clamp (kept as
+defense-in-depth). Grep-gate: no `Math.random`/`Date.now` in `spacetimedb/src`. Plan-3 pre-check:
+verify server-known (`activeCharacterId`, transcend level) vs must-pass (combo) inputs.
 
 #### Phase 2: FSM + leapSlam end-to-end + delete goliath drain
 **Goal**: Goliaths stop draining on contact and instead commit one telegraphed, dodgeable

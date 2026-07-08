@@ -163,6 +163,46 @@ telegraphs / poise accrual (Phases 2 & 5); weapon/constellation crit *contributi
 a deeper-authority HOW decision on the same feature, not a new capability.*
 </deferred>
 
+<plan_breakdown>
+## Plan Breakdown (Phase 1 split — Option B makes this multi-plan)
+
+Ordered, dependency-forced. Test-first pure helpers precede reducer wiring; server authority
+lands before the client roll is deleted; PVP after enemies; deploy/verify last.
+
+- **Plan 1 — Stats + server pure helpers + parity (data only, no reducer wiring).**
+  Add `critRate`/`critDmg` to `CharacterDefinition` (role-seeded, 18 chars) + mirror into server
+  `CHARACTER_STATS`. Mirror `WEAPONS` + multiplier funcs (`regularAttackMultiplier`,
+  `skillAttackMultiplier`, combo scale, `transcendDamageMultiplier`, `skill.damage`) into
+  `spacetimedb/src`. Extract zero-import vitest helpers: `crit.ts` (`rollCrit(critRate,critDmg,rng)`)
+  + `damage.ts` (`computeBaseDamage(...)`). Extend `serverSync.test.ts` to assert client↔server
+  crit values AND weapon/multiplier parity. No behavior change yet. (CRIT-01, CRIT-03)
+
+- **Plan 2 — Crit event table + client render path.** New event table (`isCrit`, amount, target,
+  attacker) mirroring `skill_cast`/`ranged_attack` (`onInsert`-only). All clients subscribe;
+  `createDamageNumbers` pops the big red crit number from the event. Regenerate bindings. (CRIT-04)
+
+- **Plan 3 — Server-authoritative damage + crit on enemies (`attackEnemies`/`attackRay`).**
+  Drop the `damage` arg → accept intent (characterId/combo/basic-vs-skill). Server computes base via
+  `damage.ts`, rolls crit via `ctx.random` from mirrored stats, applies `critDmg`, emits the crit
+  event, records `isCrit`, keeps `MAX_HIT_DAMAGE` clamp. Update client `network.send*`; DELETE
+  client `rollDamage`/`CRIT_CHANCE`/`CRIT_MULTIPLIER`. Grep-gate: no `Math.random` in
+  `spacetimedb/src`. (CRIT-02, CRIT-05)
+  - **Blocking pre-check (from scope note):** verify what the server already knows
+    (`activeCharacterId` yes; transcend/constellation level — check `owned_character`/transcend
+    tables) vs must be passed (combo is client-side today → pass, already bounded).
+
+- **Plan 4 — PVP crit (`attackPlayer`).** Same server base-damage + `ctx.random` crit + crit event
+  on PVP hits. Update client `applyPvpDamage`/`sendAttackPlayer`. (D-06)
+
+- **Plan 5 — Deploy + verify.** `spacetime publish 2d-impact-game-fr9ti --module-path spacetimedb
+  --server local --yes` → `pnpm run spacetime:generate` → `pnpm build`. Migrated-DB (not fresh-seed)
+  check; two-client playtest: distinct per-character crit frequency/magnitude, truthful red crit
+  number on enemies + PVP, no visual regression. (all Success Criteria)
+
+**Commit note:** roadmap constraint is one atomic commit per phase — executor may stage plans and
+squash, or commit per plan then confirm the phase's single-commit intent at ship.
+</plan_breakdown>
+
 ---
 
 *Phase: 1-crit-foundation*
