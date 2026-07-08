@@ -122,7 +122,20 @@ number reaches every client via a new crit event table.
 
   4. A modified client can no longer decide whether a hit crit, nor inflate base damage;
      `MAX_HIT_DAMAGE` clamp kept as defense-in-depth. Grep-gate: no `Math.random` in `spacetimedb/src`.
-**Plans**: TBD
+**Plans**: 3 plans
+
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — `CHARACTER_COMBAT` mirror (weapon/skillDamage/skillCooldown, INV-5 parity) + `skillGate.ts` pure helper, test-first (wave 1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 02-02-PLAN.md — server authority + intent plumbing: `enemy_hit` event table, `skillReadyAt`/window state + gated `castSkill`, `resolvePlayerHit`, `attackEnemies`/`attackRay` rework (drop `damage`, add `isSkill`), delete client crit roll, generate + build green (wave 2)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 02-03-PLAN.md — damage-number reconciliation (local prediction + `enemy_hit` onInsert + own-crit upgrade, remove HP-delta spawn) + deploy (local + maincloud) + two-client migrated-DB playtest (wave 3)
+
 **Notes**: The wiring slice. Roadmap's original "no new tables" note is **waived** (user) — one crit
 event table is added so the server-owned `isCrit` reaches clients truthfully. Skills and basic
 attacks are indistinguishable server-side (both via `attackEnemies`, see `resistances.ts`), so a
