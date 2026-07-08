@@ -109,3 +109,35 @@ export function computeBaseDamage(input: {
   const ramp = input.skillDamage != null ? skillAttackMultiplier(input.combo) : regularAttackMultiplier(input.combo);
   return base * ramp * transcendDamageMultiplier(input.constellation, input.transcend);
 }
+
+// Per-character combat data the server needs to run computeBaseDamage and the
+// skill-cooldown gate. The server has no other character→weapon / skill map, so
+// this is its sole source. Parity with the client is pinned by an import-and-
+// compare test (serverSync.test.ts, INV-5/CRIT-06).
+export interface CharacterCombat {
+  weaponId: WeaponId;
+  skillDamage: number;
+  skillCooldownSeconds: number;
+}
+
+// Mirror of src/game/data/characters.ts CHARACTERS — weapon + skill.damage +
+// skill.cooldownSeconds per id. Values must match exactly (each entry single-line).
+export const CHARACTER_COMBAT: Record<string, CharacterCombat> = {
+  aeris: { weaponId: 'sword', skillDamage: 140, skillCooldownSeconds: 6 },
+  terron: { weaponId: 'greatsword', skillDamage: 220, skillCooldownSeconds: 10 },
+  volta: { weaponId: 'book', skillDamage: 90, skillCooldownSeconds: 8 },
+  silva: { weaponId: 'bow', skillDamage: 180, skillCooldownSeconds: 7 },
+  marina: { weaponId: 'spear', skillDamage: 45, skillCooldownSeconds: 12 },
+  ignis: { weaponId: 'greatsword', skillDamage: 200, skillCooldownSeconds: 9 },
+  sarma: { weaponId: 'sword', skillDamage: 70, skillCooldownSeconds: 6 },
+  nereida: { weaponId: 'bow', skillDamage: 165, skillCooldownSeconds: 7 },
+  vesper: { weaponId: 'spear', skillDamage: 210, skillCooldownSeconds: 7 },
+  glacia: { weaponId: 'greatsword', skillDamage: 240, skillCooldownSeconds: 10 },
+  zefs: { weaponId: 'book', skillDamage: 110, skillCooldownSeconds: 5 },
+  petra: { weaponId: 'spear', skillDamage: 130, skillCooldownSeconds: 7 },
+  zibo: { weaponId: 'sword', skillDamage: 120, skillCooldownSeconds: 6 },
+  lapa: { weaponId: 'book', skillDamage: 35, skillCooldownSeconds: 10 },
+  rasa: { weaponId: 'bow', skillDamage: 140, skillCooldownSeconds: 5 },
+  dzirkste: { weaponId: 'spear', skillDamage: 150, skillCooldownSeconds: 6 },
+  stindzis: { weaponId: 'bow', skillDamage: 150, skillCooldownSeconds: 6 },
+};

@@ -20,6 +20,7 @@ import { transcendDamageMultiplier as clientTranscend } from '../../combat/trans
 // Import the server damage mirror across the package boundary and compare OUTPUTS,
 // not source regex (RESEARCH Pitfall 4) — the robust parity path.
 import {
+  CHARACTER_COMBAT,
   WEAPONS as SERVER_WEAPONS,
   regularAttackMultiplier as serverRegular,
   skillAttackMultiplier as serverSkill,
@@ -312,4 +313,25 @@ describe('server damage.ts mirror stays in sync', () => {
     expect(serverTranscend(1, 0)).toBe(clientTranscend(1, 0));
     expect(serverTranscend(1, 0)).toBe(1.08);
   });
+});
+
+// INV-5 / CRIT-06: the server CHARACTER_COMBAT mirror (weapon + skill damage +
+// skill cooldown) MUST stay identical to the client CHARACTERS source of truth.
+// Import-and-compare (RESEARCH Pitfall 3): the server has no other combat-data
+// map, so any silent drift would let server damage diverge from client feel.
+describe('server CHARACTER_COMBAT mirror stays in sync with client CHARACTERS', () => {
+  it('contains exactly the same character ids', () => {
+    expect(Object.keys(CHARACTER_COMBAT).sort()).toEqual(Object.keys(CHARACTERS).sort());
+  });
+
+  it.each(Object.keys(CHARACTERS).map(id => [id] as const))(
+    '%s weapon/skillDamage/skillCooldownSeconds match client CHARACTERS',
+    id => {
+      const character = CHARACTERS[id];
+      expect(CHARACTER_COMBAT[id], `CHARACTER_COMBAT missing entry for ${id}`).toBeDefined();
+      expect(CHARACTER_COMBAT[id].weaponId).toBe(character.weapon);
+      expect(CHARACTER_COMBAT[id].skillDamage).toBe(character.skill.damage);
+      expect(CHARACTER_COMBAT[id].skillCooldownSeconds).toBe(character.skill.cooldownSeconds);
+    }
+  );
 });
