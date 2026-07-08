@@ -12,19 +12,44 @@ that power worth stealing, and a co-op raid faucet lets any ganked player recove
 
 ## Milestone
 
-**Transcendence** — layers the transcendence economy, shard risk, character roles, parties,
-and (planned) a raid boss on top of the existing live game.
+**Transcendence (shipped)** — layered the transcendence economy, shard risk, character roles,
+and parties onto the live game. **Now building: Combat Depth (v0.2.0-alpha).**
 
-## Current State
+## Current Milestone: v0.2.0-alpha Combat Depth
+
+**Goal:** Replace the undodgeable per-tick contact drain with discrete, telegraphed,
+DODGEABLE attacks (windup → strike → recovery) driven by ONE unit-agnostic,
+server-authoritative attack state machine, plus a real per-character crit system and a
+custom animation state machine layered on the same FSM.
+
+**Target features:**
+- Unit-agnostic `unit_attack` FSM (windup/strike/recovery) on the world tick; damage resolves
+  once at the strike frame vs LIVE positions so players can dash out.
+- Data-driven `ATTACKS` registry + per-archetype `UNIT_ATTACKS` lists (new attack = one entry,
+  new unit = one list); shared client + server.
+- Real per-character crit: `critRate`/`critDmg` on `CharacterDefinition`, replacing the client
+  global `Math.random()<0.22`; `isCrit` added to `attackEnemies`/`attackRay`.
+- Crit poise interrupt: a crit landing during a unit's windup adds poise → cancel/stagger.
+- Custom animation state machine (idle/move/windup/strike/recovery) shared by hero + enemy
+  meshes, per-attack clips, strike VFX on an `attack_strike` event table.
+- Goliath v1 roster: `shieldDash` (lane), `leapSlam` (circle), `swordSwing` (cone),
+  `swordSwirl` (circle). Goliath **contact drain deleted** — goliaths damage only via strikes.
+- Camp enemies reuse the SAME machine with zero schema change (proves unit-agnosticism).
+
+**Scope:** Enemies only. Heroes stay on the current client swing (no hero attack FSM this
+milestone); the FSM is built so heroes CAN reuse it later with zero schema change. Crit stats
+on characters ARE in scope (they modify the existing hero→enemy attack, not a hero FSM).
+
+## Previous State
 
 **Shipped: v0.1.0-alpha (2026-07-08)** — the transcendence economy is live end-to-end:
 scarce-shard mint → install (BŪSTS) for real power → shards at risk on death/PVP → character
 roles → invite-only parties. Merged to `master`, tagged `v0.1.0-alpha`.
 
-**Not yet built (deferred to the next milestone):** the raid boss (Phase 6) and its role
-enforcement + balance pass (Phase 7). Until the raid faucet ships, **INV-4 is unsatisfied** —
-a ganked, shard-poor player has no PVE recovery path yet. This is the headline goal of the
-next milestone. Specs preserved under `.planning/todos/pending/*-DEFERRED.md`.
+**Deferred to a LATER milestone (not this one):** the raid boss (was Phase 6) and its role
+enforcement + balance pass (was Phase 7). Until the raid faucet ships, **INV-4 is unsatisfied** —
+a ganked, shard-poor player has no PVE recovery path yet. Reserved as deferred phases 6/7.
+Specs preserved under `.planning/todos/pending/*-DEFERRED.md`.
 
 ## Target Runtime
 
@@ -147,6 +172,8 @@ downstream.
 | 2026-07 | All work on `feat/transcendence` off `master` | `master` is the real trunk; `main` is stale | ✓ Good |
 | 2026-07-08 | Ship alpha at Phase 5; defer raid (6) + balance (7) to next milestone | Get the economy + PVP loop in players' hands sooner; raid is a self-contained slice | ⚠️ Revisit — INV-4 unmet until raid ships |
 | 2026-07-08 | Merged `feat/transcendence` → `master`, tagged `v0.1.0-alpha` | Mark the shipped alpha; `master` is trunk | ✓ Good |
+| 2026-07-08 | Start v0.2.0-alpha Combat Depth on branch `alpha-v0.2.0` (cut from `master`) | Trunk-based; keep combat work isolated from trunk until shippable | ✓ Good |
+| 2026-07-08 | Combat FSM built unit-agnostic but scoped enemies-only this milestone (heroes stay on client swing) | Ship the dodgeable-attack loop faster; heroes reuse the same table/registry later with zero schema change | — new |
 
 ## Out of Scope (shipped alpha v0.1.0-alpha)
 
@@ -158,5 +185,22 @@ downstream.
 - Maincloud deploy of the transcendence schema — alpha shipped to local + `master`; the
   paused maincloud DB republish is a pending human action.
 
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd-transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
 ---
-*Last updated: 2026-07-08 after v0.1.0-alpha milestone*
+*Last updated: 2026-07-08 — started v0.2.0-alpha Combat Depth milestone*

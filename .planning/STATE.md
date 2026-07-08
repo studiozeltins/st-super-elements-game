@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.1.0-alpha
-milestone_name: Transcendence
-current_phase: "—"
-status: Awaiting next milestone
-stopped_at: "v0.1.0-alpha shipped (Phases A, 0–5); Phases 6 & 7 deferred; merged to master + tagged v0.1.0-alpha"
-last_updated: "2026-07-08T08:02:28.216Z"
+milestone: v0.2.0-alpha
+milestone_name: Combat Depth
+status: planning
+last_updated: "2026-07-08T09:16:52.675Z"
 last_activity: 2026-07-08
-last_activity_desc: Milestone v0.1.0-alpha completed and archived
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 23
-  completed_plans: 23
-  percent: 100
-current_phase_name: "—"
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -31,10 +27,10 @@ carry INV-4 (the ganked-player recovery faucet).
 
 ## Current Position
 
-Phase: Milestone v0.1.0-alpha complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-08 — Milestone v0.1.0-alpha completed and archived
+Status: Defining requirements
+Last activity: 2026-07-08 — Milestone v0.2.0-alpha started
 
 ## Performance Metrics
 
