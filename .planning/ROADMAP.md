@@ -52,7 +52,7 @@ phase; the four attack shapes + interrupt follow in Phases 4–7.
 
 ### Phases
 
-- [ ] **Phase 1: Crit stats + server damage foundation** - Distinct per-character crit stats mirrored server-side + tested pure helpers (base damage + crit roll); no wiring yet.
+- [x] **Phase 1: Crit stats + server damage foundation** - Distinct per-character crit stats mirrored server-side + tested pure helpers (base damage + crit roll); no wiring yet.
 - [ ] **Phase 2: Server-authoritative damage + crit on enemies** - Server computes base damage + rolls crit via `ctx.random`; client sends intent; old client roll deleted; crit event table feeds truthful crit numbers.
 - [ ] **Phase 3: PVP crit** - Same server damage/crit path extended to `attackPlayer`; truthful, un-spoofable PVP crit numbers.
 - [ ] **Phase 4: Attack state machine + leapSlam end-to-end + delete goliath drain** - The risky vertical slice: unit-agnostic attack state machine (windup → strike → recovery) proven on ONE circle attack, contact drain deleted.
