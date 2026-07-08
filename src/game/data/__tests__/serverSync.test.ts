@@ -33,6 +33,8 @@ interface ServerStat {
   maxHealth: number;
   healthRegen: number;
   role: string;
+  critRate: number;
+  critDmg: number;
   healType: string;
   healMode: string;
   healPower: number;
@@ -58,6 +60,8 @@ function extractServerStats(): Record<string, ServerStat> {
       maxHealth: Number(readField(body, 'maxHealth')),
       healthRegen: Number(readField(body, 'healthRegen')),
       role: readField(body, 'role') ?? 'dps',
+      critRate: Number(readField(body, 'critRate')),
+      critDmg: Number(readField(body, 'critDmg')),
       // Non-healers spread ...NO_HEAL, so these fields are absent → defaults.
       healType: readField(body, 'healType') ?? 'none',
       healMode: readField(body, 'healMode') ?? 'flat',
@@ -115,6 +119,17 @@ describe('server CHARACTER_STATS stays in sync with client CHARACTERS', () => {
     '%s role matches server CHARACTER_STATS',
     id => {
       expect(serverStats[id].role).toBe(CHARACTERS[id].role);
+    }
+  );
+
+  // INV-5: crit stats must match client↔server for all 17 ids, or fairness drifts
+  // silently once Phase 2 wires server-authoritative crit. A single mismatched
+  // decimal fails here; NaN (a multi-line/malformed entry) also fails === .
+  it.each(Object.values(CHARACTERS).map(character => [character.id] as const))(
+    '%s critRate/critDmg match server CHARACTER_STATS',
+    id => {
+      expect(serverStats[id].critRate).toBe(CHARACTERS[id].critRate);
+      expect(serverStats[id].critDmg).toBe(CHARACTERS[id].critDmg);
     }
   );
 });
