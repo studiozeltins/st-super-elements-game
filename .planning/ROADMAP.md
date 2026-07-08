@@ -90,7 +90,7 @@ roll crit — the data + logic foundation, wired to nothing yet.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-03-PLAN.md — extend `serverSync.test.ts`: crit parity (regex) + weapon/multiplier/CONSTELLATION_DAMAGE_STEP parity (import-and-compare) (wave 2)
+- [x] 01-03-PLAN.md — extend `serverSync.test.ts`: crit parity (regex) + weapon/multiplier/CONSTELLATION_DAMAGE_STEP parity (import-and-compare) (wave 2)
 
 **Notes**: Pure foundation, ships alone. Mirroring `WEAPONS` + the multiplier funcs
 (`regularAttackMultiplier`, `skillAttackMultiplier`, combo scale, `transcendDamageMultiplier`,
@@ -264,7 +264,7 @@ do NOT elevate an untrusted bool to a state trigger.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Crit stats + server damage foundation | 2/3 | In Progress|  |
+| 1. Crit stats + server damage foundation | 3/3 | Complete   | 2026-07-08 |
 | 2. Server-authoritative damage + crit on enemies | 0/TBD | Not started | - |
 | 3. PVP crit | 0/TBD | Not started | - |
 | 4. Attack state machine + leapSlam + delete drain | 0/TBD | Not started | - |
