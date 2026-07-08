@@ -12,8 +12,19 @@ that power worth stealing, and a co-op raid faucet lets any ganked player recove
 
 ## Milestone
 
-**Transcendence** (v1) — a single milestone that layers the transcendence economy, shard
-risk, character roles, parties, and a raid boss on top of the existing live game.
+**Transcendence** — layers the transcendence economy, shard risk, character roles, parties,
+and (planned) a raid boss on top of the existing live game.
+
+## Current State
+
+**Shipped: v0.1.0-alpha (2026-07-08)** — the transcendence economy is live end-to-end:
+scarce-shard mint → install (BŪSTS) for real power → shards at risk on death/PVP → character
+roles → invite-only parties. Merged to `master`, tagged `v0.1.0-alpha`.
+
+**Not yet built (deferred to the next milestone):** the raid boss (Phase 6) and its role
+enforcement + balance pass (Phase 7). Until the raid faucet ships, **INV-4 is unsatisfied** —
+a ganked, shard-poor player has no PVE recovery path yet. This is the headline goal of the
+next milestone. Specs preserved under `.planning/todos/pending/*-DEFERRED.md`.
 
 ## Target Runtime
 
@@ -128,15 +139,24 @@ downstream.
 
 ## Key Decisions
 
-| Date | Decision | Rationale |
-|------|----------|-----------|
-| 2026-07 | Two-tier gem/shard economy naming (verbatim contract) | One consistency contract across client+server prevents drift |
-| 2026-07 | Wipe (not migrate) for the primogems→gems rename | Destructive column rename, done once before real players mattered |
-| 2026-07 | PVE-death shard = ground collectible; PVP-death = steal to killer | Makes PVP theft the meaningful risk; PVE loss is recoverable |
-| 2026-07 | All work on `feat/transcendence` off `master` | `master` is the real trunk; `main` is stale |
+| Date | Decision | Rationale | Outcome |
+|------|----------|-----------|---------|
+| 2026-07 | Two-tier gem/shard economy naming (verbatim contract) | One consistency contract across client+server prevents drift | ✓ Good |
+| 2026-07 | Wipe (not migrate) for the primogems→gems rename | Destructive column rename, done once before real players mattered | ✓ Good |
+| 2026-07 | PVE-death shard = ground collectible; PVP-death = steal to killer | Makes PVP theft the meaningful risk; PVE loss is recoverable | ✓ Good |
+| 2026-07 | All work on `feat/transcendence` off `master` | `master` is the real trunk; `main` is stale | ✓ Good |
+| 2026-07-08 | Ship alpha at Phase 5; defer raid (6) + balance (7) to next milestone | Get the economy + PVP loop in players' hands sooner; raid is a self-contained slice | ⚠️ Revisit — INV-4 unmet until raid ships |
+| 2026-07-08 | Merged `feat/transcendence` → `master`, tagged `v0.1.0-alpha` | Mark the shipped alpha; `master` is trunk | ✓ Good |
 
-## Out of Scope (v1 / this milestone)
+## Out of Scope (shipped alpha v0.1.0-alpha)
 
+- Raid boss (Phase 6) + role enforcement/balance (Phase 7) — **deferred to next milestone**,
+  full specs preserved (`.planning/todos/pending/*-DEFERRED.md`). These carry INV-4.
 - Elemental resistance system (future).
 - XP/levelling for players and enemies (future).
 - Email password reset (needs external service).
+- Maincloud deploy of the transcendence schema — alpha shipped to local + `master`; the
+  paused maincloud DB republish is a pending human action.
+
+---
+*Last updated: 2026-07-08 after v0.1.0-alpha milestone*

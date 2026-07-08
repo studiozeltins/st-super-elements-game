@@ -1,42 +1,40 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-current_phase: 5
-current_phase_name: Multiplayer party
-status: complete
-stopped_at: "Milestone shipped at Phase 5 (2026-07-08). Phases 6 & 7 deferred to a future milestone; feat/transcendence merged to master."
-last_updated: "2026-07-08T00:00:00.000Z"
+milestone: v0.1.0-alpha
+milestone_name: Transcendence
+current_phase: "—"
+status: Awaiting next milestone
+stopped_at: "v0.1.0-alpha shipped (Phases A, 0–5); Phases 6 & 7 deferred; merged to master + tagged v0.1.0-alpha"
+last_updated: "2026-07-08T08:02:28.216Z"
 last_activity: 2026-07-08
-last_activity_desc: Milestone shipped at Phase 5; phases 6 & 7 deferred; branch merged to master
+last_activity_desc: Milestone v0.1.0-alpha completed and archived
 progress:
   total_phases: 7
   completed_phases: 7
   total_plans: 23
   completed_plans: 23
   percent: 100
+current_phase_name: "—"
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-06)
+See: .planning/PROJECT.md (updated 2026-07-08)
 
 **Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor).
-**Current focus:** Phase 6 — Raid boss
+**Current focus:** Planning next milestone — raid boss (Phase 6) + balance (Phase 7), which
+carry INV-4 (the ganked-player recovery faucet).
 
 ## Current Position
 
-Milestone: SHIPPED at Phase 5 (2026-07-08)
-Phase: 5 — Multiplayer party (last shipped)
-Status: Complete — feat/transcendence merged to master
-Deferred: Phase 6 (Raid boss) + Phase 7 (Role enforcement + balance) → future milestone
-Last activity: 2026-07-08 — Milestone shipped at Phase 5; 6 & 7 deferred; branch merged
-
-Progress: [██████████] 100% (7 of 7 shipped phases complete; 6 & 7 deferred out of scope)
+Phase: Milestone v0.1.0-alpha complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-08 — Milestone v0.1.0-alpha completed and archived
 
 ## Performance Metrics
 
@@ -142,3 +140,7 @@ None yet.
 Last session: 2026-07-07T14:28:52.573Z
 Stopped at: Completed 05-02: party model + reducers
 Resume file: None
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
