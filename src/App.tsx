@@ -610,10 +610,10 @@ export default function App() {
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
         sendHealParty: comboCount => connection.reducers.healParty({ comboCount }),
-        sendAttackEnemies: (centerX, centerZ, radius, damage, comboCount) =>
-          connection.reducers.attackEnemies({ centerX, centerZ, radius, damage, comboCount }),
-        sendAttackRay: (originX, originZ, directionX, directionZ, range, hitRadius, damage, comboCount) =>
-          connection.reducers.attackRay({ originX, originZ, dirX: directionX, dirZ: directionZ, range, hitRadius, damage, comboCount }),
+        sendAttackEnemies: (centerX, centerZ, radius, isSkill, comboCount) =>
+          connection.reducers.attackEnemies({ centerX, centerZ, radius, isSkill, comboCount }),
+        sendAttackRay: (originX, originZ, directionX, directionZ, range, hitRadius, isSkill, comboCount) =>
+          connection.reducers.attackRay({ originX, originZ, dirX: directionX, dirZ: directionZ, range, hitRadius, isSkill, comboCount }),
         sendCollectGem: dropId => connection.reducers.collectGem({ dropId }),
         sendCollectShard: dropId => {
           // A pickup is the only shard GAIN the client itself initiates — record it

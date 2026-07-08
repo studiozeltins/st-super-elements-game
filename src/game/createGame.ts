@@ -85,7 +85,7 @@ export interface GameNetworkActions {
     centerX: number,
     centerZ: number,
     radius: number,
-    damage: number,
+    isSkill: boolean,
     comboCount: number
   ): void;
   /**
@@ -101,7 +101,7 @@ export interface GameNetworkActions {
     directionZ: number,
     range: number,
     hitRadius: number,
-    damage: number,
+    isSkill: boolean,
     comboCount: number
   ): void;
   sendCollectGem(dropId: bigint): void;
@@ -371,12 +371,13 @@ export function createGame(
     center: { x: number; y: number; z: number },
     radius: number,
     damage: number,
-    _element: ElementId,
-    kind: DamageKind
+    kind: DamageKind,
+    isSkill: boolean
   ): boolean {
-    // The server owns enemy/goliath HP and payouts — report the swing and let it
-    // apply authoritative damage. Local hit detection only drives combo + facing.
-    network.sendAttackEnemies(center.x, center.z, radius, Math.round(damage), combo);
+    // The server owns enemy/goliath HP, crit, AND the damage number now — report the
+    // INTENT (skill-vs-basic + combo), never a client-authored number. Local hit
+    // detection only drives combo + facing; PvP still sends its own local number.
+    network.sendAttackEnemies(center.x, center.z, radius, isSkill, combo);
     const hitEntity = anyEntityWithinRadius(center, radius);
     const hitPlayer = applyPvpDamage(center, radius, damage, kind);
     return hitEntity || hitPlayer;
@@ -384,12 +385,13 @@ export function createGame(
 
   // Only regular attacks build the combo (once per landed attack, even across
   // several targets); skills spend the combo scaling but do not add to it.
-  const applyAttackDamage: DamageApplier = (center, radius, damage, element, kind) => {
-    const hit = dealDamage(center, radius, damage, element, kind);
+  const applyAttackDamage: DamageApplier = (center, radius, damage, _element, kind) => {
+    const hit = dealDamage(center, radius, damage, kind, false);
     if (hit) registerComboHit();
     return hit;
   };
-  const applySkillDamage: DamageApplier = dealDamage;
+  const applySkillDamage: DamageApplier = (center, radius, damage, _element, kind) =>
+    dealDamage(center, radius, damage, kind, true);
 
   // Ranged (bow) projectiles are now purely visual for enemy damage — the server
   // hitscan (sendAttackRay, fired once at launch) owns enemy/goliath HP. This
@@ -475,18 +477,8 @@ export function createGame(
     return nearestPosition;
   }
 
-  const CRIT_CHANCE = 0.22;
-  const CRIT_MULTIPLIER = 1.9;
   let activeConstellation = 0;
   let activeTranscend = 0;
-
-  /** Client-only visual crit roll (no shared state, so plain randomness is fine). */
-  function rollDamage(baseDamage: number): { amount: number; kind: DamageKind } {
-    if (Math.random() < CRIT_CHANCE) {
-      return { amount: baseDamage * CRIT_MULTIPLIER, kind: 'crit' };
-    }
-    return { amount: baseDamage, kind: 'normal' };
-  }
 
   function performAttack() {
     // The caller already paced this by the input cooldown; the combo itself
@@ -501,11 +493,14 @@ export function createGame(
     const direction = facingDirection();
     const elementColor = ELEMENTS[activeCharacter.element].color;
     // Regular attacks get only a small combo boost — the payoff is the skill.
-    const baseDamage =
+    // Crit is now decided SERVER-side (CRIT-02); this local number is a display-only
+    // 'normal' hit that keeps the projectile/melee feel until Plan 03 floats the
+    // authoritative enemy_hit number.
+    const amount =
       weapon.damage *
       regularAttackMultiplier(combo) *
       transcendDamageMultiplier(activeConstellation, activeTranscend);
-    const { amount, kind } = rollDamage(baseDamage);
+    const kind: DamageKind = 'normal';
 
     if (profile.isFlourish) {
       effectSystem.spawnBurst(playerPosition.clone().setY(playerPosition.y + 1), elementColor, 30);
@@ -524,7 +519,7 @@ export function createGame(
         direction.z,
         rangedRange,
         RANGED_HIT_RADIUS,
-        Math.round(amount),
+        false,
         combo
       );
       effectSystem.spawnProjectile({
