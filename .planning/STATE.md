@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
 current_phase: 1
-current_phase_name: not started; context gathered
+current_phase_name: in progress; wave 1 plan 01 complete
 status: roadmapped
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-08T15:13:25.709Z"
+last_updated: "2026-07-08T15:19:40.372Z"
 last_activity: 2026-07-08
-last_activity_desc: Phase 1 discussed; chose full server-authoritative base damage (Option
+last_activity_desc: "Executed 01-01: rollCrit (D-08 injected rng) + damage.ts WEAPONS/multiplier mirror (D-05 P1/D-07), 4 files, RED→GREEN TDD, CRIT-01/CRIT-03 satisfied"
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ Phase 1 (Crit stats + server damage foundation) with `/gsd-plan-phase 1`.
 ## Current Position
 
 Phase: 1 — Crit stats + server damage foundation (in progress; wave 1 plan 01 complete)
-Plan: 01 of 3 complete (crit.ts + damage.ts pure helpers landed, tested)
+Plan: 2 of 3 complete (crit.ts + damage.ts pure helpers landed, tested)
 Status: 01-01 executed — zero-import rollCrit + computeBaseDamage siblings + cross-boundary vitest (403 tests green). Plans 01-02/01-03 remain.
 Last activity: 2026-07-08 — Executed 01-01: rollCrit (D-08 injected rng) + damage.ts WEAPONS/multiplier mirror (D-05 P1/D-07), 4 files, RED→GREEN TDD, CRIT-01/CRIT-03 satisfied
 
@@ -73,6 +73,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | 7 | TBD | - | - |
 
 *Updated after each plan completion.*
+| Phase 01 P02 | 3 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -116,6 +117,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Pass ordering]: `runUnitAttacks` MUST sit between worldTick's position-build pass and the single
   `playerDamage` apply, landing strike damage in that shared map (reuses resistance/death/shard/respawn).
 
+- [Phase ?]: critDmg stored as full multiplier (e.g. 1.9), matching value it replaces in Phase 2
+- [Phase ?]: 17 distinct role-seeded critRate values (D-01/D-02); user tunes in playtest
+- [Phase ?]: Server CHARACTER_STATS kept single-line flat so serverSync regex extractor keeps parsing
+
 ### Pending Todos
 
 None yet.
@@ -158,7 +163,7 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-08T15:13:25.689Z
+Last session: 2026-07-08T15:19:01.144Z
 Stopped at: Phase 1 context gathered
 Resume file: .planning/phases/01-crit-foundation/01-CONTEXT.md
 

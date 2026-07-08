@@ -86,7 +86,7 @@ roll crit — the data + logic foundation, wired to nothing yet.
 **Wave 1**
 
 - [x] 01-01-PLAN.md — zero-import pure helpers `crit.ts` (`rollCrit`) + `damage.ts` (`computeBaseDamage`, `WEAPONS`/multiplier mirror) with cross-boundary vitest (wave 1)
-- [ ] 01-02-PLAN.md — distinct role-coherent `critRate`/`critDmg` on all 17 characters + `CHARACTER_STATS` mirror + `characters.test.ts` distinctness (wave 1)
+- [x] 01-02-PLAN.md — distinct role-coherent `critRate`/`critDmg` on all 17 characters + `CHARACTER_STATS` mirror + `characters.test.ts` distinctness (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -264,7 +264,7 @@ do NOT elevate an untrusted bool to a state trigger.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Crit stats + server damage foundation | 1/3 | In Progress|  |
+| 1. Crit stats + server damage foundation | 2/3 | In Progress|  |
 | 2. Server-authoritative damage + crit on enemies | 0/TBD | Not started | - |
 | 3. PVP crit | 0/TBD | Not started | - |
 | 4. Attack state machine + leapSlam + delete drain | 0/TBD | Not started | - |
