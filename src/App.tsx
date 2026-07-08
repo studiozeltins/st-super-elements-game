@@ -121,6 +121,7 @@ export default function App() {
         tables.pullResult,
         tables.pvpHit,
         tables.rangedAttack,
+        tables.enemyHit,
         tables.healEvent,
         tables.gemDrop,
         tables.shardDrop,
@@ -211,6 +212,25 @@ export default function App() {
         // Someone else got hit — show their health bar (I'm the attacker/bystander).
         gameRef.current?.flashRemoteHealth(targetHex);
       }
+    },
+  });
+  // Server-authoritative enemy/goliath hit → the {amount, isCrit} truth (Plan 02).
+  // Own hits are drawn once by local prediction (createGame): an own CRIT promotes
+  // that single sprite in place, an own non-crit is already drawn so we skip the
+  // echo (D2-02 double-draw suppression). Other players' hits float event-driven
+  // numbers for shared co-op visibility.
+  useTable(tables.enemyHit, {
+    onInsert: hit => {
+      if (hit.attacker.toHexString() === myIdentityRef.current) {
+        if (hit.isCrit) gameRef.current?.upgradeOwnCritNumber(hit.amount);
+        return;
+      }
+      gameRef.current?.spawnWorldNumber(
+        hit.positionX,
+        hit.positionZ,
+        hit.amount,
+        hit.isCrit ? 'crit' : 'normal'
+      );
     },
   });
   // A healer restored one of my characters → green +number.
