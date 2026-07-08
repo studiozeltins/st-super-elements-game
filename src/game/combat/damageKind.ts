@@ -18,7 +18,7 @@ export interface DamageKindStyle {
 export const DAMAGE_KIND_STYLES: Record<DamageKind, DamageKindStyle> = {
   normal: { cssColor: '#f4f1e8', fontScale: 1 },
   skill: { cssColor: '#7ec8ff', fontScale: 1.2 },
-  crit: { cssColor: '#ffcc33', fontScale: 1.85 },
+  crit: { cssColor: '#ff2bd6', fontScale: 1.85 },
   reaction: { cssColor: '#ff8bd0', fontScale: 1.4 },
   // Damage the local player receives: red from enemies (bigger on crit),
   // purple from other players. Heals show green with a + prefix.
