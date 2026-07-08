@@ -4,8 +4,8 @@ milestone: v0.2.0-alpha
 milestone_name: Combat Depth
 current_phase: 02
 status: completed
-stopped_at: Phase 2 context gathered
-last_updated: "2026-07-08T20:37:06.729Z"
+stopped_at: Phase 03 context gathered
+last_updated: "2026-07-08T21:12:28.222Z"
 last_activity: 2026-07-08
 progress:
   total_phases: 7
@@ -162,9 +162,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-08T16:28:32.498Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-server-authoritative-damage-crit-on-enemies/02-CONTEXT.md
+Last session: 2026-07-08T21:12:28.192Z
+Stopped at: Phase 03 context gathered
+Resume file: .planning/phases/03-pvp-crit/03-CONTEXT.md
 
 ## Operator Next Steps
 
