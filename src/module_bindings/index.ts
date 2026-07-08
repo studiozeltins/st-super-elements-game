@@ -88,6 +88,7 @@ import AccountLinkRow from "./account_link_table";
 import BannerPityRow from "./banner_pity_table";
 import CharacterActivationRow from "./character_activation_table";
 import EnemyRow from "./enemy_table";
+import EnemyHitRow from "./enemy_hit_table";
 import GemDropRow from "./gem_drop_table";
 import GoliathRow from "./goliath_table";
 import HealEventRow from "./heal_event_table";
@@ -163,6 +164,14 @@ const tablesSchema = __schema({
       { name: 'enemy_enemy_id_key', constraint: 'unique', columns: ['enemyId'] },
     ],
   }, EnemyRow),
+  enemyHit: __table({
+    name: 'enemy_hit',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, EnemyHitRow),
   gemDrop: __table({
     name: 'gem_drop',
     indexes: [

@@ -72,6 +72,15 @@ export const Enemy = __t.object("Enemy", {
 });
 export type Enemy = __Infer<typeof Enemy>;
 
+export const EnemyHit = __t.object("EnemyHit", {
+  attacker: __t.identity(),
+  positionX: __t.f32(),
+  positionZ: __t.f32(),
+  amount: __t.u32(),
+  isCrit: __t.bool(),
+});
+export type EnemyHit = __Infer<typeof EnemyHit>;
+
 export const GemDrop = __t.object("GemDrop", {
   id: __t.u64(),
   positionX: __t.f32(),
@@ -163,6 +172,8 @@ export const Player = __t.object("Player", {
   gemsFromKills: __t.u32(),
   gemsCollected: __t.u32(),
   transcendShards: __t.u32(),
+  skillReadyAtMicros: __t.u64(),
+  skillWindowEndsAtMicros: __t.u64(),
 });
 export type Player = __Infer<typeof Player>;
 

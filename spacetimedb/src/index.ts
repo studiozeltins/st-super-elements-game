@@ -15,7 +15,10 @@ import {
 } from './enemyStats';
 import { damagePerTick, distanceBetween, gemIsCollectible, stepToward, windowBucketFor } from './combatMath';
 import { pickRayHit } from './hitscan';
-import { resistedDamage, GOLIATH_RESISTANCES, PLAYER_RESISTANCES } from './resistances';
+import { resistedDamage, GOLIATH_RESISTANCES, PLAYER_RESISTANCES, type DamageType, type ResistanceProfile } from './resistances';
+import { computeBaseDamage, CHARACTER_COMBAT } from './damage';
+import { rollCrit } from './crit';
+import { nextSkillReadyAt, skillGrantActive } from './skillGate';
 import { isWalkable, nextGoliathWaypoint } from './bridges';
 import { chooseGoliathTargetCamp, headingFromStep, hasReachedCamp, isWithinForwardArc } from './goliathAI';
 import { resolveTranscendInstall } from './transcendInstall';
@@ -209,6 +212,10 @@ const MAX_ATTACK_RADIUS = 20;
 const MAX_RANGED_HIT_RADIUS = 3;
 const MAX_STEP_DISTANCE = 12;
 const MAX_COMBO_FOR_GEMS = 100;
+// How long after a valid castSkill an isSkill hit still earns the uncapped skill
+// multiplier (D2-03). ~5s spans the animation + travel of the longest skills; past
+// it, an isSkill hit downgrades to a basic swing (skillGrantActive gate).
+const SKILL_HIT_WINDOW_MICROS = 5_000_000n;
 const COMBO_GEM_STEP = 0.03; // +3% dropped gems per combo point (capped)
 const PVP_DEATH_SPILL = 1 / 3; // fraction of gems a PVP loser drops
 const PVE_DEATH_SPILL = 1 / 4; // fraction a player drops when an enemy kills them
@@ -326,6 +333,12 @@ const player = table(
     // .default(0) lets the additive migrate backfill existing player rows to 0 (assumption A1)
     // without a data wipe — SpacetimeDB refuses to add a non-defaulted column to a populated table.
     transcendShards: t.u32().default(0),
+    // Authoritative skill cooldown state (CRIT-02 / D2-03). skillReadyAtMicros gates
+    // the next castSkill; skillWindowEndsAtMicros is the deadline through which an
+    // isSkill hit earns the uncapped skill multiplier. Both .default(0n) so the
+    // additive migrate backfills populated rows without a wipe (Pitfall 2).
+    skillReadyAtMicros: t.u64().default(0n),
+    skillWindowEndsAtMicros: t.u64().default(0n),
   }
 );
 
@@ -550,6 +563,20 @@ const rangedAttack = table(
   }
 );
 
+// Broadcasts one landed enemy/goliath hit with the SERVER-authoritative amount +
+// crit bit (CRIT-05). Event-only: rows are never stored, one insert per surviving
+// hit so the attacker's client can float the authoritative number in Plan 03.
+const enemyHit = table(
+  { name: 'enemy_hit', public: true, event: true },
+  {
+    attacker: t.identity(),
+    positionX: t.f32(),
+    positionZ: t.f32(),
+    amount: t.u32(),
+    isCrit: t.bool(),
+  }
+);
+
 // Broadcasts a heal so the healer's client can float green numbers (self + party).
 const healEvent = table(
   { name: 'heal_event', public: true, event: true },
@@ -681,6 +708,7 @@ const spacetimedb = schema({
   pullResult,
   pvpHit,
   rangedAttack,
+  enemyHit,
   healEvent,
   regenTimer,
   worldTimer,
@@ -778,6 +806,8 @@ function seedPlayer(ctx: { db: any; timestamp: any }, identity: any, name: strin
     gemsFromKills: 0,
     gemsCollected: 0,
     transcendShards: 0,
+    skillReadyAtMicros: 0n,
+    skillWindowEndsAtMicros: 0n,
   });
   ctx.db.ownedCharacter.insert({
     id: 0n,
@@ -1654,6 +1684,20 @@ export const castSkill = spacetimedb.reducer(
   },
   (ctx, { skillId, originX, originZ, directionX, directionZ }) => {
     const currentPlayer = requirePlayer(ctx);
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    // Authoritative skill rate-limit: reject a cast still on cooldown (emit NO
+    // skill_cast). The cooldown is derived from server CHARACTER_COMBAT, never the
+    // client-sent skillId (Pitfall 5), so a spoofed id can't shorten it.
+    if (now < currentPlayer.skillReadyAtMicros) return;
+    const cc = CHARACTER_COMBAT[currentPlayer.activeCharacterId];
+    const cooldownSeconds = cc ? cc.skillCooldownSeconds : 0;
+    // Open the skill-hit window and arm the next cooldown BEFORE the broadcast, so
+    // an isSkill hit landing inside SKILL_HIT_WINDOW_MICROS earns the skill multiplier.
+    ctx.db.player.identity.update({
+      ...currentPlayer,
+      skillReadyAtMicros: nextSkillReadyAt(now, cooldownSeconds),
+      skillWindowEndsAtMicros: now + SKILL_HIT_WINDOW_MICROS,
+    });
     ctx.db.skillCast.insert({
       caster: currentPlayer.identity,
       characterId: currentPlayer.activeCharacterId,
@@ -1809,6 +1853,45 @@ function killGoliathRow(
   return dropped;
 }
 
+// Server-authoritative resolution of ONE landed player hit into a final
+// {amount, isCrit}. Composes the pure helpers: base via computeBaseDamage (weapon
+// or skill ramp + constellation/transcend), the seeded crit roll (ctx.random —
+// the sole client-untrusted decision, CRIT-02), the target's resistance, and the
+// MAX_HIT_DAMAGE clamp. Apply order is load-bearing: base → × crit → resist → clamp.
+// grantSkill gates the uncapped skill multiplier to the authoritative cast window.
+function resolvePlayerHit(
+  ctx: any,
+  hitter: any,
+  isSkill: boolean,
+  combo: number,
+  dmgType: DamageType,
+  profile?: ResistanceProfile
+): { amount: number; isCrit: boolean } {
+  const cc = CHARACTER_COMBAT[hitter.activeCharacterId];
+  if (!cc) return { amount: 0, isCrit: false };
+  const owned = findOwnedRow(ctx, hitter, hitter.activeCharacterId);
+  const constellation = activatedConstellationFor(
+    ctx,
+    hitter.identity,
+    hitter.activeCharacterId,
+    owned ? owned.constellation : 0
+  );
+  const transcend = owned ? owned.transcendLevel : 0;
+  const grantSkill = skillGrantActive(isSkill, ctx.timestamp.microsSinceUnixEpoch, hitter.skillWindowEndsAtMicros);
+  const base = computeBaseDamage({
+    weaponId: cc.weaponId,
+    skillDamage: grantSkill ? cc.skillDamage : null,
+    combo,
+    constellation,
+    transcend,
+  });
+  const stat = CHARACTER_STATS[hitter.activeCharacterId];
+  const { isCrit, multiplier } = rollCrit(stat ? stat.critRate : 0, stat ? stat.critDmg : 1, () => ctx.random());
+  const resisted = resistedDamage(base * multiplier, profile, dmgType);
+  const amount = Math.min(Math.round(resisted), MAX_HIT_DAMAGE);
+  return { amount, isCrit };
+}
+
 // A player's real, authoritative attack: every alive enemy AND goliath within
 // radius of the center takes `damage` and has its aggro flipped to the caller.
 // Anything that dies pays its combo-boosted base + hoard, credited to the killer.
@@ -1818,10 +1901,10 @@ export const attackEnemies = spacetimedb.reducer(
     centerX: t.f32(),
     centerZ: t.f32(),
     radius: t.f32(),
-    damage: t.u32(),
+    isSkill: t.bool(),
     comboCount: t.u32(),
   },
-  (ctx, { centerX, centerZ, radius, damage, comboCount }) => {
+  (ctx, { centerX, centerZ, radius, isSkill, comboCount }) => {
     const currentPlayer = requirePlayer(ctx);
     // Reject implausible strikes so a client can't sweep the whole map risk-free
     // from the safe zone: the strike centre must be within weapon range of the
@@ -1831,7 +1914,6 @@ export const attackEnemies = spacetimedb.reducer(
     if (distanceBetween(currentPlayer.positionX, currentPlayer.positionZ, centerX, centerZ) > MAX_HIT_RANGE) return;
     const boundedRadius = Math.max(0, Math.min(radius, MAX_ATTACK_RADIUS));
     const now = ctx.timestamp.microsSinceUnixEpoch;
-    const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
     const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
     const comboScale = 1 + combo * COMBO_GEM_STEP;
     let gemsCredited = 0;
@@ -1839,7 +1921,10 @@ export const attackEnemies = spacetimedb.reducer(
     for (const enemyRow of [...ctx.db.enemy.iter()]) {
       if (!enemyRow.alive) continue;
       if (distanceBetween(enemyRow.positionX, enemyRow.positionZ, centerX, centerZ) > boundedRadius) continue;
-      const remaining = enemyRow.health - Math.min(clampedDamage, enemyRow.health);
+      // Server owns the number: base + crit are computed here per target (each gets
+      // its own crit roll — correct and acceptable), never sent by the client.
+      const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'melee');
+      const remaining = enemyRow.health - Math.min(amount, enemyRow.health);
       if (remaining > 0) {
         ctx.db.enemy.enemyId.update({
           ...enemyRow,
@@ -1847,6 +1932,13 @@ export const attackEnemies = spacetimedb.reducer(
           aggroKind: AGGRO_PLAYER,
           aggroPlayer: currentPlayer.identity,
           aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
+        });
+        ctx.db.enemyHit.insert({
+          attacker: currentPlayer.identity,
+          positionX: enemyRow.positionX,
+          positionZ: enemyRow.positionZ,
+          amount,
+          isCrit,
         });
         continue;
       }
@@ -1857,13 +1949,21 @@ export const attackEnemies = spacetimedb.reducer(
     for (const goliathRow of [...ctx.db.goliath.iter()]) {
       if (!goliathRow.alive) continue;
       if (distanceBetween(goliathRow.positionX, goliathRow.positionZ, centerX, centerZ) > boundedRadius) continue;
-      const remaining = goliathRow.health - Math.min(clampedDamage, goliathRow.health);
+      const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'melee');
+      const remaining = goliathRow.health - Math.min(amount, goliathRow.health);
       if (remaining > 0) {
         ctx.db.goliath.goliathId.update({
           ...goliathRow,
           health: remaining,
           aggroPlayer: currentPlayer.identity,
           aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
+        });
+        ctx.db.enemyHit.insert({
+          attacker: currentPlayer.identity,
+          positionX: goliathRow.positionX,
+          positionZ: goliathRow.positionZ,
+          amount,
+          isCrit,
         });
         continue;
       }
@@ -1906,10 +2006,10 @@ export const attackRay = spacetimedb.reducer(
     dirZ: t.f32(),
     range: t.f32(),
     hitRadius: t.f32(),
-    damage: t.u32(),
+    isSkill: t.bool(),
     comboCount: t.u32(),
   },
-  (ctx, { originX, originZ, dirX, dirZ, range, hitRadius, damage, comboCount }) => {
+  (ctx, { originX, originZ, dirX, dirZ, range, hitRadius, isSkill, comboCount }) => {
     const currentPlayer = requirePlayer(ctx);
     if (
       !Number.isFinite(originX) ||
@@ -1927,7 +2027,6 @@ export const attackRay = spacetimedb.reducer(
 
     const boundedRange = Math.max(0, Math.min(range, MAX_HIT_RANGE));
     const boundedRadius = Math.max(0, Math.min(hitRadius, MAX_RANGED_HIT_RADIUS));
-    const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
     const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
     const comboScale = 1 + combo * COMBO_GEM_STEP;
     const now = ctx.timestamp.microsSinceUnixEpoch;
@@ -1972,15 +2071,23 @@ export const attackRay = spacetimedb.reducer(
     let gemsCredited = 0;
     if (strikeGoliath) {
       const goliathRow = aliveGoliaths[goliathHit.index];
-      // Ranged resistance: a projectile only chips a fraction off a goliath.
-      const goliathDamage = resistedDamage(clampedDamage, GOLIATH_RESISTANCES, 'ranged');
-      const remaining = goliathRow.health - Math.min(goliathDamage, goliathRow.health);
+      // Server owns the number: resolvePlayerHit applies GOLIATH_RESISTANCES ranged
+      // (0.10) to the server-computed raw — the client sends no damage.
+      const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'ranged', GOLIATH_RESISTANCES);
+      const remaining = goliathRow.health - Math.min(amount, goliathRow.health);
       if (remaining > 0) {
         ctx.db.goliath.goliathId.update({
           ...goliathRow,
           health: remaining,
           aggroPlayer: currentPlayer.identity,
           aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
+        });
+        ctx.db.enemyHit.insert({
+          attacker: currentPlayer.identity,
+          positionX: goliathRow.positionX,
+          positionZ: goliathRow.positionZ,
+          amount,
+          isCrit,
         });
       } else {
         const base = Math.round(enemyBaseGems(true, goliathRow.sizeIndex, 0, false) * comboScale);
@@ -1998,7 +2105,8 @@ export const attackRay = spacetimedb.reducer(
       }
     } else {
       const enemyRow = aliveEnemies[enemyHit.index];
-      const remaining = enemyRow.health - Math.min(clampedDamage, enemyRow.health);
+      const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'melee');
+      const remaining = enemyRow.health - Math.min(amount, enemyRow.health);
       if (remaining > 0) {
         ctx.db.enemy.enemyId.update({
           ...enemyRow,
@@ -2006,6 +2114,13 @@ export const attackRay = spacetimedb.reducer(
           aggroKind: AGGRO_PLAYER,
           aggroPlayer: currentPlayer.identity,
           aggroExpiresAtMicros: now + AGGRO_DURATION_MICROS,
+        });
+        ctx.db.enemyHit.insert({
+          attacker: currentPlayer.identity,
+          positionX: enemyRow.positionX,
+          positionZ: enemyRow.positionZ,
+          amount,
+          isCrit,
         });
       } else {
         const base = Math.round(enemyBaseGems(false, 0, enemyRow.rewardTier, enemyRow.isBoss) * comboScale);
@@ -2078,7 +2193,9 @@ export const restorePlayers = spacetimedb.reducer(
   (ctx, { rows }) => {
     requireEmpty(ctx.db.player.iter(), 'player');
     for (const row of rows) {
-      ctx.db.player.insert({ ...row, online: false, lastKillRewardAt: ctx.timestamp });
+      // Skill-window state is a Phase-02 additive column absent from pre-existing
+      // backups; seed it to 0n so a restored player simply starts off-cooldown.
+      ctx.db.player.insert({ ...row, online: false, lastKillRewardAt: ctx.timestamp, skillReadyAtMicros: 0n, skillWindowEndsAtMicros: 0n });
     }
   }
 );
@@ -2715,6 +2832,8 @@ export const debugSpawnBots = spacetimedb.reducer(
         gemsFromKills: 0,
         gemsCollected: 0,
         transcendShards: 0,
+        skillReadyAtMicros: 0n,
+        skillWindowEndsAtMicros: 0n,
       });
     }
   }

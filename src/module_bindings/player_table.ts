@@ -26,4 +26,6 @@ export default __t.row({
   gemsFromKills: __t.u32().name("gems_from_kills"),
   gemsCollected: __t.u32().name("gems_collected"),
   transcendShards: __t.u32().name("transcend_shards"),
+  skillReadyAtMicros: __t.u64().name("skill_ready_at_micros"),
+  skillWindowEndsAtMicros: __t.u64().name("skill_window_ends_at_micros"),
 });

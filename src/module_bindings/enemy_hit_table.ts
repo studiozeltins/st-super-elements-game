@@ -10,13 +10,10 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  originX: __t.f32(),
-  originZ: __t.f32(),
-  dirX: __t.f32(),
-  dirZ: __t.f32(),
-  range: __t.f32(),
-  hitRadius: __t.f32(),
-  isSkill: __t.bool(),
-  comboCount: __t.u32(),
-};
+export default __t.row({
+  attacker: __t.identity(),
+  positionX: __t.f32().name("position_x"),
+  positionZ: __t.f32().name("position_z"),
+  amount: __t.u32(),
+  isCrit: __t.bool().name("is_crit"),
+});

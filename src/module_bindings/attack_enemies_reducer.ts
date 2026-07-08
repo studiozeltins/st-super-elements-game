@@ -14,6 +14,6 @@ export default {
   centerX: __t.f32(),
   centerZ: __t.f32(),
   radius: __t.f32(),
-  damage: __t.u32(),
+  isSkill: __t.bool(),
   comboCount: __t.u32(),
 };
