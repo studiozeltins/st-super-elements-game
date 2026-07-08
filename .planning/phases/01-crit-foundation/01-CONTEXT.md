@@ -44,10 +44,10 @@ attack state machine / telegraphs / poise (Phases 4 & 7); weapon/constellation c
   differently between characters in play (Success Criterion 1).
 
 ### Crit feedback — the isCrit signal reaches clients (CRIT-04, CRIT-05)
-- **D-03:** **Add a new crit/hit event table.** Roadmap's "no new tables" note is explicitly
+- **D-03 [informational]:** _(lands Phase 2, not tracked in Phase 1)_ **Add a new crit/hit event table.** Roadmap's "no new tables" note is explicitly
   waived by the user for this phase. The server owns the roll (`ctx.random`, un-replicable by a
   client), so the client cannot know `isCrit` locally — it learns it from this server event.
-- **D-04:** **Everyone subscribes** to the crit event so any client can pop the big red crit
+- **D-04 [informational]:** _(lands Phase 2, not tracked in Phase 1)_ **Everyone subscribes** to the crit event so any client can pop the big red crit
   number over the right target — the local attacker, other players watching, and PVP victims.
   Mirror the existing `skill_cast` / `ranged_attack` event-table pattern (`onInsert`-only,
   never stored). The floating number is driven by the real server roll (no client-local crit
@@ -72,7 +72,7 @@ attack state machine / telegraphs / poise (Phases 4 & 7); weapon/constellation c
     server-side today — both arrive via `attackEnemies`; see `resistances.ts`).
 
 ### PVP crit scope
-- **D-06:** **Include PVP.** The same server crit roll applies to `attackPlayer`, not just
+- **D-06 [informational]:** _(lands Phase 3, not tracked in Phase 1)_ **Include PVP.** The same server crit roll applies to `attackPlayer`, not just
   `attackEnemies`/`attackRay`. Crit is consistent everywhere and PVP damage numbers stay
   truthful. Cheap once the server roll + base-damage helper exists.
 
