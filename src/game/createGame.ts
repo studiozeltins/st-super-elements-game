@@ -23,6 +23,7 @@ import { createBoostOrbit } from './entities/createBoostOrbit';
 import { createInputSystem } from './systems/createInputSystem';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
+import type { AttackAnimationView } from './systems/createEntityRenderer';
 import { createGoliathRenderer } from './systems/createGoliathRenderer';
 import { createTelegraphSystem } from './systems/createTelegraphSystem';
 import { createDamageNumbers } from './systems/createDamageNumbers';
@@ -266,6 +267,10 @@ export function createGame(
 
   // Mirrors UNIT_KIND_GOLIATH in spacetimedb/src/attacks.ts.
   const UNIT_KIND_GOLIATH = 0;
+  // Attack FSM states mirrored from spacetimedb/src/attacks.ts (u32 in the row).
+  const ATTACK_STATE_WINDUP = 1;
+  const ATTACK_STATE_STRIKE = 2;
+  const ATTACK_STATE_RECOVERY = 3;
   // goliathId -> alive, refreshed by syncGoliaths; gates telegraphs so none
   // outlives its goliath even while the stale unit_attack row still exists.
   const goliathAlive = new Map<string, boolean>();
@@ -274,6 +279,116 @@ export function createGame(
   function isUnitAlive(unitKind: number, unitId: bigint): boolean {
     if (unitKind !== UNIT_KIND_GOLIATH) return false;
     return goliathAlive.get(unitId.toString()) === true;
+  }
+
+  // Per unit_attack row: a server-clock anchor captured on arrival / fresh cast
+  // (ANIM-01 — serverNow re-derives from it + performance.now() each frame, the
+  // same arrival anchoring the telegraph uses, never a free-running timer), plus
+  // the RECOVERY phase's start. Recovery's true start (the grace deadline) is
+  // zero-storage on the row (D4-02), so the recovery state change's ARRIVAL
+  // approximates it.
+  interface UnitAttackTiming {
+    state: number;
+    startedAtMicros: bigint;
+    baseServerMicros: bigint;
+    basePerfMs: number;
+    phaseStartMicros: bigint;
+  }
+  const attackTimings = new Map<string, UnitAttackTiming>();
+  // Rebuilt every frame from latestUnitAttackRows, pushed to the goliath renderer.
+  const goliathAttackViews = new Map<string, AttackAnimationView>();
+
+  function serverNowEstimate(timing: UnitAttackTiming): bigint {
+    return (
+      timing.baseServerMicros + BigInt(Math.round((performance.now() - timing.basePerfMs) * 1000))
+    );
+  }
+
+  // Anchors/re-anchors each row's server clock: a fresh cast (startedAt change)
+  // or first sight re-bases it; a state change stamps the new phase's start.
+  function syncAttackTimings(rows: readonly UnitAttack[]) {
+    const seen = new Set<string>();
+    for (const row of rows) {
+      if (row.unitKind !== UNIT_KIND_GOLIATH) continue;
+      const key = row.unitId.toString();
+      seen.add(key);
+      const existing = attackTimings.get(key);
+      if (!existing || existing.startedAtMicros !== row.startedAtMicros) {
+        // A windup row was written at startedAt, so its arrival pins serverNow
+        // ≈ startedAt (the telegraph's assumption). A row first seen already
+        // mid-strike/recovery pins to strikeAt — conservative: a late joiner
+        // sees a slightly longer, clamped settle, never a stuck pose.
+        const base = row.state === ATTACK_STATE_WINDUP ? row.startedAtMicros : row.strikeAtMicros;
+        attackTimings.set(key, {
+          state: row.state,
+          startedAtMicros: row.startedAtMicros,
+          baseServerMicros: base,
+          basePerfMs: performance.now(),
+          phaseStartMicros: base,
+        });
+        continue;
+      }
+      if (existing.state !== row.state) {
+        existing.state = row.state;
+        // Strike begins exactly at the row's own strikeAt deadline; recovery's
+        // unstored start is approximated by this state change's arrival.
+        existing.phaseStartMicros =
+          row.state === ATTACK_STATE_STRIKE ? row.strikeAtMicros : serverNowEstimate(existing);
+      }
+    }
+    for (const key of attackTimings.keys()) {
+      if (!seen.has(key)) attackTimings.delete(key);
+    }
+  }
+
+  // Rebuilds the attack views each frame: phase straight from the row state,
+  // progress from the row's OWN micros against the anchored server clock —
+  // windup runs startedAt → strikeAt; recovery runs its arrival-anchored start
+  // → recoveryEndsAt. Strike's true end (the grace deadline, D4-02) is never
+  // stored: its progress ramps against the row's only later deadline and the
+  // phase ends when the recovery state change arrives — the goliath's leap arc
+  // rides the actual travel toward the landing, so the coarse in-strike
+  // progress never drives the arc. Idle rows produce NO view.
+  function refreshAttackViews() {
+    goliathAttackViews.clear();
+    for (const row of latestUnitAttackRows) {
+      if (row.unitKind !== UNIT_KIND_GOLIATH) continue;
+      if (!isUnitAlive(row.unitKind, row.unitId)) continue;
+      const key = row.unitId.toString();
+      const timing = attackTimings.get(key);
+      if (!timing) continue;
+      let phase: AttackAnimationView['phase'];
+      let phaseStart: bigint;
+      let phaseEnd: bigint;
+      if (row.state === ATTACK_STATE_WINDUP) {
+        phase = 'windup';
+        phaseStart = row.startedAtMicros;
+        phaseEnd = row.strikeAtMicros;
+      } else if (row.state === ATTACK_STATE_STRIKE) {
+        phase = 'strike';
+        phaseStart = row.strikeAtMicros;
+        phaseEnd = row.recoveryEndsAtMicros;
+      } else if (row.state === ATTACK_STATE_RECOVERY) {
+        phase = 'recovery';
+        phaseStart = timing.phaseStartMicros;
+        phaseEnd = row.recoveryEndsAtMicros;
+      } else {
+        continue;
+      }
+      const durationMicros = Number(phaseEnd - phaseStart);
+      const elapsedMicros = Number(serverNowEstimate(timing) - phaseStart);
+      goliathAttackViews.set(key, {
+        attackId: row.attackId,
+        phase,
+        phaseProgress:
+          durationMicros <= 0 ? 1 : THREE.MathUtils.clamp(elapsedMicros / durationMicros, 0, 1),
+        castX: row.castX,
+        castZ: row.castZ,
+        landingX: row.landingX,
+        landingZ: row.landingZ,
+      });
+    }
+    goliathRenderer.setAttackViews(goliathAttackViews);
   }
 
   let activeCharacter: CharacterDefinition = CHARACTERS.zibo;
@@ -935,6 +1050,9 @@ export function createGame(
     // the server tick owns their combat and damages players (reflected through
     // syncMyServerRow), so there is no local contact-damage path here anymore.
     enemyRenderer.update(deltaSeconds, world.getGroundHeight);
+    // Re-derive each goliath's attack phase/progress from its row micros and
+    // push the views BEFORE the renderer animates this frame's poses.
+    refreshAttackViews();
     goliathRenderer.update(deltaSeconds, world.getGroundHeight);
     telegraphSystem.update(deltaSeconds);
     updateGemDrops(deltaSeconds);
@@ -1181,8 +1299,10 @@ export function createGame(
       telegraphSystem.syncAttacks(latestUnitAttackRows, isUnitAlive);
     },
     syncUnitAttacks(rows) {
-      // Kept for later plans (attack animation views) as well as the telegraphs.
+      // Stored so the frame loop can re-derive attack views (refreshAttackViews)
+      // and syncGoliaths can re-gate telegraphs between row updates.
       latestUnitAttackRows = rows;
+      syncAttackTimings(rows);
       telegraphSystem.syncAttacks(rows, isUnitAlive);
     },
     handleRemoteSkillCast(cast) {
