@@ -6,14 +6,14 @@ current_phase: 04
 current_phase_name: attack-state-machine-leapslam-end-to-end-delete-goliath-drai
 status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-07-09T12:23:59.297Z"
+last_updated: "2026-07-09T13:14:05.231Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 15
-  completed_plans: 12
+  completed_plans: 13
   percent: 43
 ---
 
@@ -32,7 +32,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 ## Current Position
 
 Phase: 04 (attack-state-machine-leapslam-end-to-end-delete-goliath-drai) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-07-09 — Phase 04 execution started
 
@@ -80,6 +80,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | Phase 04 P02 | 10min | 2 tasks | 3 files |
 | Phase 04 P03 | 12min | 2 tasks | 10 files |
 | Phase 04 P04 | ~8min | 2 tasks | 3 files |
+| Phase 04 P05 | 45min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 04]: 04-03: STDB rejects plain function exports from the module entry file at publish time (tsc passes, module-hooks validator throws) — shared helpers must live in pure sibling modules; worldRules.ts created for clampToWorld/isInsideSafeZone/aggroExpired
 - [Phase 04]: 04-03: serverSync parity extractor scans index.ts + worldRules.ts concatenated so constants carved out of index.ts stay parity-asserted (INV-5)
 - [Phase 04]: 04-04: telegraph timing anchor re-arms on startedAtMicros change (fresh cast re-locks landing, restarts fill); syncGoliaths re-gates telegraphs with the fresh alive map so a mid-windup goliath death drops its disc immediately
+- [Phase 04]: 04-05: animateAttack is OPTIONAL on EntityAnimation — camp enemies compile unchanged (ANIM-03); implementers restore neutral in animateMovement/animateDeath
+- [Phase 04]: 04-05: goliath leap arc rides travelFraction (actual mesh travel toward the locked landing), not phaseProgress — parabola grounds exactly on arrival
+- [Phase 04]: 04-05: recovery phase start is anchored by the state change's ARRIVAL (grace deadline is zero-storage on the row, D4-02)
 
 ### Pending Todos
 
@@ -179,7 +183,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-09T12:23:22.514Z
+Last session: 2026-07-09T13:13:39.765Z
 Stopped at: Phase 4 planned (7 plans, checker passed iteration 2)
 Resume file: .planning/phases/04-attack-state-machine-leapslam-end-to-end-delete-goliath-drai/04-CONTEXT.md
 
