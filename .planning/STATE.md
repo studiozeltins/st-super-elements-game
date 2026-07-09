@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
-current_phase: 03
-current_phase_name: PVP crit
+current_phase: 4
+current_phase_name: Attack state machine + leapSlam end-to-end + delete goliath drain
 status: verifying
-stopped_at: Phase 03 context gathered
-last_updated: "2026-07-09T06:51:38.273Z"
+stopped_at: Phase 03 planned (2 plans); decision-coverage gate overridden (D3-NN prefix unparseable by gate; coverage verified by plan-checker dim 7)
+last_updated: "2026-07-09T07:09:58.660Z"
 last_activity: 2026-07-09
-last_activity_desc: Phase 03 execution started
+last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
   total_phases: 7
   completed_phases: 3
@@ -31,10 +31,10 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 
 ## Current Position
 
-Phase: 03 (PVP crit) — EXECUTING
-Plan: 2 of 2
+Phase: 4 — Attack state machine + leapSlam end-to-end + delete goliath drain
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-09 — Phase 03 execution started
+Last activity: 2026-07-09 — Phase 03 complete, transitioned to Phase 4
 
 ## Roadmap Summary
 
@@ -65,7 +65,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 |-------|-------|-------|----------|
 | 1 | 1/3 | ~4 min | ~4 min |
 | 2 | TBD | - | - |
-| 3 | TBD | - | - |
+| 03 | 2 | - | - |
 | 4 | TBD | - | - |
 | 5 | TBD | - | - |
 | 6 | TBD | - | - |
