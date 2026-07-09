@@ -2,19 +2,19 @@
 gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
-current_phase: 02
+current_phase: 03
+current_phase_name: PVP crit
 status: executing
 stopped_at: Phase 03 context gathered
-last_updated: "2026-07-09T06:27:57.019Z"
+last_updated: "2026-07-09T06:37:26.013Z"
 last_activity: 2026-07-09
-last_activity_desc: Phase 03 planning complete
+last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 7
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
   percent: 29
-current_phase_name: server-authoritative-damage-crit-on-enemies
 ---
 
 # Project State
@@ -27,14 +27,14 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor). This milestone deepens *combat feel*: enemy attacks become dodgeable and crit becomes a
 real per-character stat, so power investment (crit) buys tempo, not just damage.
-**Current focus:** Phase 02 complete + verified (15/15). Next: plan Phase 3 (PVP crit) with `/gsd-plan-phase 3`. Outstanding: maincloud additive publish deferred to prod point.
+**Current focus:** Phase 03 — PVP crit
 
 ## Current Position
 
-Phase: 02 — COMPLETE
-Plan: 1 of 3
+Phase: 03 (PVP crit) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
-Last activity: 2026-07-09 — Phase 03 planning complete
+Last activity: 2026-07-09 — Phase 03 execution started
 
 ## Roadmap Summary
 
@@ -74,6 +74,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 *Updated after each plan completion.*
 | Phase 01 P02 | 3 | 3 tasks | 3 files |
 | Phase 01 P03 | 6m | 2 tasks | 1 files |
+| Phase 03 P01 | 6 min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -120,6 +121,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: critDmg stored as full multiplier (e.g. 1.9), matching value it replaces in Phase 2
 - [Phase ?]: 17 distinct role-seeded critRate values (D-01/D-02); user tunes in playtest
 - [Phase ?]: Server CHARACTER_STATS kept single-line flat so serverSync regex extractor keeps parsing
+- [Phase 03]: pvp_hit extended additively (attacker/isCrit with .default()); attackPlayer intent-only via resolvePlayerHit, no PVP resistance profile (D3-03); victim crit = new purple pvpCrit kind, attacker suppression in App.tsx pvpHit callback
 
 ### Pending Todos
 
@@ -163,7 +165,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-08T21:12:28.192Z
+Last session: 2026-07-09T06:37:12.584Z
 Stopped at: Phase 03 planned (2 plans); decision-coverage gate overridden (D3-NN prefix unparseable by gate; coverage verified by plan-checker dim 7)
 Resume file: .planning/phases/03-pvp-crit/03-CONTEXT.md
 

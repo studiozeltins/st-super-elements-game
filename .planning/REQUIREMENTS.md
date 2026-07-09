@@ -23,7 +23,7 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 - [x] **CRIT-04**: A crit hit floats the `kind:'crit'` damage number, driven by the real server roll (no visual regression).
 - [x] **CRIT-05**: `attackEnemies`/`attackRay` resolve crit server-side and record `isCrit` on the hit so the poise system can consume it.
 - [x] **CRIT-06**: Base damage is computed SERVER-SIDE from mirrored `WEAPONS` + combo/skill/transcend math — `attackEnemies`/`attackRay` drop the client `damage` arg and receive intent instead, so a modified client can no longer inflate damage (closes the PVP damage-spoof hole; chosen over client-sends-damage in discuss-phase). Promoted from decision D-05.
-- [ ] **CRIT-07**: PVP hits (`attackPlayer`) resolve base damage + crit server-side via the same path and emit the crit event, so PVP crit numbers are truthful and un-spoofable. Promoted from decision D-06.
+- [x] **CRIT-07**: PVP hits (`attackPlayer`) resolve base damage + crit server-side via the same path and emit the crit event, so PVP crit numbers are truthful and un-spoofable. Promoted from decision D-06.
 
 ### Attack State Machine (FSM) — unit-agnostic core
 
@@ -104,7 +104,7 @@ damage; attack shapes + interrupt in Phases 4–7).
 | CRIT-04 | Phase 2 | Complete |
 | CRIT-05 | Phase 2 | Complete |
 | CRIT-06 | Phase 2 | Complete |
-| CRIT-07 | Phase 3 | Pending |
+| CRIT-07 | Phase 3 | Complete |
 | FSM-01 | Phase 4 | Pending |
 | FSM-02 | Phase 4 | Pending |
 | FSM-03 | Phase 4 | Pending |

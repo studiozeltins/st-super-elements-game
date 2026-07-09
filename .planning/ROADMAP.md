@@ -163,7 +163,7 @@ crit + crit event as enemy hits, so crit is consistent and PVP damage numbers st
 
 **Wave 1**
 
-- [ ] 03-01-PLAN.md — server + client rework in one slice: `pvp_hit` +`attacker`/`isCrit`, intent-shaped `attackPlayer` via `resolvePlayerHit`, client intent plumbing + 3-way event rendering with attacker suppression + `pvpCrit` kind (wave 1)
+- [x] 03-01-PLAN.md — server + client rework in one slice: `pvp_hit` +`attacker`/`isCrit`, intent-shaped `attackPlayer` via `resolvePlayerHit`, client intent plumbing + 3-way event rendering with attacker suppression + `pvpCrit` kind (wave 1)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -288,7 +288,7 @@ do NOT elevate an untrusted bool to a state trigger.
 |-------|----------------|--------|-----------|
 | 1. Crit stats + server damage foundation | 3/3 | Complete   | 2026-07-08 |
 | 2. Server-authoritative damage + crit on enemies | 0/TBD | Not started | - |
-| 3. PVP crit | 0/2 | Planned | - |
+| 3. PVP crit | 1/2 | In Progress|  |
 | 4. Attack state machine + leapSlam + delete drain | 0/TBD | Not started | - |
 | 5. swordSwing → swordSwirl combo | 0/TBD | Not started | - |
 | 6. shieldDash lane | 0/TBD | Not started | - |
