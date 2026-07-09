@@ -339,6 +339,11 @@ const player = table(
     // additive migrate backfills populated rows without a wipe (Pitfall 2).
     skillReadyAtMicros: t.u64().default(0n),
     skillWindowEndsAtMicros: t.u64().default(0n),
+    // Slam-victim stun window (HIT-01/D4-10): updatePosition rejects client
+    // positions while now < this, so the server owns the knocked-back position
+    // for the whole stun. Appended LAST with .default(0n) so the additive
+    // migrate backfills populated rows without a wipe (Pitfall 2).
+    stunnedUntilMicros: t.u64().default(0n),
   }
 );
 
@@ -437,6 +442,40 @@ const goliath = table(
     // this forward arc); kept pointing at the camp it walked into while stopped.
     headingX: t.f32().default(0),
     headingZ: t.f32().default(0),
+  }
+);
+
+// Per-unit attack-FSM state (FSM-01/FSM-06), unit-agnostic: unitKind 0 = goliath
+// (1 = camp enemy, 2 = hero later — zero schema change to reuse). Rows are lazily
+// upserted per unit by runUnitAttacks: the table starts EMPTY on a migrated DB and
+// is NEVER the iteration driver — the tick iterates live units and looks its row
+// up via by_unit. A whole new table (not columns on goliath) so the migrate stays
+// additive and other unit kinds join without touching their own tables.
+const unitAttack = table(
+  {
+    name: 'unit_attack',
+    public: true,
+    indexes: [{ accessor: 'by_unit', algorithm: 'btree', columns: ['unitKind', 'unitId'] }],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    unitKind: t.u32(),
+    unitId: t.u64(),
+    state: t.u32(), // ATTACK_STATE_* (attacks.ts): idle/windup/strike/recovery
+    attackId: t.string(), // key into ATTACKS ('' until the first windup)
+    startedAtMicros: t.u64(),
+    strikeAtMicros: t.u64(),
+    recoveryEndsAtMicros: t.u64(),
+    cooldownUntilMicros: t.u64(),
+    // Landing LOCKED at windup entry (ATK-01) — later transitions only read it.
+    landingX: t.f32(),
+    landingZ: t.f32(),
+    radius: t.f32(),
+    // The cast root the unit stays planted on through the windup (D4-12).
+    castX: t.f32(),
+    castZ: t.f32(),
+    strikeResolved: t.bool(),
+    poise: t.u32(), // reset on windup entry; consumed by Phase-7 interrupts
   }
 );
 
@@ -581,6 +620,22 @@ const enemyHit = table(
   }
 );
 
+// Broadcasts one landed unit attack strike (ANIM-04 producer). Event-only: rows
+// are never stored, ONE insert per strike — not per victim (victims learn their
+// fate via their own player row) — emitted unconditionally at the strike
+// transition, before any victim branching.
+const attackStrike = table(
+  { name: 'attack_strike', public: true, event: true },
+  {
+    unitKind: t.u32(),
+    unitId: t.u64(),
+    attackId: t.string(),
+    landingX: t.f32(),
+    landingZ: t.f32(),
+    radius: t.f32(),
+  }
+);
+
 // Broadcasts a heal so the healer's client can float green numbers (self + party).
 const healEvent = table(
   { name: 'heal_event', public: true, event: true },
@@ -704,6 +759,7 @@ const spacetimedb = schema({
   shardDrop,
   enemy,
   goliath,
+  unitAttack,
   ownedCharacter,
   characterActivation,
   skillCast,
@@ -713,6 +769,7 @@ const spacetimedb = schema({
   pvpHit,
   rangedAttack,
   enemyHit,
+  attackStrike,
   healEvent,
   regenTimer,
   worldTimer,
@@ -812,6 +869,7 @@ function seedPlayer(ctx: { db: any; timestamp: any }, identity: any, name: strin
     transcendShards: 0,
     skillReadyAtMicros: 0n,
     skillWindowEndsAtMicros: 0n,
+    stunnedUntilMicros: 0n,
   });
   ctx.db.ownedCharacter.insert({
     id: 0n,
@@ -1069,6 +1127,9 @@ export const updatePosition = spacetimedb.reducer(
     const currentPlayer = requirePlayer(ctx);
     // A puppet (training dummy) is server-driven — ignore its client's position.
     if (ctx.db.puppet.identity.find(currentPlayer.identity)) return;
+    // A slam victim is server-owned for the stun window (HIT-01/T-04-03): reject
+    // client positions until it ends so a modified client cannot wiggle out.
+    if (ctx.timestamp.microsSinceUnixEpoch < currentPlayer.stunnedUntilMicros) return;
     const stepX = positionX - currentPlayer.positionX;
     const stepZ = positionZ - currentPlayer.positionZ;
     const stepDistance = Math.hypot(stepX, stepZ);
@@ -2204,9 +2265,9 @@ export const restorePlayers = spacetimedb.reducer(
   (ctx, { rows }) => {
     requireEmpty(ctx.db.player.iter(), 'player');
     for (const row of rows) {
-      // Skill-window state is a Phase-02 additive column absent from pre-existing
-      // backups; seed it to 0n so a restored player simply starts off-cooldown.
-      ctx.db.player.insert({ ...row, online: false, lastKillRewardAt: ctx.timestamp, skillReadyAtMicros: 0n, skillWindowEndsAtMicros: 0n });
+      // Skill-window/stun state are additive columns absent from pre-existing
+      // backups; seed them to 0n so a restored player starts off-cooldown, unstunned.
+      ctx.db.player.insert({ ...row, online: false, lastKillRewardAt: ctx.timestamp, skillReadyAtMicros: 0n, skillWindowEndsAtMicros: 0n, stunnedUntilMicros: 0n });
     }
   }
 );
@@ -2845,6 +2906,7 @@ export const debugSpawnBots = spacetimedb.reducer(
         transcendShards: 0,
         skillReadyAtMicros: 0n,
         skillWindowEndsAtMicros: 0n,
+        stunnedUntilMicros: 0n,
       });
     }
   }
