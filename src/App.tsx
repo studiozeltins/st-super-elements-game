@@ -125,6 +125,9 @@ export default function App() {
         tables.shardDrop,
         tables.enemy,
         tables.goliath,
+        // unit_attack is a normal CACHED table (rows persist through the FSM
+        // cycle), so it takes the manual subscription + plain useTable below.
+        tables.unitAttack,
         tables.party,
         tables.partyMember,
         // Only invites addressed to ME (canonical recipient) — a player must never
@@ -154,6 +157,7 @@ export default function App() {
   const [shardDropRows] = useTable(tables.shardDrop);
   const [enemyRows] = useTable(tables.enemy);
   const [goliathRows] = useTable(tables.goliath);
+  const [unitAttackRows] = useTable(tables.unitAttack);
   const [parties] = useTable(tables.party);
   const [partyMembers] = useTable(tables.partyMember);
   const [myInvites] = useTable(tables.partyInvite);
@@ -693,6 +697,10 @@ export default function App() {
   useEffect(() => {
     gameRef.current?.syncGoliaths(goliathRows);
   }, [goliathRows]);
+
+  useEffect(() => {
+    gameRef.current?.syncUnitAttacks(unitAttackRows);
+  }, [unitAttackRows]);
 
   // Shard counter flash + movement toast, driven by the reactive transcendShards diff.
   useEffect(() => {

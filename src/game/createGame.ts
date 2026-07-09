@@ -24,6 +24,7 @@ import { createInputSystem } from './systems/createInputSystem';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
 import { createGoliathRenderer } from './systems/createGoliathRenderer';
+import { createTelegraphSystem } from './systems/createTelegraphSystem';
 import { createDamageNumbers } from './systems/createDamageNumbers';
 import {
   comboWindowSeconds,
@@ -45,6 +46,7 @@ import type {
   RangedAttack,
   ShardDrop,
   SkillCast,
+  UnitAttack,
 } from '../module_bindings/types';
 
 export interface HudState {
@@ -143,6 +145,8 @@ export interface Game {
   syncEnemies(rows: readonly Enemy[]): void;
   /** Reconciles the rendered goliath raiders against the server `goliath` table. */
   syncGoliaths(rows: readonly Goliath[]): void;
+  /** Feeds `unit_attack` FSM rows to the ground-telegraph system (windup countdown). */
+  syncUnitAttacks(rows: readonly UnitAttack[]): void;
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
@@ -255,7 +259,22 @@ export function createGame(
   // (lastDamagedAt, set independently of this callback).
   const enemyRenderer = createEnemyRenderer(scene, effectSystem);
   const goliathRenderer = createGoliathRenderer(scene);
+  // Ground telegraphs for server unit_attack windups (D4-14): discs sit on the
+  // terrain at the LOCKED landing so the dodge read matches the server hitbox.
+  const telegraphSystem = createTelegraphSystem(scene, (x, z) => world.getGroundHeight(x, z));
   const inputSystem = createInputSystem(canvas);
+
+  // Mirrors UNIT_KIND_GOLIATH in spacetimedb/src/attacks.ts.
+  const UNIT_KIND_GOLIATH = 0;
+  // goliathId -> alive, refreshed by syncGoliaths; gates telegraphs so none
+  // outlives its goliath even while the stale unit_attack row still exists.
+  const goliathAlive = new Map<string, boolean>();
+  let latestUnitAttackRows: readonly UnitAttack[] = [];
+
+  function isUnitAlive(unitKind: number, unitId: bigint): boolean {
+    if (unitKind !== UNIT_KIND_GOLIATH) return false;
+    return goliathAlive.get(unitId.toString()) === true;
+  }
 
   let activeCharacter: CharacterDefinition = CHARACTERS.zibo;
   let playerModel = createCharacterModel(activeCharacter);
@@ -917,6 +936,7 @@ export function createGame(
     // syncMyServerRow), so there is no local contact-damage path here anymore.
     enemyRenderer.update(deltaSeconds, world.getGroundHeight);
     goliathRenderer.update(deltaSeconds, world.getGroundHeight);
+    telegraphSystem.update(deltaSeconds);
     updateGemDrops(deltaSeconds);
     updateShardDrops(deltaSeconds);
     resolveAllCollisions();
@@ -958,6 +978,7 @@ export function createGame(
       damageNumbers.dispose();
       enemyRenderer.dispose();
       goliathRenderer.dispose();
+      telegraphSystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
       playerModel.dispose();
@@ -1153,6 +1174,16 @@ export function createGame(
     },
     syncGoliaths(rows) {
       goliathRenderer.syncRows(rows);
+      goliathAlive.clear();
+      for (const row of rows) goliathAlive.set(row.goliathId.toString(), row.alive);
+      // Re-gate telegraphs on the fresh alive flags (a death mid-windup must
+      // drop the disc immediately, before the attack row itself updates).
+      telegraphSystem.syncAttacks(latestUnitAttackRows, isUnitAlive);
+    },
+    syncUnitAttacks(rows) {
+      // Kept for later plans (attack animation views) as well as the telegraphs.
+      latestUnitAttackRows = rows;
+      telegraphSystem.syncAttacks(rows, isUnitAlive);
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];
