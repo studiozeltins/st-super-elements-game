@@ -85,6 +85,7 @@ import UpdatePositionReducer from "./update_position_reducer";
 
 // Import all table schema definitions
 import AccountLinkRow from "./account_link_table";
+import AttackStrikeRow from "./attack_strike_table";
 import BannerPityRow from "./banner_pity_table";
 import CharacterActivationRow from "./character_activation_table";
 import EnemyRow from "./enemy_table";
@@ -103,6 +104,7 @@ import PvpHitRow from "./pvp_hit_table";
 import RangedAttackRow from "./ranged_attack_table";
 import ShardDropRow from "./shard_drop_table";
 import SkillCastRow from "./skill_cast_table";
+import UnitAttackRow from "./unit_attack_table";
 import WeaponItemRow from "./weapon_item_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -120,6 +122,14 @@ const tablesSchema = __schema({
       { name: 'account_link_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, AccountLinkRow),
+  attackStrike: __table({
+    name: 'attack_strike',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, AttackStrikeRow),
   bannerPity: __table({
     name: 'banner_pity',
     indexes: [
@@ -330,6 +340,21 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, SkillCastRow),
+  unitAttack: __table({
+    name: 'unit_attack',
+    indexes: [
+      { accessor: 'id', name: 'unit_attack_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'by_unit', name: 'unit_attack_unit_kind_unit_id_idx_btree', algorithm: 'btree', columns: [
+        'unitKind',
+        'unitId',
+      ] },
+    ],
+    constraints: [
+      { name: 'unit_attack_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, UnitAttackRow),
   weaponItem: __table({
     name: 'weapon_item',
     indexes: [

@@ -30,6 +30,16 @@ export const AccountLink = __t.object("AccountLink", {
 });
 export type AccountLink = __Infer<typeof AccountLink>;
 
+export const AttackStrike = __t.object("AttackStrike", {
+  unitKind: __t.u32(),
+  unitId: __t.u64(),
+  attackId: __t.string(),
+  landingX: __t.f32(),
+  landingZ: __t.f32(),
+  radius: __t.f32(),
+});
+export type AttackStrike = __Infer<typeof AttackStrike>;
+
 export const BannerPity = __t.object("BannerPity", {
   id: __t.u64(),
   owner: __t.identity(),
@@ -174,6 +184,7 @@ export const Player = __t.object("Player", {
   transcendShards: __t.u32(),
   skillReadyAtMicros: __t.u64(),
   skillWindowEndsAtMicros: __t.u64(),
+  stunnedUntilMicros: __t.u64(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -282,6 +293,26 @@ export const SkillCast = __t.object("SkillCast", {
   directionZ: __t.f32(),
 });
 export type SkillCast = __Infer<typeof SkillCast>;
+
+export const UnitAttack = __t.object("UnitAttack", {
+  id: __t.u64(),
+  unitKind: __t.u32(),
+  unitId: __t.u64(),
+  state: __t.u32(),
+  attackId: __t.string(),
+  startedAtMicros: __t.u64(),
+  strikeAtMicros: __t.u64(),
+  recoveryEndsAtMicros: __t.u64(),
+  cooldownUntilMicros: __t.u64(),
+  landingX: __t.f32(),
+  landingZ: __t.f32(),
+  radius: __t.f32(),
+  castX: __t.f32(),
+  castZ: __t.f32(),
+  strikeResolved: __t.bool(),
+  poise: __t.u32(),
+});
+export type UnitAttack = __Infer<typeof UnitAttack>;
 
 export const WeaponItem = __t.object("WeaponItem", {
   id: __t.u64(),

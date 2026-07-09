@@ -28,4 +28,5 @@ export default __t.row({
   transcendShards: __t.u32().name("transcend_shards"),
   skillReadyAtMicros: __t.u64().name("skill_ready_at_micros"),
   skillWindowEndsAtMicros: __t.u64().name("skill_window_ends_at_micros"),
+  stunnedUntilMicros: __t.u64().name("stunned_until_micros"),
 });
