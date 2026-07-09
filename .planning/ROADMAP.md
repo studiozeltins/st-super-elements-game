@@ -224,7 +224,7 @@ telegraph → animation → juice → live verification):
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 04-04-PLAN.md — createTelegraphSystem (outline + outward fill + rim flash, #86e2ff) + App.tsx/createGame unit_attack row plumbing
+- [x] 04-04-PLAN.md — createTelegraphSystem (outline + outward fill + rim flash, #86e2ff) + App.tsx/createGame unit_attack row plumbing
 
 **Wave 5** *(blocked on Wave 4)*
 
@@ -322,7 +322,7 @@ do NOT elevate an untrusted bool to a state trigger.
 | 1. Crit stats + server damage foundation | 3/3 | Complete   | 2026-07-08 |
 | 2. Server-authoritative damage + crit on enemies | 0/TBD | Not started | - |
 | 3. PVP crit | 2/2 | Complete    | 2026-07-09 |
-| 4. Attack state machine + leapSlam + delete drain | 3/7 | In Progress|  |
+| 4. Attack state machine + leapSlam + delete drain | 4/7 | In Progress|  |
 | 5. swordSwing → swordSwirl combo | 0/TBD | Not started | - |
 | 6. shieldDash lane | 0/TBD | Not started | - |
 | 7. Crit poise interrupt | 0/TBD | Not started | - |

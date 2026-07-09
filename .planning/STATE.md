@@ -6,14 +6,14 @@ current_phase: 04
 current_phase_name: attack-state-machine-leapslam-end-to-end-delete-goliath-drai
 status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-07-09T12:15:08.637Z"
+last_updated: "2026-07-09T12:23:59.297Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 15
-  completed_plans: 11
+  completed_plans: 12
   percent: 43
 ---
 
@@ -32,7 +32,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 ## Current Position
 
 Phase: 04 (attack-state-machine-leapslam-end-to-end-delete-goliath-drai) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-07-09 — Phase 04 execution started
 
@@ -79,6 +79,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | Phase 04 P01 | 7min | 3 tasks | 7 files |
 | Phase 04 P02 | 10min | 2 tasks | 3 files |
 | Phase 04 P03 | 12min | 2 tasks | 10 files |
+| Phase 04 P04 | ~8min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -134,6 +135,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: 04-02: src/unitAttacks.ts added to spacetimedb tsconfig include until Plan 03 wires the import
 - [Phase 04]: 04-03: STDB rejects plain function exports from the module entry file at publish time (tsc passes, module-hooks validator throws) — shared helpers must live in pure sibling modules; worldRules.ts created for clampToWorld/isInsideSafeZone/aggroExpired
 - [Phase 04]: 04-03: serverSync parity extractor scans index.ts + worldRules.ts concatenated so constants carved out of index.ts stay parity-asserted (INV-5)
+- [Phase 04]: 04-04: telegraph timing anchor re-arms on startedAtMicros change (fresh cast re-locks landing, restarts fill); syncGoliaths re-gates telegraphs with the fresh alive map so a mid-windup goliath death drops its disc immediately
 
 ### Pending Todos
 
@@ -177,7 +179,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-09T12:13:47.764Z
+Last session: 2026-07-09T12:23:22.514Z
 Stopped at: Phase 4 planned (7 plans, checker passed iteration 2)
 Resume file: .planning/phases/04-attack-state-machine-leapslam-end-to-end-delete-goliath-drai/04-CONTEXT.md
 
