@@ -119,7 +119,6 @@ export default function App() {
         tables.bannerPity,
         tables.weaponItem,
         tables.pullResult,
-        tables.pvpHit,
         tables.rangedAttack,
         tables.healEvent,
         tables.gemDrop,
@@ -197,20 +196,31 @@ export default function App() {
       }, 120);
     },
   });
-  // Another player hit me → purple number over my character.
+  // Server-authoritative PVP hit → truthful {amount, isCrit, attacker} for all
+  // three viewer roles (D3-05, D2-02). EVENT table: its useTable is the ONLY
+  // subscription — it must not also sit in the manual list above (double
+  // delivery = double numbers).
   useTable(tables.pvpHit, {
     onInsert: row => {
       const targetHex = row.target.toHexString();
       if (targetHex === myIdentityRef.current) {
-        // Mark the PVP context so a coinciding shard DOWN reads as a theft, not a
-        // PVE drop (the shard only actually leaves on a fatal hit; a non-fatal hit
-        // simply produces no shard diff, so no false toast fires).
+        // Victim: mark the PVP context so a coinciding shard DOWN reads as a
+        // theft, not a PVE drop (the shard only actually leaves on a fatal hit;
+        // a non-fatal hit simply produces no shard diff, so no false toast fires).
         lastPvpHitOnMeAtRef.current = performance.now();
-        gameRef.current?.spawnSelfNumber(row.amount, 'pvp');
-      } else {
-        // Someone else got hit — show their health bar (I'm the attacker/bystander).
-        gameRef.current?.flashRemoteHealth(targetHex);
+        gameRef.current?.spawnSelfNumber(row.amount, row.isCrit ? 'pvpCrit' : 'pvp');
+        return;
       }
+      // Someone else got hit — show their health bar (I'm the attacker/bystander).
+      gameRef.current?.flashRemoteHealth(targetHex);
+      if (row.attacker.toHexString() === myIdentityRef.current) {
+        // D3-05: own non-crit already drawn locally in applyPvpDamage — suppress;
+        // upgrade to the big crit number at the victim's live position on crit.
+        if (row.isCrit) gameRef.current?.spawnPlayerNumber(targetHex, row.amount, 'crit');
+        return;
+      }
+      // Spectator: full shared visibility (D2-02).
+      gameRef.current?.spawnPlayerNumber(targetHex, row.amount, row.isCrit ? 'crit' : 'normal');
     },
   });
   // Server-authoritative enemy/goliath hit → the {amount, isCrit, position} truth

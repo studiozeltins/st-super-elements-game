@@ -51,7 +51,7 @@ function drawNumber(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const label =
-    kind === 'crit' || kind === 'takenCrit'
+    kind === 'crit' || kind === 'takenCrit' || kind === 'pvpCrit'
       ? `${amount}!`
       : kind === 'heal'
         ? `+${amount}`

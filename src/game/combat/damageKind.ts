@@ -7,6 +7,7 @@ export type DamageKind =
   | 'taken'
   | 'takenCrit'
   | 'pvp'
+  | 'pvpCrit'
   | 'heal';
 
 export interface DamageKindStyle {
@@ -25,5 +26,6 @@ export const DAMAGE_KIND_STYLES: Record<DamageKind, DamageKindStyle> = {
   taken: { cssColor: '#ff5c3c', fontScale: 1 },
   takenCrit: { cssColor: '#ff5c3c', fontScale: 1.7 },
   pvp: { cssColor: '#c07dff', fontScale: 1.15 },
+  pvpCrit: { cssColor: '#c07dff', fontScale: 1.7 },
   heal: { cssColor: '#7ec843', fontScale: 1 },
 };

@@ -133,6 +133,8 @@ export interface Game {
   spawnWorldNumber(positionX: number, positionZ: number, amount: number, kind: DamageKind): void;
   /** Shows a remote player's health bar for a few seconds (they were hit). */
   flashRemoteHealth(identityHex: string): void;
+  /** Floats a server-driven `pvp_hit` number at a remote player's live position. */
+  spawnPlayerNumber(identityHex: string, amount: number, kind: DamageKind): void;
   /** Syncs the gem drops lying in the world (walk over to collect). */
   syncGemDrops(drops: readonly GemDrop[]): void;
   /** Syncs the rare transcend-shard drops lying in the world (purple, walk over to collect). */
@@ -1067,7 +1069,7 @@ export function createGame(
     },
     spawnSelfNumber(amount, kind) {
       // Account PvP damage so the synced HP drop isn't re-floated as a "taken" number.
-      if (kind === 'pvp') pvpDamageSinceSync += amount;
+      if (kind === 'pvp' || kind === 'pvpCrit') pvpDamageSinceSync += amount;
       damageNumbers.spawn(playerPosition.clone().setY(playerPosition.y + 1.4), amount, kind);
     },
     spawnWorldNumber(positionX, positionZ, amount, kind) {
@@ -1076,6 +1078,12 @@ export function createGame(
     flashRemoteHealth(identityHex) {
       const view = remotePlayers.get(identityHex);
       if (view) view.lastPvpHitAt = elapsedSeconds;
+    },
+    spawnPlayerNumber(identityHex, amount, kind) {
+      const view = remotePlayers.get(identityHex);
+      if (!view) return; // victim despawned — drop silently
+      const p = view.model.group.position;
+      damageNumbers.spawn(p.clone().setY(p.y + 1), amount, kind);
     },
     syncGemDrops(drops) {
       const seen = new Set<string>();
