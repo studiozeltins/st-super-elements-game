@@ -203,4 +203,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-08 — started v0.2.0-alpha Combat Depth milestone*
+*Last updated: 2026-07-09 — Phase 3 (PVP crit) complete: crit trilogy done, PVP damage fully server-authoritative (CRIT-07)*
