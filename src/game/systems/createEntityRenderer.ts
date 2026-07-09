@@ -7,12 +7,37 @@ export type GetGroundHeight = (x: number, z: number, maxSurfaceY?: number) => nu
 /** Floats the amount a row's health just fell — the number is server-driven. */
 export type HealthDropReporter = (worldPosition: THREE.Vector3, amount: number) => void;
 
+/**
+ * One unit's live attack, as the client sees it: the phase comes straight from
+ * the unit_attack row state and the progress is re-derived from the ROW's micros
+ * (arrival-anchored, same model as the telegraph) — never a client-local timer.
+ */
+export interface AttackAnimationView {
+  attackId: string;
+  phase: 'windup' | 'strike' | 'recovery';
+  /** 0..1 within the current phase, client-derived from the row's micros. */
+  phaseProgress: number;
+  /** Where the unit was rooted when it cast (the leap's launch point). */
+  castX: number;
+  castZ: number;
+  /** The LOCKED landing the strike resolves at — immutable once cast. */
+  landingX: number;
+  landingZ: number;
+}
+
 /** Per-entity locomotion + death animation, closed over its own model and parts. */
 export interface EntityAnimation {
   /** One alive frame: limb swing / body bob for the given motion state. */
   animateMovement(elapsedSeconds: number, isMoving: boolean): void;
   /** Death pose for progress 0 (just died) → 1 (fully toppled and hidden). */
   animateDeath(progress: number): void;
+  /**
+   * OPTIONAL per-phase attack pose (ANIM-03), applied AFTER animateMovement each
+   * frame while the unit has a live attack view. Kinds without attacks (camp
+   * enemies today) simply omit it and compile unchanged; implementers must leave
+   * the rig neutral when no view arrives (restore inside animateMovement/Death).
+   */
+  animateAttack?(view: AttackAnimationView): void;
 }
 
 export interface SpawnedEntity {
@@ -53,6 +78,12 @@ export interface EntityRendererOptions<Row> {
 export interface EntityRenderer<Row> {
   /** Reconciles the live set against the latest table rows (insert/update/remove). */
   syncRows(rows: readonly Row[]): void;
+  /**
+   * Replaces the live attack views wholesale (keyed by the same id string
+   * syncRows keys entities by). Entities with a view get animateAttack each
+   * update; during windup they face the locked landing instead of their target.
+   */
+  setAttackViews(views: Map<string, AttackAnimationView>): void;
   /** Interpolates each model toward its server target and animates it. */
   update(deltaSeconds: number, getGroundHeight: GetGroundHeight): void;
   getAlivePositions(): THREE.Vector3[];
@@ -98,6 +129,8 @@ export function createEntityRenderer<Row>(
 ): EntityRenderer<Row> {
   const { scene, adapter, onHealthDrop } = options;
   const entities = new Map<string, RenderedEntity>();
+  // Live attack views keyed by entity id string; replaced wholesale each refresh.
+  let attackViews: Map<string, AttackAnimationView> = new Map();
   let elapsedSeconds = 0;
 
   function insert(row: Row): RenderedEntity {
@@ -210,7 +243,7 @@ export function createEntityRenderer<Row>(
   function update(deltaSeconds: number, getGroundHeight: GetGroundHeight) {
     elapsedSeconds += deltaSeconds;
     const lerpFactor = Math.min(1, deltaSeconds * LERP_RATE);
-    for (const entity of entities.values()) {
+    for (const [key, entity] of entities) {
       refreshOverlay(entity);
       if (!entity.alive) {
         entity.animation.animateDeath(deathProgress(entity));
@@ -229,13 +262,25 @@ export function createEntityRenderer<Row>(
       }
       group.position.y = getGroundHeight(group.position.x, group.position.z);
       const isMoving = horizontalGap > MOTION_EPSILON;
-      if (isMoving) group.lookAt(entity.targetX, group.position.y, entity.targetZ);
+      const view = attackViews.get(key);
+      // A winding-up unit is rooted at its cast point: instead of lerp-chasing a
+      // movement target, the crouch faces the LOCKED landing it will leap to
+      // (D4-12 — the aim read). Strike/recovery keep the normal travel facing.
+      if (view?.phase === 'windup') {
+        group.lookAt(view.landingX, group.position.y, view.landingZ);
+      } else if (isMoving) {
+        group.lookAt(entity.targetX, group.position.y, entity.targetZ);
+      }
       entity.animation.animateMovement(elapsedSeconds, isMoving);
+      if (view) entity.animation.animateAttack?.(view);
     }
   }
 
   return {
     syncRows,
+    setAttackViews(views) {
+      attackViews = views;
+    },
     update,
     getAlivePositions() {
       // Return the AUTHORITATIVE server position (targetX/Z), not the lerped
