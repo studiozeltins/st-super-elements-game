@@ -115,12 +115,12 @@ export default function App() {
         tables.player,
         tables.ownedCharacter,
         tables.characterActivation,
-        tables.skillCast,
+        // skillCast / pullResult / rangedAttack / healEvent are EVENT tables:
+        // their useTable hooks below open the ONLY subscription. Listing them
+        // here too would deliver every event row twice (double VFX/numbers) —
+        // same invariant as pvpHit/enemyHit.
         tables.bannerPity,
         tables.weaponItem,
-        tables.pullResult,
-        tables.rangedAttack,
-        tables.healEvent,
         tables.gemDrop,
         tables.shardDrop,
         tables.enemy,
@@ -177,9 +177,6 @@ export default function App() {
   useTable(tables.pullResult, {
     onInsert: row => {
       if (row.owner.toHexString() !== myIdentityRef.current) return;
-      // The table is delivered through two subscriptions, so each row can fire
-      // onInsert twice; slot is unique per request, so dedupe on it.
-      if (pullBufferRef.current.some(view => view.slot === row.slot)) return;
       pullBufferRef.current.push({
         slot: row.slot,
         kind: row.kind,
