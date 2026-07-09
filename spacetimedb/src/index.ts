@@ -538,12 +538,16 @@ const pullResult = table(
   }
 );
 
-// Broadcasts a PVP hit so the victim's client can float a purple number.
+// Broadcasts a PVP hit so every client can float a truthful number: victim
+// purple, attacker crit upgrade, spectators (CRIT-07). Carries the FULL
+// computed amount (D3-02) — HP application caps separately.
 const pvpHit = table(
   { name: 'pvp_hit', public: true, event: true },
   {
     target: t.identity(),
     amount: t.u32(),
+    attacker: t.identity().default(Identity.zero()),
+    isCrit: t.bool().default(false),
   }
 );
 
@@ -1090,8 +1094,8 @@ export const updatePosition = spacetimedb.reducer(
 );
 
 export const attackPlayer = spacetimedb.reducer(
-  { targetIdentity: t.identity(), damage: t.u32() },
-  (ctx, { targetIdentity, damage }) => {
+  { targetIdentity: t.identity(), isSkill: t.bool(), comboCount: t.u32() },
+  (ctx, { targetIdentity, isSkill, comboCount }) => {
     const attacker = requirePlayer(ctx);
     const target = ctx.db.player.identity.find(targetIdentity);
     if (!target) throw new SenderError('Target not found');
@@ -1112,9 +1116,13 @@ export const attackPlayer = spacetimedb.reducer(
       throw new SenderError('Target out of range');
     }
 
-    const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
-    const dealt = Math.min(clampedDamage, target.currentHealth);
-    ctx.db.pvpHit.insert({ target: targetIdentity, amount: dealt });
+    // Server owns the number (CRIT-07): intent in, resolvePlayerHit composes
+    // base → × crit (ctx.random) → clamp. No resistance profile for PVP (D3-03).
+    const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
+    const { amount, isCrit } = resolvePlayerHit(ctx, attacker, isSkill, combo, 'melee');
+    // D3-02: FULL computed amount, PRE-branch — killing blows float full strength.
+    ctx.db.pvpHit.insert({ target: targetIdentity, attacker: attacker.identity, amount, isCrit });
+    const dealt = Math.min(amount, target.currentHealth);
 
     const remainingHealth = target.currentHealth - dealt;
     if (remainingHealth > 0) {
