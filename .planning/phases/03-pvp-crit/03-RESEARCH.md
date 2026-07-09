@@ -425,16 +425,16 @@ spawnPlayerNumber(identityHex, amount, kind) {
 
 All other claims are `[VERIFIED: codebase]` (read directly this session) or `[CITED]` to official docs.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Does migrate-publish accept the extended `pvp_hit` on the live local DB?** (D3-01's explicit "verify on publish")
+1. **RESOLVED: acceptance-tested at first publish — Plan 03-02 Task 1 encodes the publish gate + this fallback ladder.** **Does migrate-publish accept the extended `pvp_hit` on the live local DB?** (D3-01's explicit "verify on publish")
    - What we know: docs require append-at-end + `.default()` for added columns `[CITED: spacetimedb.com/docs/databases/automatic-migrations/]`; both new columns can satisfy that; event tables hold zero rows so there is nothing to backfill.
    - What's unclear: whether the schema differ special-cases event tables at all (undocumented).
    - Recommendation: make the local publish the FIRST executed step of the implementation's deploy sequence (it is anyway). If rejected: (a) retry without `.default()` (in case event tables skip the default requirement), (b) empty-table drop+recreate — the project has removed an empty table before (`enemy_carry` precedent, CLAUDE.md), so publishing with `pvp_hit` renamed/replaced is a viable escape hatch since event tables never hold rows and are not in the backup set. Confirm post-publish with `spacetime describe 2d-impact-game-fr9ti table pvp_hit --json`.
 
-2. **Does `performSkill`'s effect pipeline pass a `kind` that keeps the attacker's local skill-hit number sensible?** Skill appliers pass `SKILL_DAMAGE_KIND` (`'skill'`, createEffectSystem.ts:289/332) into `applyPvpDamage`'s `kind` — unchanged behavior, but the playtest should confirm the attacker's local skill number + event-driven crit upgrade read well together (feel check, not correctness).
+2. **RESOLVED: playtest feel-check 5 in Plan 03-02 Task 2.** **Does `performSkill`'s effect pipeline pass a `kind` that keeps the attacker's local skill-hit number sensible?** Skill appliers pass `SKILL_DAMAGE_KIND` (`'skill'`, createEffectSystem.ts:289/332) into `applyPvpDamage`'s `kind` — unchanged behavior, but the playtest should confirm the attacker's local skill number + event-driven crit upgrade read well together (feel check, not correctness).
 
-3. **Doubled remote skill/projectile VFX during playtest** (skillCast/rangedAttack are also double-subscribed): pre-existing, out of scope — verify observers don't log it as a Phase-3 regression; consider capturing a cleanup todo.
+3. **RESOLVED: pre-existing, flagged not fixed — Plan 03-02 prohibition + playtest check 9.** **Doubled remote skill/projectile VFX during playtest** (skillCast/rangedAttack are also double-subscribed): pre-existing, out of scope — verify observers don't log it as a Phase-3 regression; consider capturing a cleanup todo.
 
 ## Project Constraints (from CLAUDE.md)
 

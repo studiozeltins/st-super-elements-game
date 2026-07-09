@@ -3,10 +3,11 @@ gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
 current_phase: 02
-status: completed
+status: executing
 stopped_at: Phase 03 context gathered
-last_updated: "2026-07-08T21:12:28.222Z"
-last_activity: 2026-07-08
+last_updated: "2026-07-09T06:27:57.019Z"
+last_activity: 2026-07-09
+last_activity_desc: Phase 03 planning complete
 progress:
   total_phases: 7
   completed_phases: 2
@@ -32,8 +33,8 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 
 Phase: 02 — COMPLETE
 Plan: 1 of 3
-Status: Phase 02 complete
-Last activity: 2026-07-08
+Status: Ready to execute
+Last activity: 2026-07-09 — Phase 03 planning complete
 
 ## Roadmap Summary
 
@@ -163,7 +164,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 ## Session Continuity
 
 Last session: 2026-07-08T21:12:28.192Z
-Stopped at: Phase 03 context gathered
+Stopped at: Phase 03 planned (2 plans); decision-coverage gate overridden (D3-NN prefix unparseable by gate; coverage verified by plan-checker dim 7)
 Resume file: .planning/phases/03-pvp-crit/03-CONTEXT.md
 
 ## Operator Next Steps
