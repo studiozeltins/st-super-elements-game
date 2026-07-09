@@ -893,7 +893,8 @@ function ownsCharacter(ctx: { db: any }, owner: any, characterId: string) {
   return owned.some(row => row.characterId === characterId);
 }
 
-function clampToWorld(coordinate: number) {
+// Exported for unitAttacks.ts (knockback destinations respect the same world bounds).
+export function clampToWorld(coordinate: number) {
   return Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, coordinate));
 }
 
@@ -1018,7 +1019,8 @@ function spillShards(
   });
 }
 
-function isInsideSafeZone(positionX: number, positionZ: number) {
+// Exported for unitAttacks.ts (attack targeting + strike resolution honor the same zone).
+export function isInsideSafeZone(positionX: number, positionZ: number) {
   return Math.hypot(positionX, positionZ) <= SAFE_ZONE_RADIUS;
 }
 
@@ -2720,7 +2722,8 @@ function runGoliathLifecycle(ctx: { db: any; random: any; sender: any; timestamp
   });
 }
 
-function aggroExpired(expiresAtMicros: bigint, nowMicros: bigint): boolean {
+// Exported for unitAttacks.ts (attack selection requires a LIVE aggro target).
+export function aggroExpired(expiresAtMicros: bigint, nowMicros: bigint): boolean {
   return expiresAtMicros !== 0n && nowMicros >= expiresAtMicros;
 }
 
