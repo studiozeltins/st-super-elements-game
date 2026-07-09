@@ -204,7 +204,38 @@ ANIM-01, ANIM-02, ANIM-03, ANIM-04, HIT-01
 
   5. On a MIGRATED (not freshly-seeded) DB over maincloud RTT, a real two-client engage creates
      `unit_attack` rows and the dodge stays fair — verified remotely, not just on LAN.
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans (one per wave — the spine is inherently sequential: pure helpers → schema → tick wiring →
+telegraph → animation → juice → live verification):
+
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — test-first pure helpers: `attacks.ts` (ATTACKS/UNIT_ATTACKS/selectAttack), `unitAttackFsm.ts` (deadline math, late-tick resolve), `attackHitbox.ts` (circle + knockback) + serverSync INV-5 extension
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 04-02-PLAN.md — additive schema (`unit_attack`, `attack_strike`, `player.stunnedUntilMicros` + stun guard) + `unitAttacks.ts` runUnitAttacks glue (lazy upsert, landing lock, grace resolution, knockback/stun)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 04-03-PLAN.md — wire runUnitAttacks into worldTick, DELETE goliath→player contact drain (ATK-05), local publish → generate → build
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 04-04-PLAN.md — createTelegraphSystem (outline + outward fill + rim flash, #86e2ff) + App.tsx/createGame unit_attack row plumbing
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [ ] 04-05-PLAN.md — optional `animateAttack` hook on EntityAnimation + goliath crouch/leap/slam procedural animation + attack-view plumbing
+
+**Wave 6** *(blocked on Wave 5)*
+
+- [ ] 04-06-PLAN.md — strike juice (burst + camera shake + WebAudio slam SFX) on attack_strike onInsert + client stun/knockback reconcile
+
+**Wave 7** *(blocked on Wave 6)*
+
+- [ ] 04-07-PLAN.md — verification capstone: local migrated-DB playtest (human), maincloud backup + additive publish, two-client RTT dodge-fairness playtest (human, SC5)
 **Notes**: Carries all integration risk. `runUnitAttacks` sits BETWEEN `worldTick`'s
 position-build pass and the single `playerDamage` apply, writing strike damage into that shared
 map (reuses resistance/death/shard-spill/respawn). The state machine is row-optional (iterate unit
