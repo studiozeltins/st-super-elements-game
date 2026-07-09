@@ -232,7 +232,7 @@ telegraph → animation → juice → live verification):
 
 **Wave 6** *(blocked on Wave 5)*
 
-- [ ] 04-06-PLAN.md — strike juice (burst + camera shake + WebAudio slam SFX) on attack_strike onInsert + client stun/knockback reconcile
+- [x] 04-06-PLAN.md — strike juice (burst + camera shake + WebAudio slam SFX) on attack_strike onInsert + client stun/knockback reconcile
 
 **Wave 7** *(blocked on Wave 6)*
 
@@ -322,7 +322,7 @@ do NOT elevate an untrusted bool to a state trigger.
 | 1. Crit stats + server damage foundation | 3/3 | Complete   | 2026-07-08 |
 | 2. Server-authoritative damage + crit on enemies | 0/TBD | Not started | - |
 | 3. PVP crit | 2/2 | Complete    | 2026-07-09 |
-| 4. Attack state machine + leapSlam + delete drain | 5/7 | In Progress|  |
+| 4. Attack state machine + leapSlam + delete drain | 6/7 | In Progress|  |
 | 5. swordSwing → swordSwirl combo | 0/TBD | Not started | - |
 | 6. shieldDash lane | 0/TBD | Not started | - |
 | 7. Crit poise interrupt | 0/TBD | Not started | - |

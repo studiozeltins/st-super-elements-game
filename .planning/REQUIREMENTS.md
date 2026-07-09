@@ -48,7 +48,7 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 - [x] **ANIM-01**: The client renders a ground telegraph per attack (circle / cone / lane) that fills over the windup, with timing re-derived from the server row (`(now − startedAt)/duration`) — never a client-local timer.
 - [x] **ANIM-02**: Telegraphs are legible through the pixel filter at target resolution (high-contrast cue, e.g. icy-cyan `#86e2ff`), verified through the filter, not raw Three.js.
 - [x] **ANIM-03**: A shared procedural animation state machine (idle/move/windup/strike/recovery) drives both enemy and goliath meshes per attack phase via an `animateAttack` hook on `EntityAnimation`, built so heroes reuse it later with zero schema change.
-- [ ] **ANIM-04**: Per-attack strike VFX/SFX fire once on the `attack_strike` event (`onInsert` only), mirroring the existing `skill_cast`/`ranged_attack` pattern.
+- [x] **ANIM-04**: Per-attack strike VFX/SFX fire once on the `attack_strike` event (`onInsert` only), mirroring the existing `skill_cast`/`ranged_attack` pattern.
 
 ### Hit Reaction (HIT)
 
@@ -117,7 +117,7 @@ damage; attack shapes + interrupt in Phases 4–7).
 | ANIM-01 | Phase 4 | Complete |
 | ANIM-02 | Phase 4 | Complete |
 | ANIM-03 | Phase 4 | Complete |
-| ANIM-04 | Phase 4 | Pending |
+| ANIM-04 | Phase 4 | Complete |
 | HIT-01 | Phase 4 | Complete |
 | ATK-02 | Phase 5 | Pending |
 | ATK-03 | Phase 5 | Pending |
