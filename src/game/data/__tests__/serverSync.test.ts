@@ -26,6 +26,8 @@ import {
   skillAttackMultiplier as serverSkill,
   transcendDamageMultiplier as serverTranscend,
 } from '../../../../spacetimedb/src/damage';
+import { ATTACKS } from '../../../../spacetimedb/src/attacks';
+import { GOLIATH_SIZE_STATS } from '../../../../spacetimedb/src/enemyStats';
 import {
   GACHA_PULL_COST,
   MAX_HEALTH,
@@ -334,4 +336,31 @@ describe('server CHARACTER_COMBAT mirror stays in sync with client CHARACTERS', 
       expect(CHARACTER_COMBAT[id].skillCooldownSeconds).toBe(character.skill.cooldownSeconds);
     }
   );
+});
+
+// INV-5 / D4-04..07: the ATTACKS registry drives BOTH the server FSM and every
+// client-rendered telegraph/animation duration (rows are denormalized from it),
+// so its internal invariants + the per-size damage arithmetic are release-blocking.
+// Import-and-compare across the package boundary, same mechanism as damage.ts above.
+describe('ATTACKS registry invariants (INV-5)', () => {
+  it.each(Object.entries(ATTACKS))(
+    '%s durations are exact tick multiples with the >= 2-tick windup floor',
+    (_, spec) => {
+      expect(Number.isInteger(spec.windupTicks)).toBe(true);
+      expect(spec.windupTicks).toBeGreaterThanOrEqual(2); // >= 0.35s lock (FSM-05)
+      expect(Number.isInteger(spec.recoveryTicks)).toBe(true);
+    }
+  );
+
+  it('leapSlam damage = 4.5x per-size contactDamage -> 405/585/765 (D4-04)', () => {
+    expect(
+      GOLIATH_SIZE_STATS.map(size =>
+        Math.round(size.contactDamage * ATTACKS.leapSlam.damageMultiplier)
+      )
+    ).toEqual([405, 585, 765]);
+  });
+
+  it('leapSlam radius array covers every goliath size (D4-05)', () => {
+    expect(ATTACKS.leapSlam.radiusBySize).toHaveLength(GOLIATH_SIZE_STATS.length);
+  });
 });
