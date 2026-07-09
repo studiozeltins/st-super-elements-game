@@ -25,6 +25,7 @@ import { resolveTranscendInstall } from './transcendInstall';
 import { resolveDupeGrant } from './gachaOverflow';
 import { applyDeathShardPenalty } from './deathPenalty';
 import { nextLeader, canAccept } from './partyRules';
+import { runUnitAttacks } from './unitAttacks';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -272,7 +273,6 @@ const GOLIATH_SPLASH_RANGE = 4.0; // the largest raider hits everything in here
 // fresh camp gang up and eventually overpower a wounded goliath.
 const GOLIATH_ENGAGE_RANGE = 8.0;
 const ENEMY_PLAYER_CONTACT_RANGE = 1.8; // camp member ↔ player it is chasing
-const GOLIATH_PLAYER_CONTACT_RANGE = 2.6; // goliath ↔ a player who provoked it (bigger reach)
 // Idle patrol: an un-aggro'd camp member walks a slow deterministic loop around its
 // home post instead of standing frozen at the fire. Radius + period are shared by
 // all members; each member's phase is derived from its id so the camp fans out.
@@ -3184,6 +3184,20 @@ export const worldTick = spacetimedb.reducer(
       });
     }
 
+    // Player-directed damage from strikes (attack FSM below) and enemy bites
+    // (pass 4) accumulates in ONE map so the single apply loop at the bottom
+    // (resist 'contact' → death → spill → respawn) stays the only damage sink.
+    const playerDamage = new Map<string, number>();
+
+    // Attack FSM pass (FSM-01): windup → strike → recovery for every live
+    // goliath. Runs AFTER the position-build passes — it overrides entries in
+    // goliathPosition/goliathHeading (root during windup, leap at strike) that
+    // the goliath apply loop persists — and BEFORE every damage consumer, so
+    // slam damage lands in playerDamage ahead of the single apply (ATK-05:
+    // strikes are now the ONLY goliath→player damage source; the old per-tick
+    // contact drain is deleted).
+    runUnitAttacks(ctx, now, tick, goliaths, goliathPosition, goliathHeading, playerByHex, playerDamage);
+
     // Pass 3 — goliaths raid the camp. Proximity RALLIES every nearby member to
     // defend (soft aggro); the STRIKE lands on all members in splash range for the
     // largest raider, else on its nearest member. A member that actually takes a
@@ -3222,7 +3236,6 @@ export const worldTick = spacetimedb.reducer(
     // it; one aggroed to a player (in reach, player outside the safe zone) hurts
     // the player. Player-directed damage is summed for a single apply below.
     const goliathDamage = new Map<bigint, number>();
-    const playerDamage = new Map<string, number>();
     for (const enemyRow of enemies) {
       const expired = aggroExpired(enemyRow.aggroExpiresAtMicros, now);
       if (expired) continue;
@@ -3240,18 +3253,6 @@ export const worldTick = spacetimedb.reducer(
         if (distanceBetween(from.x, from.z, chased.positionX, chased.positionZ) > ENEMY_PLAYER_CONTACT_RANGE) continue;
         playerDamage.set(hex, (playerDamage.get(hex) ?? 0) + damagePerTick(enemyRow.contactDamage, tick));
       }
-    }
-
-    // Pass 4b — a provoked goliath hammers the player who hit it (brutal), as long
-    // as the aggro is live and that player is out in the open (not the safe zone).
-    for (const goliathRow of goliaths) {
-      if (aggroExpired(goliathRow.aggroExpiresAtMicros, now) || !goliathRow.aggroPlayer) continue;
-      const hex = goliathRow.aggroPlayer.toHexString();
-      const chased = playerByHex.get(hex);
-      if (!chased || isInsideSafeZone(chased.positionX, chased.positionZ)) continue;
-      const from = goliathPosition.get(goliathRow.goliathId)!;
-      if (distanceBetween(from.x, from.z, chased.positionX, chased.positionZ) > GOLIATH_PLAYER_CONTACT_RANGE) continue;
-      playerDamage.set(hex, (playerDamage.get(hex) ?? 0) + damagePerTick(goliathRow.contactDamage, tick));
     }
 
     // Nearest open-field (non-safe-zone) player within aggro range, or null.
