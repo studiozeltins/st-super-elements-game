@@ -772,9 +772,22 @@ export function createGame(
     effectSystem.spawnBurst(playerPosition.clone().setY(playerPosition.y + 0.5), 0xd8b48a, 16);
   }
 
+  // HIT-01 client half (D4-10): a RAISED stunnedUntilMicros on my own server row
+  // opens this render-side stun window — input freezes and x/z lerp toward the
+  // authoritative row, so the knockback displacement the server wrote is what
+  // the victim sees. 300ms = ATTACKS.leapSlam.stunTicks (2) × the 150ms world
+  // tick. The real control stays server-side: updatePosition writes are rejected
+  // while now < stunnedUntilMicros (Plan 02); this is only the felt half.
+  const STUN_RENDER_MS = 300;
+  const STUN_LERP_RATE = 12;
+  let stunActiveUntilPerfMs = 0;
+  let lastStunnedUntilMicros = 0n;
+  const stunServerPosition = new THREE.Vector3();
+
   function updateLocalPlayer(deltaSeconds: number) {
+    const isStunned = performance.now() < stunActiveUntilPerfMs;
     const moveVector = inputSystem.getMoveVector();
-    const isMoving = Math.hypot(moveVector.x, moveVector.z) > 0.05;
+    const isMoving = !isStunned && Math.hypot(moveVector.x, moveVector.z) > 0.05;
     if (isMoving) {
       // Rotate screen-space input by the camera yaw so "up" moves away from the camera.
       const worldMoveX =
@@ -787,7 +800,16 @@ export function createGame(
       playerRotationY = Math.atan2(worldMoveX, worldMoveZ);
     }
 
-    if (inputSystem.consumeJump() && isGrounded()) {
+    // Stunned: adopt the server's knockback — lerp x/z toward the authoritative
+    // row. y stays locally owned (gravity below), so a knockback past an edge
+    // still falls and dies through the existing VOID_KILL_DEPTH path (D4-11).
+    if (isStunned) {
+      const pull = Math.min(1, deltaSeconds * STUN_LERP_RATE);
+      playerPosition.x += (stunServerPosition.x - playerPosition.x) * pull;
+      playerPosition.z += (stunServerPosition.z - playerPosition.z) * pull;
+    }
+
+    if (!isStunned && inputSystem.consumeJump() && isGrounded()) {
       playerVelocityY = JUMP_VELOCITY;
     }
     playerVelocityY -= GRAVITY * deltaSeconds;
@@ -807,10 +829,14 @@ export function createGame(
 
     // Only drain one queued click per input-cooldown so rapid clicks buffer
     // instead of being eaten within a single frame.
-    if (elapsedSeconds - lastSwingAt >= COMBO_INPUT_COOLDOWN_SECONDS && inputSystem.consumeAttackClick()) {
+    if (
+      !isStunned &&
+      elapsedSeconds - lastSwingAt >= COMBO_INPUT_COOLDOWN_SECONDS &&
+      inputSystem.consumeAttackClick()
+    ) {
       performAttack();
     }
-    if (inputSystem.consumeSkill()) performSkill();
+    if (!isStunned && inputSystem.consumeSkill()) performSkill();
     const requestedSlot = inputSystem.consumePartySlot();
     if (requestedSlot !== null) game.onPartySlotRequested?.(requestedSlot);
 
@@ -1224,6 +1250,14 @@ export function createGame(
       lastSyncedCharacterId = row.activeCharacterId;
       myServerHealth = row.currentHealth;
       const serverPosition = new THREE.Vector3(row.positionX, row.positionY, row.positionZ);
+      // HIT-01: a RAISED stunnedUntilMicros means a fresh knockback landed on me
+      // — open the render stun window; the freshest server row is the lerp
+      // target updateLocalPlayer pulls toward while the window is active.
+      if (row.stunnedUntilMicros > lastStunnedUntilMicros) {
+        stunActiveUntilPerfMs = performance.now() + STUN_RENDER_MS;
+      }
+      lastStunnedUntilMicros = row.stunnedUntilMicros;
+      stunServerPosition.copy(serverPosition);
       const isFarFromServer =
         playerPosition.distanceTo(serverPosition) > SERVER_TELEPORT_THRESHOLD;
       const voidRespawnConfirmed =
