@@ -5,8 +5,8 @@ milestone_name: Combat Depth
 current_phase: 4
 current_phase_name: Attack state machine + leapSlam end-to-end + delete goliath drain
 status: verifying
-stopped_at: Phase 03 planned (2 plans); decision-coverage gate overridden (D3-NN prefix unparseable by gate; coverage verified by plan-checker dim 7)
-last_updated: "2026-07-09T07:09:58.660Z"
+stopped_at: Phase 4 context gathered
+last_updated: "2026-07-09T10:09:13.649Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
@@ -167,9 +167,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-09T06:50:57.521Z
-Stopped at: Phase 03 planned (2 plans); decision-coverage gate overridden (D3-NN prefix unparseable by gate; coverage verified by plan-checker dim 7)
-Resume file: .planning/phases/03-pvp-crit/03-CONTEXT.md
+Last session: 2026-07-09T10:09:13.622Z
+Stopped at: Phase 4 context gathered
+Resume file: .planning/phases/04-attack-state-machine-leapslam-end-to-end-delete-goliath-drai/04-CONTEXT.md
 
 ## Operator Next Steps
 
