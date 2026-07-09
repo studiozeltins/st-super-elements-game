@@ -27,16 +27,16 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### Attack State Machine (FSM) — unit-agnostic core
 
-- [ ] **FSM-01**: Every attacking unit runs a `windup → strike → recovery` state machine on the server world tick, stored in a public unit-agnostic `unit_attack` table (`unitKind`/`unitId`).
-- [ ] **FSM-02**: Strike damage resolves once at the strike frame against LIVE player positions — a player who leaves the hitbox during windup takes no damage.
+- [x] **FSM-01**: Every attacking unit runs a `windup → strike → recovery` state machine on the server world tick, stored in a public unit-agnostic `unit_attack` table (`unitKind`/`unitId`).
+- [x] **FSM-02**: Strike damage resolves once at the strike frame against LIVE player positions — a player who leaves the hitbox during windup takes no damage.
 - [x] **FSM-03**: An idle unit with a target in engage range and off cooldown selects an attack via one range/cooldown selection fn (`(distance, cooldownUntil, available[]) → attackId`).
 - [x] **FSM-04**: Attacks are data-driven — an `ATTACKS` registry (shape, windup/active/recovery/cooldown, hitbox, damage, `move`, `poiseThreshold`) + per-archetype `UNIT_ATTACKS[unitKind][archetype]` lists; a new attack is one entry, a new unit is one list.
 - [x] **FSM-05**: The FSM is deterministic — keyed on the server clock (`ctx.timestamp`, deterministic server time in microseconds) sampled once per tick, windups authored as exact tick multiples, and a strike whose deadline a late/coalesced tick already passed is resolved (never dropped).
-- [ ] **FSM-06**: The `unit_attack` + `attack_strike` tables are additive and deploy to a live (migrated, not freshly-seeded) DB; the FSM lazily creates attack state by iterating the unit tables, never the empty attack table.
+- [x] **FSM-06**: The `unit_attack` + `attack_strike` tables are additive and deploy to a live (migrated, not freshly-seeded) DB; the FSM lazily creates attack state by iterating the unit tables, never the empty attack table.
 
 ### Attack Roster & Hitboxes (ATK) — goliath v1
 
-- [ ] **ATK-01**: `leapSlam` — a circle AOE at a LOCKED landing (position sampled at cast; dodge by not being there when it lands).
+- [x] **ATK-01**: `leapSlam` — a circle AOE at a LOCKED landing (position sampled at cast; dodge by not being there when it lands).
 - [ ] **ATK-02**: `swordSwing` — a frontal cone resolved vs live positions (close-range poke).
 - [ ] **ATK-03**: `swordSwirl` — a 360° circle that chains immediately after `swordSwing`.
 - [ ] **ATK-04**: `shieldDash` — a lane/capsule moving hitbox gap-closer (`move:'charge'` body commit) resolved along the charge path.
@@ -52,7 +52,7 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 
 ### Hit Reaction (HIT)
 
-- [ ] **HIT-01**: A landed strike knocks back and/or briefly stuns the hit player (weight feedback), server-authoritative and rendered client-side.
+- [x] **HIT-01**: A landed strike knocks back and/or briefly stuns the hit player (weight feedback), server-authoritative and rendered client-side.
 
 ### Poise Interrupt (POISE) — the differentiator
 
@@ -105,20 +105,20 @@ damage; attack shapes + interrupt in Phases 4–7).
 | CRIT-05 | Phase 2 | Complete |
 | CRIT-06 | Phase 2 | Complete |
 | CRIT-07 | Phase 3 | Complete |
-| FSM-01 | Phase 4 | Pending |
-| FSM-02 | Phase 4 | Pending |
+| FSM-01 | Phase 4 | Complete |
+| FSM-02 | Phase 4 | Complete |
 | FSM-03 | Phase 4 | Complete |
 | FSM-04 | Phase 4 | Complete |
 | FSM-05 | Phase 4 | Complete |
-| FSM-06 | Phase 4 | Pending |
-| ATK-01 | Phase 4 | Pending |
+| FSM-06 | Phase 4 | Complete |
+| ATK-01 | Phase 4 | Complete |
 | ATK-05 | Phase 4 | Pending |
 | ATK-06 | Phases 4–6 (circle: P4, cone: P5, lane: P6) | Complete |
 | ANIM-01 | Phase 4 | Pending |
 | ANIM-02 | Phase 4 | Pending |
 | ANIM-03 | Phase 4 | Pending |
 | ANIM-04 | Phase 4 | Pending |
-| HIT-01 | Phase 4 | Pending |
+| HIT-01 | Phase 4 | Complete |
 | ATK-02 | Phase 5 | Pending |
 | ATK-03 | Phase 5 | Pending |
 | ATK-04 | Phase 6 | Pending |

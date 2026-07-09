@@ -6,14 +6,14 @@ current_phase: 04
 current_phase_name: attack-state-machine-leapslam-end-to-end-delete-goliath-drai
 status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-07-09T11:48:33.787Z"
+last_updated: "2026-07-09T12:01:19.995Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 04 execution started
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 15
-  completed_plans: 9
+  completed_plans: 10
   percent: 43
 ---
 
@@ -32,7 +32,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 ## Current Position
 
 Phase: 04 (attack-state-machine-leapslam-end-to-end-delete-goliath-drai) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-07-09 — Phase 04 execution started
 
@@ -77,6 +77,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | Phase 03 P01 | 6 min | 3 tasks | 8 files |
 | Phase 03 P02 | ~9min | 2 tasks | 0 files |
 | Phase 04 P01 | 7min | 3 tasks | 7 files |
+| Phase 04 P02 | 10min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 03]: D3-01 resolved: additive .default() columns on an event table pass SpacetimeDB automatic migration on a populated DB — The 03-02 additive publish of extended pvp_hit was accepted as UPDATE of the populated local DB (no wipe, no fallback ladder) — future event-table migrations can append .default() columns directly
 - [Phase 04]: 04-01: dueAttackTransitions cascades fully to IDLE — a coalesced tick jumped past every deadline emits [STRIKE, RECOVERY, IDLE] in one ordered call (FSM-05 resolve-never-drop)
 - [Phase 04]: 04-01: grace deadline is derived per call (graceDeadline(row.strikeAtMicros, spec.graceTicks, tick)), never stored — D4-02 zero-storage grace; recoveryEndsAtMicros written only at windup entry
+- [Phase ?]: 04-02: dead-row hygiene scans unit_attack via a local alias; FSM driver iterates the live-goliath list (FSM-06)
+- [Phase ?]: 04-02: grace resolution re-finds victim rows live via player.identity.find instead of the tick-start snapshot (D4-02)
+- [Phase ?]: 04-02: src/unitAttacks.ts added to spacetimedb tsconfig include until Plan 03 wires the import
 
 ### Pending Todos
 
@@ -170,7 +174,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-09T11:47:50.617Z
+Last session: 2026-07-09T12:00:41.030Z
 Stopped at: Phase 4 planned (7 plans, checker passed iteration 2)
 Resume file: .planning/phases/04-attack-state-machine-leapslam-end-to-end-delete-goliath-drai/04-CONTEXT.md
 
