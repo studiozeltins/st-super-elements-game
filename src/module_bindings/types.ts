@@ -199,6 +199,8 @@ export type Puppet = __Infer<typeof Puppet>;
 export const PvpHit = __t.object("PvpHit", {
   target: __t.identity(),
   amount: __t.u32(),
+  attacker: __t.identity(),
+  isCrit: __t.bool(),
 });
 export type PvpHit = __Infer<typeof PvpHit>;
 

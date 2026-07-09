@@ -71,7 +71,12 @@ export interface GameNetworkActions {
     directionX: number,
     directionZ: number
   ): void;
-  sendAttackPlayer(target: Player, damage: number): void;
+  /**
+   * The local player landed a PVP hit. The server owns the damage number and
+   * the crit roll — this reports the INTENT (skill-vs-basic + combo) only; a
+   * modified client can no longer author its own PVP damage.
+   */
+  sendAttackPlayer(target: Player, isSkill: boolean, comboCount: number): void;
   sendTakeDamage(damage: number): void;
   sendHeal(amount: number): void;
   /** Trigger a healer character's party heal (combo only matters for combo-mode). */
@@ -381,7 +386,7 @@ export function createGame(
     // detection only drives combo + facing; PvP still sends its own local number.
     network.sendAttackEnemies(center.x, center.z, radius, isSkill, combo);
     const hitEntity = anyEntityWithinRadius(center, radius);
-    const hitPlayer = applyPvpDamage(center, radius, damage, kind);
+    const hitPlayer = applyPvpDamage(center, radius, damage, kind, isSkill);
     return hitEntity || hitPlayer;
   }
 
@@ -401,7 +406,7 @@ export function createGame(
   // reaches a target) and ranged PvP, WITHOUT re-sending enemy damage per frame.
   const applyRangedProjectileHit: DamageApplier = (center, radius, damage, _element, kind) => {
     const hitEntity = anyEntityWithinRadius(center, radius);
-    const hitPlayer = applyPvpDamage(center, radius, damage, kind);
+    const hitPlayer = applyPvpDamage(center, radius, damage, kind, false);
     const hit = hitEntity || hitPlayer;
     if (hit) registerComboHit();
     return hit;
@@ -416,7 +421,8 @@ export function createGame(
     center: { x: number; y: number; z: number },
     radius: number,
     damage: number,
-    kind: DamageKind
+    kind: DamageKind,
+    isSkill: boolean
   ): boolean {
     if (isInsideSafeZone(playerPosition.x, playerPosition.z)) return false;
     let hitSomeone = false;
@@ -432,8 +438,10 @@ export function createGame(
       if (distance > radius + 0.8) continue;
       remotePlayer.lastPvpHitAt = elapsedSeconds;
       hitSomeone = true;
-      network.sendAttackPlayer(remotePlayer.row, Math.round(damage));
+      network.sendAttackPlayer(remotePlayer.row, isSkill, combo);
       effectSystem.spawnBurst(remotePosition.clone().setY(1.2), 0xff4a4a, 14);
+      // Instant local display number (D3-05) — the server pvp_hit event is the
+      // truth; our own non-crit echo is suppressed in the App.tsx callback.
       damageNumbers.spawn(remotePosition.clone().setY(remotePosition.y + 1), damage, kind);
     }
     return hitSomeone;

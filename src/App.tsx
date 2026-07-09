@@ -626,8 +626,8 @@ export default function App() {
           connection.reducers.updatePosition({ positionX, positionY, positionZ, rotationY }),
         sendCastSkill: (skillId, originX, originZ, directionX, directionZ) =>
           connection.reducers.castSkill({ skillId, originX, originZ, directionX, directionZ }),
-        sendAttackPlayer: (target, damage) =>
-          connection.reducers.attackPlayer({ targetIdentity: target.identity, damage }),
+        sendAttackPlayer: (target, isSkill, comboCount) =>
+          connection.reducers.attackPlayer({ targetIdentity: target.identity, isSkill, comboCount }),
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
         sendHealParty: comboCount => connection.reducers.healParty({ comboCount }),
