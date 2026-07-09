@@ -42,8 +42,13 @@ import {
   WORLD_BOUND,
 } from '../constants';
 
-// Vitest runs with the project root as cwd.
-const SERVER_SOURCE = readFileSync(resolve(process.cwd(), 'spacetimedb/src/index.ts'), 'utf8');
+// Vitest runs with the project root as cwd. worldRules.ts is scanned too:
+// SAFE_ZONE_RADIUS (and the shared world predicates) were carved out of
+// index.ts in 04-03 because SpacetimeDB rejects plain helper exports from the
+// module entry file.
+const SERVER_SOURCE =
+  readFileSync(resolve(process.cwd(), 'spacetimedb/src/index.ts'), 'utf8') +
+  readFileSync(resolve(process.cwd(), 'spacetimedb/src/worldRules.ts'), 'utf8');
 
 interface ServerStat {
   stars: number;

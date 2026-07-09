@@ -21,7 +21,7 @@ import { dueAttackTransitions, enterWindup, graceDeadline, stunDeadline } from '
 import { knockbackDisplacement, resolveCircleHit } from './attackHitbox';
 import { distanceBetween } from './combatMath';
 import { headingFromStep } from './goliathAI';
-import { aggroExpired, clampToWorld, isInsideSafeZone } from './index';
+import { aggroExpired, clampToWorld, isInsideSafeZone } from './worldRules';
 
 // An idle unit_attack row for a unit that has never attacked (lazy upsert seed).
 function idleAttackRow(unitKind: number, unitId: bigint) {

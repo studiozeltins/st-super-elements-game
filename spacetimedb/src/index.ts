@@ -26,6 +26,7 @@ import { resolveDupeGrant } from './gachaOverflow';
 import { applyDeathShardPenalty } from './deathPenalty';
 import { nextLeader, canAccept } from './partyRules';
 import { runUnitAttacks } from './unitAttacks';
+import { aggroExpired, clampToWorld, isInsideSafeZone } from './worldRules';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -131,8 +132,8 @@ const FEATURED_5STAR_WIN = 0.55;
 const FOUR_STAR_CHARACTER_SHARE = 0.5;
 const MAX_PULLS_PER_REQUEST = 10;
 // Keep in sync with src/game/data/constants.ts (archipelago extent).
+// MOVEMENT_LIMIT lives in worldRules.ts (shared with unitAttacks.ts via clampToWorld).
 const WORLD_BOUND = 130;
-const MOVEMENT_LIMIT = 135;
 const VOID_DEATH_DEPTH = -10;
 const MAX_VERTICAL_STEP = 8;
 
@@ -151,7 +152,6 @@ function isOverAnyIsland(positionX: number, positionZ: number) {
       Math.hypot(positionX - island.centerX, positionZ - island.centerZ) <= island.radius
   );
 }
-const SAFE_ZONE_RADIUS = 18;
 const SPAWN_X = 6;
 const SPAWN_Z = 6;
 const DEFAULT_MAX_HEALTH = 1000;
@@ -893,11 +893,6 @@ function ownsCharacter(ctx: { db: any }, owner: any, characterId: string) {
   return owned.some(row => row.characterId === characterId);
 }
 
-// Exported for unitAttacks.ts (knockback destinations respect the same world bounds).
-export function clampToWorld(coordinate: number) {
-  return Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, coordinate));
-}
-
 function findOwnedRow(ctx: { db: any }, targetPlayer: any, characterId: string) {
   return [...ctx.db.ownedCharacter.owner.filter(targetPlayer.identity)].find(
     (row: any) => row.characterId === characterId
@@ -1017,11 +1012,6 @@ function spillShards(
     droppedBy,
     droppedAtMicros: ctx.timestamp.microsSinceUnixEpoch,
   });
-}
-
-// Exported for unitAttacks.ts (attack targeting + strike resolution honor the same zone).
-export function isInsideSafeZone(positionX: number, positionZ: number) {
-  return Math.hypot(positionX, positionZ) <= SAFE_ZONE_RADIUS;
 }
 
 function distanceBetweenPlayers(playerA: any, playerB: any) {
@@ -2720,11 +2710,6 @@ function runGoliathLifecycle(ctx: { db: any; random: any; sender: any; timestamp
       windowBucket,
     });
   });
-}
-
-// Exported for unitAttacks.ts (attack selection requires a LIVE aggro target).
-export function aggroExpired(expiresAtMicros: bigint, nowMicros: bigint): boolean {
-  return expiresAtMicros !== 0n && nowMicros >= expiresAtMicros;
 }
 
 // Two optional identities are equal when both are absent or share a hex.
