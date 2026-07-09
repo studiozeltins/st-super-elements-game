@@ -182,7 +182,8 @@ recovery) spine (schema → tick pass-ordering → subscription → telegraph �
 drain deletion) proven end-to-end on a SINGLE attack.
 **Depends on**: Phase 2 (shares the combat path; the poise column established here consumes
 Phase 2's server-owned `isCrit` in Phase 7)
-**Requirements**: FSM-01, FSM-02, FSM-03, FSM-04, FSM-05, FSM-06, ATK-01, ATK-05, ATK-06,
+**Requirements**: FSM-01, FSM-02, FSM-03, FSM-04, FSM-05, FSM-06, ATK-01, ATK-05, ATK-06
+(Phase-4 share: circle resolver only — cone/lane land in Phases 5/6, no dead stubs),
 ANIM-01, ANIM-02, ANIM-03, ANIM-04, HIT-01
 **Success Criteria** (what must be TRUE):
 

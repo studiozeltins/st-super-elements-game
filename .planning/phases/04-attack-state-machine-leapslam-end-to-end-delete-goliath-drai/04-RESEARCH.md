@@ -694,22 +694,36 @@ if (stunned) {
 | A5 | Client stun rendering via self-row reconcile (no new event payload for victims) is acceptable UX at 10Hz row sync | Pattern 5 | If knockback feels late on the victim's screen, add knockback fields to `attack_strike` for client-side prediction — additive, no schema risk |
 | A6 | `strikeResolved`/deferred-resolution satisfies FSM-02's "resolves once at the strike frame" reading (one resolution, at the grace deadline) | Pattern 3 | If reviewers read FSM-02 literally (damage at strikeAt exactly), use resolve-at-T-no-grace… which contradicts D4-02; the CONTEXT decision (D4-02) outranks — flag in plan for verifier awareness |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All four questions were resolved during planning — picks recorded inline:
 
 1. **Grace mechanics final form (planner must pick, discretion granted):** Pattern 3 recommends
    single resolution at `strikeAt + 1 grace tick` vs live positions (zero storage). The
    alternative (true two-sample AND) needs a private snapshot table. Recommendation: ship the
    zero-storage form; the SC5 maincloud playtest is the acceptance test either way.
+   **RESOLVED — zero-storage grace picked:** single resolution at the grace deadline vs live
+   positions (04-01 `graceDeadline` helper, 04-02 step 5 glue); no snapshot table. SC5 (04-07 T3)
+   validates fairness over real RTT; A2 fallback (bump `graceTicks` to 2) remains a data-only
+   retune.
 2. **SFX scope:** No audio system exists anywhere in `src/` (grep-verified). Options: (a) ~50-LOC
    WebAudio procedural thump (`createAudioSystem.ts`, AudioContext resumed on first user gesture —
    the game already has click/touch input); (b) descope SFX from SC3 with user sign-off.
    Recommendation: (a) — small, zero-dep, and SC3 explicitly says "VFX/SFX".
+   **RESOLVED — option (a) in scope:** zero-asset, zero-dep WebAudio one-shot
+   (`src/game/audio/createAudioSystem.ts`, plan 04-06 T1), AudioContext resumed on first user
+   gesture. No descope waiver needed.
 3. **Camera shake taste (D4-15 "needs a taste pass"):** implement as a decaying offset added to
    `desiredPosition` before the camera lerp (createGame.ts:838) — magnitude ~0.15–0.25u,
    ~0.25s decay; human-verify checkpoint tunes it. Not blocking.
+   **RESOLVED — as recommended:** decaying camera-offset shake implemented in 04-06 T2; taste
+   tuned at the 04-07 T1 human-verify checkpoint.
 4. **`GOLIATH_PLAYER_CONTACT_RANGE` afterlife:** dies with pass 4b unless referenced elsewhere
    (grep at execution time). If the selection fn wants a point-blank band edge, define a NEW named
    const in attacks.ts rather than reusing the drain-era one.
+   **RESOLVED — constant deleted:** the drain-era const dies with pass 4b in 04-03 T1
+   (grep-gated to zero occurrences in index.ts); no reuse — leapSlam's `minBand: 0` covers
+   point-blank, so no replacement const is needed.
 
 ## Environment Availability
 
