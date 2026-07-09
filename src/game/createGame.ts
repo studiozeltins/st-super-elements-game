@@ -167,7 +167,12 @@ interface RemotePlayerView {
   row: Player;
   targetPosition: THREE.Vector3;
   targetRotationY: number;
-  lastPvpHitAt: number;
+  // Two timestamps, deliberately separate: the send-rate gate must only ever be
+  // re-armed by OUR OWN outgoing attackPlayer — if it shared a field with the
+  // display flash, every broadcast pvp_hit on this victim (rival attackers, our
+  // own event echo) would re-arm our 0.3s lockout and swallow our swings.
+  lastPvpSentAt: number; // local send-rate gate (applyPvpDamage only)
+  lastPvpHitShownAt: number; // health-bar flash display (any pvp_hit broadcast)
   healthBar: HealthBar;
 }
 
@@ -433,12 +438,13 @@ export function createGame(
       if (partyAllyHexes.has(remoteHex)) continue;
       const remotePosition = remotePlayer.model.group.position;
       if (isInsideSafeZone(remotePosition.x, remotePosition.z)) continue;
-      if (elapsedSeconds < remotePlayer.lastPvpHitAt + PVP_HIT_COOLDOWN_SECONDS) continue;
+      if (elapsedSeconds < remotePlayer.lastPvpSentAt + PVP_HIT_COOLDOWN_SECONDS) continue;
       if (playerPosition.distanceTo(remotePosition) > PVP_MAX_HIT_RANGE) continue;
       if (Math.abs(remotePosition.y + 1 - center.y) > VERTICAL_HIT_GATE) continue;
       const distance = Math.hypot(remotePosition.x - center.x, remotePosition.z - center.z);
       if (distance > radius + 0.8) continue;
-      remotePlayer.lastPvpHitAt = elapsedSeconds;
+      remotePlayer.lastPvpSentAt = elapsedSeconds;
+      remotePlayer.lastPvpHitShownAt = elapsedSeconds;
       hitSomeone = true;
       network.sendAttackPlayer(remotePlayer.row, isSkill, combo);
       effectSystem.spawnBurst(remotePosition.clone().setY(1.2), 0xff4a4a, 14);
@@ -818,7 +824,7 @@ export function createGame(
       remotePlayer.model.animate(elapsedSeconds, deltaSeconds, isMoving);
 
       // Show a health bar for 5s after this player was last hit in PVP.
-      const showBar = elapsedSeconds - remotePlayer.lastPvpHitAt < 5;
+      const showBar = elapsedSeconds - remotePlayer.lastPvpHitShownAt < 5;
       remotePlayer.healthBar.sprite.visible = showBar;
       if (showBar) {
         const maxHealth = CHARACTERS[remotePlayer.characterId]?.maxHealth ?? MAX_HEALTH;
@@ -1010,7 +1016,8 @@ export function createGame(
             row,
             targetPosition: new THREE.Vector3(row.positionX, row.positionY, row.positionZ),
             targetRotationY: row.rotationY,
-            lastPvpHitAt: 0,
+            lastPvpSentAt: 0,
+            lastPvpHitShownAt: 0,
             healthBar,
           });
           continue;
@@ -1076,8 +1083,11 @@ export function createGame(
       damageNumbers.spawn(new THREE.Vector3(positionX, 1.2, positionZ), amount, kind);
     },
     flashRemoteHealth(identityHex) {
+      // Display only — must NOT touch lastPvpSentAt: this fires for every
+      // broadcast pvp_hit (rival attackers, our own echo) and would otherwise
+      // re-arm our local send-rate gate on the shared victim.
       const view = remotePlayers.get(identityHex);
-      if (view) view.lastPvpHitAt = elapsedSeconds;
+      if (view) view.lastPvpHitShownAt = elapsedSeconds;
     },
     spawnPlayerNumber(identityHex, amount, kind) {
       const view = remotePlayers.get(identityHex);
