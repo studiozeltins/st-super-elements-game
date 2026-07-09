@@ -51,7 +51,7 @@ export const ATTACKS: Record<string, AttackSpec> = {
     damageMultiplier: 4.5,
     minBand: 0,
     maxBand: 8,
-    knockback: 3,
+    knockback: 6, // doubled from 3 after 04-07 local playtest — landed slam must throw players clear
     stunTicks: 2,
     move: 'leap',
     poiseThreshold: 600,
