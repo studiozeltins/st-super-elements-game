@@ -212,7 +212,7 @@ telegraph → animation → juice → live verification):
 
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — test-first pure helpers: `attacks.ts` (ATTACKS/UNIT_ATTACKS/selectAttack), `unitAttackFsm.ts` (deadline math, late-tick resolve), `attackHitbox.ts` (circle + knockback) + serverSync INV-5 extension
+- [x] 04-01-PLAN.md — test-first pure helpers: `attacks.ts` (ATTACKS/UNIT_ATTACKS/selectAttack), `unitAttackFsm.ts` (deadline math, late-tick resolve), `attackHitbox.ts` (circle + knockback) + serverSync INV-5 extension
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -237,6 +237,7 @@ telegraph → animation → juice → live verification):
 **Wave 7** *(blocked on Wave 6)*
 
 - [ ] 04-07-PLAN.md — verification capstone: local migrated-DB playtest (human), maincloud backup + additive publish, two-client RTT dodge-fairness playtest (human, SC5)
+
 **Notes**: Carries all integration risk. `runUnitAttacks` sits BETWEEN `worldTick`'s
 position-build pass and the single `playerDamage` apply, writing strike damage into that shared
 map (reuses resistance/death/shard-spill/respawn). The state machine is row-optional (iterate unit
@@ -321,7 +322,7 @@ do NOT elevate an untrusted bool to a state trigger.
 | 1. Crit stats + server damage foundation | 3/3 | Complete   | 2026-07-08 |
 | 2. Server-authoritative damage + crit on enemies | 0/TBD | Not started | - |
 | 3. PVP crit | 2/2 | Complete    | 2026-07-09 |
-| 4. Attack state machine + leapSlam + delete drain | 0/TBD | Not started | - |
+| 4. Attack state machine + leapSlam + delete drain | 1/7 | In Progress|  |
 | 5. swordSwing → swordSwirl combo | 0/TBD | Not started | - |
 | 6. shieldDash lane | 0/TBD | Not started | - |
 | 7. Crit poise interrupt | 0/TBD | Not started | - |
