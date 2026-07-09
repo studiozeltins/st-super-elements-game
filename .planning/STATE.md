@@ -4,9 +4,9 @@ milestone: v0.2.0-alpha
 milestone_name: Combat Depth
 current_phase: 4
 current_phase_name: Attack state machine + leapSlam end-to-end + delete goliath drain
-status: verifying
+status: executing
 stopped_at: Phase 4 context gathered
-last_updated: "2026-07-09T10:09:13.649Z"
+last_updated: "2026-07-09T11:36:40.046Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
@@ -33,7 +33,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 
 Phase: 4 — Attack state machine + leapSlam end-to-end + delete goliath drain
 Plan: Not started
-Status: Phase complete — ready for verification
+Status: Ready to execute
 Last activity: 2026-07-09 — Phase 03 complete, transitioned to Phase 4
 
 ## Roadmap Summary
@@ -168,9 +168,11 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 ## Session Continuity
 
 Last session: 2026-07-09T10:09:13.622Z
-Stopped at: Phase 4 context gathered
+Stopped at: Phase 4 planned (7 plans, checker passed iteration 2)
 Resume file: .planning/phases/04-attack-state-machine-leapslam-end-to-end-delete-goliath-drai/04-CONTEXT.md
+
+**Gate override (2026-07-09):** Phase 4 decision-coverage gate returned `could-not-parse` — CONTEXT.md uses `D4-NN` decision IDs, parser expects `D-NN`. Proceeded on plan-checker Dimension 7 PASS (all D4-01…D4-17 manually traced to plan tasks). verify-phase should re-confirm decision coverage semantically, not via the parser.
 
 ## Operator Next Steps
 
-- Plan Phase 1 (Crit foundation) with `/gsd-plan-phase 1`.
+- Execute Phase 4 with `/gsd-execute-phase 4`.
