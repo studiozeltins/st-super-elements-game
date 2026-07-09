@@ -4,17 +4,17 @@ milestone: v0.2.0-alpha
 milestone_name: Combat Depth
 current_phase: 03
 current_phase_name: PVP crit
-status: executing
+status: verifying
 stopped_at: Phase 03 context gathered
-last_updated: "2026-07-09T06:37:26.013Z"
+last_updated: "2026-07-09T06:51:38.273Z"
 last_activity: 2026-07-09
 last_activity_desc: Phase 03 execution started
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 7
-  percent: 29
+  completed_plans: 8
+  percent: 43
 ---
 
 # Project State
@@ -33,7 +33,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 
 Phase: 03 (PVP crit) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-09 — Phase 03 execution started
 
 ## Roadmap Summary
@@ -75,6 +75,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | Phase 01 P02 | 3 | 3 tasks | 3 files |
 | Phase 01 P03 | 6m | 2 tasks | 1 files |
 | Phase 03 P01 | 6 min | 3 tasks | 8 files |
+| Phase 03 P02 | ~9min | 2 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: 17 distinct role-seeded critRate values (D-01/D-02); user tunes in playtest
 - [Phase ?]: Server CHARACTER_STATS kept single-line flat so serverSync regex extractor keeps parsing
 - [Phase 03]: pvp_hit extended additively (attacker/isCrit with .default()); attackPlayer intent-only via resolvePlayerHit, no PVP resistance profile (D3-03); victim crit = new purple pvpCrit kind, attacker suppression in App.tsx pvpHit callback
+- [Phase 03]: D3-01 resolved: additive .default() columns on an event table pass SpacetimeDB automatic migration on a populated DB — The 03-02 additive publish of extended pvp_hit was accepted as UPDATE of the populated local DB (no wipe, no fallback ladder) — future event-table migrations can append .default() columns directly
 
 ### Pending Todos
 
@@ -165,7 +167,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-09T06:37:12.584Z
+Last session: 2026-07-09T06:50:57.521Z
 Stopped at: Phase 03 planned (2 plans); decision-coverage gate overridden (D3-NN prefix unparseable by gate; coverage verified by plan-checker dim 7)
 Resume file: .planning/phases/03-pvp-crit/03-CONTEXT.md
 
