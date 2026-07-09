@@ -245,6 +245,16 @@ export default function App() {
       );
     },
   });
+  // A unit attack landed (leapSlam impact) → the one-shot strike juice: impact
+  // burst + telegraph rim flash + small camera shake + slam SFX (ANIM-04).
+  //
+  // attack_strike is an EVENT table, so it must NOT also appear in the manual
+  // subscription list above — useTable already opens its own subscription, and a
+  // second overlapping subscription would deliver each event row twice, firing
+  // this onInsert twice (double shake/SFX per slam). One subscription = one slam.
+  useTable(tables.attackStrike, {
+    onInsert: strike => gameRef.current?.handleAttackStrike(strike),
+  });
   // A healer restored one of my characters → green +number.
   useTable(tables.healEvent, {
     onInsert: row => {

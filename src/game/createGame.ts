@@ -21,6 +21,7 @@ import {
 import { createCharacterModel, createNameSprite, type CharacterModel } from './entities/createCharacterModel';
 import { createBoostOrbit } from './entities/createBoostOrbit';
 import { createInputSystem } from './systems/createInputSystem';
+import { createAudioSystem } from './audio/createAudioSystem';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
 import type { AttackAnimationView } from './systems/createEntityRenderer';
@@ -40,6 +41,7 @@ import { transcendDamageMultiplier } from './combat/transcendScaling';
 import { attackHitsEntity } from './combat/hitTest';
 import { gemVisual } from './data/gemDrops';
 import type {
+  AttackStrike,
   Enemy,
   GemDrop,
   Goliath,
@@ -148,6 +150,8 @@ export interface Game {
   syncGoliaths(rows: readonly Goliath[]): void;
   /** Feeds `unit_attack` FSM rows to the ground-telegraph system (windup countdown). */
   syncUnitAttacks(rows: readonly UnitAttack[]): void;
+  /** One `attack_strike` event: impact burst + rim flash + camera shake + slam SFX (ANIM-04). */
+  handleAttackStrike(strike: AttackStrike): void;
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
@@ -264,6 +268,8 @@ export function createGame(
   // terrain at the LOCKED landing so the dodge read matches the server hitbox.
   const telegraphSystem = createTelegraphSystem(scene, (x, z) => world.getGroundHeight(x, z));
   const inputSystem = createInputSystem(canvas);
+  // Hand-rolled WebAudio slam SFX (D4-15) — zero assets, zero dependencies.
+  const audioSystem = createAudioSystem();
 
   // Mirrors UNIT_KIND_GOLIATH in spacetimedb/src/attacks.ts.
   const UNIT_KIND_GOLIATH = 0;
@@ -967,8 +973,24 @@ export function createGame(
     }
   }
 
+  // Slam camera shake (D4-15): SMALL and SHORT — taste-tunable. A strike sets
+  // shakeMagnitude; each frame adds a random offset (render-only cosmetic
+  // randomness — the determinism rule binds spacetimedb/src, not the renderer)
+  // and decays the magnitude exponentially to nothing over ~0.25s.
+  const SHAKE_START_MAGNITUDE = 0.2; // world units
+  const SHAKE_DECAY_RATE = 12; // e^-3 ≈ 5% left after 0.25s
+  const SHAKE_FLOOR = 0.005; // below this the shake snaps off
+  let shakeMagnitude = 0;
+
   function updateCamera(deltaSeconds: number) {
     const desiredPosition = playerPosition.clone().add(CAMERA_OFFSET);
+    if (shakeMagnitude > 0) {
+      desiredPosition.x += (Math.random() - 0.5) * 2 * shakeMagnitude;
+      desiredPosition.y += (Math.random() - 0.5) * 2 * shakeMagnitude;
+      desiredPosition.z += (Math.random() - 0.5) * 2 * shakeMagnitude;
+      shakeMagnitude *= Math.exp(-SHAKE_DECAY_RATE * deltaSeconds);
+      if (shakeMagnitude < SHAKE_FLOOR) shakeMagnitude = 0;
+    }
     pixelRenderer.camera.position.lerp(desiredPosition, Math.min(1, deltaSeconds * 6));
     pixelRenderer.camera.lookAt(playerPosition.x, playerPosition.y + 1, playerPosition.z);
   }
@@ -1097,6 +1119,7 @@ export function createGame(
       enemyRenderer.dispose();
       goliathRenderer.dispose();
       telegraphSystem.dispose();
+      audioSystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
       playerModel.dispose();
@@ -1304,6 +1327,19 @@ export function createGame(
       latestUnitAttackRows = rows;
       syncAttackTimings(rows);
       telegraphSystem.syncAttacks(rows, isUnitAlive);
+    },
+    handleAttackStrike(strike) {
+      // D4-15 full strike juice — every component fires exactly ONCE per event
+      // (the App.tsx useTable hook is this event table's ONLY subscription).
+      const groundY = world.getGroundHeight(strike.landingX, strike.landingZ);
+      effectSystem.spawnBurst(
+        new THREE.Vector3(strike.landingX, groundY, strike.landingZ),
+        0x86e2ff,
+        26
+      );
+      telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
+      shakeMagnitude = SHAKE_START_MAGNITUDE;
+      audioSystem.playSlam();
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];
