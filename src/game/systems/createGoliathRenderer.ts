@@ -48,6 +48,15 @@ const SWIRL_ARM_FLARE = 1.15;
 const SWIRL_CROUCH = 0.35;
 /** Exhausted squash depth at the start of the swirl's long recovery. */
 const SWIRL_SETTLE_SQUASH = 0.3;
+/**
+ * Torso yaw reached by the end of the ONE-TICK strike release (radians). The
+ * strike phase is only ~150ms (STRIKE_PHASE window), far too short for a
+ * readable 360° — the release starts fast here, and the remaining spin
+ * completes over the recovery's opening slice below.
+ */
+const SWIRL_STRIKE_YAW = Math.PI * 0.9;
+/** Fraction of the recovery window that finishes the spin to exactly 2π. */
+const SWIRL_SPIN_TAIL = 0.35;
 
 function resolveArchetype(sizeIndex: number): GoliathArchetype {
   return GOLIATH_ARCHETYPES_BY_SIZE[sizeIndex] ?? GOLIATH_ARCHETYPES_BY_SIZE[0];
@@ -165,20 +174,23 @@ function createGoliathAnimation(model: EnemyModel): EntityAnimation {
       return;
     }
     if (view.phase === 'strike') {
-      // One full revolution: the coil releases through 2π, so the strike ends
-      // visually neutral (2π ≡ 0) and recovery never spins backwards.
+      // The coil releases FAST across the one-tick strike (to SWIRL_STRIKE_YAW);
+      // the spin then carries into recovery so the full 360° stays readable.
       model.body.rotation.y = THREE.MathUtils.lerp(
         -SWIRL_COIL,
-        Math.PI * 2,
+        SWIRL_STRIKE_YAW,
         view.phaseProgress
       );
       setArmFlare(SWIRL_ARM_FLARE);
       return;
     }
-    // Recovery: a heavy eased settle — the chain's long punish window reads
-    // as exhaustion (arms drop, body sags back up from a squash).
+    // Recovery: the spin's momentum completes to exactly 2π (≡ 0, visually
+    // neutral — never spins backwards) over the opening SWIRL_SPIN_TAIL slice,
+    // then the heavy eased settle — the chain's long punish window reads as
+    // exhaustion (arms drop, body sags back up from a squash).
+    const spin = Math.min(1, view.phaseProgress / SWIRL_SPIN_TAIL);
+    model.body.rotation.y = THREE.MathUtils.lerp(SWIRL_STRIKE_YAW, Math.PI * 2, spin);
     const settle = 1 - (1 - view.phaseProgress) * (1 - view.phaseProgress);
-    model.body.rotation.y = 0;
     setArmFlare(SWIRL_ARM_FLARE * (1 - settle));
     applyCrouch(SWIRL_SETTLE_SQUASH * (1 - settle));
   }

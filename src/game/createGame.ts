@@ -279,6 +279,13 @@ export function createGame(
   const ATTACK_STATE_WINDUP = 1;
   const ATTACK_STATE_STRIKE = 2;
   const ATTACK_STATE_RECOVERY = 3;
+  // The row leaves STRIKE at the (zero-storage, D4-02) grace deadline — ONE world
+  // tick after strikeAt for every ATTACKS entry (graceTicks: 1, serverSync-locked).
+  // Strike-phase clip progress must ride THAT window: the old denominator
+  // (recoveryEndsAtMicros, spanning strike+grace+recovery) made in-strike progress
+  // crawl to ~11%, so the swing slash and swirl spin never visibly played
+  // (05-05 playtest fix). leapSlam is unaffected — its arc rides travelFraction.
+  const STRIKE_PHASE_MICROS = 150_000n;
   // goliathId -> alive, refreshed by syncGoliaths; gates telegraphs so none
   // outlives its goliath even while the stale unit_attack row still exists.
   const goliathAlive = new Map<string, boolean>();
@@ -351,12 +358,11 @@ export function createGame(
 
   // Rebuilds the attack views each frame: phase straight from the row state,
   // progress from the row's OWN micros against the anchored server clock —
-  // windup runs startedAt → strikeAt; recovery runs its arrival-anchored start
-  // → recoveryEndsAt. Strike's true end (the grace deadline, D4-02) is never
-  // stored: its progress ramps against the row's only later deadline and the
-  // phase ends when the recovery state change arrives — the goliath's leap arc
-  // rides the actual travel toward the landing, so the coarse in-strike
-  // progress never drives the arc. Idle rows produce NO view.
+  // windup runs startedAt → strikeAt; strike runs strikeAt → strikeAt + one
+  // grace tick (STRIKE_PHASE_MICROS — the zero-storage deadline the row actually
+  // leaves STRIKE at, D4-02); recovery runs its arrival-anchored start →
+  // recoveryEndsAt. The goliath's leap arc still rides the actual travel toward
+  // the landing, never in-strike progress. Idle rows produce NO view.
   function refreshAttackViews() {
     goliathAttackViews.clear();
     for (const row of latestUnitAttackRows) {
@@ -375,7 +381,7 @@ export function createGame(
       } else if (row.state === ATTACK_STATE_STRIKE) {
         phase = 'strike';
         phaseStart = row.strikeAtMicros;
-        phaseEnd = row.recoveryEndsAtMicros;
+        phaseEnd = row.strikeAtMicros + STRIKE_PHASE_MICROS;
       } else if (row.state === ATTACK_STATE_RECOVERY) {
         phase = 'recovery';
         phaseStart = timing.phaseStartMicros;
