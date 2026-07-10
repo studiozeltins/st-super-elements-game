@@ -134,6 +134,9 @@ export function runUnitAttacks(
         distanceBetween(from.x, from.z, target.positionX, target.positionZ),
         now,
         row.cooldownUntilMicros,
+        // 0n until plan 05-03 adds the basicCooldownUntilMicros column and
+        // rewires this glue onto walkAttackTransitions (D5-08 gate inert here).
+        0n,
         UNIT_ATTACKS[UNIT_KIND_GOLIATH].default
       );
       if (attackId === null) continue;

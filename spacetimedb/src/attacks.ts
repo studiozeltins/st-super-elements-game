@@ -19,16 +19,16 @@ export const ATTACK_STATE_WINDUP = 1;
 export const ATTACK_STATE_STRIKE = 2;
 export const ATTACK_STATE_RECOVERY = 3;
 
-// Registry fields locked by D4-04..D4-10; one entry = one attack (FSM-04).
+// Registry fields locked by D4-04..D4-10 + D5-01..D5-13; one entry = one attack (FSM-04).
 export interface AttackSpec {
-  shape: 'circle' | 'cone' | 'lane'; // circle ships now; cone/lane = Phases 5/6
+  shape: 'circle' | 'cone' | 'lane'; // circle + cone live; lane = Phase 6
   role: 'skill' | 'basic'; // D4-08 rhythm: skill preferred when off cooldown
   windupTicks: number; // EXACT tick multiples (FSM-05); 8 = 1.2s
   activeTicks: number; // strike window; 1 for leapSlam
   graceTicks: number; // D4-02 dodge grace; 1 = ~150ms
   recoveryTicks: number; // 8 = 1.2s (D4-06)
-  cooldownMicros: bigint; // 3_500_000n micros (D4-07; Phase-5 retune noted)
-  radiusBySize: readonly number[]; // positionally aligned with sizeIndex, like GOLIATH_SIZE_STATS (D4-05)
+  cooldownMicros: bigint; // per-role: skill → cooldownUntilMicros, basic → basicCooldownUntilMicros (D5-08)
+  radiusBySize: readonly number[]; // positionally aligned with sizeIndex, like GOLIATH_SIZE_STATS (D4-05); a cone reuses it as RANGE (D5-06)
   damageMultiplier: number; // x unit contactDamage -> 405/585/765 (D4-04)
   minBand: number; // 0 this phase — no point-blank dead zone (ATK-05)
   maxBand: number; // <= ~8u so the leap stays under the client SNAP_DISTANCE
@@ -36,6 +36,8 @@ export interface AttackSpec {
   stunTicks: number; // D4-09: hit reaction is per-attack DATA; ticks × 150ms tick
   move: 'none' | 'leap' | 'charge'; // 'leap' teleports to landing at strike
   poiseThreshold: number; // consumed Phase 7; field exists now (FSM-04)
+  chainsInto?: string; // D5-01: chaining is DATA — RECOVERY re-enters WINDUP on this attack id
+  coneMinDot?: number; // D5-06: cos(half-angle) for shape 'cone'; 0.5 = 120° full angle
 }
 
 export const ATTACKS: Record<string, AttackSpec> = {
@@ -46,7 +48,7 @@ export const ATTACKS: Record<string, AttackSpec> = {
     activeTicks: 1,
     graceTicks: 1,
     recoveryTicks: 8,
-    cooldownMicros: 3_500_000n,
+    cooldownMicros: 5_500_000n, // 3.5s -> 5.5s (D5-09 playtest seed): the slam is the rhythm's punctuation now that the swing chain fills the melee band
     radiusBySize: [4.0, 4.75, 5.5],
     damageMultiplier: 4.5,
     minBand: 0,
@@ -56,27 +58,71 @@ export const ATTACKS: Record<string, AttackSpec> = {
     move: 'leap',
     poiseThreshold: 600,
   },
+  swordSwing: {
+    shape: 'cone', // ATK-02: forward cone resolved by resolveCone
+    role: 'basic', // fills the melee band the slam cooldown leaves open (D5-08)
+    windupTicks: 4, // 0.6s readable-but-quick opener (D5-11 playtest seed)
+    activeTicks: 1,
+    graceTicks: 1,
+    recoveryTicks: 8, // INERT — the swing always chains, RECOVERY is never entered (D5-01)
+    cooldownMicros: 2_500_000n, // INERT — the swing never reaches IDLE; the swirl writes the chain cooldown (D5-13)
+    radiusBySize: [3.0, 3.5, 4.0], // reused as CONE RANGE per size (D5-06 playtest seed)
+    damageMultiplier: 1.5, // 135/195/255 per size (D5-10 playtest seed)
+    minBand: 0,
+    maxBand: 3.5, // basic melee band; beyond it the goliath chases or slams (D5-09)
+    knockback: 0, // stun-only opener — the victim must stay in swirl range (D5-12)
+    stunTicks: 4, // 0.6s tag so the swirl windup is a real escape race (D5-12 playtest seed)
+    move: 'none',
+    poiseThreshold: 600,
+    chainsInto: 'swordSwirl', // D5-01: the chain is DATA, not FSM code
+    coneMinDot: 0.5, // cos 60° → 120° full swing arc (D5-06)
+  },
+  swordSwirl: {
+    shape: 'circle', // self-centered AoE spin (D5-04)
+    role: 'basic', // the FINISHING attack's role writes the basic cooldown (D5-13)
+    windupTicks: 5, // 0.75s chain warning — the escape window after the swing stun (D5-11 playtest seed)
+    activeTicks: 1,
+    graceTicks: 1,
+    recoveryTicks: 8, // 1.2s — the chain's single punish window (D5-11)
+    cooldownMicros: 2_500_000n, // THE chain cooldown, written at IDLE into basicCooldownUntilMicros (D5-13)
+    // Escape-race arithmetic (RESEARCH Pitfall 9 — tune informed): swing stun 4
+    // ticks eats most of the 5-tick swirl windup, leaving ~1 tick + grace
+    // (~0.3s) of free run ≈ 2.5u at player speed 8.4u/s; a victim tagged at the
+    // cone edge starts ~3-4u out, so 4.0-5.0u radii make escape tight but real.
+    // Full windup outrun budget if never tagged: 0.75s × 8.4 ≈ 6.3u.
+    radiusBySize: [4.0, 4.5, 5.0], // escape-race seed (D5-06/Pitfall 9 playtest seed)
+    damageMultiplier: 2.5, // 225/325/425 per size (D5-10 playtest seed)
+    minBand: 0, // INERT — never selectable directly (D5-03); authored to swing's values for parity sanity
+    maxBand: 3.5, // INERT (D5-03)
+    knockback: 4.5, // throw clear so the chain cannot re-tag instantly (D5-12 playtest seed)
+    stunTicks: 0,
+    move: 'none',
+    poiseThreshold: 600,
+  },
 };
 
 // Per-archetype attack lists keyed by unit kind — a new unit is one list (FSM-04).
+// swordSwirl is deliberately ABSENT: it is reachable ONLY via the swing chain (D5-03).
 export const UNIT_ATTACKS: Record<number, Record<string, readonly string[]>> = {
-  [UNIT_KIND_GOLIATH]: { default: ['leapSlam'] },
+  [UNIT_KIND_GOLIATH]: { default: ['leapSlam', 'swordSwing'] },
 };
 
 // Picks the attack a unit should open at the given distance (FSM-03), following
 // the D4-08 rhythm verbatim:
 //   - a 'skill' attack whose band contains the distance AND that is off cooldown
 //     wins (maximize DPS);
-//   - else a 'basic' attack in band fills the gap (none exist in Phase 4);
+//   - else a 'basic' attack in band AND off the basic cooldown fills the gap
+//     (D5-08: basics gate on their OWN per-role cooldown);
 //   - else null = keep chasing.
-// Band test: minBand <= distance <= maxBand. Cooldown test: nowMicros >=
-// cooldownUntilMicros. leapSlam's band 0..8 covers every distance this phase (no
-// facetank dead zone, ATK-05); Phases 5/6 SPLIT bands by adding entries, never
-// reshaping existing ones.
+// Band test: minBand <= distance <= maxBand. Cooldown tests: nowMicros >=
+// skillCooldownUntilMicros / basicCooldownUntilMicros (inclusive >=, FSM-05
+// boundary style). Both roles on cooldown at d <= 3.5, or nothing in band past
+// its maxBand, means chase (chase sentinel, D5-09/D4-13).
 export function selectAttack(
   distance: number,
   nowMicros: bigint,
-  cooldownUntilMicros: bigint,
+  skillCooldownUntilMicros: bigint,
+  basicCooldownUntilMicros: bigint,
   available: readonly string[]
 ): string | null {
   let basicInBand: string | null = null;
@@ -85,9 +131,10 @@ export function selectAttack(
     if (!spec) continue;
     if (distance < spec.minBand || distance > spec.maxBand) continue;
     if (spec.role === 'skill') {
-      if (nowMicros >= cooldownUntilMicros) return attackId;
+      if (nowMicros >= skillCooldownUntilMicros) return attackId;
       continue;
     }
+    if (nowMicros < basicCooldownUntilMicros) continue; // D5-08 basic gate
     if (basicInBand === null) basicInBand = attackId;
   }
   return basicInBand;
