@@ -6,14 +6,14 @@ current_phase: 05
 current_phase_name: swordSwing → swordSwirl combo
 status: executing
 stopped_at: "Phase 05 planned (5 plans, checker passed iteration 2). Gate override: decision-coverage parser could-not-parse (D5-NN vs D-NN, same as Phase 4) — proceeded on plan-checker Dimension 7 PASS (D5-01..D5-16 all traced)."
-last_updated: "2026-07-10T16:08:50.324Z"
+last_updated: "2026-07-10T16:16:44.897Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 20
-  completed_plans: 18
+  completed_plans: 19
   percent: 57
 ---
 
@@ -32,7 +32,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 ## Current Position
 
 Phase: 05 (swordSwing → swordSwirl combo) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-10 — Phase 05 execution started
 
@@ -85,6 +85,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | Phase 05 P01 | 14min | 3 tasks | 8 files |
 | Phase 05 P02 | 9min | 2 tasks | 3 files |
 | Phase 05 P03 | 8min | 2 tasks | 4 files |
+| Phase 05 P04 | 5min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -154,6 +155,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 05]: 05-02: neutral-restore extension is one shared resetAttackPose (torso lean/yaw + arm x/z) called from BOTH animateMovement and animateDeath — Pitfall 10 provable from one function
 - [Phase 05]: 05-02: juice magnitudes are handler-local named constants in createGame.ts, NOT parity material for the 05-04 client mirror (RESEARCH OQ2)
 - [Phase 05-03]: Teleport target reads strikeSnapshot landing, not plan.row — after a chain swap the final row carries the swirl's geometry
+- [Phase 05-04]: Same-attack re-cast telegraph re-anchor made shape-aware via anchorGroup — stock branch would park a re-cast cone at the landing with stale yaw (Rule 2 deviation)
+- [Phase 05-04]: Sector yaw sign atan2(-(aimZ), aimX) applied as DERIVED (A1, MEDIUM confidence) — pixel-filter visual verification owned by plan 05-05; a flip is a one-line sign fix
 
 ### Pending Todos
 
@@ -197,7 +200,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-10T16:07:54.277Z
+Last session: 2026-07-10T16:16:03.496Z
 Stopped at: Phase 05 planned (5 plans, checker passed iteration 2). Gate override: decision-coverage parser could-not-parse (D5-NN vs D-NN, same as Phase 4) — proceeded on plan-checker Dimension 7 PASS (D5-01..D5-16 all traced).
 Resume file: .planning/phases/05-swordswing-swordswirl-combo/05-01-PLAN.md
 
