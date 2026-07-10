@@ -9,16 +9,20 @@
 import {
   ATTACKS,
   ATTACK_STATE_IDLE,
-  ATTACK_STATE_RECOVERY,
-  ATTACK_STATE_STRIKE,
   ATTACK_STATE_WINDUP,
   UNIT_ATTACKS,
   UNIT_KIND_GOLIATH,
   selectAttack,
   type AttackSpec,
 } from './attacks';
-import { dueAttackTransitions, enterWindup, graceDeadline, stunDeadline } from './unitAttackFsm';
-import { knockbackDisplacement, resolveCircleHit } from './attackHitbox';
+import {
+  dueAttackTransitions,
+  enterWindup,
+  graceDeadline,
+  stunDeadline,
+  walkAttackTransitions,
+} from './unitAttackFsm';
+import { knockbackDisplacement, resolveCircleHit, resolveCone } from './attackHitbox';
 import { distanceBetween } from './combatMath';
 import { headingFromStep } from './goliathAI';
 import { aggroExpired, clampToWorld, isInsideSafeZone } from './worldRules';
@@ -35,6 +39,7 @@ function idleAttackRow(unitKind: number, unitId: bigint) {
     strikeAtMicros: 0n,
     recoveryEndsAtMicros: 0n,
     cooldownUntilMicros: 0n,
+    basicCooldownUntilMicros: 0n, // D5-08 per-role basic cooldown (Pitfall 5: any-typed row — a miss only fails at runtime insert)
     landingX: 0,
     landingZ: 0,
     radius: 0,
@@ -46,14 +51,17 @@ function idleAttackRow(unitKind: number, unitId: bigint) {
 }
 
 // The single damage-resolution moment (D4-02 zero-storage grace, D4-03 bystanders
-// included): EVERY online player is tested against the locked circle at their
+// included): EVERY online player is tested against the locked hitbox at their
 // LIVE row position — a victim who left within the grace window reads outside and
-// counts OUT. Hits get (a) RAW damage into the SHARED playerDamage map (the
-// existing apply loop applies the 'contact' resistance, death, shard spill,
-// respawn — never the player-hit path, whose 400 cap would clamp the slam), (b) a
-// knockback displacement away from the center written onto the row (clamped to
-// world bounds only — D4-11: edge deaths are a feature), and (c) an enforced stun
-// window (HIT-01; updatePosition rejects the client while it runs).
+// counts OUT. Shape branch (ATK-02, Pitfall 4): a 'cone' resolves via resolveCone
+// from the CAST apex with the aim locked at windup entry (landing minus cast,
+// D5-05); everything else stays the circle test on the landing. Hits get (a) RAW
+// damage into the SHARED playerDamage map (the existing apply loop applies the
+// 'contact' resistance, death, shard spill, respawn — never the player-hit path,
+// whose 400 cap would clamp the slam), (b) a knockback displacement away from the
+// center written onto the row (clamped to world bounds only — D4-11: edge deaths
+// are a feature), and (c) an enforced stun window (HIT-01; updatePosition rejects
+// the client while it runs).
 function resolveStrike(
   ctx: { db: any },
   now: bigint,
@@ -65,16 +73,35 @@ function resolveStrike(
   playerByHex: Map<string, any>,
   playerDamage: Map<string, number>
 ): void {
+  const isCone = spec.shape === 'cone';
+  // Knockback center: the apex for cones (push AWAY from the goliath — the swing
+  // seeds knockback 0 so this is inert this phase, but a later cone must never
+  // pull victims toward the aim point), the landing for circles (swirl: landing
+  // equals cast so both are identical, D5-04).
+  const centerX = isCone ? row.castX : row.landingX;
+  const centerZ = isCone ? row.castZ : row.landingZ;
   for (const [hex, snapshot] of playerByHex) {
     const victim = ctx.db.player.identity.find(snapshot.identity);
     if (!victim || isInsideSafeZone(victim.positionX, victim.positionZ)) continue;
-    if (!resolveCircleHit(victim.positionX, victim.positionZ, row.landingX, row.landingZ, row.radius)) continue;
+    const hit = isCone
+      ? resolveCone(
+          victim.positionX,
+          victim.positionZ,
+          row.castX,
+          row.castZ,
+          row.landingX - row.castX,
+          row.landingZ - row.castZ,
+          row.radius,
+          spec.coneMinDot ?? 0.5
+        )
+      : resolveCircleHit(victim.positionX, victim.positionZ, row.landingX, row.landingZ, row.radius);
+    if (!hit) continue;
     playerDamage.set(hex, (playerDamage.get(hex) ?? 0) + goliathRow.contactDamage * spec.damageMultiplier);
     const pushed = knockbackDisplacement(
       victim.positionX,
       victim.positionZ,
-      row.landingX,
-      row.landingZ,
+      centerX,
+      centerZ,
       spec.knockback,
       heading.x,
       heading.z
@@ -134,9 +161,7 @@ export function runUnitAttacks(
         distanceBetween(from.x, from.z, target.positionX, target.positionZ),
         now,
         row.cooldownUntilMicros,
-        // 0n until plan 05-03 adds the basicCooldownUntilMicros column and
-        // rewires this glue onto walkAttackTransitions (D5-08 gate inert here).
-        0n,
+        row.basicCooldownUntilMicros, // D5-08: basics gate on their OWN cooldown
         UNIT_ATTACKS[UNIT_KIND_GOLIATH].default
       );
       if (attackId === null) continue;
@@ -169,8 +194,11 @@ export function runUnitAttacks(
       );
     }
 
-    // Walk every due transition in order — a coalesced tick that jumped past
-    // several deadlines applies them all in one pass (FSM-05 resolve-never-drop).
+    // Delegate the transition walk to the tested pure applier (D5-01): the chain
+    // swap + break contract (Pitfall 2) and the per-role cooldown split (D5-08)
+    // live INSIDE walkAttackTransitions — this glue only applies the returned
+    // plan's side effects and never duplicates that logic. A coalesced tick that
+    // jumped past several deadlines applies them all in one pass (FSM-05).
     const transitions = dueAttackTransitions(
       row.state,
       now,
@@ -178,32 +206,33 @@ export function runUnitAttacks(
       graceDeadline(row.strikeAtMicros, spec.graceTicks, tick),
       row.recoveryEndsAtMicros
     );
-    for (const nextState of transitions) {
-      if (nextState === ATTACK_STATE_STRIKE) {
-        // The leap (move: 'leap'): the unit lands on the locked circle, and the
-        // strike event fires UNCONDITIONALLY at the transition, BEFORE any
-        // victim branching (Phase-2 guarded-emission lesson).
-        goliathPosition.set(goliathRow.goliathId, { x: row.landingX, z: row.landingZ });
-        ctx.db.attackStrike.insert({
-          unitKind: row.unitKind,
-          unitId: row.unitId,
-          attackId: row.attackId,
-          landingX: row.landingX,
-          landingZ: row.landingZ,
-          radius: row.radius,
-        });
-        row = { ...row, state: ATTACK_STATE_STRIKE };
-      } else if (nextState === ATTACK_STATE_RECOVERY) {
-        if (!row.strikeResolved) {
-          const heading = goliathHeading.get(goliathRow.goliathId) ?? { x: goliathRow.headingX, z: goliathRow.headingZ };
-          resolveStrike(ctx, now, tick, goliathRow, row, spec, heading, playerByHex, playerDamage);
-        }
-        row = { ...row, state: ATTACK_STATE_RECOVERY, strikeResolved: true };
-      } else {
-        // Back to IDLE: the full cycle ends and the cooldown starts (D4-06/D4-07).
-        row = { ...row, state: ATTACK_STATE_IDLE, cooldownUntilMicros: now + spec.cooldownMicros };
-      }
+    if (transitions.length === 0) continue;
+    const pos = goliathPosition.get(goliathRow.goliathId) ?? { x: goliathRow.positionX, z: goliathRow.positionZ };
+    const plan = walkAttackTransitions(row, transitions, spec, now, tick, goliathRow.sizeIndex, pos.x, pos.z);
+    const struck = plan.strikeSnapshot;
+    // The ONLY teleport in the strike path, gated on the applier's leap flag
+    // (Pitfall 1 fix): move 'none' attacks like the swing stay planted.
+    if (plan.teleportToLanding && struck) {
+      goliathPosition.set(goliathRow.goliathId, { x: struck.landingX, z: struck.landingZ });
     }
-    if (transitions.length > 0) attackTable.id.update(row);
+    if (plan.emitStrike && struck) {
+      // UNCONDITIONAL emission, BEFORE any victim branching (Phase-2 lesson —
+      // the event fires even on a whiff-into-chain). Fields come from the
+      // strikeSnapshot: after a chain swap the final row already carries the
+      // swirl's geometry, but this strike belongs to the OLD attack.
+      ctx.db.attackStrike.insert({
+        unitKind: struck.unitKind,
+        unitId: struck.unitId,
+        attackId: struck.attackId,
+        landingX: struck.landingX,
+        landingZ: struck.landingZ,
+        radius: struck.radius,
+      });
+    }
+    if (plan.resolveStrike && struck) {
+      const heading = goliathHeading.get(goliathRow.goliathId) ?? { x: goliathRow.headingX, z: goliathRow.headingZ };
+      resolveStrike(ctx, now, tick, goliathRow, struck, spec, heading, playerByHex, playerDamage);
+    }
+    attackTable.id.update(plan.row);
   }
 }
