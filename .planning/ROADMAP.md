@@ -267,7 +267,7 @@ proving attack chaining and a second/third hitbox shape on the validated spine.
 **Plans**: 5 plans
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — server pure layer test-first: `resolveCone`, ATTACKS entries + `chainsInto`, 5-arg `selectAttack`, `walkAttackTransitions` applier + coalesced-tick chain test (wave 1)
+- [x] 05-01-PLAN.md — server pure layer test-first: `resolveCone`, ATTACKS entries + `chainsInto`, 5-arg `selectAttack`, `walkAttackTransitions` applier + coalesced-tick chain test (wave 1)
 - [ ] 05-02-PLAN.md — client clips (`animateSwing`/`animateSwirl`) + per-attack strike juice + `playSwing`/`playSwirl` SFX (wave 1)
 
 **Wave 2**
@@ -278,6 +278,7 @@ proving attack chaining and a second/third hitbox shape on the validated spine.
 **Wave 3**
 
 - [ ] 05-05-PLAN.md — capstone: full suite + build + migrated-DB deploy checks + blocking human playtest (SC1/SC2/SC3, seed retunes) (wave 3)
+
 **Notes**: Mechanical repeat of the Phase 4 pattern — add two `ATTACKS` entries + `resolveCone`
 (reuse `isWithinForwardArc`), chain selection (swirl after swing), a client cone telegraph branch,
 and a sword-swing clip. Author real cooldowns so the `swing`+`swirl` chain cannot one-shot a
@@ -336,7 +337,7 @@ do NOT elevate an untrusted bool to a state trigger.
 | 2. Server-authoritative damage + crit on enemies | 0/TBD | Not started | - |
 | 3. PVP crit | 2/2 | Complete    | 2026-07-09 |
 | 4. Attack state machine + leapSlam + delete drain | 6/7 | In Progress|  |
-| 5. swordSwing → swordSwirl combo | 0/TBD | Not started | - |
+| 5. swordSwing → swordSwirl combo | 1/5 | In Progress|  |
 | 6. shieldDash lane | 0/TBD | Not started | - |
 | 7. Crit poise interrupt | 0/TBD | Not started | - |
 
