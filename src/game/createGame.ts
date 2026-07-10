@@ -161,6 +161,12 @@ export interface Game {
   /** Set the identity hexes of my party (Bars) so PVP skips friendly fire. */
   setPartyAllies(identityHexes: readonly string[]): void;
   setInputEnabled(enabled: boolean): void;
+  /**
+   * True while the local stun window is open (HIT-01). Character switching is
+   * gated on it (App.selectCharacter) so the UI never optimistically swaps a
+   * model the server-side stun gate will refuse.
+   */
+  isStunned(): boolean;
   onPartySlotRequested: ((slotIndex: number) => void) | null;
 }
 
@@ -1512,6 +1518,9 @@ export function createGame(
     },
     setInputEnabled(enabled) {
       inputSystem.setEnabled(enabled);
+    },
+    isStunned() {
+      return performance.now() < stunActiveUntilPerfMs;
     },
   };
 

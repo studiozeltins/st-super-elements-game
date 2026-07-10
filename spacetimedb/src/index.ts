@@ -1243,6 +1243,11 @@ export const setActiveCharacter = spacetimedb.reducer(
   { characterId: t.string() },
   (ctx, { characterId }) => {
     const currentPlayer = requirePlayer(ctx);
+    // A stunned player is server-owned for the whole stun window (HIT-01, same
+    // gate as updatePosition): switching is a combat action — swapping to a
+    // fresh body/HP pool mid-stun would sidestep the swing tag's escape race
+    // (D5-12). Silent return; the client UI gates the same window for feel.
+    if (ctx.timestamp.microsSinceUnixEpoch < currentPlayer.stunnedUntilMicros) return;
     if (characterId === currentPlayer.activeCharacterId) return;
     const nextOwned = findOwnedRow(ctx, currentPlayer, characterId);
     if (!nextOwned) throw new SenderError('Character not owned');

@@ -509,6 +509,10 @@ export default function App() {
 
   const selectCharacter = useCallback(
     (characterId: string) => {
+      // Stunned = server-owned combat window (HIT-01): the reducer rejects the
+      // switch, so don't optimistically swap the local model either (it would
+      // desync until the next row echo). Covers 1-4 keys AND HUD portrait taps.
+      if (gameRef.current?.isStunned()) return;
       connection?.reducers.setActiveCharacter({ characterId });
       gameRef.current?.setActiveCharacter(characterId);
     },
