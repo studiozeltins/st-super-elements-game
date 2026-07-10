@@ -14,6 +14,7 @@ import { PartySheet } from './ui/PartySheet';
 import { PartyToast } from './ui/PartyToast';
 import { PartyFrames } from './ui/PartyFrames';
 import { Hud } from './ui/Hud';
+import { StunPopup, type StunPopupState } from './ui/StunPopup';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
 import { GachaScreen, type GachaTab, type PityInfo, type PullView } from './ui/GachaScreen';
@@ -49,6 +50,10 @@ export default function App() {
   const gameRef = useRef<Game | null>(null);
   const partyRef = useRef<string[]>([]);
   const [hudState, setHudState] = useState<HudState>(INITIAL_HUD_STATE);
+  // Manga stun burst: keyed remount per stun; variant cycles so each hit enters
+  // from a different side.
+  const [stunPopup, setStunPopup] = useState<StunPopupState | null>(null);
+  const stunVariantRef = useRef(0);
   const [isGachaOpen, setIsGachaOpen] = useState(false);
   const [gachaTab, setGachaTab] = useState<GachaTab>('banners');
   // The owned-only character detail/management modal (distinct from the VAROŅI
@@ -715,7 +720,16 @@ export default function App() {
         },
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
-      setHudState
+      setHudState,
+      (durationSeconds, intensity) => {
+        stunVariantRef.current = (stunVariantRef.current + 1) % 3;
+        setStunPopup({
+          key: performance.now(),
+          seconds: durationSeconds,
+          intensity,
+          variant: stunVariantRef.current,
+        });
+      }
     );
     game.onPartySlotRequested = slotIndex => {
       const characterId = partyRef.current[slotIndex];
@@ -892,6 +906,7 @@ export default function App() {
           ))}
         </div>
       )}
+      <StunPopup state={stunPopup} />
       <Hud
         playerName={myPlayer?.name ?? ''}
         health={myPlayer?.currentHealth ?? MAX_HEALTH}

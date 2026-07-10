@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 // Both families ship the latin-ext subset, so Latvian diacritics (ā ē ī ū č ģ ķ ļ
 // ņ š ž) render in the same font as the rest of the text.
 import '@fontsource-variable/handjet/wght.css';
+// Bangers = the manga/comic burst font for one-shot SFX text (STUN popup).
+import '@fontsource/bangers/400.css';
 import '@fontsource/chakra-petch/400.css';
 import '@fontsource/chakra-petch/600.css';
 import '@fontsource/chakra-petch/700.css';

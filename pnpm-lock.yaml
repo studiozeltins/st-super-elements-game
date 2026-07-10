@@ -11,6 +11,9 @@ importers:
       '@fontsource-variable/handjet':
         specifier: ^5.2.7
         version: 5.2.7
+      '@fontsource/bangers':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@fontsource/chakra-petch':
         specifier: ^5.2.7
         version: 5.2.7
@@ -413,6 +416,9 @@ packages:
 
   '@fontsource-variable/handjet@5.2.7':
     resolution: {integrity: sha512-ojym5lpolA9JpTctAiaGmeRH5q3ssos0+qgaAl2cY/iqnlsM7KmeS+jYwx/PtTvNlTusdO13s5h2A+Cut7ql9g==}
+
+  '@fontsource/bangers@5.2.8':
+    resolution: {integrity: sha512-fFFXg+IHf05TEQ4U0gS8f7B0JHrhAN7oEw/Q8wR0APPLXnhnQSfZz2QDjg0kmVuM+IsM28ODga+0rSpnHLqFfQ==}
 
   '@fontsource/chakra-petch@5.2.7':
     resolution: {integrity: sha512-GLbun5WZJNAEc8FtWxwcgo+4Kurqdwejvf671l+YfIjyQgPvTjyxXYP7Ffg2HAY89NGnp3oOvKQjRzfm/fBECw==}
@@ -2165,6 +2171,8 @@ snapshots:
       levn: 0.4.1
 
   '@fontsource-variable/handjet@5.2.7': {}
+
+  '@fontsource/bangers@5.2.8': {}
 
   '@fontsource/chakra-petch@5.2.7': {}
 
