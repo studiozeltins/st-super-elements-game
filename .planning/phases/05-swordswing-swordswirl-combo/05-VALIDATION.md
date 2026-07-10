@@ -1,8 +1,8 @@
 ---
 phase: 05
 slug: swordswing-swordswirl-combo
-status: draft
-nyquist_compliant: false
+status: planned
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-10
 ---
@@ -39,10 +39,17 @@ created: 2026-07-10
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| (filled by planner) | — | — | ATK-02 | — | cone resolved server-side vs live positions | unit (pure) | `pnpm vitest run src/game/data/__tests__/attackHitbox.test.ts` | ✅ extend | ⬜ pending |
-| (filled by planner) | — | — | ATK-02 | — | selection cannot be client-influenced | unit (pure) | `pnpm vitest run src/game/data/__tests__/attacks.test.ts` | ✅ extend | ⬜ pending |
-| (filled by planner) | — | — | ATK-03 | — | chain data terminates; swirl not selectable; no-one-shot invariant (680 raw < 900 min HP) | unit (parity) | `pnpm vitest run src/game/data/__tests__/serverSync.test.ts` | ✅ extend | ⬜ pending |
-| (filled by planner) | — | — | ATK-03 | — | coalesced tick across chain: swing strike resolved, ends WINDUP-swirl, no cooldown written | unit (pure + glue) | `pnpm vitest run src/game/data/__tests__/unitAttackFsm.test.ts` | ✅ pure exists; ❌ glue seam = Wave 0 decision | ⬜ pending |
+| 05-01 Task 1 | 05-01 | 1 | ATK-02 | T-05-01 | cone resolved server-side vs live positions | unit (pure, TDD) | `pnpm vitest run src/game/data/__tests__/attackHitbox.test.ts` | ✅ extend | ⬜ pending |
+| 05-01 Task 2 | 05-01 | 1 | ATK-02 | T-05-01 | selection cannot be client-influenced; basics gate on basic cooldown | unit (pure, TDD) | `pnpm vitest run src/game/data/__tests__/attacks.test.ts` | ✅ extend | ⬜ pending |
+| 05-01 Task 2 | 05-01 | 1 | ATK-03 | T-05-03 | chain data terminates; swirl not selectable; no-one-shot invariant (680 raw < 900 min HP) | unit (parity) | `pnpm vitest run src/game/data/__tests__/serverSync.test.ts` | ✅ extend | ⬜ pending |
+| 05-01 Task 3 | 05-01 | 1 | ATK-03 | T-05-01 | coalesced tick across chain: swing strike resolved, ends WINDUP-swirl, no cooldown written | unit (pure — `walkAttackTransitions` extraction, Wave-0 seam RESOLVED) | `pnpm vitest run src/game/data/__tests__/unitAttackFsm.test.ts` | ✅ extend | ⬜ pending |
+| 05-02 Tasks 1-2 | 05-02 | 1 | ATK-02/03 | T-05-04 | clips/juice driven only by server rows/events | grep gates + human (05-05) | `grep -c "swordSwing\|swordSwirl" src/game/systems/createGoliathRenderer.ts src/game/createGame.ts` | manual-feel deferred | ⬜ pending |
+| 05-03 Task 1 | 05-03 | 2 | ATK-02, ATK-03 | T-05-01/02 | glue delegates to tested pure layer; leap-only teleport; determinism grep-gate | unit (regression) | quick trio + serverSync (see plan) | ✅ | ⬜ pending |
+| 05-03 Task 2 | 05-03 | 2 | ATK-02, ATK-03 | T-05-06 | additive migrate, rows survive, no wipe | CLI (describe/sql/logs) | `spacetime describe 2d-impact-game-fr9ti table unit_attack --json --server local` | ✅ | ⬜ pending |
+| 05-04 Task 1 | 05-04 | 2 | ATK-02 | T-05-07 | client mirror parity-locked to server ATTACKS (INV-5) | unit (parity) | `pnpm vitest run src/game/data/__tests__/serverSync.test.ts` | ✅ extend | ⬜ pending |
+| 05-04 Task 2 | 05-04 | 2 | ATK-02, ATK-03 | T-05-07 | sector telegraph + rebuild-on-attackId (no lingering cone) | grep gates + human (05-05) | see plan | manual-visual deferred | ⬜ pending |
+| 05-05 Task 1 | 05-05 | 3 | ATK-02, ATK-03 | all | full suite + build + migrated-DB deploy checks | full gate | `pnpm test && pnpm build` | ✅ | ⬜ pending |
+| 05-05 Task 2 | 05-05 | 3 | ATK-02, ATK-03 | T-05-01 | SC1/SC2/SC3 + planted goliath + rhythm | human playtest (blocking checkpoint) | manual — migrated local DB over LAN | manual-only | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -50,11 +57,12 @@ created: 2026-07-10
 
 ## Wave 0 Requirements
 
-- [ ] Chain-glue test seam: extract a pure transition-applier helper (recommended — e.g.
-  `nextAfterStrike(spec) → 'chain' | 'recovery'` or a pure applier taking the transitions
-  list + spec, returning the row mutation plan) tested in `unitAttackFsm.test.ts`.
-  Pure-helper-testing-discipline memory strongly favors extraction; the coalesced-tick chain
-  test is this phase's highest-value test.
+- [x] Chain-glue test seam: RESOLVED — extraction chosen. Plan 05-01 Task 3 creates
+  `walkAttackTransitions(row, transitions, spec, now, tick, sizeIndex, posX, posZ)` in
+  `unitAttackFsm.ts` returning a TransitionPlan (final row + emitStrike / teleportToLanding /
+  resolveStrike / strikeSnapshot / chainedInto). The coalesced-tick chain test (this phase's
+  highest-value test) becomes a plain vitest unit test in `unitAttackFsm.test.ts`; the plan
+  05-03 glue delegates to it instead of duplicating the walk.
 - No framework/config gaps — existing vitest infrastructure covers everything else.
 
 ---
@@ -71,11 +79,11 @@ created: 2026-07-10
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies (05-05 Task 2 is the designated manual-only playtest gate per the Manual-Only table)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (chain-glue seam → walkAttackTransitions extraction, 05-01 Task 3)
+- [x] No watch-mode flags (all commands use `vitest run`)
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** planned 2026-07-10 (5 plans, 3 waves)

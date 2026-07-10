@@ -264,7 +264,20 @@ proving attack chaining and a second/third hitbox shape on the validated spine.
 
   3. Each attack shows its own filling ground telegraph (cone, then circle) and its own goliath
      animation clip; `serverSync.test.ts` `ATTACKS` parity stays green.
-**Plans**: TBD
+**Plans**: 5 plans
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — server pure layer test-first: `resolveCone`, ATTACKS entries + `chainsInto`, 5-arg `selectAttack`, `walkAttackTransitions` applier + coalesced-tick chain test (wave 1)
+- [ ] 05-02-PLAN.md — client clips (`animateSwing`/`animateSwirl`) + per-attack strike juice + `playSwing`/`playSwirl` SFX (wave 1)
+
+**Wave 2**
+
+- [ ] 05-03-PLAN.md — glue wiring (chain swap+break, leap-only teleport gate, shape branch, per-role cooldown) + additive `basicCooldownUntilMicros` column + local migrate-publish + bindings (wave 2)
+- [ ] 05-04-PLAN.md — client mirror `src/game/data/attacks.ts` + serverSync parity + cone SECTOR telegraph + rebuild-on-attackId-change (wave 2)
+
+**Wave 3**
+
+- [ ] 05-05-PLAN.md — capstone: full suite + build + migrated-DB deploy checks + blocking human playtest (SC1/SC2/SC3, seed retunes) (wave 3)
 **Notes**: Mechanical repeat of the Phase 4 pattern — add two `ATTACKS` entries + `resolveCone`
 (reuse `isWithinForwardArc`), chain selection (swirl after swing), a client cone telegraph branch,
 and a sword-swing clip. Author real cooldowns so the `swing`+`swirl` chain cannot one-shot a
