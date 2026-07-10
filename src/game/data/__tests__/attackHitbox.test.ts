@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   knockbackDisplacement,
   resolveCircleHit,
+  resolveCone,
 } from '../../../../spacetimedb/src/attackHitbox';
 
 describe('resolveCircleHit (ATK-06 circle resolver)', () => {
@@ -24,6 +25,76 @@ describe('resolveCircleHit (ATK-06 circle resolver)', () => {
 
   it('is true when the victim stands exactly on the center', () => {
     expect(resolveCircleHit(10, 20, 10, 20, 5.5)).toBe(true);
+  });
+});
+
+describe('resolveCone (ATK-02 cone resolver, D5-05/D5-06)', () => {
+  // Apex at (10, 20), aiming due east (+x), range 3.5, minDot 0.5 = cos(60°)
+  // → the 120° full-angle swing cone (D5-06).
+  const APEX_X = 10;
+  const APEX_Z = 20;
+  const RANGE = 3.5;
+  const MIN_DOT = 0.5;
+
+  it('is true for a target on the aim axis just inside range', () => {
+    expect(resolveCone(APEX_X + RANGE - 0.1, APEX_Z, APEX_X, APEX_Z, 1, 0, RANGE, MIN_DOT)).toBe(true);
+  });
+
+  it('boundary: is true at EXACTLY range on the aim axis (inclusive <=, matches resolveCircleHit)', () => {
+    expect(resolveCone(APEX_X + RANGE, APEX_Z, APEX_X, APEX_Z, 1, 0, RANGE, MIN_DOT)).toBe(true);
+  });
+
+  it('is false just beyond range on the aim axis', () => {
+    expect(resolveCone(APEX_X + RANGE + 0.01, APEX_Z, APEX_X, APEX_Z, 1, 0, RANGE, MIN_DOT)).toBe(false);
+  });
+
+  it('is false for a target within range but directly BEHIND the apex (SC1 side/back escape)', () => {
+    expect(resolveCone(APEX_X - 2, APEX_Z, APEX_X, APEX_Z, 1, 0, RANGE, MIN_DOT)).toBe(false);
+  });
+
+  it('boundary: is true at EXACTLY the 60° half-angle edge (dot == minDot, inclusive arc edge)', () => {
+    // Target at 60° off the +x aim axis, distance 2: dot = cos(60°) = 0.5 exactly.
+    const distance = 2;
+    expect(
+      resolveCone(
+        APEX_X + distance * Math.cos(Math.PI / 3),
+        APEX_Z + distance * Math.sin(Math.PI / 3),
+        APEX_X,
+        APEX_Z,
+        1,
+        0,
+        RANGE,
+        MIN_DOT
+      )
+    ).toBe(true);
+  });
+
+  it('is false just past the half-angle edge (dot slightly < minDot)', () => {
+    // 61° off-axis: dot = cos(61°) ≈ 0.4848 < 0.5.
+    const angle = (61 * Math.PI) / 180;
+    const distance = 2;
+    expect(
+      resolveCone(
+        APEX_X + distance * Math.cos(angle),
+        APEX_Z + distance * Math.sin(angle),
+        APEX_X,
+        APEX_Z,
+        1,
+        0,
+        RANGE,
+        MIN_DOT
+      )
+    ).toBe(false);
+  });
+
+  it('is true for a target standing exactly ON the apex (point-blank, degenerate direction)', () => {
+    expect(resolveCone(APEX_X, APEX_Z, APEX_X, APEX_Z, 1, 0, RANGE, MIN_DOT)).toBe(true);
+  });
+
+  it('zero-length aim vector degrades to a 360° range check', () => {
+    // Within range → hit regardless of bearing; beyond range → miss.
+    expect(resolveCone(APEX_X - 2, APEX_Z + 1, APEX_X, APEX_Z, 0, 0, RANGE, MIN_DOT)).toBe(true);
+    expect(resolveCone(APEX_X + RANGE + 1, APEX_Z, APEX_X, APEX_Z, 0, 0, RANGE, MIN_DOT)).toBe(false);
   });
 });
 
