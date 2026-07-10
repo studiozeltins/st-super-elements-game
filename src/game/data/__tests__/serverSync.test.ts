@@ -453,6 +453,13 @@ describe('client ATTACK_RENDER mirror stays in sync with server ATTACKS', () => 
     }
   });
 
+  it.each(Object.keys(ATTACKS).map(id => [id] as const))(
+    '%s stunSeconds mirrors server stunTicks x 150ms tick (D4-09/D5-12)',
+    id => {
+      expect(ATTACK_RENDER[id].stunSeconds).toBeCloseTo(ATTACKS[id].stunTicks * 0.15);
+    }
+  );
+
   it('every attack keeps graceTicks 1 — the client STRIKE_PHASE_MICROS window assumes it', () => {
     // createGame.ts derives the strike-phase clip window as strikeAt + ONE world
     // tick (the zero-storage grace deadline, D4-02). If an attack ever ships a
