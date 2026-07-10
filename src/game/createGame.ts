@@ -1016,6 +1016,12 @@ export function createGame(
   const SHAKE_START_MAGNITUDE = 0.45; // world units
   const SHAKE_DECAY_RATE = 7; // e^-3 ≈ 5% left after ~0.43s
   const SHAKE_FLOOR = 0.005; // below this the shake snaps off
+  // Per-attack juice seeds (ANIM-04): swing lightest, swirl medium, slam full.
+  // Handler-local by design — feel numbers, not client/server parity material.
+  const SWING_BURST_PARTICLES = 10;
+  const SWING_SHAKE_MAGNITUDE = 0.15;
+  const SWIRL_BURST_PARTICLES = 18;
+  const SWIRL_SHAKE_MAGNITUDE = 0.3;
   let shakeMagnitude = 0;
   const desiredPosition = new THREE.Vector3();
 
@@ -1389,14 +1395,34 @@ export function createGame(
       telegraphSystem.syncAttacks(rows, isUnitAlive);
     },
     handleAttackStrike(strike) {
-      // D4-15 full strike juice — every component fires exactly ONCE per event
-      // (the App.tsx useTable hook is this event table's ONLY subscription).
-      // The shockwave draws from the EVENT's own coords + radius, so it lands
-      // even when the telegraph ring is already torn down (the rim flash raced
-      // the row's windup→recovery jump and often never showed — 04-07 playtest).
+      // Per-attack strike juice tiers (ANIM-04) — every component fires exactly
+      // ONCE per event (the App.tsx useTable hook is this event table's ONLY
+      // subscription). All juice draws from the EVENT's own coords + radius, so
+      // it lands even when the telegraph ring is already torn down (the rim
+      // flash raced the row's windup→recovery jump and often never showed —
+      // 04-07 playtest).
       const groundY = world.getGroundHeight(strike.landingX, strike.landingZ);
       const landing = new THREE.Vector3(strike.landingX, groundY + 0.05, strike.landingZ);
       lastStrike = { x: strike.landingX, z: strike.landingZ, radius: strike.radius, atMs: performance.now() };
+      if (strike.attackId === 'swordSwing') {
+        // Lightest tier: small burst, light shake, whoosh — and NO shockwave
+        // (a circular shockwave misreads the swing's cone).
+        effectSystem.spawnBurst(landing, 0x86e2ff, SWING_BURST_PARTICLES);
+        telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
+        shakeMagnitude = SWING_SHAKE_MAGNITUDE;
+        audioSystem.playSwing();
+        return;
+      }
+      if (strike.attackId === 'swordSwirl') {
+        // Medium tier: the swirl IS a circle, so the radius shockwave reads true.
+        effectSystem.spawnBurst(landing, 0x86e2ff, SWIRL_BURST_PARTICLES);
+        effectSystem.spawnShockwave(landing, strike.radius, 0x86e2ff);
+        telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
+        shakeMagnitude = SWIRL_SHAKE_MAGNITUDE;
+        audioSystem.playSwirl();
+        return;
+      }
+      // Default (leapSlam + any unknown attackId): the D4-15 full package.
       effectSystem.spawnBurst(landing, 0x86e2ff, 26);
       effectSystem.spawnShockwave(landing, strike.radius, 0x86e2ff);
       telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
