@@ -17,6 +17,7 @@ import {
   recoveryDeadline,
   strikeDeadline,
   stunDeadline,
+  walkAttackTransitions,
 } from '../../../../spacetimedb/src/unitAttackFsm';
 
 // The server world tick length, injected exactly like the reducer glue will.
@@ -128,5 +129,205 @@ describe('dueAttackTransitions (FSM-05 resolve-never-drop cascade)', () => {
     expect(
       dueAttackTransitions(ATTACK_STATE_IDLE, recoveryEndsAt + 100n * TICK, strikeAt, graceAt, recoveryEndsAt)
     ).toEqual([]);
+  });
+});
+
+describe('walkAttackTransitions (D5-01/D5-04 chain glue seam, Pitfalls 1+2)', () => {
+  // A mid-attack row (state STRIKE deadlines passed) with distinct cooldown
+  // markers so any accidental write is visible.
+  const SIZE_INDEX = 1;
+  const POS_X = 10;
+  const POS_Z = 20;
+
+  function rowFor(attackId: string, overrides: Record<string, unknown> = {}) {
+    return {
+      state: ATTACK_STATE_WINDUP,
+      attackId,
+      startedAtMicros: NOW - 10n * TICK,
+      strikeAtMicros: NOW - 2n * TICK,
+      recoveryEndsAtMicros: NOW - 1n * TICK,
+      cooldownUntilMicros: 111n,
+      basicCooldownUntilMicros: 222n,
+      landingX: 14,
+      landingZ: 26,
+      castX: 10,
+      castZ: 20,
+      radius: 3.5,
+      strikeResolved: false,
+      poise: 0,
+      ...overrides,
+    };
+  }
+
+  it('[STRIKE] with move leap teleports to landing; move none never does (Pitfall 1 gate)', () => {
+    const leap = walkAttackTransitions(
+      rowFor('leapSlam'),
+      [ATTACK_STATE_STRIKE],
+      ATTACKS.leapSlam,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(leap.teleportToLanding).toBe(true);
+    expect(leap.emitStrike).toBe(true);
+
+    const rooted = walkAttackTransitions(
+      rowFor('swordSwing'),
+      [ATTACK_STATE_STRIKE],
+      ATTACKS.swordSwing,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(rooted.teleportToLanding).toBe(false);
+    expect(rooted.emitStrike).toBe(true);
+  });
+
+  it('[STRIKE] strikeSnapshot carries the OLD attack id/landing/radius for the event emit', () => {
+    const plan = walkAttackTransitions(
+      rowFor('swordSwing'),
+      [ATTACK_STATE_STRIKE],
+      ATTACKS.swordSwing,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(plan.strikeSnapshot).not.toBeNull();
+    expect(plan.strikeSnapshot!.attackId).toBe('swordSwing');
+    expect(plan.strikeSnapshot!.landingX).toBe(14);
+    expect(plan.strikeSnapshot!.landingZ).toBe(26);
+    expect(plan.strikeSnapshot!.radius).toBe(3.5);
+  });
+
+  it('coalesced [STRIKE, RECOVERY, IDLE] on swordSwing ends in WINDUP(swordSwirl) with cooldowns untouched (Pitfall 2 break contract)', () => {
+    const plan = walkAttackTransitions(
+      rowFor('swordSwing'),
+      [ATTACK_STATE_STRIKE, ATTACK_STATE_RECOVERY, ATTACK_STATE_IDLE],
+      ATTACKS.swordSwing,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(plan.row.state).toBe(ATTACK_STATE_WINDUP);
+    expect(plan.row.attackId).toBe('swordSwirl');
+    expect(plan.resolveStrike).toBe(true); // swing strike resolved, never dropped (FSM-05)
+    expect(plan.chainedInto).toBe('swordSwirl');
+    // The stale IDLE step belonged to the OLD attack's deadlines and never ran:
+    expect(plan.row.cooldownUntilMicros).toBe(111n);
+    expect(plan.row.basicCooldownUntilMicros).toBe(222n);
+  });
+
+  it('chain entry equals a self-centered enterWindup spread (D5-04) with a next-tick strike deadline', () => {
+    const plan = walkAttackTransitions(
+      rowFor('swordSwing'),
+      [ATTACK_STATE_STRIKE, ATTACK_STATE_RECOVERY],
+      ATTACKS.swordSwing,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    const expected = enterWindup(NOW, TICK, ATTACKS.swordSwirl, SIZE_INDEX, POS_X, POS_Z, POS_X, POS_Z);
+    expect(plan.row).toEqual({
+      ...rowFor('swordSwing'),
+      ...expected,
+      attackId: 'swordSwirl',
+    });
+    // Self-centered: cast == landing == the unit's effective position.
+    expect(plan.row.castX).toBe(POS_X);
+    expect(plan.row.landingX).toBe(POS_X);
+    expect(plan.row.castZ).toBe(POS_Z);
+    expect(plan.row.landingZ).toBe(POS_Z);
+    expect(plan.row.strikeResolved).toBe(false);
+    // The swirl strike lands strictly in the future — a single pass cannot loop.
+    expect(plan.row.strikeAtMicros > NOW).toBe(true);
+  });
+
+  it('[STRIKE, RECOVERY, IDLE] without a chain, role skill → IDLE + cooldownUntilMicros written', () => {
+    const plan = walkAttackTransitions(
+      rowFor('leapSlam'),
+      [ATTACK_STATE_STRIKE, ATTACK_STATE_RECOVERY, ATTACK_STATE_IDLE],
+      ATTACKS.leapSlam,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(plan.row.state).toBe(ATTACK_STATE_IDLE);
+    expect(plan.row.cooldownUntilMicros).toBe(NOW + ATTACKS.leapSlam.cooldownMicros);
+    expect(plan.row.basicCooldownUntilMicros).toBe(222n); // untouched (D5-08 split)
+    expect(plan.chainedInto).toBeNull();
+  });
+
+  it('[STRIKE, RECOVERY, IDLE] role basic (swordSwirl) → basicCooldownUntilMicros written, skill cooldown untouched (D5-13)', () => {
+    const plan = walkAttackTransitions(
+      rowFor('swordSwirl'),
+      [ATTACK_STATE_STRIKE, ATTACK_STATE_RECOVERY, ATTACK_STATE_IDLE],
+      ATTACKS.swordSwirl,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(plan.row.state).toBe(ATTACK_STATE_IDLE);
+    expect(plan.row.basicCooldownUntilMicros).toBe(NOW + 2_500_000n);
+    expect(plan.row.cooldownUntilMicros).toBe(111n); // untouched (D5-08 split)
+  });
+
+  it('[RECOVERY] with strikeResolved already true never re-resolves (no double resolution)', () => {
+    const plan = walkAttackTransitions(
+      rowFor('leapSlam', { state: ATTACK_STATE_STRIKE, strikeResolved: true }),
+      [ATTACK_STATE_RECOVERY],
+      ATTACKS.leapSlam,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(plan.resolveStrike).toBe(false);
+    expect(plan.row.state).toBe(ATTACK_STATE_RECOVERY);
+  });
+
+  it('a leap spec WITH a chain enters the chained windup at the LANDING coords (teleport before chain)', () => {
+    const leapChain = { ...ATTACKS.leapSlam, chainsInto: 'swordSwirl' };
+    const plan = walkAttackTransitions(
+      rowFor('leapSlam'),
+      [ATTACK_STATE_STRIKE, ATTACK_STATE_RECOVERY],
+      leapChain,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(plan.teleportToLanding).toBe(true);
+    // The chain windup is centered on where the unit actually IS now: the landing.
+    expect(plan.row.castX).toBe(14);
+    expect(plan.row.castZ).toBe(26);
+    expect(plan.row.landingX).toBe(14);
+    expect(plan.row.landingZ).toBe(26);
+  });
+
+  it('an empty transition list is a no-op plan (strikeSnapshot null, row unchanged)', () => {
+    const row = rowFor('leapSlam');
+    const plan = walkAttackTransitions(row, [], ATTACKS.leapSlam, NOW, TICK, SIZE_INDEX, POS_X, POS_Z);
+    expect(plan.row).toEqual(row);
+    expect(plan.strikeSnapshot).toBeNull();
+    expect(plan.emitStrike).toBe(false);
+    expect(plan.resolveStrike).toBe(false);
+    expect(plan.teleportToLanding).toBe(false);
+    expect(plan.chainedInto).toBeNull();
   });
 });
