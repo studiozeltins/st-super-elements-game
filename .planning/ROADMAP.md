@@ -272,7 +272,7 @@ proving attack chaining and a second/third hitbox shape on the validated spine.
 
 **Wave 2**
 
-- [ ] 05-03-PLAN.md — glue wiring (chain swap+break, leap-only teleport gate, shape branch, per-role cooldown) + additive `basicCooldownUntilMicros` column + local migrate-publish + bindings (wave 2)
+- [x] 05-03-PLAN.md — glue wiring (chain swap+break, leap-only teleport gate, shape branch, per-role cooldown) + additive `basicCooldownUntilMicros` column + local migrate-publish + bindings (wave 2)
 - [ ] 05-04-PLAN.md — client mirror `src/game/data/attacks.ts` + serverSync parity + cone SECTOR telegraph + rebuild-on-attackId-change (wave 2)
 
 **Wave 3**
@@ -337,7 +337,7 @@ do NOT elevate an untrusted bool to a state trigger.
 | 2. Server-authoritative damage + crit on enemies | 0/TBD | Not started | - |
 | 3. PVP crit | 2/2 | Complete    | 2026-07-09 |
 | 4. Attack state machine + leapSlam + delete drain | 6/7 | In Progress|  |
-| 5. swordSwing → swordSwirl combo | 2/5 | In Progress|  |
+| 5. swordSwing → swordSwirl combo | 3/5 | In Progress|  |
 | 6. shieldDash lane | 0/TBD | Not started | - |
 | 7. Crit poise interrupt | 0/TBD | Not started | - |
 
