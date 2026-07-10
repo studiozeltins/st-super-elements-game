@@ -4,15 +4,15 @@ milestone: v0.2.0-alpha
 milestone_name: Combat Depth
 current_phase: 04
 current_phase_name: attack-state-machine-leapslam-end-to-end-delete-goliath-drai
-status: phase_complete
-stopped_at: Phase 05 context gathered
-last_updated: "2026-07-10T14:46:18.962Z"
+status: executing
+stopped_at: "Phase 05 planned (5 plans, checker passed iteration 2). Gate override: decision-coverage parser could-not-parse (D5-NN vs D-NN, same as Phase 4) — proceeded on plan-checker Dimension 7 PASS (D5-01..D5-16 all traced)."
+last_updated: "2026-07-10T15:32:09.454Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 04 verified + playtest tuning; fps regression fixed en route
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 15
+  total_plans: 20
   completed_plans: 15
   percent: 57
 ---
@@ -33,7 +33,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 
 Phase: 04 (attack-state-machine-leapslam-end-to-end-delete-goliath-drai) — COMPLETE
 Plan: 7 of 7 done (04-07 human playtest verified, SC5 maincloud obsolete — self-host pivot)
-Status: Phase complete — next is /gsd-plan-phase 05
+Status: Ready to execute
 Last activity: 2026-07-10 — Phase 04 verified + playtest tuning; fps regression fixed en route
 
 ## Roadmap Summary
@@ -187,9 +187,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-10T14:46:18.927Z
-Stopped at: Phase 05 context gathered
-Resume file: .planning/phases/05-swordswing-swordswirl-combo/05-CONTEXT.md
+Last session: 2026-07-10T15:32:09.424Z
+Stopped at: Phase 05 planned (5 plans, checker passed iteration 2). Gate override: decision-coverage parser could-not-parse (D5-NN vs D-NN, same as Phase 4) — proceeded on plan-checker Dimension 7 PASS (D5-01..D5-16 all traced).
+Resume file: .planning/phases/05-swordswing-swordswirl-combo/05-01-PLAN.md
 
 **Gate override (2026-07-09):** Phase 4 decision-coverage gate returned `could-not-parse` — CONTEXT.md uses `D4-NN` decision IDs, parser expects `D-NN`. Proceeded on plan-checker Dimension 7 PASS (all D4-01…D4-17 manually traced to plan tasks). verify-phase should re-confirm decision coverage semantically, not via the parser.
 
