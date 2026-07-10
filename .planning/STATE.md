@@ -4,17 +4,17 @@ milestone: v0.2.0-alpha
 milestone_name: Combat Depth
 current_phase: 04
 current_phase_name: attack-state-machine-leapslam-end-to-end-delete-goliath-drai
-status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-07-09T13:23:09.263Z"
-last_activity: 2026-07-09
-last_activity_desc: Phase 04 execution started
+status: phase_complete
+stopped_at: Phase 4 complete (04-07 verified) — next is plan-phase 05
+last_updated: "2026-07-10T14:00:00.000Z"
+last_activity: 2026-07-10
+last_activity_desc: Phase 04 complete — 04-07 playtest verified + tuned; perf regression fixed en route
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 15
-  completed_plans: 14
-  percent: 43
+  completed_plans: 15
+  percent: 57
 ---
 
 # Project State
@@ -31,10 +31,10 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 
 ## Current Position
 
-Phase: 04 (attack-state-machine-leapslam-end-to-end-delete-goliath-drai) — EXECUTING
-Plan: 7 of 7
-Status: Ready to execute
-Last activity: 2026-07-09 — Phase 04 execution started
+Phase: 04 (attack-state-machine-leapslam-end-to-end-delete-goliath-drai) — COMPLETE
+Plan: 7 of 7 done (04-07 human playtest verified, SC5 maincloud obsolete — self-host pivot)
+Status: Phase complete — next is /gsd-plan-phase 05
+Last activity: 2026-07-10 — Phase 04 verified + playtest tuning; fps regression fixed en route
 
 ## Roadmap Summary
 
