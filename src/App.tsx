@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { tables, type DbConnection } from './module_bindings';
 import type { Player } from './module_bindings/types';
@@ -113,14 +113,10 @@ export default function App() {
         // Only this device's own link row — learns our canonical identity.
         tables.accountLink.where(row => row.identity.eq(identity)),
         tables.player,
-        tables.ownedCharacter,
-        tables.characterActivation,
         // skillCast / pullResult / rangedAttack / healEvent are EVENT tables:
         // their useTable hooks below open the ONLY subscription. Listing them
         // here too would deliver every event row twice (double VFX/numbers) —
         // same invariant as pvpHit/enemyHit.
-        tables.bannerPity,
-        tables.weaponItem,
         tables.gemDrop,
         tables.shardDrop,
         tables.enemy,
@@ -130,10 +126,22 @@ export default function App() {
         tables.unitAttack,
         tables.party,
         tables.partyMember,
-        // Only invites addressed to ME (canonical recipient) — a player must never
-        // receive invites meant for others (T-05-05, Information Disclosure).
+        // Owner-scoped tables are filtered SERVER-SIDE to my canonical identity.
+        // weapon_item alone holds thousands of rows across all accounts (one per
+        // gacha pull); subscribing to the full table made every App render scan
+        // and hex-compare all of them (~60k identity serializations/s = the
+        // 144→40fps regression). The matching useTable hooks below carry the
+        // same filter, so the client cache only ever holds MY rows.
         ...(myCanonicalIdentity
-          ? [tables.partyInvite.where(row => row.recipientIdentity.eq(myCanonicalIdentity))]
+          ? [
+              tables.ownedCharacter.where(row => row.owner.eq(myCanonicalIdentity)),
+              tables.characterActivation.where(row => row.owner.eq(myCanonicalIdentity)),
+              tables.bannerPity.where(row => row.owner.eq(myCanonicalIdentity)),
+              tables.weaponItem.where(row => row.owner.eq(myCanonicalIdentity)),
+              // Only invites addressed to ME (canonical recipient) — a player must
+              // never receive invites meant for others (T-05-05, Information Disclosure).
+              tables.partyInvite.where(row => row.recipientIdentity.eq(myCanonicalIdentity)),
+            ]
           : []),
       ]);
     return () => {
@@ -149,10 +157,34 @@ export default function App() {
   }, [connection, isActive, identity, myIdentityHex]);
 
   const [players] = useTable(tables.player);
-  const [ownedCharacterRows] = useTable(tables.ownedCharacter);
-  const [activationRows] = useTable(tables.characterActivation);
-  const [bannerPityRows] = useTable(tables.bannerPity);
-  const [weaponItemRows] = useTable(tables.weaponItem);
+  // Owner-scoped hooks mirror the manual subscription's server-side filter —
+  // disabled until the canonical identity resolves so no hook ever subscribes
+  // to (and caches) every account's rows. See the subscribe list above.
+  const haveCanonical = myCanonicalIdentity !== null;
+  const [ownedCharacterRows] = useTable(
+    haveCanonical
+      ? tables.ownedCharacter.where(row => row.owner.eq(myCanonicalIdentity))
+      : tables.ownedCharacter,
+    { enabled: haveCanonical }
+  );
+  const [activationRows] = useTable(
+    haveCanonical
+      ? tables.characterActivation.where(row => row.owner.eq(myCanonicalIdentity))
+      : tables.characterActivation,
+    { enabled: haveCanonical }
+  );
+  const [bannerPityRows] = useTable(
+    haveCanonical
+      ? tables.bannerPity.where(row => row.owner.eq(myCanonicalIdentity))
+      : tables.bannerPity,
+    { enabled: haveCanonical }
+  );
+  const [weaponItemRows] = useTable(
+    haveCanonical
+      ? tables.weaponItem.where(row => row.owner.eq(myCanonicalIdentity))
+      : tables.weaponItem,
+    { enabled: haveCanonical }
+  );
   const [gemDropRows] = useTable(tables.gemDrop);
   const [shardDropRows] = useTable(tables.shardDrop);
   const [enemyRows] = useTable(tables.enemy);
@@ -266,54 +298,71 @@ export default function App() {
   const myPlayer: Player | undefined = players.find(
     row => row.identity.toHexString() === myIdentityHex
   );
-  const myCharacterIds = ownedCharacterRows
-    .filter(row => row.owner.toHexString() === myIdentityHex)
-    .sort((rowA, rowB) => (rowA.id < rowB.id ? -1 : 1))
-    .map(row => row.characterId);
+  // useTable snapshots are reference-stable until THEIR table changes, so these
+  // memos skip the identity hex-compares on the ~16/s unrelated transactions
+  // (enemy movement, position echoes). Re-filtering thousands of weapon_item
+  // rows on every render was the 144→40fps regression.
+  const myCharacterIds = useMemo(
+    () =>
+      ownedCharacterRows
+        .filter(row => row.owner.toHexString() === myIdentityHex)
+        .sort((rowA, rowB) => (rowA.id < rowB.id ? -1 : 1))
+        .map(row => row.characterId),
+    [ownedCharacterRows, myIdentityHex]
+  );
   // Prefer the player's chosen party order; fall back to the first owned characters.
   const chosenParty = (myPlayer?.partyOrder ?? []).filter(id => myCharacterIds.includes(id));
   const partyCharacterIds =
     chosenParty.length > 0 ? chosenParty.slice(0, PARTY_SIZE) : myCharacterIds.slice(0, PARTY_SIZE);
   partyRef.current = partyCharacterIds;
 
-  const partyHealthById: Record<string, number> = {};
-  for (const row of ownedCharacterRows) {
-    if (row.owner.toHexString() !== myIdentityHex) continue;
-    const maxHealth = CHARACTERS[row.characterId]?.maxHealth ?? MAX_HEALTH;
-    partyHealthById[row.characterId] = maxHealth > 0 ? row.currentHealth / maxHealth : 1;
-  }
-
-  const constellationById: Record<string, number> = {};
-  const transcendById: Record<string, number> = {};
-  for (const row of ownedCharacterRows) {
-    if (row.owner.toHexString() !== myIdentityHex) continue;
-    constellationById[row.characterId] = row.constellation;
-    transcendById[row.characterId] = row.transcendLevel;
-  }
+  const { partyHealthById, constellationById, transcendById } = useMemo(() => {
+    const health: Record<string, number> = {};
+    const constellation: Record<string, number> = {};
+    const transcend: Record<string, number> = {};
+    for (const row of ownedCharacterRows) {
+      if (row.owner.toHexString() !== myIdentityHex) continue;
+      const maxHealth = CHARACTERS[row.characterId]?.maxHealth ?? MAX_HEALTH;
+      health[row.characterId] = maxHealth > 0 ? row.currentHealth / maxHealth : 1;
+      constellation[row.characterId] = row.constellation;
+      transcend[row.characterId] = row.transcendLevel;
+    }
+    return { partyHealthById: health, constellationById: constellation, transcendById: transcend };
+  }, [ownedCharacterRows, myIdentityHex]);
 
   // Manually-activated stars per character. No row = full constellation is active
   // (matches the server fallback), so untouched characters behave as before.
-  const activatedById: Record<string, number> = {};
-  for (const row of activationRows) {
-    if (row.owner.toHexString() !== myIdentityHex) continue;
-    activatedById[row.characterId] = row.activatedConstellation;
-  }
+  const activatedById = useMemo(() => {
+    const activated: Record<string, number> = {};
+    for (const row of activationRows) {
+      if (row.owner.toHexString() !== myIdentityHex) continue;
+      activated[row.characterId] = row.activatedConstellation;
+    }
+    return activated;
+  }, [activationRows, myIdentityHex]);
   const effectiveConstellation = (characterId: string) =>
     activatedById[characterId] ?? constellationById[characterId] ?? 0;
 
-  const pityByBanner: Record<string, PityInfo> = {};
-  for (const row of bannerPityRows) {
-    if (row.owner.toHexString() !== myIdentityHex) continue;
-    pityByBanner[row.bannerId] = {
-      pullsSinceFiveStar: row.pullsSinceFiveStar,
-      guaranteedFeatured: row.guaranteedFeatured,
-      totalPulls: row.totalPulls,
-    };
-  }
+  const pityByBanner = useMemo(() => {
+    const pity: Record<string, PityInfo> = {};
+    for (const row of bannerPityRows) {
+      if (row.owner.toHexString() !== myIdentityHex) continue;
+      pity[row.bannerId] = {
+        pullsSinceFiveStar: row.pullsSinceFiveStar,
+        guaranteedFeatured: row.guaranteedFeatured,
+        totalPulls: row.totalPulls,
+      };
+    }
+    return pity;
+  }, [bannerPityRows, myIdentityHex]);
 
-  const myWeaponItems = weaponItemRows
-    .filter(row => row.owner.toHexString() === myIdentityHex)
-    .map(row => ({ weaponId: row.weaponId, rarity: row.rarity }));
+  const myWeaponItems = useMemo(
+    () =>
+      weaponItemRows
+        .filter(row => row.owner.toHexString() === myIdentityHex)
+        .map(row => ({ weaponId: row.weaponId, rarity: row.rarity })),
+    [weaponItemRows, myIdentityHex]
+  );
 
   // ---- Player-party (Bars) derivations — all identity comparisons key off the
   // canonical myIdentityHex, since party_member.identity is the canonical id. ----
