@@ -44,6 +44,7 @@ import AttackRayReducer from "./attack_ray_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
 import CollectGemReducer from "./collect_gem_reducer";
 import CollectShardReducer from "./collect_shard_reducer";
+import ConsolidateWeaponItemsReducer from "./consolidate_weapon_items_reducer";
 import DebugBotsAcceptReducer from "./debug_bots_accept_reducer";
 import DebugClearBotsReducer from "./debug_clear_bots_reducer";
 import DebugInviteReducer from "./debug_invite_reducer";
@@ -364,6 +365,10 @@ const tablesSchema = __schema({
       { accessor: 'owner', name: 'weapon_item_owner_idx_btree', algorithm: 'btree', columns: [
         'owner',
       ] },
+      { accessor: 'by_owner_weapon', name: 'weapon_item_owner_weapon_id_idx_btree', algorithm: 'btree', columns: [
+        'owner',
+        'weaponId',
+      ] },
     ],
     constraints: [
       { name: 'weapon_item_id_key', constraint: 'unique', columns: ['id'] },
@@ -383,6 +388,7 @@ const reducersSchema = __reducers(
   __reducerSchema("cast_skill", CastSkillReducer),
   __reducerSchema("collect_gem", CollectGemReducer),
   __reducerSchema("collect_shard", CollectShardReducer),
+  __reducerSchema("consolidate_weapon_items", ConsolidateWeaponItemsReducer),
   __reducerSchema("debug_bots_accept", DebugBotsAcceptReducer),
   __reducerSchema("debug_clear_bots", DebugClearBotsReducer),
   __reducerSchema("debug_invite", DebugInviteReducer),

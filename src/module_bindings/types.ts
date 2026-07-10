@@ -270,6 +270,7 @@ export const RestoreWeaponItemRow = __t.object("RestoreWeaponItemRow", {
   owner: __t.identity(),
   weaponId: __t.string(),
   rarity: __t.u32(),
+  count: __t.u32(),
 });
 export type RestoreWeaponItemRow = __Infer<typeof RestoreWeaponItemRow>;
 
@@ -320,6 +321,7 @@ export const WeaponItem = __t.object("WeaponItem", {
   weaponId: __t.string(),
   rarity: __t.u32(),
   acquiredAt: __t.timestamp(),
+  count: __t.u32(),
 });
 export type WeaponItem = __Infer<typeof WeaponItem>;
 

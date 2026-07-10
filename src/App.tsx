@@ -360,7 +360,7 @@ export default function App() {
     () =>
       weaponItemRows
         .filter(row => row.owner.toHexString() === myIdentityHex)
-        .map(row => ({ weaponId: row.weaponId, rarity: row.rarity })),
+        .map(row => ({ weaponId: row.weaponId, rarity: row.rarity, count: row.count })),
     [weaponItemRows, myIdentityHex]
   );
 

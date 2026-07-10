@@ -548,15 +548,25 @@ const bannerPity = table(
   }
 );
 
-// Weapon inventory — one row per pulled weapon. No combat use yet.
+// Weapon inventory — one row per (owner, weapon) STACK; count = copies pulled.
+// Was one row per pull, which grew unbounded (3,711 rows) and became the client's
+// frame-cost bomb (see CLAUDE.md Client Performance Rules). No combat use yet.
 const weaponItem = table(
-  { name: 'weapon_item', public: true },
+  {
+    name: 'weapon_item',
+    public: true,
+    indexes: [{ accessor: 'by_owner_weapon', algorithm: 'btree', columns: ['owner', 'weaponId'] }],
+  },
   {
     id: t.u64().primaryKey().autoInc(),
     owner: t.identity().index('btree'),
     weaponId: t.string(),
     rarity: t.u32(),
-    acquiredAt: t.timestamp(),
+    acquiredAt: t.timestamp(), // when the FIRST copy arrived
+    // NEW columns append at the END (additive migrate rejects reordering).
+    // .default(1) backfills pre-stack rows; the one-shot consolidateWeaponItems
+    // reducer then merges duplicates into real counts.
+    count: t.u32().default(1),
   }
 );
 
@@ -2237,6 +2247,7 @@ const RestoreWeaponItemRow = t.object('RestoreWeaponItemRow', {
   owner: t.identity(),
   weaponId: t.string(),
   rarity: t.u32(),
+  count: t.u32(),
 });
 
 const RestoreBannerPityRow = t.object('RestoreBannerPityRow', {
@@ -2281,6 +2292,25 @@ export const restoreWeaponItems = spacetimedb.reducer(
     for (const row of rows) ctx.db.weaponItem.insert({ id: 0n, ...row, acquiredAt: ctx.timestamp });
   }
 );
+
+// One-shot migration: merge legacy one-row-per-pull weapon_item duplicates into
+// (owner, weapon) stacks by summing counts. Idempotent — already-stacked rows
+// have nothing to merge. Run once per environment after the stacking publish:
+// `spacetime call <db> consolidate_weapon_items`.
+export const consolidateWeaponItems = spacetimedb.reducer((ctx) => {
+  const keeperByKey = new Map<string, any>();
+  for (const row of [...ctx.db.weaponItem.iter()]) {
+    const key = `${row.owner.toHexString()}:${row.weaponId}`;
+    const keeper = keeperByKey.get(key);
+    if (!keeper) {
+      keeperByKey.set(key, { ...row });
+      continue;
+    }
+    keeper.count += row.count;
+    ctx.db.weaponItem.id.delete(row.id);
+  }
+  for (const keeper of keeperByKey.values()) ctx.db.weaponItem.id.update(keeper);
+});
 
 export const restoreBannerPity = spacetimedb.reducer(
   { rows: t.array(RestoreBannerPityRow) },
@@ -2441,11 +2471,18 @@ function grantCharacter(ctx: { db: any }, owner: any, characterId: string) {
 }
 
 function grantWeapon(ctx: { db: any; timestamp: any }, owner: any, weaponId: string, rarity: number) {
+  // Stack upsert: a dupe bumps the existing row's count instead of adding a row.
+  const existing = [...ctx.db.weaponItem.by_owner_weapon.filter([owner, weaponId])][0];
+  if (existing) {
+    ctx.db.weaponItem.id.update({ ...existing, count: existing.count + 1 });
+    return;
+  }
   ctx.db.weaponItem.insert({
     id: 0n,
     owner,
     weaponId,
     rarity,
+    count: 1,
     acquiredAt: ctx.timestamp,
   });
 }

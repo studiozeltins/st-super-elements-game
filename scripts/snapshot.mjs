@@ -35,7 +35,7 @@ export const TABLES = [
   {
     table: 'weapon_item',
     reducer: 'restore_weapon_items',
-    keep: ['owner', 'weapon_id', 'rarity'],
+    keep: ['owner', 'weapon_id', 'rarity', 'count'],
   },
   {
     table: 'banner_pity',

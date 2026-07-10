@@ -35,6 +35,8 @@ export interface PullView {
 interface WeaponRow {
   weaponId: string;
   rarity: number;
+  /** Copies owned — the server stacks duplicates into one row. */
+  count: number;
 }
 
 interface GachaScreenProps {
@@ -158,10 +160,9 @@ export function GachaScreen({
   const shownShards = pullSnapshot?.shards ?? transcendShards;
 
   const weaponInventory = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const item of weaponItems) counts.set(item.weaponId, (counts.get(item.weaponId) ?? 0) + 1);
-    return [...counts.entries()]
-      .map(([id, count]) => ({ entry: WEAPONS_BY_ID[id], count }))
+    // One row per (owner, weapon) stack now — the count comes from the server.
+    return weaponItems
+      .map(item => ({ entry: WEAPONS_BY_ID[item.weaponId], count: item.count }))
       .filter(row => row.entry)
       .sort((a, b) => b.entry.rarity - a.entry.rarity || a.entry.displayName.localeCompare(b.entry.displayName));
   }, [weaponItems]);
