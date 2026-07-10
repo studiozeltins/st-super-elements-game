@@ -476,6 +476,11 @@ const unitAttack = table(
     castZ: t.f32(),
     strikeResolved: t.bool(),
     poise: t.u32(), // reset on windup entry; consumed by Phase-7 interrupts
+    // Basic-attack cooldown, split from the skill cooldown (D5-08): 'basic' role
+    // attacks gate on and write THIS field so the swing/swirl rhythm never blocks
+    // the slam (or vice versa). Appended LAST with .default(0n) so the additive
+    // migrate backfills populated rows without a wipe (Pitfall 6).
+    basicCooldownUntilMicros: t.u64().default(0n),
   }
 );
 

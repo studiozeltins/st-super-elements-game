@@ -27,4 +27,5 @@ export default __t.row({
   castZ: __t.f32().name("cast_z"),
   strikeResolved: __t.bool().name("strike_resolved"),
   poise: __t.u32(),
+  basicCooldownUntilMicros: __t.u64().name("basic_cooldown_until_micros"),
 });

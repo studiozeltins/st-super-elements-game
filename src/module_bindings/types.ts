@@ -312,6 +312,7 @@ export const UnitAttack = __t.object("UnitAttack", {
   castZ: __t.f32(),
   strikeResolved: __t.bool(),
   poise: __t.u32(),
+  basicCooldownUntilMicros: __t.u64(),
 });
 export type UnitAttack = __Infer<typeof UnitAttack>;
 
