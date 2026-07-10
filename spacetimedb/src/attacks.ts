@@ -33,7 +33,7 @@ export interface AttackSpec {
   minBand: number; // 0 this phase — no point-blank dead zone (ATK-05)
   maxBand: number; // <= ~8u so the leap stays under the client SNAP_DISTANCE
   knockback: number; // displacement units on hit (D4-10)
-  stunTicks: number; // D4-09: hit reaction is per-attack DATA; 2 = 0.3s (D4-10)
+  stunTicks: number; // D4-09: hit reaction is per-attack DATA; ticks × 150ms tick
   move: 'none' | 'leap' | 'charge'; // 'leap' teleports to landing at strike
   poiseThreshold: number; // consumed Phase 7; field exists now (FSM-04)
 }
@@ -52,7 +52,7 @@ export const ATTACKS: Record<string, AttackSpec> = {
     minBand: 0,
     maxBand: 8,
     knockback: 6, // doubled from 3 after 04-07 local playtest — landed slam must throw players clear
-    stunTicks: 2,
+    stunTicks: 7, // 2 -> 7 (~1.05s) after 04-07 playtest — 0.3s read as a stutter, not a stun
     move: 'leap',
     poiseThreshold: 600,
   },

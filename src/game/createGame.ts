@@ -247,7 +247,9 @@ const MOVEMENT_LIMIT = WORLD_BOUND + 5; // matches server clamp
 export function createGame(
   canvas: HTMLCanvasElement,
   network: GameNetworkActions,
-  onHudChange: (hud: HudState) => void
+  onHudChange: (hud: HudState) => void,
+  /** Fired once when MY stun window opens: duration + 0..1 proximity to the slam center. */
+  onStunned?: (durationSeconds: number, intensity: number) => void
 ): Game {
   const scene = new THREE.Scene();
   const pixelRenderer = createPixelRenderer(canvas);
@@ -775,14 +777,18 @@ export function createGame(
   // HIT-01 client half (D4-10): a RAISED stunnedUntilMicros on my own server row
   // opens this render-side stun window — input freezes and x/z lerp toward the
   // authoritative row, so the knockback displacement the server wrote is what
-  // the victim sees. 300ms = ATTACKS.leapSlam.stunTicks (2) × the 150ms world
+  // the victim sees. 1050ms = ATTACKS.leapSlam.stunTicks (7) × the 150ms world
   // tick. The real control stays server-side: updatePosition writes are rejected
   // while now < stunnedUntilMicros (Plan 02); this is only the felt half.
-  const STUN_RENDER_MS = 300;
+  const STUN_RENDER_MS = 1050;
   const STUN_LERP_RATE = 12;
   let stunActiveUntilPerfMs = 0;
   let lastStunnedUntilMicros = 0n;
   const stunServerPosition = new THREE.Vector3();
+  // Last slam this client saw — lets the stun popup scale with how close to the
+  // impact center I was. The strike event and my stunned row update ride the same
+  // worldTick transaction, so a fresh (<600ms) strike is MY stun's cause.
+  let lastStrike: { x: number; z: number; radius: number; atMs: number } | null = null;
 
   function updateLocalPlayer(deltaSeconds: number) {
     const isStunned = performance.now() < stunActiveUntilPerfMs;
@@ -999,12 +1005,12 @@ export function createGame(
     }
   }
 
-  // Slam camera shake (D4-15): SMALL and SHORT — taste-tunable. A strike sets
-  // shakeMagnitude; each frame adds a random offset (render-only cosmetic
-  // randomness — the determinism rule binds spacetimedb/src, not the renderer)
-  // and decays the magnitude exponentially to nothing over ~0.25s.
-  const SHAKE_START_MAGNITUDE = 0.2; // world units
-  const SHAKE_DECAY_RATE = 12; // e^-3 ≈ 5% left after 0.25s
+  // Slam camera shake (D4-15): taste-tunable. A strike sets shakeMagnitude; each
+  // frame adds a random offset (render-only cosmetic randomness — the determinism
+  // rule binds spacetimedb/src, not the renderer) and decays the magnitude
+  // exponentially over ~0.45s. Bumped after 04-07 playtest: 0.2/12 read as nothing.
+  const SHAKE_START_MAGNITUDE = 0.45; // world units
+  const SHAKE_DECAY_RATE = 7; // e^-3 ≈ 5% left after ~0.43s
   const SHAKE_FLOOR = 0.005; // below this the shake snaps off
   let shakeMagnitude = 0;
   const desiredPosition = new THREE.Vector3();
@@ -1256,6 +1262,19 @@ export function createGame(
       // target updateLocalPlayer pulls toward while the window is active.
       if (row.stunnedUntilMicros > lastStunnedUntilMicros) {
         stunActiveUntilPerfMs = performance.now() + STUN_RENDER_MS;
+        // Popup intensity = proximity to the slam center (1 = dead center).
+        // Stale/absent strike info (e.g. PVP-added stuns later) falls back to mid.
+        const fresh = lastStrike && performance.now() - lastStrike.atMs < 600;
+        const intensity = fresh
+          ? THREE.MathUtils.clamp(
+              1 -
+                Math.hypot(playerPosition.x - lastStrike!.x, playerPosition.z - lastStrike!.z) /
+                  Math.max(0.001, lastStrike!.radius),
+              0.25,
+              1
+            )
+          : 0.5;
+        onStunned?.(STUN_RENDER_MS / 1000, intensity);
       }
       lastStunnedUntilMicros = row.stunnedUntilMicros;
       stunServerPosition.copy(serverPosition);
@@ -1366,12 +1385,14 @@ export function createGame(
     handleAttackStrike(strike) {
       // D4-15 full strike juice — every component fires exactly ONCE per event
       // (the App.tsx useTable hook is this event table's ONLY subscription).
+      // The shockwave draws from the EVENT's own coords + radius, so it lands
+      // even when the telegraph ring is already torn down (the rim flash raced
+      // the row's windup→recovery jump and often never showed — 04-07 playtest).
       const groundY = world.getGroundHeight(strike.landingX, strike.landingZ);
-      effectSystem.spawnBurst(
-        new THREE.Vector3(strike.landingX, groundY, strike.landingZ),
-        0x86e2ff,
-        26
-      );
+      const landing = new THREE.Vector3(strike.landingX, groundY + 0.05, strike.landingZ);
+      lastStrike = { x: strike.landingX, z: strike.landingZ, radius: strike.radius, atMs: performance.now() };
+      effectSystem.spawnBurst(landing, 0x86e2ff, 26);
+      effectSystem.spawnShockwave(landing, strike.radius, 0x86e2ff);
       telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
       shakeMagnitude = SHAKE_START_MAGNITUDE;
       audioSystem.playSlam();

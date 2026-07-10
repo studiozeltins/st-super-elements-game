@@ -51,6 +51,8 @@ export interface EffectSystem {
     damageKind: DamageKind;
   }): void;
   spawnMeleeSlash(position: THREE.Vector3, facingAngle: number, color: number): void;
+  /** Ground shockwave: a flat ring expanding from the point out to radius. */
+  spawnShockwave(position: THREE.Vector3, radius: number, color: number): void;
   spawnSkillEffect(options: SkillEffectOptions): void;
   dispose(): void;
 }
@@ -202,19 +204,42 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
     });
   }
 
-  function spawnNova(options: SkillEffectOptions) {
-    const elementColor = ELEMENTS[options.element].color;
+  // Shared ground-ring visual: expands from the point out to radius, fading out.
+  // Used by nova skills and the slam shockwave.
+  function spawnExpandingRing(
+    x: number,
+    y: number,
+    z: number,
+    radius: number,
+    color: number,
+    expandSeconds: number
+  ) {
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.4, 0.9, 32),
       new THREE.MeshBasicMaterial({
-        color: elementColor,
+        color,
         transparent: true,
         side: THREE.DoubleSide,
         depthWrite: false,
       })
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.set(options.origin.x, options.origin.y - 0.85, options.origin.z);
+    ring.position.set(x, y, z);
+    let ageSeconds = 0;
+    addEffect({
+      object: ring,
+      update(deltaSeconds) {
+        ageSeconds += deltaSeconds;
+        const progress = Math.min(1, ageSeconds / expandSeconds);
+        ring.scale.setScalar(1 + progress * radius);
+        (ring.material as THREE.MeshBasicMaterial).opacity = 1 - progress;
+        return progress < 1;
+      },
+    });
+  }
+
+  function spawnNova(options: SkillEffectOptions) {
+    const elementColor = ELEMENTS[options.element].color;
     options.applyDamage?.(
       options.origin,
       options.skill.radius,
@@ -223,18 +248,21 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
       SKILL_DAMAGE_KIND
     );
     spawnBurst(options.origin, elementColor, 26);
-    let ageSeconds = 0;
-    const expandSeconds = 0.45;
-    addEffect({
-      object: ring,
-      update(deltaSeconds) {
-        ageSeconds += deltaSeconds;
-        const progress = Math.min(1, ageSeconds / expandSeconds);
-        ring.scale.setScalar(1 + progress * options.skill.radius);
-        (ring.material as THREE.MeshBasicMaterial).opacity = 1 - progress;
-        return progress < 1;
-      },
-    });
+    spawnExpandingRing(
+      options.origin.x,
+      options.origin.y - 0.85,
+      options.origin.z,
+      options.skill.radius,
+      elementColor,
+      0.45
+    );
+  }
+
+  // Slam impact shockwave (04-07 playtest ask): two staggered rings racing out
+  // from the landing center read as a wave, not a fading circle.
+  function spawnShockwave(position: THREE.Vector3, radius: number, color: number) {
+    spawnExpandingRing(position.x, position.y, position.z, radius, color, 0.35);
+    spawnExpandingRing(position.x, position.y, position.z, radius * 0.7, 0xffffff, 0.5);
   }
 
   function spawnDamageRing(options: SkillEffectOptions) {
@@ -356,6 +384,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
     spawnSparkle,
     spawnProjectile,
     spawnMeleeSlash,
+    spawnShockwave,
     spawnSkillEffect,
     dispose() {
       for (const effect of activeEffects) removeEffect(effect);

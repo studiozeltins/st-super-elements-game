@@ -30,7 +30,7 @@ describe('ATTACKS registry (FSM-04 data-driven attacks)', () => {
       minBand: 0,
       maxBand: 8,
       knockback: 6,
-      stunTicks: 2,
+      stunTicks: 7,
       move: 'leap',
       poiseThreshold: 600,
     });
