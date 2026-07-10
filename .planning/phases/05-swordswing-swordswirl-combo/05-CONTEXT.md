@@ -97,6 +97,9 @@ still feels static).
   alone cannot one-shot even before 'contact' resistance (roadmap note satisfied; slam stays
   the big hit at 4.5×). Damage lands in the SAME shared `playerDamage` map → same 'contact'
   resistance channel as the slam.
+  *[Correction (research measurement): the live minimum squishy HP pool is **900**, not 950
+  (`characters.ts:286`). The invariant still holds with margin (680 < 900); RESEARCH documents
+  the correction and the serverSync no-one-shot test derives the bound computationally.]*
 - **D5-11 — timing seeds (exact tick multiples):** swing windup **4 ticks (0.6s)** — faster
   than slam's 1.2s (it's the cheap poke) but reactable over real RTT; active 1, grace 1;
   recovery UNUSED (chains into swirl). Swirl windup **5 ticks (0.75s)** — the chain warning

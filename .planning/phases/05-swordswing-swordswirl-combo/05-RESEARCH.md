@@ -800,7 +800,7 @@ export const ATTACK_RENDER: Record<string, AttackRenderSpec> = {
 | A2 | The local `unit_attack` table currently holds rows (populated by the Phase-4 playtest), making `.default()` mandatory rather than merely prudent | Pitfall 6 | None — `.default(0n)` is required by the locked constraint regardless; if the table happens to be empty the migrate is trivially safe `[ASSUMED — DB not queried this session]` |
 | A3 | Swirl radius seeds 4.0/4.5/5.0 satisfy the SC2 escape race | Pitfall 9 | Playtest tuning pass (already planned per D-02/04-07 precedent); seeds are explicitly user-tunable `[ASSUMED — arithmetic estimate]` |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does the chain glue stay under `unitAttacks.ts`'s 300-LOC ceiling?**
    - What we know: file is 207 functional-ish lines; chain branch + move gate + shape branch +
@@ -808,15 +808,24 @@ export const ATTACK_RENDER: Record<string, AttackRenderSpec> = {
    - What's unclear: whether the planner also lands the cone knockback-center branch there.
    - Recommendation: it fits; if it crosses ~300, extract `resolveStrike` into a sibling
      (`unitStrike.ts`) in the same slice — pre-authorize this in the plan.
+   - **RESOLVED → adopted by plan 05-03 Task 1:** the glue edits land in `unitAttacks.ts` with
+     the `unitStrike.ts` extraction pre-authorized in the same commit if the file crosses
+     300 functional LOC.
 2. **Where do juice hints live — client mirror or `createGame` constants?**
    - What we know: both satisfy D5-07/ANIM-04; mirror keeps per-attack data in one place,
      constants keep the mirror minimal for parity.
    - Recommendation: put shape + half-angle in the mirror (parity-checked); keep juice
      magnitudes as plain constants in the handler (not parity material). Discretion.
+   - **RESOLVED → adopted by plan 05-02 Task 2:** juice magnitudes are plain constants in the
+     `createGame` strike handler; the mirror (05-04) carries only parity-checked shape data,
+     per the recommendation.
 3. **Cone telegraph straight edges:** the arc-rim outline has no straight edges from the apex.
    - Recommendation: ship arc rim + filled progress sector first (cheapest, reuses recipe);
      add two thin edge quads only if the 04-04-style pixel-filter check says the cone reads
      ambiguously. Discretion.
+   - **RESOLVED → adopted by plan 05-04 Task 2:** ship arc rim + filled progress sector first;
+     edge quads deferred to the ANIM-02 pixel-filter readability check at the 05-05 playtest
+     gate.
 
 ## Environment Availability
 
