@@ -18,6 +18,11 @@ import { SpacetimeDBProvider } from 'spacetimedb/react';
 import { DbConnection } from './module_bindings/index.ts';
 import { MODULE_NAME, SPACETIMEDB_URI } from './config.ts';
 
+// Warm the SFX font at boot — browsers only fetch a font at first USE, so the
+// first STUNNED! popup otherwise renders in the fallback and blinks when
+// Bangers arrives mid-animation.
+document.fonts?.load('400 1rem Bangers');
+
 const TOKEN_KEY = `${SPACETIMEDB_URI}/${MODULE_NAME}/auth_token`;
 
 const connectionBuilder = DbConnection.builder()

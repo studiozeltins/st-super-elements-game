@@ -14,7 +14,7 @@ import { PartySheet } from './ui/PartySheet';
 import { PartyToast } from './ui/PartyToast';
 import { PartyFrames } from './ui/PartyFrames';
 import { Hud } from './ui/Hud';
-import { StunPopup, type StunPopupState } from './ui/StunPopup';
+import { SfxPopup, type SfxPopupState } from './ui/SfxPopup';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
 import { GachaScreen, type GachaTab, type PityInfo, type PullView } from './ui/GachaScreen';
@@ -50,10 +50,10 @@ export default function App() {
   const gameRef = useRef<Game | null>(null);
   const partyRef = useRef<string[]>([]);
   const [hudState, setHudState] = useState<HudState>(INITIAL_HUD_STATE);
-  // Manga stun burst: keyed remount per stun; variant cycles so each hit enters
-  // from a different side.
-  const [stunPopup, setStunPopup] = useState<StunPopupState | null>(null);
-  const stunVariantRef = useRef(0);
+  // Manga SFX burst (stun today; freeze/PVP callouts reuse it): keyed remount
+  // per popup; variant cycles so each one enters from a different side.
+  const [sfxPopup, setSfxPopup] = useState<SfxPopupState | null>(null);
+  const sfxVariantRef = useRef(0);
   const [isGachaOpen, setIsGachaOpen] = useState(false);
   const [gachaTab, setGachaTab] = useState<GachaTab>('banners');
   // The owned-only character detail/management modal (distinct from the VAROŅI
@@ -722,12 +722,13 @@ export default function App() {
       },
       setHudState,
       (durationSeconds, intensity) => {
-        stunVariantRef.current = (stunVariantRef.current + 1) % 3;
-        setStunPopup({
+        sfxVariantRef.current = (sfxVariantRef.current + 1) % 3;
+        setSfxPopup({
           key: performance.now(),
+          text: 'STUNNED!',
           seconds: durationSeconds,
           intensity,
-          variant: stunVariantRef.current,
+          variant: sfxVariantRef.current,
         });
       }
     );
@@ -906,7 +907,7 @@ export default function App() {
           ))}
         </div>
       )}
-      <StunPopup state={stunPopup} />
+      <SfxPopup state={sfxPopup} />
       <Hud
         playerName={myPlayer?.name ?? ''}
         health={myPlayer?.currentHealth ?? MAX_HEALTH}

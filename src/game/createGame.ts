@@ -784,6 +784,10 @@ export function createGame(
   const STUN_LERP_RATE = 12;
   let stunActiveUntilPerfMs = 0;
   let lastStunnedUntilMicros = 0n;
+  // The row KEEPS its last stunnedUntilMicros forever, so the first sync after a
+  // page load must baseline against it silently — comparing to the initial 0n
+  // fired a ghost STUNNED popup on every refresh.
+  let hasBaselinedStun = false;
   const stunServerPosition = new THREE.Vector3();
   // Last slam this client saw — lets the stun popup scale with how close to the
   // impact center I was. The strike event and my stunned row update ride the same
@@ -1260,7 +1264,9 @@ export function createGame(
       // HIT-01: a RAISED stunnedUntilMicros means a fresh knockback landed on me
       // — open the render stun window; the freshest server row is the lerp
       // target updateLocalPlayer pulls toward while the window is active.
-      if (row.stunnedUntilMicros > lastStunnedUntilMicros) {
+      if (!hasBaselinedStun) {
+        hasBaselinedStun = true;
+      } else if (row.stunnedUntilMicros > lastStunnedUntilMicros) {
         stunActiveUntilPerfMs = performance.now() + STUN_RENDER_MS;
         // Popup intensity = proximity to the slam center (1 = dead center).
         // Stale/absent strike info (e.g. PVP-added stuns later) falls back to mid.
