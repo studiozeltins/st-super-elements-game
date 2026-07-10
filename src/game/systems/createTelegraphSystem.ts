@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ATTACK_RENDER } from '../data/attacks';
 import { disposeObject } from '../engine/disposeObject';
 import type { UnitAttack } from '../../module_bindings/types';
 
@@ -36,6 +37,9 @@ const OUTLINE_RENDER_ORDER = 1000;
 interface ActiveTelegraph {
   unitKind: number;
   unitId: bigint;
+  // Which attack this geometry was built for: a chain swap arrives on the SAME
+  // unit key with a different attackId — the mesh must be rebuilt, not re-anchored.
+  attackId: string;
   group: THREE.Group;
   outline: THREE.Mesh;
   outlineMaterial: THREE.MeshBasicMaterial;
@@ -85,43 +89,82 @@ export function createTelegraphSystem(
   // Shared clock for the outer-ring pulse (cosmetic only — never drives timing).
   let pulseElapsedSeconds = 0;
 
-  function insert(row: UnitAttack): ActiveTelegraph {
-    const group = new THREE.Group();
-    // Static full-radius outer ring appears instantly at windup entry (D4-14):
-    // the constant danger edge.
-    const outlineMaterial = flatMaterial(OUTLINE_OPACITY);
-    const outline = new THREE.Mesh(
-      new THREE.RingGeometry(row.radius - RIM_WIDTH, row.radius, RING_SEGMENTS),
-      outlineMaterial
-    );
-    outline.rotation.x = -Math.PI / 2;
-    outline.position.y = 0.005;
-    outline.renderOrder = OUTLINE_RENDER_ORDER;
-    // Progress ring: built at FULL radius and scaled 0 → 1 over the windup, so
-    // it expands from the center and meets the outer ring exactly at strike.
-    // Its expansion IS the countdown.
-    const progress = new THREE.Mesh(
-      new THREE.RingGeometry(
-        Math.max(0.001, row.radius - PROGRESS_RIM_WIDTH),
-        row.radius,
-        RING_SEGMENTS
-      ),
-      flatMaterial(PROGRESS_OPACITY)
-    );
-    progress.rotation.x = -Math.PI / 2;
-    progress.renderOrder = PROGRESS_RENDER_ORDER;
-    progress.scale.setScalar(0.0001); // starts empty; never exactly 0 (degenerate matrix)
-    group.add(outline, progress);
-    // The landing is LOCKED at windup entry — position once, on the terrain.
+  // Anchors the group: circles sit on the LOCKED landing; cone sectors sit at the
+  // cast APEX yawed toward the aim (D5-14). Both are locked at windup entry (D5-05)
+  // — the telegraph never re-aims mid-windup.
+  function anchorGroup(group: THREE.Group, row: UnitAttack) {
+    if (ATTACK_RENDER[row.attackId]?.shape === 'cone') {
+      // After the -PI/2 X-rotation, geometry angle 0 maps to world +X, so yawing
+      // by atan2(-aimZ, aimX) points the θ=0-centered sector at the aim. Sign
+      // convention is DERIVED (RESEARCH A1, MEDIUM confidence) — the pixel-filter
+      // visual check is owned by plan 05-05; a flip is a one-line sign fix.
+      group.rotation.y = Math.atan2(-(row.landingZ - row.castZ), row.landingX - row.castX);
+      group.position.set(row.castX, getGroundHeight(row.castX, row.castZ) + GROUND_EPSILON, row.castZ);
+      return;
+    }
+    group.rotation.y = 0;
     group.position.set(
       row.landingX,
       getGroundHeight(row.landingX, row.landingZ) + GROUND_EPSILON,
       row.landingZ
     );
+  }
+
+  function insert(row: UnitAttack): ActiveTelegraph {
+    const group = new THREE.Group();
+    // Static full-radius outer ring appears instantly at windup entry (D4-14):
+    // the constant danger edge.
+    const outlineMaterial = flatMaterial(OUTLINE_OPACITY);
+    // Shape lookup by attackId; unknown/missing entry → circle (back-compat with
+    // rows written before the client updated).
+    const render = ATTACK_RENDER[row.attackId];
+    let outline: THREE.Mesh;
+    let progress: THREE.Mesh;
+    if (render?.shape === 'cone' && render.coneHalfAngleDegrees !== undefined) {
+      // Cone SECTOR (D5-14): row.radius is reused as cone RANGE (D5-06). The
+      // sector is authored centered on geometry angle 0; anchorGroup yaws it.
+      const fullAngle = THREE.MathUtils.degToRad(render.coneHalfAngleDegrees * 2);
+      // Arc rim at the danger edge — instant at windup entry, like the circle rim.
+      outline = new THREE.Mesh(
+        new THREE.RingGeometry(row.radius - RIM_WIDTH, row.radius, RING_SEGMENTS, 1, -fullAngle / 2, fullAngle),
+        outlineMaterial
+      );
+      // Progress: FILLED sector built at full size — the shared update() scaling
+      // expands it from the apex for free because the group origin IS the apex.
+      progress = new THREE.Mesh(
+        new THREE.RingGeometry(0.001, row.radius, RING_SEGMENTS, 1, -fullAngle / 2, fullAngle),
+        flatMaterial(PROGRESS_OPACITY)
+      );
+    } else {
+      outline = new THREE.Mesh(
+        new THREE.RingGeometry(row.radius - RIM_WIDTH, row.radius, RING_SEGMENTS),
+        outlineMaterial
+      );
+      // Progress ring: built at FULL radius and scaled 0 → 1 over the windup, so
+      // it expands from the center and meets the outer ring exactly at strike.
+      // Its expansion IS the countdown.
+      progress = new THREE.Mesh(
+        new THREE.RingGeometry(
+          Math.max(0.001, row.radius - PROGRESS_RIM_WIDTH),
+          row.radius,
+          RING_SEGMENTS
+        ),
+        flatMaterial(PROGRESS_OPACITY)
+      );
+    }
+    outline.rotation.x = -Math.PI / 2;
+    outline.position.y = 0.005;
+    outline.renderOrder = OUTLINE_RENDER_ORDER;
+    progress.rotation.x = -Math.PI / 2;
+    progress.renderOrder = PROGRESS_RENDER_ORDER;
+    progress.scale.setScalar(0.0001); // starts empty; never exactly 0 (degenerate matrix)
+    group.add(outline, progress);
+    anchorGroup(group, row);
     scene.add(group);
     const telegraph: ActiveTelegraph = {
       unitKind: row.unitKind,
       unitId: row.unitId,
+      attackId: row.attackId,
       group,
       outline,
       outlineMaterial,
@@ -174,16 +217,20 @@ export function createTelegraphSystem(
         telegraphs.set(key, insert(row));
         continue;
       }
-      // A fresh cast (new startedAt) re-anchors timing and re-locks the landing.
+      // Chain swap (Pitfall 3): a different attack arrived on the SAME key — the
+      // old mesh (wrong shape/size/yaw) must never linger through the new windup.
+      // Remove (disposes geometry) and rebuild fresh.
+      if (row.attackId !== existing.attackId) {
+        remove(key, existing);
+        telegraphs.set(key, insert(row));
+        continue;
+      }
+      // A same-attack re-cast (new startedAt) re-anchors timing and placement.
       if (row.state === ATTACK_STATE_WINDUP && row.startedAtMicros !== existing.startedAtMicros) {
         existing.arrivalPerfMs = performance.now();
         existing.startedAtMicros = row.startedAtMicros;
         existing.windupDurationMicros = row.strikeAtMicros - row.startedAtMicros;
-        existing.group.position.set(
-          row.landingX,
-          getGroundHeight(row.landingX, row.landingZ) + GROUND_EPSILON,
-          row.landingZ
-        );
+        anchorGroup(existing.group, row);
       }
       if (existing.state === ATTACK_STATE_WINDUP && row.state === ATTACK_STATE_STRIKE) {
         flash(existing);
