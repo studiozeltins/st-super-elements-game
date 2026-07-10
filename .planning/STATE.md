@@ -5,10 +5,10 @@ milestone_name: Combat Depth
 current_phase: 04
 current_phase_name: attack-state-machine-leapslam-end-to-end-delete-goliath-drai
 status: phase_complete
-stopped_at: Phase 4 complete (04-07 verified) — next is plan-phase 05
-last_updated: "2026-07-10T14:00:00.000Z"
+stopped_at: Phase 05 context gathered
+last_updated: "2026-07-10T14:46:18.962Z"
 last_activity: 2026-07-10
-last_activity_desc: Phase 04 complete — 04-07 playtest verified + tuned; perf regression fixed en route
+last_activity_desc: Phase 04 verified + playtest tuning; fps regression fixed en route
 progress:
   total_phases: 7
   completed_phases: 4
@@ -187,9 +187,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-09T13:22:38.506Z
-Stopped at: Phase 4 planned (7 plans, checker passed iteration 2)
-Resume file: .planning/phases/04-attack-state-machine-leapslam-end-to-end-delete-goliath-drai/04-CONTEXT.md
+Last session: 2026-07-10T14:46:18.927Z
+Stopped at: Phase 05 context gathered
+Resume file: .planning/phases/05-swordswing-swordswirl-combo/05-CONTEXT.md
 
 **Gate override (2026-07-09):** Phase 4 decision-coverage gate returned `could-not-parse` — CONTEXT.md uses `D4-NN` decision IDs, parser expects `D-NN`. Proceeded on plan-checker Dimension 7 PASS (all D4-01…D4-17 manually traced to plan tasks). verify-phase should re-confirm decision coverage semantically, not via the parser.
 
