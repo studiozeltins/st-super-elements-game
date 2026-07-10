@@ -1,10 +1,12 @@
-// Pure attack hitbox geometry, kept dependency-free (one pure sibling import) so
-// it can be unit-tested directly under the client's vitest runner (same pattern
-// as crit.ts / goliathAI.ts). No global randomness, no wall-clock time — plain
-// coordinates in, plain results out (CLAUDE.md rule 2). Circle is the only shape
-// this phase (ATK-06); cone (Phase 5) reuses isWithinForwardArc and lane (Phase 6)
-// reuses segment projection when those phases land — no dead stubs here.
+// Pure attack hitbox geometry, kept dependency-free (pure sibling imports only)
+// so it can be unit-tested directly under the client's vitest runner (same
+// pattern as crit.ts / goliathAI.ts). No global randomness, no wall-clock time —
+// plain coordinates in, plain results out (CLAUDE.md rule 2). Circle (ATK-06)
+// and cone (ATK-02, reusing isWithinForwardArc per the geometry-reuse mandate)
+// are live; lane (Phase 6) reuses segment projection when it lands — no dead
+// stubs here.
 import { distanceBetween } from './combatMath';
+import { isWithinForwardArc } from './goliathAI';
 
 // True when the point (px,pz) lies inside or exactly ON the circle — the edge is
 // INCLUSIVE (<=), so a victim standing precisely at radius distance counts hit.
@@ -17,6 +19,28 @@ export function resolveCircleHit(
   radius: number
 ): boolean {
   return distanceBetween(px, pz, centerX, centerZ) <= radius;
+}
+
+// True when the point (px,pz) lies inside the cone: within `range` of the apex
+// (INCLUSIVE <=, same edge semantics as resolveCircleHit) AND within the forward
+// arc of the aim vector (INCLUSIVE dot >= minDot). minDot = cos(half-angle);
+// 0.5 = the 120° full-angle swing cone (D5-06). The aim vector is landing minus
+// cast, NOT normalized — isWithinForwardArc normalizes internally (D5-05).
+// Degenerate semantics inherited from isWithinForwardArc: a zero-length aim
+// vector degrades to a 360° range check; a target standing exactly ON the apex
+// counts as a point-blank hit. No new dot-product math (ATK-06 geometry reuse).
+export function resolveCone(
+  px: number,
+  pz: number,
+  apexX: number,
+  apexZ: number,
+  aimX: number,
+  aimZ: number,
+  range: number,
+  minDot: number
+): boolean {
+  if (distanceBetween(px, pz, apexX, apexZ) > range) return false;
+  return isWithinForwardArc(aimX, aimZ, apexX, apexZ, px, pz, minDot);
 }
 
 // Returns the victim's DISPLACED position: pushed `distance` units away from the

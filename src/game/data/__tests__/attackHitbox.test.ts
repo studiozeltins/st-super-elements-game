@@ -53,37 +53,17 @@ describe('resolveCone (ATK-02 cone resolver, D5-05/D5-06)', () => {
   });
 
   it('boundary: is true at EXACTLY the 60° half-angle edge (dot == minDot, inclusive arc edge)', () => {
-    // Target at 60° off the +x aim axis, distance 2: dot = cos(60°) = 0.5 exactly.
-    const distance = 2;
-    expect(
-      resolveCone(
-        APEX_X + distance * Math.cos(Math.PI / 3),
-        APEX_Z + distance * Math.sin(Math.PI / 3),
-        APEX_X,
-        APEX_Z,
-        1,
-        0,
-        RANGE,
-        MIN_DOT
-      )
-    ).toBe(true);
+    // Apex at the origin so the target offset (1, √3) survives float roundtrip
+    // exactly: hypot(1, √3) === 2 and dot === 0.5 === minDot precisely.
+    expect(resolveCone(1, Math.sqrt(3), 0, 0, 1, 0, RANGE, MIN_DOT)).toBe(true);
   });
 
   it('is false just past the half-angle edge (dot slightly < minDot)', () => {
-    // 61° off-axis: dot = cos(61°) ≈ 0.4848 < 0.5.
+    // 61° off-axis from an origin apex: dot = cos(61°) ≈ 0.4848 < 0.5.
     const angle = (61 * Math.PI) / 180;
     const distance = 2;
     expect(
-      resolveCone(
-        APEX_X + distance * Math.cos(angle),
-        APEX_Z + distance * Math.sin(angle),
-        APEX_X,
-        APEX_Z,
-        1,
-        0,
-        RANGE,
-        MIN_DOT
-      )
+      resolveCone(distance * Math.cos(angle), distance * Math.sin(angle), 0, 0, 1, 0, RANGE, MIN_DOT)
     ).toBe(false);
   });
 
