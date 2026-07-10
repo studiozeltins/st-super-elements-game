@@ -84,21 +84,39 @@ export function createAudioSystem(): AudioSystem {
     const now = context.currentTime;
 
     // Light whoosh (lightest tier): a short bandpass sweep rising through a
-    // noise burst — clearly quieter and shorter than the slam.
+    // noise burst — shorter and lighter than the slam, but clearly audible.
+    // Playtest fix (05-05 round 2): the original 0.25-gain Q1.2 recipe was
+    // inaudible under gameplay — a bandpass discards most of the noise energy,
+    // so the peak gain must sit far above the slam's broadband 0.5 to compete.
     const seconds = 0.2;
     const noise = createNoiseSource(context, seconds);
     const filter = context.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.Q.value = 1.2;
+    filter.Q.value = 0.8;
     filter.frequency.setValueAtTime(500, now);
     filter.frequency.exponentialRampToValueAtTime(2200, now + seconds);
     const gain = context.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.25, now + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.6, now + 0.03);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
     noise.connect(filter).connect(gain).connect(context.destination);
     noise.start(now);
     noise.stop(now + seconds);
+
+    // Light percussive "thock" under the whoosh so the hit registers on small
+    // speakers that reproduce little of the filtered hiss — well above the
+    // slam's 70Hz so the tiers stay distinct.
+    const thock = context.createOscillator();
+    thock.type = 'sine';
+    thock.frequency.setValueAtTime(160, now);
+    thock.frequency.exponentialRampToValueAtTime(95, now + 0.1);
+    const thockGain = context.createGain();
+    thockGain.gain.setValueAtTime(0.0001, now);
+    thockGain.gain.exponentialRampToValueAtTime(0.4, now + 0.01);
+    thockGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+    thock.connect(thockGain).connect(context.destination);
+    thock.start(now);
+    thock.stop(now + 0.16);
   }
 
   function playSwirl() {
@@ -107,32 +125,48 @@ export function createAudioSystem(): AudioSystem {
     const now = context.currentTime;
 
     // Whirling swell (medium tier): a longer bandpass noise that rises then
-    // falls — the blade cutting a full circle of air.
+    // falls — the blade cutting a full circle of air. Playtest fix (05-05
+    // round 2): swell gain raised 0.4 → 0.75 (bandpass eats most of the noise
+    // energy) so the circle-cut is actually audible mid-combat.
     const seconds = 0.4;
     const noise = createNoiseSource(context, seconds);
     const filter = context.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.Q.value = 0.9;
+    filter.Q.value = 0.7;
     filter.frequency.setValueAtTime(300, now);
     filter.frequency.exponentialRampToValueAtTime(1200, now + seconds * 0.6);
     filter.frequency.exponentialRampToValueAtTime(500, now + seconds);
     const gain = context.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.4, now + seconds * 0.5);
+    gain.gain.exponentialRampToValueAtTime(0.75, now + seconds * 0.5);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
     noise.connect(filter).connect(gain).connect(context.destination);
     noise.start(now);
     noise.stop(now + seconds);
 
+    // Broadband impact texture (like the slam's, softer): this is what carries
+    // the "hit" on small speakers that reproduce almost no sub-100Hz thump.
+    const impactSeconds = 0.1;
+    const impact = createNoiseSource(context, impactSeconds);
+    const impactFilter = context.createBiquadFilter();
+    impactFilter.type = 'lowpass';
+    impactFilter.frequency.value = 500;
+    const impactGain = context.createGain();
+    impactGain.gain.setValueAtTime(0.35, now);
+    impactGain.gain.exponentialRampToValueAtTime(0.0001, now + impactSeconds);
+    impact.connect(impactFilter).connect(impactGain).connect(context.destination);
+    impact.start(now);
+    impact.stop(now + impactSeconds);
+
     // A low thump under the swell — higher and softer than the slam's
     // 70→40Hz 0.8-gain hit, so the slam stays the loudest tier.
     const thump = context.createOscillator();
     thump.type = 'sine';
-    thump.frequency.setValueAtTime(90, now);
-    thump.frequency.exponentialRampToValueAtTime(55, now + 0.2);
+    thump.frequency.setValueAtTime(85, now);
+    thump.frequency.exponentialRampToValueAtTime(50, now + 0.2);
     const thumpGain = context.createGain();
     thumpGain.gain.setValueAtTime(0.0001, now);
-    thumpGain.gain.exponentialRampToValueAtTime(0.35, now + 0.02);
+    thumpGain.gain.exponentialRampToValueAtTime(0.55, now + 0.02);
     thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
     thump.connect(thumpGain).connect(context.destination);
     thump.start(now);
