@@ -26,7 +26,7 @@ import {
   skillAttackMultiplier as serverSkill,
   transcendDamageMultiplier as serverTranscend,
 } from '../../../../spacetimedb/src/damage';
-import { ATTACKS } from '../../../../spacetimedb/src/attacks';
+import { ATTACKS, UNIT_ATTACKS, UNIT_KIND_GOLIATH } from '../../../../spacetimedb/src/attacks';
 import { GOLIATH_SIZE_STATS } from '../../../../spacetimedb/src/enemyStats';
 import {
   GACHA_PULL_COST,
@@ -367,5 +367,54 @@ describe('ATTACKS registry invariants (INV-5)', () => {
 
   it('leapSlam radius array covers every goliath size (D4-05)', () => {
     expect(ATTACKS.leapSlam.radiusBySize).toHaveLength(GOLIATH_SIZE_STATS.length);
+  });
+
+  it('swordSwing damage = 1.5x per-size contactDamage -> 135/195/255 (D5-10)', () => {
+    expect(
+      GOLIATH_SIZE_STATS.map(size =>
+        Math.round(size.contactDamage * ATTACKS.swordSwing.damageMultiplier)
+      )
+    ).toEqual([135, 195, 255]);
+  });
+
+  it('swordSwirl damage = 2.5x per-size contactDamage -> 225/325/425 (D5-10)', () => {
+    expect(
+      GOLIATH_SIZE_STATS.map(size =>
+        Math.round(size.contactDamage * ATTACKS.swordSwirl.damageMultiplier)
+      )
+    ).toEqual([225, 325, 425]);
+  });
+
+  it('no-one-shot invariant: worst-case chain damage stays below the smallest character HP pool', () => {
+    // BOTH sides derived live (never a hardcoded tautology): the largest goliath's
+    // full swing+swirl chain must not kill the squishiest character from full HP.
+    const worstChain = Math.max(
+      ...GOLIATH_SIZE_STATS.map(
+        size =>
+          Math.round(size.contactDamage * ATTACKS.swordSwing.damageMultiplier) +
+          Math.round(size.contactDamage * ATTACKS.swordSwirl.damageMultiplier)
+      )
+    );
+    const minPool = Math.min(...Object.values(CHARACTERS).map(character => character.maxHealth));
+    expect(worstChain).toBeLessThan(minPool);
+  });
+
+  it('every chainsInto resolves in ATTACKS and chains terminate without cycles (D5-01)', () => {
+    for (const [attackId, spec] of Object.entries(ATTACKS)) {
+      const visited = new Set<string>([attackId]);
+      let next = spec.chainsInto;
+      while (next !== undefined) {
+        expect(ATTACKS[next], `${attackId} chain link '${next}' missing from ATTACKS`).toBeDefined();
+        expect(visited.has(next), `chain from ${attackId} revisits '${next}' (cycle)`).toBe(false);
+        visited.add(next);
+        next = ATTACKS[next].chainsInto;
+      }
+    }
+  });
+
+  it('goliath default list has swordSwing but NEVER swordSwirl — swirl only via chain (D5-03)', () => {
+    const defaultList = UNIT_ATTACKS[UNIT_KIND_GOLIATH].default;
+    expect(defaultList).toContain('swordSwing');
+    expect(defaultList).not.toContain('swordSwirl');
   });
 });
