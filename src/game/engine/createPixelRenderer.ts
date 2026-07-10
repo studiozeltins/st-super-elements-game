@@ -30,6 +30,10 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.BasicShadowMap;
+  // The sun and all shadow-casting geometry are static (only units move a little),
+  // and each renderer.render() below would otherwise rebuild the 2048² sun depth
+  // map over the WHOLE scene. Drive it once per frame instead of twice.
+  renderer.shadowMap.autoUpdate = false;
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
 
@@ -79,6 +83,10 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
     camera,
     resize,
     render(scene) {
+      // Rebuild the sun shadow map exactly once this frame (auto-resets to false
+      // after the first render() below, so pass 3 reuses it instead of redrawing).
+      renderer.shadowMap.needsUpdate = true;
+
       // Pass 1: world (layer 0) → low-res target.
       camera.layers.set(0);
       renderer.setRenderTarget(worldTarget);

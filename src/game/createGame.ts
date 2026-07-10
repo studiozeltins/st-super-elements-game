@@ -1007,9 +1007,10 @@ export function createGame(
   const SHAKE_DECAY_RATE = 12; // e^-3 ≈ 5% left after 0.25s
   const SHAKE_FLOOR = 0.005; // below this the shake snaps off
   let shakeMagnitude = 0;
+  const desiredPosition = new THREE.Vector3();
 
   function updateCamera(deltaSeconds: number) {
-    const desiredPosition = playerPosition.clone().add(CAMERA_OFFSET);
+    desiredPosition.copy(playerPosition).add(CAMERA_OFFSET);
     if (shakeMagnitude > 0) {
       desiredPosition.x += (Math.random() - 0.5) * 2 * shakeMagnitude;
       desiredPosition.y += (Math.random() - 0.5) * 2 * shakeMagnitude;

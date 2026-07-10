@@ -155,10 +155,8 @@ export function createTelegraphSystem(
     if (duration <= 0) return 1;
     // Re-derive from the row's server duration with the arrival-captured offset
     // (ANIM-01): elapsed micros since the row arrived over windup micros.
-    const elapsedMicros = BigInt(
-      Math.round((performance.now() - telegraph.arrivalPerfMs) * 1000)
-    );
-    return THREE.MathUtils.clamp(Number(elapsedMicros) / duration, 0, 1);
+    const elapsedMicros = (performance.now() - telegraph.arrivalPerfMs) * 1000;
+    return THREE.MathUtils.clamp(elapsedMicros / duration, 0, 1);
   }
 
   function syncAttacks(
