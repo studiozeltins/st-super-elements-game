@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ATTACK_RENDER } from '../attacks';
 import { CHARACTERS, healSpecFor } from '../characters';
 import { BANNERS, GACHA_WEAPONS } from '../gacha';
 import { BOSS_GEM_MULTIPLIER, GEM_DENOMINATIONS } from '../gemDrops';
@@ -416,5 +417,39 @@ describe('ATTACKS registry invariants (INV-5)', () => {
     const defaultList = UNIT_ATTACKS[UNIT_KIND_GOLIATH].default;
     expect(defaultList).toContain('swordSwing');
     expect(defaultList).not.toContain('swordSwirl');
+  });
+});
+
+// INV-5 / D5-07: the client ATTACK_RENDER mirror (telegraph shape + cone angle)
+// MUST stay parity-locked to the server ATTACKS registry. Import-and-compare
+// across the package boundary, same mechanism as CHARACTER_COMBAT above — a
+// runtime client import of the server module was explicitly rejected (D5-07),
+// so this test IS the only drift protection.
+describe('client ATTACK_RENDER mirror stays in sync with server ATTACKS', () => {
+  it('contains exactly the same attack ids (no drift in either direction)', () => {
+    expect(Object.keys(ATTACK_RENDER).sort()).toEqual(Object.keys(ATTACKS).sort());
+  });
+
+  it.each(Object.keys(ATTACKS).map(id => [id] as const))('%s shape matches server ATTACKS', id => {
+    expect(ATTACK_RENDER[id], `ATTACK_RENDER missing entry for ${id}`).toBeDefined();
+    expect(ATTACK_RENDER[id].shape).toBe(ATTACKS[id].shape);
+  });
+
+  it('every cone entry locks cos(coneHalfAngleDegrees) to the server coneMinDot (D5-06)', () => {
+    const coneIds = Object.keys(ATTACKS).filter(id => ATTACKS[id].shape === 'cone');
+    expect(coneIds.length).toBeGreaterThan(0); // swordSwing exists — guard against a vacuous pass
+    for (const id of coneIds) {
+      const halfAngleDegrees = ATTACK_RENDER[id].coneHalfAngleDegrees;
+      expect(halfAngleDegrees, `${id} is a cone but has no coneHalfAngleDegrees`).toBeDefined();
+      // Locks 60° to coneMinDot 0.5: cos(60° in radians) ≈ 0.5.
+      expect(Math.cos((halfAngleDegrees! * Math.PI) / 180)).toBeCloseTo(ATTACKS[id].coneMinDot!);
+    }
+  });
+
+  it('non-cone entries carry NO coneHalfAngleDegrees', () => {
+    for (const [id, spec] of Object.entries(ATTACK_RENDER)) {
+      if (spec.shape === 'cone') continue;
+      expect(spec.coneHalfAngleDegrees, `${id} is not a cone but has a cone angle`).toBeUndefined();
+    }
   });
 });
