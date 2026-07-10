@@ -1441,10 +1441,14 @@ export function createGame(
         radius: strike.radius,
         atMs: performance.now(),
       };
+      // Juice tint comes from the ATTACK_RENDER element palette hint (05-05
+      // round 2 — telegraphs stay Frost cyan; only the strike burst/shockwave
+      // is element-colored). Unknown attackIds fall back to geo like the slam.
+      const juiceColor = ATTACK_RENDER[strike.attackId]?.juiceColor ?? ELEMENTS.geo.color;
       if (strike.attackId === 'swordSwing') {
         // Lightest tier: small burst, light shake, whoosh — and NO shockwave
         // (a circular shockwave misreads the swing's cone).
-        effectSystem.spawnBurst(landing, 0x86e2ff, SWING_BURST_PARTICLES);
+        effectSystem.spawnBurst(landing, juiceColor, SWING_BURST_PARTICLES);
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
         shakeMagnitude = SWING_SHAKE_MAGNITUDE;
         audioSystem.playSwing();
@@ -1452,16 +1456,16 @@ export function createGame(
       }
       if (strike.attackId === 'swordSwirl') {
         // Medium tier: the swirl IS a circle, so the radius shockwave reads true.
-        effectSystem.spawnBurst(landing, 0x86e2ff, SWIRL_BURST_PARTICLES);
-        effectSystem.spawnShockwave(landing, strike.radius, 0x86e2ff);
+        effectSystem.spawnBurst(landing, juiceColor, SWIRL_BURST_PARTICLES);
+        effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
         shakeMagnitude = SWIRL_SHAKE_MAGNITUDE;
         audioSystem.playSwirl();
         return;
       }
       // Default (leapSlam + any unknown attackId): the D4-15 full package.
-      effectSystem.spawnBurst(landing, 0x86e2ff, 26);
-      effectSystem.spawnShockwave(landing, strike.radius, 0x86e2ff);
+      effectSystem.spawnBurst(landing, juiceColor, 26);
+      effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
       telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
       shakeMagnitude = SHAKE_START_MAGNITUDE;
       audioSystem.playSlam();

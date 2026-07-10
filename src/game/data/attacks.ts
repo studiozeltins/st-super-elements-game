@@ -1,9 +1,11 @@
+import { ELEMENTS } from './elements';
+
 // Static per-attack RENDER data keyed by attackId. The server ATTACKS registry
 // (spacetimedb/src/attacks.ts) stays the source of truth for all timing/damage —
 // unit_attack rows are denormalized from it; this mirror holds ONLY what the
-// renderer needs to pick a telegraph shape/orientation. Guarded by
-// serverSync.test.ts parity (INV-5, D5-07 — a runtime import of the server
-// module into the client bundle was explicitly rejected).
+// renderer needs: telegraph shape/orientation, stun window, and strike-juice
+// color. Guarded by serverSync.test.ts parity (INV-5, D5-07 — a runtime import
+// of the server module into the client bundle was explicitly rejected).
 
 export interface AttackRenderSpec {
   shape: 'circle' | 'cone';
@@ -16,11 +18,26 @@ export interface AttackRenderSpec {
    * hit knocks back but must NOT freeze inputs or fire the popup.
    */
   stunSeconds: number;
+  /**
+   * Strike-juice tint (burst + shockwave particles) drawn from the ELEMENTS
+   * palette. Pure client render data — attacks carry NO element on the server
+   * yet (elemental combat is a deferred feature), so this is a per-attack
+   * visual hint, not parity material. Telegraphs stay Frost cyan regardless.
+   */
+  juiceColor: number;
 }
 
 export const ATTACK_RENDER: Record<string, AttackRenderSpec> = {
-  leapSlam: { shape: 'circle', stunSeconds: 1.05 },
+  // Ground-shattering slam reads as geo/earth amber.
+  leapSlam: { shape: 'circle', stunSeconds: 1.05, juiceColor: ELEMENTS.geo.color },
   // 60° half-angle = 120° full swing arc; cos 60° = 0.5 = server coneMinDot (D5-06).
-  swordSwing: { shape: 'cone', coneHalfAngleDegrees: 60, stunSeconds: 0.6 },
-  swordSwirl: { shape: 'circle', stunSeconds: 0 },
+  // Air-cutting arc reads as anemo teal.
+  swordSwing: {
+    shape: 'cone',
+    coneHalfAngleDegrees: 60,
+    stunSeconds: 0.6,
+    juiceColor: ELEMENTS.anemo.color,
+  },
+  // Charged full-circle spin reads as electro violet — pops against the green terrain.
+  swordSwirl: { shape: 'circle', stunSeconds: 0, juiceColor: ELEMENTS.electro.color },
 };

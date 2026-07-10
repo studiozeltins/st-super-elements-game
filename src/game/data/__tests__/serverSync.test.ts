@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ATTACK_RENDER } from '../attacks';
 import { CHARACTERS, healSpecFor } from '../characters';
+import { ELEMENTS } from '../elements';
 import { BANNERS, GACHA_WEAPONS } from '../gacha';
 import { BOSS_GEM_MULTIPLIER, GEM_DENOMINATIONS } from '../gemDrops';
 import {
@@ -459,6 +460,18 @@ describe('client ATTACK_RENDER mirror stays in sync with server ATTACKS', () => 
       expect(ATTACK_RENDER[id].stunSeconds).toBeCloseTo(ATTACKS[id].stunTicks * 0.15);
     }
   );
+
+  // Client-only render hint (no server counterpart — attacks carry no element
+  // yet): the strike-juice tint must come from the ELEMENTS palette, never an
+  // ad-hoc hex, so juice always reads as one of the game's elements.
+  it('every entry tints its strike juice with a color from the ELEMENTS palette', () => {
+    const paletteColors = Object.values(ELEMENTS).map(element => element.color);
+    for (const [id, spec] of Object.entries(ATTACK_RENDER)) {
+      expect(paletteColors, `${id}.juiceColor is not an ELEMENTS palette color`).toContain(
+        spec.juiceColor
+      );
+    }
+  });
 
   it('every attack keeps graceTicks 1 — the client STRIKE_PHASE_MICROS window assumes it', () => {
     // createGame.ts derives the strike-phase clip window as strikeAt + ONE world
