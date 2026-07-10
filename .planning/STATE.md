@@ -6,14 +6,14 @@ current_phase: 05
 current_phase_name: swordSwing → swordSwirl combo
 status: executing
 stopped_at: "Phase 05 planned (5 plans, checker passed iteration 2). Gate override: decision-coverage parser could-not-parse (D5-NN vs D-NN, same as Phase 4) — proceeded on plan-checker Dimension 7 PASS (D5-01..D5-16 all traced)."
-last_updated: "2026-07-10T15:50:39.778Z"
+last_updated: "2026-07-10T16:00:06.462Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 20
-  completed_plans: 16
+  completed_plans: 17
   percent: 57
 ---
 
@@ -32,7 +32,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 ## Current Position
 
 Phase: 05 (swordSwing → swordSwirl combo) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-10 — Phase 05 execution started
 
@@ -83,6 +83,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | Phase 04 P05 | 45min | 2 tasks | 3 files |
 | Phase 04 P06 | ~8min | 3 tasks | 3 files |
 | Phase 05 P01 | 14min | 3 tasks | 8 files |
+| Phase 05 P02 | 9min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -148,6 +149,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: 05-01: chain break contract locked pure — walkAttackTransitions STOPS the walk at a chain swap so the old attack's stale IDLE never writes cooldowns (Pitfall 2)
 - [Phase ?]: 05-01: per-role cooldown split is data-driven — IDLE writes basicCooldownUntilMicros for role 'basic', cooldownUntilMicros for 'skill' (D5-08/D5-13)
 - [Phase ?]: 05-01: unitAttacks glue passes literal 0n basic cooldown until 05-03 adds the column — do NOT publish the module between 05-01 and 05-03 (swing would resolve as circle, no chain)
+- [Phase 05]: 05-02: swirl strike yaw lerps -coil -> exactly 2pi so the spin ends visually neutral (2pi = 0) and recovery never counter-spins; spin drives model.body (named torso), never the group (lookAt owns it)
+- [Phase 05]: 05-02: neutral-restore extension is one shared resetAttackPose (torso lean/yaw + arm x/z) called from BOTH animateMovement and animateDeath — Pitfall 10 provable from one function
+- [Phase 05]: 05-02: juice magnitudes are handler-local named constants in createGame.ts, NOT parity material for the 05-04 client mirror (RESEARCH OQ2)
 
 ### Pending Todos
 
@@ -191,7 +195,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-10T15:49:57.066Z
+Last session: 2026-07-10T15:59:32.259Z
 Stopped at: Phase 05 planned (5 plans, checker passed iteration 2). Gate override: decision-coverage parser could-not-parse (D5-NN vs D-NN, same as Phase 4) — proceeded on plan-checker Dimension 7 PASS (D5-01..D5-16 all traced).
 Resume file: .planning/phases/05-swordswing-swordswirl-combo/05-01-PLAN.md
 
