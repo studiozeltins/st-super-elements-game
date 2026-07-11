@@ -10,8 +10,13 @@
 
 // Unit kinds the unit-agnostic FSM discriminates on (u32-friendly, matching the
 // existing aggroKind idiom). Goliaths are the only FSM-driven unit this milestone;
-// camp enemies + heroes reuse the same kind space later with zero schema change.
+// heroes reuse the same kind space later with zero schema change.
 export const UNIT_KIND_GOLIATH = 0;
+// Camp enemies. Not FSM-driven — slime hop landings (enemyMovement.ts) emit
+// attack_strike events with this kind ('slimeSlam'/'spikySlam') so clients can
+// play the squash on a landed slam; those ids are deliberately NOT in ATTACKS
+// (the slam has no windup/recovery FSM shape, its radius rides the event row).
+export const UNIT_KIND_ENEMY = 1;
 
 // Attack FSM states (u32-friendly). IDLE → WINDUP → STRIKE → RECOVERY → IDLE.
 export const ATTACK_STATE_IDLE = 0;

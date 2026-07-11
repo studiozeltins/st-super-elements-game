@@ -24,3 +24,9 @@ export function isInsideSafeZone(positionX: number, positionZ: number) {
 export function aggroExpired(expiresAtMicros: bigint, nowMicros: bigint): boolean {
   return expiresAtMicros !== 0n && nowMicros >= expiresAtMicros;
 }
+
+// Aggro kinds on the enemy row (shared by worldTick and the movement pass):
+// an entity fights whoever last DAMAGED it for a refreshable memory window.
+export const AGGRO_HOME = 0; // defend the camp (enemies) / roam camps (goliaths)
+export const AGGRO_PLAYER = 1;
+export const AGGRO_GOLIATH = 2;

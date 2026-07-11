@@ -2,7 +2,7 @@ import { schema, t, table, SenderError } from 'spacetimedb/server';
 import { ScheduleAt, Identity } from 'spacetimedb';
 import { sha256Hex, bytesToHex } from './sha256';
 import { createSeededRandom } from './rng';
-import { generateCampSites, type CampArchetypeId } from './worldGen';
+import { generateCampSites } from './worldGen';
 import {
   ENEMY_ARCHETYPE_STATS,
   MEMBERS_PER_CAMP,
@@ -26,7 +26,17 @@ import { resolveDupeGrant } from './gachaOverflow';
 import { applyDeathShardPenalty } from './deathPenalty';
 import { nextLeader, canAccept } from './partyRules';
 import { runUnitAttacks } from './unitAttacks';
-import { aggroExpired, clampToWorld, isInsideSafeZone } from './worldRules';
+import { moveEnemies } from './enemyMovement';
+import { isSlimeArchetype } from './slimeHop';
+import { steeredStep } from './steering';
+import {
+  AGGRO_GOLIATH,
+  AGGRO_HOME,
+  AGGRO_PLAYER,
+  aggroExpired,
+  clampToWorld,
+  isInsideSafeZone,
+} from './worldRules';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -259,9 +269,6 @@ const WORLD_TICK_INTERVAL_MICROS = 150_000n; // ~6.7 ticks/sec
 // Aggro is a 5-second refreshable memory: an entity fights whoever last DAMAGED
 // it, and forgets 5s after the last hit. Walking near never flips aggro.
 const AGGRO_DURATION_MICROS = 5_000_000n;
-const AGGRO_HOME = 0; // defend the camp (enemies) / roam camps (goliaths)
-const AGGRO_PLAYER = 1;
-const AGGRO_GOLIATH = 2;
 // Enemies spawn scattered around their camp home; matches client SPAWN_SCATTER_RADIUS.
 const SPAWN_SCATTER_RADIUS = 3;
 const ENEMY_SPAWN_SEED = 0xbeef5; // matches the client enemy spawn PRNG seed
@@ -272,12 +279,7 @@ const GOLIATH_SPLASH_RANGE = 4.0; // the largest raider hits everything in here
 // itself is still single-target unless the raider splashes). This is what makes a
 // fresh camp gang up and eventually overpower a wounded goliath.
 const GOLIATH_ENGAGE_RANGE = 8.0;
-const ENEMY_PLAYER_CONTACT_RANGE = 1.8; // camp member ↔ player it is chasing
-// Idle patrol: an un-aggro'd camp member walks a slow deterministic loop around its
-// home post instead of standing frozen at the fire. Radius + period are shared by
-// all members; each member's phase is derived from its id so the camp fans out.
-const ENEMY_PATROL_RADIUS = 1.7;
-const ENEMY_PATROL_PERIOD_MICROS = 11_000_000n; // ~11s per lap — a calm patrol
+const ENEMY_PLAYER_CONTACT_RANGE = 1.8; // walking member (wisp/golem) ↔ player it is chasing
 // DEV puppet (training dummy) chase tuning.
 const PUPPET_SPEED = 6; // units/sec toward the nearest real player
 const PUPPET_STOP_RADIUS = 1.8; // stop this close so it stays in melee reach
@@ -406,6 +408,24 @@ const enemy = table(
     aggroExpiresAtMicros: t.u64(),
     alive: t.bool(),
     respawnAtMicros: t.u64(),
+    // NOTE: appended (not reordered) with defaults so the schema diff stays
+    // additive on a populated DB (STDB rejects a non-defaulted or mid-table
+    // column). Slime hop cycle in MICROS — tick-rate independent (slimeHop.ts):
+    // hopDurationMicros 0 = grounded/idle; the client animates the bounce arc
+    // from these two columns.
+    hopStartedAtMicros: t.u64().default(0n),
+    hopDurationMicros: t.u64().default(0n),
+    // Hop landing, locked at hop start (the slime travels toward it while
+    // airborne and slams there on the landing tick).
+    hopTargetX: t.f32().default(0),
+    hopTargetZ: t.f32().default(0),
+    // Current patrol destination on the home ring; (0,0) = none picked yet
+    // (never a legal ring point — camps sit far from the origin safe zone).
+    patrolTargetX: t.f32().default(0),
+    patrolTargetZ: t.f32().default(0),
+    // Rests (no hop/walk) until this deadline: the grounded pause between hops
+    // and the pause at each patrol point share it.
+    restUntilMicros: t.u64().default(0n),
   }
 );
 
@@ -1909,6 +1929,14 @@ function killEnemyRow(
     aggroGoliathId: 0n,
     aggroExpiresAtMicros: 0n,
     respawnAtMicros: nowMicros + ENEMY_RESPAWN_MICROS,
+    // A dead slime is not mid-hop; the whole move state resets with the corpse.
+    hopStartedAtMicros: 0n,
+    hopDurationMicros: 0n,
+    hopTargetX: 0,
+    hopTargetZ: 0,
+    patrolTargetX: 0,
+    patrolTargetZ: 0,
+    restUntilMicros: 0n,
   });
   return dropped;
 }
@@ -2693,6 +2721,13 @@ function spawnCamps(ctx: { db: any }) {
         aggroExpiresAtMicros: 0n,
         alive: true,
         respawnAtMicros: 0n,
+        hopStartedAtMicros: 0n,
+        hopDurationMicros: 0n,
+        hopTargetX: 0,
+        hopTargetZ: 0,
+        patrolTargetX: 0,
+        patrolTargetZ: 0,
+        restUntilMicros: 0n,
       });
     }
   });
@@ -2820,6 +2855,13 @@ function respawnEnemies(ctx: { db: any }, nowMicros: bigint) {
       aggroGoliathId: 0n,
       aggroExpiresAtMicros: 0n,
       respawnAtMicros: 0n,
+      hopStartedAtMicros: 0n,
+      hopDurationMicros: 0n,
+      hopTargetX: 0,
+      hopTargetZ: 0,
+      patrolTargetX: 0,
+      patrolTargetZ: 0,
+      restUntilMicros: 0n,
     });
   }
 }
@@ -3104,8 +3146,20 @@ export const worldTick = spacetimedb.reducer(
     const goliathEngageEnds = new Map<bigint, bigint>();
     const goliathLastRaided = new Map<bigint, number>();
     const goliathHeading = new Map<bigint, { x: number; z: number }>();
+    // Tick-start goliath bodies for mutual-avoidance steering: two raiders on
+    // the same path arc around each other (deterministic sides by id) instead
+    // of shoving. <= 3 raiders per window, so the O(n) nearest scan inside
+    // steeredStep is a handful of hypots — no spatial hash (see steering.ts).
+    const goliathObstacles = goliaths.map(otherGoliath => ({
+      id: otherGoliath.goliathId,
+      x: otherGoliath.positionX,
+      z: otherGoliath.positionZ,
+      radius: GOLIATH_SIZE_STATS[Math.min(Math.max(otherGoliath.sizeIndex, 0), GOLIATH_SIZE_STATS.length - 1)].collisionRadius,
+    }));
     for (const goliathRow of goliaths) {
       const speed = goliathRow.moveSpeed * (Number(tick) / 1_000_000);
+      const collisionRadius =
+        GOLIATH_SIZE_STATS[Math.min(Math.max(goliathRow.sizeIndex, 0), GOLIATH_SIZE_STATS.length - 1)].collisionRadius;
       const fromX = goliathRow.positionX;
       const fromZ = goliathRow.positionZ;
       // Provoked → drop the raid and chase the player who hit it for the 5s aggro.
@@ -3118,7 +3172,7 @@ export const worldTick = spacetimedb.reducer(
         // would send the raider off the island into the void). The raid timer is
         // paused (engage 0, target -1) but heading still tracks the real step.
         const waypoint = nextGoliathWaypoint(fromX, fromZ, chasedPlayer.positionX, chasedPlayer.positionZ);
-        const moved = stepToward(fromX, fromZ, waypoint.x, waypoint.z, speed);
+        const moved = steeredStep(goliathRow.goliathId, fromX, fromZ, waypoint.x, waypoint.z, speed, collisionRadius, goliathObstacles);
         const toX = clampToWorld(moved.x);
         const toZ = clampToWorld(moved.z);
         goliathTarget.set(goliathRow.goliathId, -1);
@@ -3155,7 +3209,7 @@ export const worldTick = spacetimedb.reducer(
       if (!reached) {
         // Route along bridges toward the camp so the raider stays on walkable ground.
         const waypoint = nextGoliathWaypoint(fromX, fromZ, center.x, center.z);
-        const moved = stepToward(fromX, fromZ, waypoint.x, waypoint.z, speed);
+        const moved = steeredStep(goliathRow.goliathId, fromX, fromZ, waypoint.x, waypoint.z, speed, collisionRadius, goliathObstacles);
         toX = clampToWorld(moved.x);
         toZ = clampToWorld(moved.z);
       }
@@ -3179,55 +3233,18 @@ export const worldTick = spacetimedb.reducer(
     const goliathById = new Map<bigint, any>();
     for (const goliathRow of goliaths) goliathById.set(goliathRow.goliathId, goliathRow);
 
-    // Pass 2 — enemies move toward whatever their aggro points at (post-decay).
-    const enemyPosition = new Map<bigint, { x: number; z: number }>();
-    for (const enemyRow of enemies) {
-      const expired = aggroExpired(enemyRow.aggroExpiresAtMicros, now);
-      let targetX = enemyRow.homeX;
-      let targetZ = enemyRow.homeZ;
-      let patrolling = true;
-      if (!expired && enemyRow.aggroKind === AGGRO_GOLIATH) {
-        const chased = goliathPosition.get(enemyRow.aggroGoliathId);
-        if (chased) {
-          targetX = chased.x;
-          targetZ = chased.z;
-          patrolling = false;
-        }
-      } else if (!expired && enemyRow.aggroKind === AGGRO_PLAYER && enemyRow.aggroPlayer) {
-        const chased = playerByHex.get(enemyRow.aggroPlayer.toHexString());
-        if (chased) {
-          targetX = chased.positionX;
-          targetZ = chased.positionZ;
-          patrolling = false;
-        }
-      }
-      if (patrolling) {
-        // Deterministic slow orbit around the member's home post — no RNG/wall clock.
-        // Phase from the enemy id spreads members around the loop; angle advances with
-        // world time. The isWalkable step guard below keeps the loop on solid ground.
-        const phase = (Number(enemyRow.enemyId % 628n) / 628) * Math.PI * 2;
-        const lap = Number(now % ENEMY_PATROL_PERIOD_MICROS) / Number(ENEMY_PATROL_PERIOD_MICROS);
-        const angle = phase + lap * Math.PI * 2;
-        targetX = enemyRow.homeX + Math.cos(angle) * ENEMY_PATROL_RADIUS;
-        targetZ = enemyRow.homeZ + Math.sin(angle) * ENEMY_PATROL_RADIUS;
-      }
-      const moveSpeed = ENEMY_ARCHETYPE_STATS[enemyRow.archetypeId as CampArchetypeId].moveSpeed;
-      const moved = stepToward(enemyRow.positionX, enemyRow.positionZ, targetX, targetZ, moveSpeed * (Number(tick) / 1_000_000));
-      const steppedX = clampToWorld(moved.x);
-      const steppedZ = clampToWorld(moved.z);
-      // Enemies get no bridge pathing; they just must not walk off into the void.
-      // A step that would land off all walkable ground is refused (stay put this tick).
-      const stepStaysOnGround = isWalkable(steppedX, steppedZ);
-      enemyPosition.set(enemyRow.enemyId, {
-        x: stepStaysOnGround ? steppedX : enemyRow.positionX,
-        z: stepStaysOnGround ? steppedZ : enemyRow.positionZ,
-      });
-    }
-
-    // Player-directed damage from strikes (attack FSM below) and enemy bites
-    // (pass 4) accumulates in ONE map so the single apply loop at the bottom
-    // (resist 'contact' → death → spill → respawn) stays the only damage sink.
+    // Player-directed damage from slime slams (pass 2), strikes (attack FSM
+    // below), and enemy bites (pass 4) accumulates in ONE map so the single
+    // apply loop at the bottom (resist 'contact' → death → spill → respawn)
+    // stays the only damage sink. Goliath-directed damage (slime slams + pass-4
+    // bites) likewise sums here and applies once in the goliath loop.
     const playerDamage = new Map<string, number>();
+    const goliathDamage = new Map<bigint, number>();
+
+    // Pass 2 — enemy movement (enemyMovement.ts): slimes bounce on a micros hop
+    // cycle and slam on landing, wisps/golems walk with steering, idle members
+    // patrol their camp ring. Landing damage lands in the shared maps above.
+    const enemyPosition = moveEnemies(ctx, now, tick, enemies, goliaths, goliathPosition, playerByHex, playerDamage, goliathDamage);
 
     // Attack FSM pass (FSM-01): windup → strike → recovery for every live
     // goliath. Runs AFTER the position-build passes — it overrides entries in
@@ -3272,11 +3289,12 @@ export const worldTick = spacetimedb.reducer(
       }
     }
 
-    // Pass 4 — enemies bite back: an enemy aggroed to a goliath (in reach) hurts
-    // it; one aggroed to a player (in reach, player outside the safe zone) hurts
-    // the player. Player-directed damage is summed for a single apply below.
-    const goliathDamage = new Map<bigint, number>();
+    // Pass 4 — WALKING enemies bite back per tick: an enemy aggroed to a
+    // goliath (in reach) hurts it; one aggroed to a player (in reach, player
+    // outside the safe zone) hurts the player. Slimes are excluded — their only
+    // damage is the hop-landing slam resolved in pass 2.
     for (const enemyRow of enemies) {
+      if (isSlimeArchetype(enemyRow.archetypeId)) continue;
       const expired = aggroExpired(enemyRow.aggroExpiresAtMicros, now);
       if (expired) continue;
       const from = enemyPosition.get(enemyRow.enemyId)!;
@@ -3329,8 +3347,19 @@ export const worldTick = spacetimedb.reducer(
     // Apply enemy movement + damage + aggro; dead members drop loot (uncredited,
     // droppedBy the module identity) and schedule a respawn.
     for (const enemyRow of enemies) {
-      const position = enemyPosition.get(enemyRow.enemyId)!;
-      const moved = { ...enemyRow, positionX: position.x, positionZ: position.z };
+      const move = enemyPosition.get(enemyRow.enemyId)!;
+      const moved = {
+        ...enemyRow,
+        positionX: move.x,
+        positionZ: move.z,
+        hopStartedAtMicros: move.hopStartedAtMicros,
+        hopDurationMicros: move.hopDurationMicros,
+        hopTargetX: move.hopTargetX,
+        hopTargetZ: move.hopTargetZ,
+        patrolTargetX: move.patrolTargetX,
+        patrolTargetZ: move.patrolTargetZ,
+        restUntilMicros: move.restUntilMicros,
+      };
       const damage = Math.round(enemyDamage.get(enemyRow.enemyId) ?? 0);
       if (damage >= enemyRow.health) {
         killEnemyRow(ctx, moved, enemyBaseGems(false, 0, enemyRow.rewardTier, enemyRow.isBoss), ctx.sender, now);
@@ -3389,6 +3418,13 @@ export const worldTick = spacetimedb.reducer(
       const unchanged =
         moved.positionX === enemyRow.positionX &&
         moved.positionZ === enemyRow.positionZ &&
+        moved.hopStartedAtMicros === enemyRow.hopStartedAtMicros &&
+        moved.hopDurationMicros === enemyRow.hopDurationMicros &&
+        moved.hopTargetX === enemyRow.hopTargetX &&
+        moved.hopTargetZ === enemyRow.hopTargetZ &&
+        moved.patrolTargetX === enemyRow.patrolTargetX &&
+        moved.patrolTargetZ === enemyRow.patrolTargetZ &&
+        moved.restUntilMicros === enemyRow.restUntilMicros &&
         newHealth === enemyRow.health &&
         aggroKind === enemyRow.aggroKind &&
         aggroGoliathId === enemyRow.aggroGoliathId &&

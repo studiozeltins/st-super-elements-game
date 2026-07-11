@@ -79,6 +79,13 @@ export const Enemy = __t.object("Enemy", {
   aggroExpiresAtMicros: __t.u64(),
   alive: __t.bool(),
   respawnAtMicros: __t.u64(),
+  hopStartedAtMicros: __t.u64(),
+  hopDurationMicros: __t.u64(),
+  hopTargetX: __t.f32(),
+  hopTargetZ: __t.f32(),
+  patrolTargetX: __t.f32(),
+  patrolTargetZ: __t.f32(),
+  restUntilMicros: __t.u64(),
 });
 export type Enemy = __Infer<typeof Enemy>;
 
