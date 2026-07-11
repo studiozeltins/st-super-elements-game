@@ -203,4 +203,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-09 — Phase 3 (PVP crit) complete: crit trilogy done, PVP damage fully server-authoritative (CRIT-07)*
+*Last updated: 2026-07-11 — Phase 5 (swordSwing → swordSwirl combo) complete: attack chaining + cone hitbox proven on the FSM spine (ATK-02/ATK-03); playtest-approved after 2 fix rounds*
