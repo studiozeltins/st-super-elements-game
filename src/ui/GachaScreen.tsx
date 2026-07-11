@@ -387,7 +387,12 @@ export function GachaScreen({
                             }
                           />
                         </span>
-                        <CharacterIdentity character={character} className="team-slot__id" />
+                        <CharacterIdentity
+                          character={character}
+                          className="team-slot__id"
+                          unlocked={constellationById[character.id] ?? 0}
+                          transcendLevel={transcendById[character.id] ?? 0}
+                        />
                       </div>
                       <button
                         className="team-slot__stage"

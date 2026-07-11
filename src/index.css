@@ -3030,6 +3030,17 @@ button {
   color: var(--accent);
 }
 
+/* Clickable badge (jumps to the cieņa/būsts tab where wired). */
+.cbadge--btn {
+  cursor: pointer;
+  transition: transform 0.12s, filter 0.12s;
+}
+
+.cbadge--btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.2);
+}
+
 /* Collection cards park the badge row bottom-right (where C{n} used to sit). */
 .inv-card .cbadges {
   position: absolute;
@@ -3352,40 +3363,27 @@ button {
   font-size: 30px;
 }
 
-/* Transcend status tag — purple (--shard) chip. */
-/* Shared identity tag row (combat role + Būsts level) — used by every cident. */
+/* Shared identity tag row (combat role + [C][B][L] badges) — every cident. */
 .cident__tags {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-top: 8px;
 }
 
-.cident__role,
-.cident__boost {
+.cident__role {
   padding: 4px 9px;
   font: 700 10px var(--font-display);
   letter-spacing: 0.12em;
   border: 1px solid currentColor;
 }
 
-/* Two separate Būsts chips: gold "C6" (→ cieņa) + purple "Bn" (→ būsts). */
-.cident__boost--c6 {
-  color: var(--gold);
-}
-
-.cident__boost--b {
-  color: var(--shard);
-}
-
-.cident__boost--btn {
-  cursor: pointer;
-  transition: transform 0.12s, filter 0.12s;
-}
-
-.cident__boost--btn:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.2);
+/* Identity blocks get the roomier badge size (chips keep the 8px default). */
+.cident .cbadge {
+  font-size: 10px;
+  padding: 3px 7px;
+  letter-spacing: 0.12em;
 }
 
 /* Role badge — sibling of .cchar__transcend-tag.
@@ -5232,7 +5230,7 @@ button {
   font-size: calc(9px * var(--ui-scale));
 }
 .cident__role,
-.cident__boost,
+.cident .cbadge,
 .csheet__pill {
   font-size: calc(10px * var(--ui-scale));
 }

@@ -3,24 +3,67 @@ import { ELEMENTS } from '../game/data/elements';
 import { ConstellationRing } from './ConstellationRing';
 
 /**
- * [C5][B3][L1] mini-cards — the compact character progress readout used on
- * every character card in the game (roster chips, team select, collection).
- * C = constellation (gold), B = transcend boost (purple), L = level (cyan).
+ * [C6][B10][L1] mini-cards — the compact character progress readout used on
+ * every character card in the game (roster chips, team select, collection,
+ * identity blocks). All three ALWAYS show, zeros included ([C0][B0]), so the
+ * readout stays scannable everywhere. C = constellation (gold), B = transcend
+ * boost (purple), L = level (cyan). A badge with a click handler becomes a
+ * button (e.g. jump to the cieņa/būsts tab); display-only contexts pass none.
  */
 export function CharacterBadges({
   constellation = 0,
   transcend = 0,
   level = 1,
+  onConstellationClick,
+  onTranscendClick,
 }: {
   constellation?: number;
   transcend?: number;
   level?: number;
+  onConstellationClick?: () => void;
+  onTranscendClick?: () => void;
 }) {
   return (
     <span className="cbadges">
-      {constellation > 0 && <span className="cbadge cbadge--c">C{constellation}</span>}
-      {transcend > 0 && <span className="cbadge cbadge--b">B{transcend}</span>}
-      <span className="cbadge cbadge--l">L{level}</span>
+      <Badge
+        className="cbadge cbadge--c"
+        onClick={onConstellationClick}
+        label={`Cieņa C${constellation}`}
+      >
+        C{constellation}
+      </Badge>
+      <Badge className="cbadge cbadge--b" onClick={onTranscendClick} label={`Būsts B${transcend}`}>
+        B{transcend}
+      </Badge>
+      <span className="cbadge cbadge--l" aria-label={`Līmenis ${level}`}>
+        L{level}
+      </span>
+    </span>
+  );
+}
+
+// Badge = button when clickable (opens a tab/page), plain span otherwise.
+function Badge({
+  className,
+  onClick,
+  label,
+  children,
+}: {
+  className: string;
+  onClick?: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  if (onClick) {
+    return (
+      <button type="button" className={`${className} cbadge--btn`} onClick={onClick} aria-label={label}>
+        {children}
+      </button>
+    );
+  }
+  return (
+    <span className={className} aria-label={label}>
+      {children}
     </span>
   );
 }
