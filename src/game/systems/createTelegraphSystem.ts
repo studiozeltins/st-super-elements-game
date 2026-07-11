@@ -41,6 +41,11 @@ interface ActiveTelegraph {
   outline: THREE.Mesh;
   outlineMaterial: THREE.MeshBasicMaterial;
   progress: THREE.Mesh;
+  // Windup-fill scale strategy, chosen at insert time so update() never does a
+  // per-frame shape lookup (T-06-05): 'uniform' expands XZ together (circle/cone
+  // grow from their anchor); 'x' sweeps ONLY along the lane axis so a lane fill
+  // runs cast->end at constant width (RESEARCH Pitfall 3).
+  fillAxis: 'uniform' | 'x';
   state: number;
   // ANIM-01 arrival anchor: progress is re-derived every frame from
   // (performance.now() - arrivalPerfMs) against the ROW's windup duration
@@ -104,6 +109,66 @@ function flatRing(
   return geometry;
 }
 
+// A subdivided plane laid flat in the XZ plane (local +X = `width` axis, +Z =
+// `height` axis after the baked -PI/2 X-rotation), translated so its center sits
+// at local (centerX, 0, centerZ). Width subdivisions let the shared drape follow
+// terrace steps along a long lane rail (a thin strip needs none across).
+function flatStrip(
+  width: number,
+  height: number,
+  widthSegments: number,
+  centerX: number,
+  centerZ: number
+): THREE.PlaneGeometry {
+  const geometry = new THREE.PlaneGeometry(width, height, widthSegments, 1);
+  geometry.rotateX(-Math.PI / 2);
+  geometry.translate(centerX, 0, centerZ);
+  return geometry;
+}
+
+// Concatenates the position buffers of several plane strips into ONE non-indexed
+// BufferGeometry — kept local (no BufferGeometryUtils dependency; zero new deps).
+// Position is the only attribute the drape + additive MeshBasicMaterial need;
+// normals/uvs are dropped.
+function mergeStripPositions(strips: THREE.PlaneGeometry[]): THREE.BufferGeometry {
+  const expanded = strips.map(strip => strip.toNonIndexed());
+  let total = 0;
+  for (const strip of expanded) {
+    total += (strip.getAttribute('position').array as Float32Array).length;
+  }
+  const positions = new Float32Array(total);
+  let offset = 0;
+  for (const strip of expanded) {
+    const array = strip.getAttribute('position').array as Float32Array;
+    positions.set(array, offset);
+    offset += array.length;
+    strip.dispose();
+  }
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  return merged;
+}
+
+// Rectangle OUTLINE as a single draped mesh: two full-length rails (RIM_WIDTH
+// thick, subdivided so the drape follows the ground) plus two end caps spanning
+// only the gap BETWEEN the rails — so the additive material never double-brightens
+// the corners. One BufferGeometry so the shared drape + flash treat it exactly
+// like the circle/cone rim mesh.
+function buildLaneOutline(length: number, halfWidth: number): THREE.BufferGeometry {
+  const innerHeight = Math.max(0.001, halfWidth * 2 - 2 * RIM_WIDTH);
+  const lengthSegments = Math.max(1, Math.round(length));
+  const railCenterZ = halfWidth - RIM_WIDTH / 2;
+  const strips = [
+    flatStrip(length, RIM_WIDTH, lengthSegments, length / 2, railCenterZ),
+    flatStrip(length, RIM_WIDTH, lengthSegments, length / 2, -railCenterZ),
+    flatStrip(RIM_WIDTH, innerHeight, 1, RIM_WIDTH / 2, 0),
+    flatStrip(RIM_WIDTH, innerHeight, 1, length - RIM_WIDTH / 2, 0),
+  ];
+  const merged = mergeStripPositions(strips);
+  for (const strip of strips) strip.dispose();
+  return merged;
+}
+
 export function createTelegraphSystem(
   scene: THREE.Scene,
   getGroundHeight: (x: number, z: number) => number
@@ -134,11 +199,14 @@ export function createTelegraphSystem(
   // cast APEX yawed toward the aim (D5-14). Both are locked at windup entry (D5-05)
   // — the telegraph never re-aims mid-windup.
   function anchorGroup(group: THREE.Group, row: UnitAttack) {
-    if (ATTACK_RENDER[row.attackId]?.shape === 'cone') {
-      // After the -PI/2 X-rotation, geometry angle 0 maps to world +X, so yawing
-      // by atan2(-aimZ, aimX) points the θ=0-centered sector at the aim. Sign
-      // convention is DERIVED (RESEARCH A1, MEDIUM confidence) — the pixel-filter
-      // visual check is owned by plan 05-05; a flip is a one-line sign fix.
+    const shape = ATTACK_RENDER[row.attackId]?.shape;
+    if (shape === 'cone' || shape === 'lane') {
+      // Cone sectors AND lane rectangles anchor at the CAST end, yawed toward the
+      // aim. After the geometry's baked -PI/2 X-rotation, local +X maps to world
+      // +X, so yawing by atan2(-aimZ, aimX) points the shape (the cone θ=0 axis /
+      // the lane's +X length axis) at the aim. Sign convention is DERIVED
+      // (RESEARCH A1, MEDIUM confidence) — the pixel-filter visual check is owned
+      // by plan 05-05; a flip is a one-line sign fix.
       group.rotation.y = Math.atan2(-(row.landingZ - row.castZ), row.landingX - row.castX);
       group.position.set(row.castX, getGroundHeight(row.castX, row.castZ) + GROUND_EPSILON, row.castZ);
       return;
@@ -161,7 +229,37 @@ export function createTelegraphSystem(
     const render = ATTACK_RENDER[row.attackId];
     let outline: THREE.Mesh;
     let progress: THREE.Mesh;
-    if (render?.shape === 'cone' && render.coneHalfAngleDegrees !== undefined) {
+    let fillAxis: 'uniform' | 'x' = 'uniform';
+    if (render?.shape === 'lane') {
+      // Lane RECTANGLE (D6-11): the charge path. Geometry derives ENTIRELY from
+      // the row — length = |landing - cast|, width = row.radius * 2. row.radius IS
+      // the per-size half-width written by enterWindup; there is deliberately NO
+      // client mirror half-width field (a scalar cannot parity-lock to the
+      // three-value server radiusBySize array and would be dead data — the
+      // documented D6-13 deviation, RESEARCH Pitfall 6). Local axes (authored in
+      // the XZ plane so the shared drape samples ground per vertex): +X along the
+      // lane, Z across the width; anchorGroup yaws +X toward the aim.
+      const length = Math.hypot(row.landingX - row.castX, row.landingZ - row.castZ);
+      const halfWidth = row.radius;
+      // Instant full-lane outline: a single draped mesh tracing the rectangle
+      // perimeter in the shared RIM_WIDTH / outlineMaterial (D4-14 Frost reuse).
+      outline = new THREE.Mesh(buildLaneOutline(length, halfWidth), outlineMaterial);
+      // Fill: ONE plane inset by PROGRESS_RIM_WIDTH across the width, its origin at
+      // the CAST end (translate +length/2) so scaling X sweeps cast -> lane end.
+      const fillWidth = Math.max(0.001, halfWidth * 2 - 2 * PROGRESS_RIM_WIDTH);
+      const fillGeometry = new THREE.PlaneGeometry(
+        length,
+        fillWidth,
+        Math.max(1, Math.round(length)),
+        1
+      );
+      fillGeometry.rotateX(-Math.PI / 2);
+      fillGeometry.translate(length / 2, 0, 0);
+      progress = new THREE.Mesh(fillGeometry, flatMaterial(PROGRESS_OPACITY));
+      // Lane fill scales ONLY along the lane axis (width constant); update() reads
+      // this to avoid a growing wedge (RESEARCH Pitfall 3).
+      fillAxis = 'x';
+    } else if (render?.shape === 'cone' && render.coneHalfAngleDegrees !== undefined) {
       // Cone SECTOR (D5-14): row.radius is reused as cone RANGE (D5-06). The
       // sector is authored centered on geometry angle 0; anchorGroup yaws it.
       const fullAngle = THREE.MathUtils.degToRad(render.coneHalfAngleDegrees * 2);
@@ -192,8 +290,12 @@ export function createTelegraphSystem(
     outline.frustumCulled = false;
     progress.frustumCulled = false;
     // Scale only XZ (never Y): draped vertex heights are authored in local
-    // space and must not stretch with the countdown expansion.
-    progress.scale.set(0.0001, 1, 0.0001); // starts empty; never exactly 0 (degenerate matrix)
+    // space and must not stretch with the countdown expansion. Start the fill
+    // empty (never exactly 0 — a degenerate matrix). Lanes keep full width
+    // (z = 1) and grow only along the lane axis; circle/cone start near-zero on
+    // both XZ so they expand uniformly from their anchor.
+    if (fillAxis === 'x') progress.scale.set(0.0001, 1, 1);
+    else progress.scale.set(0.0001, 1, 0.0001);
     group.add(outline, progress);
     anchorGroup(group, row);
     scene.add(group);
@@ -206,6 +308,7 @@ export function createTelegraphSystem(
       outline,
       outlineMaterial,
       progress,
+      fillAxis,
       state: row.state,
       arrivalPerfMs: performance.now(),
       startedAtMicros: row.startedAtMicros,
