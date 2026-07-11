@@ -29,10 +29,33 @@ describe('ATTACKS registry (FSM-04 data-driven attacks)', () => {
       radiusBySize: [4.0, 4.75, 5.5],
       damageMultiplier: 4.5,
       minBand: 0,
-      maxBand: 8,
+      maxBand: 5.5, // 8 -> 5.5 (RESEARCH Pitfall 1): creates the dash-only 5.5..8 zone
       knockback: 6,
       stunTicks: 7,
       move: 'leap',
+      poiseThreshold: 600,
+    });
+  });
+
+  it('shieldDash carries every locked D6 timing/geometry/reaction seed (D6-03/06/07/08/09/10)', () => {
+    // NO chainsInto (dash never chains) and NO coneMinDot (not a cone) — the
+    // optional fields stay absent; laneLengthBySize is the lane's own optional.
+    expect(ATTACKS.shieldDash).toEqual({
+      shape: 'lane',
+      role: 'skill',
+      windupTicks: 6,
+      activeTicks: 1,
+      graceTicks: 1,
+      recoveryTicks: 8,
+      cooldownMicros: 6_000_000n,
+      radiusBySize: [1.6, 1.8, 2.0],
+      laneLengthBySize: [6.5, 7.25, 7.95],
+      damageMultiplier: 2.5,
+      minBand: 3.5,
+      maxBand: 8,
+      knockback: 3.5,
+      stunTicks: 3,
+      move: 'charge',
       poiseThreshold: 600,
     });
   });
@@ -73,9 +96,9 @@ describe('ATTACKS registry (FSM-04 data-driven attacks)', () => {
     }
   );
 
-  it('UNIT_ATTACKS maps the goliath unit kind to [leapSlam, swordSwing] — swirl only via chain (D5-03)', () => {
+  it('UNIT_ATTACKS maps the goliath unit kind to [leapSlam, swordSwing, shieldDash] — swirl only via chain (D5-03), dash LAST (D6-07)', () => {
     // FSM-04: a new unit is one list; every listed id must resolve in ATTACKS.
-    expect(UNIT_ATTACKS[UNIT_KIND_GOLIATH].default).toEqual(['leapSlam', 'swordSwing']);
+    expect(UNIT_ATTACKS[UNIT_KIND_GOLIATH].default).toEqual(['leapSlam', 'swordSwing', 'shieldDash']);
     for (const lists of Object.values(UNIT_ATTACKS)) {
       for (const attackIds of Object.values(lists)) {
         for (const attackId of attackIds) expect(ATTACKS[attackId]).toBeDefined();
@@ -97,11 +120,33 @@ describe('selectAttack (FSM-03 selection, D4-08 rhythm + D5-08 basic gate)', () 
   const available = UNIT_ATTACKS[UNIT_KIND_GOLIATH].default;
 
   it('returns leapSlam for EVERY distance 0..maxBand when off cooldown (ATK-05 dead-zone sweep)', () => {
-    for (let distance = 0; distance <= 8; distance += 0.25) {
+    // Upper bound derived from the registry so the Pitfall-1 band retune
+    // (maxBand 8 -> 5.5) can never silently desync this sweep.
+    for (let distance = 0; distance <= ATTACKS.leapSlam.maxBand; distance += 0.25) {
       expect(selectAttack(distance, 0n, 0n, 0n, available), `dead zone at d=${distance}`).toBe(
         'leapSlam'
       );
     }
+  });
+
+  it('returns shieldDash at d=6.5 with both cooldowns clear (Pitfall-1 dead-code regression guard)', () => {
+    // THE guard that fails if leapSlam.maxBand ever reverts to 8: under the
+    // shared skill cooldown (D6-06) + slam-first order (D6-07), a slam band of
+    // 0..8 fully shadows the dash band 3.5..8 — dash must own 5.5..8.
+    expect(selectAttack(6.5, 0n, 0n, 0n, available)).toBe('shieldDash');
+  });
+
+  it('returns leapSlam at d=4.5 with cooldowns clear (slam wins the 3.5..5.5 overlap, D6-07 list order)', () => {
+    expect(selectAttack(4.5, 0n, 0n, 0n, available)).toBe('leapSlam');
+  });
+
+  it('returns null at d=6.5 with the skill cooldown active (SHARED gate blocks BOTH skills, D6-06)', () => {
+    // Swing's band is 0..3.5 — out of band at 6.5 — so nothing fires: chase.
+    expect(selectAttack(6.5, 999n, 1000n, 0n, available)).toBeNull();
+  });
+
+  it('boundary: returns leapSlam at EXACTLY d=5.5 with cooldowns clear (inclusive maxBand edge)', () => {
+    expect(selectAttack(5.5, 0n, 0n, 0n, available)).toBe('leapSlam');
   });
 
   it('returns null while nowMicros < skill cooldown and no basic is in band (cooldown gates the skill)', () => {

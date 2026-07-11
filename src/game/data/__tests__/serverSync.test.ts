@@ -387,6 +387,27 @@ describe('ATTACKS registry invariants (INV-5)', () => {
     ).toEqual([225, 325, 425]);
   });
 
+  it('shieldDash damage = 2.5x per-size contactDamage -> 225/325/425 (D6-09)', () => {
+    expect(
+      GOLIATH_SIZE_STATS.map(size =>
+        Math.round(size.contactDamage * ATTACKS.shieldDash.damageMultiplier)
+      )
+    ).toEqual([225, 325, 425]);
+  });
+
+  it('shieldDash is the charge: lane shape, move charge, per-size lane data under the 8u snap ceiling (D6-01/D6-03)', () => {
+    expect(ATTACKS.shieldDash.shape).toBe('lane');
+    expect(ATTACKS.shieldDash.move).toBe('charge');
+    expect(ATTACKS.shieldDash.laneLengthBySize).toHaveLength(GOLIATH_SIZE_STATS.length);
+    for (const length of ATTACKS.shieldDash.laneLengthBySize!) {
+      // 8 = the client SNAP_DISTANCE (createEntityRenderer.ts, not exported):
+      // a strike-frame gap > 8u SNAPS instead of lerping — the charge would
+      // render as a teleport (D6-03 ceiling, RESEARCH Pitfall 2).
+      expect(length).toBeLessThanOrEqual(8);
+    }
+    expect(ATTACKS.shieldDash.radiusBySize).toHaveLength(GOLIATH_SIZE_STATS.length);
+  });
+
   it('no-one-shot invariant: worst-case chain damage stays below the smallest character HP pool', () => {
     // BOTH sides derived live (never a hardcoded tautology): the largest goliath's
     // full swing+swirl chain must not kill the squishiest character from full HP.
