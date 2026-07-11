@@ -517,18 +517,23 @@ it('shieldDash is the charge: lane shape, move charge, per-size lane data under 
 
 All other claims in this document are `[VERIFIED: codebase]` — read directly from the files cited, this session.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **How should the plan resolve the D6-06/D6-07 selection shadow? (blocking — see Pitfall 1)**
+All three questions were resolved during planning; the adopted answers are implemented across plans 06-01..06-05.
+
+1. **How should the plan resolve the D6-06/D6-07 selection shadow? (blocking — see Pitfall 1)** *(RESOLVED — adopted: slam maxBand 8 → 5.5, overlap-partition)*
    - What we know: literal implementation makes shieldDash unreachable (proof in Pitfall 1); band seeds are explicitly user-tunable.
    - What's unclear: whether the user prefers overlap-partition (slam maxBand 5.5) or full partition (3.5), or something else.
    - Recommendation: implement slam maxBand → 5.5 with a loud seed comment + the three regression tests, and surface the deviation for user confirmation at the playtest checkpoint (the same checkpoint D6-07 already mandates for "verify the emergence").
-2. **D6-13 letter vs no-dead-code: mirror `laneHalfWidth` or read `row.radius`?**
+   - **Resolution:** 06-01 seeds leapSlam maxBand 5.5 with the loud seed comment and the three dash-selectability regression guards; the deviation is surfaced for explicit user ruling at the 06-05 playtest checkpoint (ruling (a)).
+2. **D6-13 letter vs no-dead-code: mirror `laneHalfWidth` or read `row.radius`?** *(RESOLVED — adopted: read `row.radius`, no mirror field)*
    - What we know: half-width is per-size and already on the row; a scalar mirror can't parity-lock to an array; unused fields violate CLAUDE.md.
    - Recommendation: read `row.radius` (renderer) — no mirror field; note the deviation in the plan (Pitfall 6 has the full argument and the honoring-variant fallback).
-3. **Keep size-2 laneLength at the locked 8.0 or back off to 7.95?**
+   - **Resolution:** `ATTACK_RENDER.shieldDash` carries NO half-width field (06-01); the telegraph renderer reads `row.radius` (06-04). The D6-13 deviation is surfaced for explicit user ruling at the 06-05 checkpoint (ruling (c)), with the honoring variant (per-size array parity-locked to server `radiusBySize`) as the fallback if the user requests the letter.
+3. **Keep size-2 laneLength at the locked 8.0 or back off to 7.95?** *(RESOLVED — adopted: 7.95 seed)*
    - What we know: strict `>` snap comparison; float error can tip 8.0 over.
    - Recommendation: 7.95 seed (Pitfall 2); if the plan keeps 8.0, add the explicit playtest check.
+   - **Resolution:** 06-01 seeds size-2 laneLength 7.95 (float-snap guard); the deviation is confirmed-or-retuned at the 06-05 playtest checkpoint (ruling (b)), including the explicit size-2 no-teleport check in the SC2 script.
 
 ## Environment Availability
 
