@@ -106,11 +106,17 @@ function resolveStrike(
       heading.x,
       heading.z
     );
+    // Stuns are MONOTONIC: a concurrent attacker's hit may only extend the
+    // victim's stun window, never shorten it. An unconditional write let a
+    // second goliath's swing shrink a live slam stun — and the swirl
+    // (stunTicks: 0) wrote `now`, cancelling any active stun outright and
+    // re-enabling movement for a player who should still be locked (HIT-01).
+    const newStun = stunDeadline(now, spec.stunTicks, tick);
     ctx.db.player.identity.update({
       ...victim,
       positionX: clampToWorld(pushed.x),
       positionZ: clampToWorld(pushed.z),
-      stunnedUntilMicros: stunDeadline(now, spec.stunTicks, tick),
+      stunnedUntilMicros: newStun > victim.stunnedUntilMicros ? newStun : victim.stunnedUntilMicros,
     });
   }
 }
