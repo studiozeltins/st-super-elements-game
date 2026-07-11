@@ -151,7 +151,7 @@ export interface Game {
   syncGoliaths(rows: readonly Goliath[]): void;
   /** Feeds `unit_attack` FSM rows to the ground-telegraph system (windup countdown). */
   syncUnitAttacks(rows: readonly UnitAttack[]): void;
-  /** One `attack_strike` event: impact burst + rim flash + camera shake + slam SFX (ANIM-04). */
+  /** One `attack_strike` event: impact burst + rim flash + camera shake + SFX (ANIM-04), distance-attenuated from the local player. */
   handleAttackStrike(strike: AttackStrike): void;
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
@@ -1042,6 +1042,12 @@ export function createGame(
   const SWING_SHAKE_MAGNITUDE = 0.15;
   const SWIRL_BURST_PARTICLES = 18;
   const SWIRL_SHAKE_MAGNITUDE = 0.3;
+  // Strike juice is LOCAL feedback: shake reads as "I was hit / something
+  // landed nearby", so a strike farther than this from the local player plays
+  // no juice at all, and within it both shake and SFX scale down linearly.
+  // Without the gate, three goliaths chaining basics across the archipelago
+  // shook and thundered on every client on the map.
+  const STRIKE_JUICE_RANGE = 40; // world units
   let shakeMagnitude = 0;
   const desiredPosition = new THREE.Vector3();
 
@@ -1441,6 +1447,18 @@ export function createGame(
         radius: strike.radius,
         atMs: performance.now(),
       };
+      // Distance gate + linear falloff (lastStrike above stays unconditional —
+      // stun attribution must survive even for a strike this gate mutes): a
+      // strike beyond STRIKE_JUICE_RANGE plays NOTHING here; inside it, shake
+      // and SFX scale by proximity so a far fight registers as a distant thud,
+      // not a full-strength "I was hit" jolt. Shake joins via max() so a faint
+      // far strike can never cut short an ongoing stronger shake.
+      const strikeDistance = Math.hypot(
+        strike.landingX - playerPosition.x,
+        strike.landingZ - playerPosition.z
+      );
+      if (strikeDistance >= STRIKE_JUICE_RANGE) return;
+      const juiceFalloff = 1 - strikeDistance / STRIKE_JUICE_RANGE;
       // Juice tint comes from the ATTACK_RENDER element palette hint (05-05
       // round 2 — telegraphs stay Frost cyan; only the strike burst/shockwave
       // is element-colored). Unknown attackIds fall back to geo like the slam.
@@ -1450,8 +1468,8 @@ export function createGame(
         // (a circular shockwave misreads the swing's cone).
         effectSystem.spawnBurst(landing, juiceColor, SWING_BURST_PARTICLES);
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
-        shakeMagnitude = SWING_SHAKE_MAGNITUDE;
-        audioSystem.playSwing();
+        shakeMagnitude = Math.max(shakeMagnitude, SWING_SHAKE_MAGNITUDE * juiceFalloff);
+        audioSystem.playSwing(juiceFalloff);
         return;
       }
       if (strike.attackId === 'swordSwirl') {
@@ -1459,16 +1477,16 @@ export function createGame(
         effectSystem.spawnBurst(landing, juiceColor, SWIRL_BURST_PARTICLES);
         effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
-        shakeMagnitude = SWIRL_SHAKE_MAGNITUDE;
-        audioSystem.playSwirl();
+        shakeMagnitude = Math.max(shakeMagnitude, SWIRL_SHAKE_MAGNITUDE * juiceFalloff);
+        audioSystem.playSwirl(juiceFalloff);
         return;
       }
       // Default (leapSlam + any unknown attackId): the D4-15 full package.
       effectSystem.spawnBurst(landing, juiceColor, 26);
       effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
       telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
-      shakeMagnitude = SHAKE_START_MAGNITUDE;
-      audioSystem.playSlam();
+      shakeMagnitude = Math.max(shakeMagnitude, SHAKE_START_MAGNITUDE * juiceFalloff);
+      audioSystem.playSlam(juiceFalloff);
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];

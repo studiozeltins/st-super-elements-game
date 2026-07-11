@@ -6,13 +6,23 @@
 // has input before combat).
 
 export interface AudioSystem {
-  /** Procedural slam thump: low sine sweep + short filtered noise burst. */
-  playSlam(): void;
-  /** Light swing whoosh: short bandpass noise sweep — the quietest tier. */
-  playSwing(): void;
-  /** Medium swirl: longer noise swell + a low thump softer than the slam's. */
-  playSwirl(): void;
+  /** Procedural slam thump: low sine sweep + short filtered noise burst. `gain` 0..1 scales loudness (distance attenuation); 0 skips playback. */
+  playSlam(gain?: number): void;
+  /** Light swing whoosh: short bandpass noise sweep — the quietest tier. `gain` 0..1 scales loudness (distance attenuation); 0 skips playback. */
+  playSwing(gain?: number): void;
+  /** Medium swirl: longer noise swell + a low thump softer than the slam's. `gain` 0..1 scales loudness (distance attenuation); 0 skips playback. */
+  playSwirl(gain?: number): void;
   dispose(): void;
+}
+
+/**
+ * Clamps a caller-supplied loudness factor to (0..1]; returns 0 (= skip) for
+ * silent/invalid input. WebAudio exponential ramps reject a target of exactly
+ * 0, so every peak this factor scales must stay strictly positive.
+ */
+function clampGain(gain: number): number {
+  if (!Number.isFinite(gain) || gain <= 0) return 0;
+  return Math.min(1, gain);
 }
 
 /** A one-shot white-noise buffer source of the given length, ready to start. */
@@ -45,9 +55,11 @@ export function createAudioSystem(): AudioSystem {
   window.addEventListener('pointerdown', unlock);
   window.addEventListener('keydown', unlock);
 
-  function playSlam() {
+  function playSlam(gainFactor = 1) {
     // Never throw mid-frame: silently skip until the gesture unlock has run.
     if (!context || context.state !== 'running') return;
+    const level = clampGain(gainFactor);
+    if (level === 0) return;
     const now = context.currentTime;
 
     // Low thump: sine sweeping ~70Hz → ~40Hz over 0.25s through a fast-attack,
@@ -58,7 +70,7 @@ export function createAudioSystem(): AudioSystem {
     thump.frequency.exponentialRampToValueAtTime(40, now + 0.25);
     const thumpGain = context.createGain();
     thumpGain.gain.setValueAtTime(0.0001, now);
-    thumpGain.gain.exponentialRampToValueAtTime(0.8, now + 0.01);
+    thumpGain.gain.exponentialRampToValueAtTime(0.8 * level, now + 0.01);
     thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
     thump.connect(thumpGain).connect(context.destination);
     thump.start(now);
@@ -71,16 +83,18 @@ export function createAudioSystem(): AudioSystem {
     filter.type = 'lowpass';
     filter.frequency.value = 400;
     const noiseGain = context.createGain();
-    noiseGain.gain.setValueAtTime(0.5, now);
+    noiseGain.gain.setValueAtTime(0.5 * level, now);
     noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + noiseSeconds);
     noise.connect(filter).connect(noiseGain).connect(context.destination);
     noise.start(now);
     noise.stop(now + noiseSeconds);
   }
 
-  function playSwing() {
+  function playSwing(gainFactor = 1) {
     // Never throw mid-frame: silently skip until the gesture unlock has run.
     if (!context || context.state !== 'running') return;
+    const level = clampGain(gainFactor);
+    if (level === 0) return;
     const now = context.currentTime;
 
     // Light whoosh (lightest tier): a short bandpass sweep rising through a
@@ -97,7 +111,7 @@ export function createAudioSystem(): AudioSystem {
     filter.frequency.exponentialRampToValueAtTime(2200, now + seconds);
     const gain = context.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.6, now + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.6 * level, now + 0.03);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
     noise.connect(filter).connect(gain).connect(context.destination);
     noise.start(now);
@@ -112,16 +126,18 @@ export function createAudioSystem(): AudioSystem {
     thock.frequency.exponentialRampToValueAtTime(95, now + 0.1);
     const thockGain = context.createGain();
     thockGain.gain.setValueAtTime(0.0001, now);
-    thockGain.gain.exponentialRampToValueAtTime(0.4, now + 0.01);
+    thockGain.gain.exponentialRampToValueAtTime(0.4 * level, now + 0.01);
     thockGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
     thock.connect(thockGain).connect(context.destination);
     thock.start(now);
     thock.stop(now + 0.16);
   }
 
-  function playSwirl() {
+  function playSwirl(gainFactor = 1) {
     // Never throw mid-frame: silently skip until the gesture unlock has run.
     if (!context || context.state !== 'running') return;
+    const level = clampGain(gainFactor);
+    if (level === 0) return;
     const now = context.currentTime;
 
     // Whirling swell (medium tier): a longer bandpass noise that rises then
@@ -138,7 +154,7 @@ export function createAudioSystem(): AudioSystem {
     filter.frequency.exponentialRampToValueAtTime(500, now + seconds);
     const gain = context.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.75, now + seconds * 0.5);
+    gain.gain.exponentialRampToValueAtTime(0.75 * level, now + seconds * 0.5);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
     noise.connect(filter).connect(gain).connect(context.destination);
     noise.start(now);
@@ -152,7 +168,7 @@ export function createAudioSystem(): AudioSystem {
     impactFilter.type = 'lowpass';
     impactFilter.frequency.value = 500;
     const impactGain = context.createGain();
-    impactGain.gain.setValueAtTime(0.35, now);
+    impactGain.gain.setValueAtTime(0.35 * level, now);
     impactGain.gain.exponentialRampToValueAtTime(0.0001, now + impactSeconds);
     impact.connect(impactFilter).connect(impactGain).connect(context.destination);
     impact.start(now);
@@ -166,7 +182,7 @@ export function createAudioSystem(): AudioSystem {
     thump.frequency.exponentialRampToValueAtTime(50, now + 0.2);
     const thumpGain = context.createGain();
     thumpGain.gain.setValueAtTime(0.0001, now);
-    thumpGain.gain.exponentialRampToValueAtTime(0.55, now + 0.02);
+    thumpGain.gain.exponentialRampToValueAtTime(0.55 * level, now + 0.02);
     thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
     thump.connect(thumpGain).connect(context.destination);
     thump.start(now);
