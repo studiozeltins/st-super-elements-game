@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
-current_phase: 05
-current_phase_name: swordSwing → swordSwirl combo
+current_phase: 6
+current_phase_name: shieldDash lane
 status: verifying
 stopped_at: Completed 05-05-PLAN.md — phase 05 gate + playtest APPROVED (2 fix rounds), all 5 plans done, ready for verification
-last_updated: "2026-07-11T07:16:17.082Z"
-last_activity: 2026-07-10
-last_activity_desc: Phase 05 execution started
+last_updated: "2026-07-11T07:39:04.305Z"
+last_activity: 2026-07-11
+last_activity_desc: Phase 05 complete, transitioned to Phase 6
 progress:
   total_phases: 7
   completed_phases: 5
@@ -31,10 +31,10 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 
 ## Current Position
 
-Phase: 05 (swordSwing → swordSwirl combo) — COMPLETE (playtest approved)
-Plan: 5 of 5
+Phase: 6 — shieldDash lane
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-11 — Phase 05 complete: 05-05 gate green + human playtest approved (2 fix rounds)
+Last activity: 2026-07-11 — Phase 05 complete, transitioned to Phase 6
 
 ## Roadmap Summary
 
@@ -67,7 +67,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | 2 | TBD | - | - |
 | 03 | 2 | - | - |
 | 4 | TBD | - | - |
-| 5 | TBD | - | - |
+| 05 | 5 | - | - |
 | 6 | TBD | - | - |
 | 7 | TBD | - | - |
 
