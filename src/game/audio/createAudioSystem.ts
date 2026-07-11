@@ -35,8 +35,10 @@ const DASH_CLANG_NOISE_GAIN = 0.9;
 const DASH_CLANG_RING_GAIN = 0.5;
 /** Total clang duration in seconds (spec window 0.15–0.25s). */
 const DASH_CLANG_SECONDS = 0.2;
-/** Detuned ring pair: a few Hz apart so the beat between them reads metallic. */
-const DASH_CLANG_RING_FREQUENCIES = [620, 626] as const;
+// INHARMONIC ring partials (bell-plate ratios ~1:1.55:2.4): struck metal has
+// non-integer overtones — the old near-unison 620/626 beat read as a piano
+// note with vibrato (playtest 2026-07-12).
+const DASH_CLANG_RING_FREQUENCIES = [620, 961, 1487] as const;
 // Pre-impact skid (playtest 2026-07-12: the four strikes read too alike): a
 // short low-band scrape leads the clang so the dash reads "skidding into you".
 const DASH_SCRAPE_SECONDS = 0.06;

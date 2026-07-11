@@ -65,10 +65,15 @@ const SLIME_SQUASH_CHIRP_END_HZ = 90;
 const SLIME_SQUASH_CHIRP_PEAK = 0.35;
 
 // Riser: peaks just before the windup lands, capped so a mob pull can't
-// stack a siren out of per-unit risers.
-const RISER_PEAK = 0.18;
-const RISER_TONE_START_HZ = 200;
-const RISER_TONE_END_HZ = 650;
+// stack a siren out of per-unit risers. NOISE-based (playtest 2026-07-12: the
+// old rising sine read as a piano/siren) — a high-Q bandpass on noise gives
+// "pitched breath", the rising danger cue without a tonal note.
+const RISER_PEAK = 0.22;
+const RISER_BAND_START_HZ = 260;
+const RISER_BAND_END_HZ = 1300;
+const RISER_BAND_Q = 6;
+const RISER_RUMBLE_HZ = 150;
+const RISER_RUMBLE_PEAK_FRACTION = 0.6;
 const RISER_CANCEL_FADE_SECONDS = 0.08;
 const MAX_CONCURRENT_RISERS = 6;
 
@@ -315,25 +320,27 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     master.gain.exponentialRampToValueAtTime(0.0001, end);
     master.connect(out);
 
-    // Rising sine = the "danger charging" pitch cue.
-    const tone = context.createOscillator();
-    tone.type = 'sine';
-    tone.frequency.setValueAtTime(RISER_TONE_START_HZ * jitter(0.05), now);
-    tone.frequency.exponentialRampToValueAtTime(RISER_TONE_END_HZ * jitter(0.05), end);
-    tone.connect(master);
-    tone.start(now);
-    tone.stop(end + 0.02);
+    // Main layer: high-Q bandpass noise climbing — rising WIND, not a note.
+    const breath = createNoiseSource(context, durationSeconds);
+    const breathBand = context.createBiquadFilter();
+    breathBand.type = 'bandpass';
+    breathBand.Q.value = RISER_BAND_Q;
+    breathBand.frequency.setValueAtTime(RISER_BAND_START_HZ * jitter(0.05), now);
+    breathBand.frequency.exponentialRampToValueAtTime(RISER_BAND_END_HZ * jitter(0.05), end);
+    breath.connect(breathBand).connect(master);
+    breath.start(now);
+    breath.stop(end);
 
-    // Airy tension layer: a bandpass hiss climbing with the tone.
-    const hiss = createNoiseSource(context, durationSeconds);
-    const hissBand = context.createBiquadFilter();
-    hissBand.type = 'bandpass';
-    hissBand.Q.value = 1;
-    hissBand.frequency.setValueAtTime(RISER_TONE_START_HZ * 2, now);
-    hissBand.frequency.exponentialRampToValueAtTime(RISER_TONE_END_HZ * 2, end);
-    hiss.connect(hissBand).connect(master);
-    hiss.start(now);
-    hiss.stop(end);
+    // Low rumble building underneath — the ground-shaking weight of the windup.
+    const rumble = createNoiseSource(context, durationSeconds);
+    const rumbleLow = context.createBiquadFilter();
+    rumbleLow.type = 'lowpass';
+    rumbleLow.frequency.value = RISER_RUMBLE_HZ;
+    const rumbleGain = context.createGain();
+    rumbleGain.gain.value = RISER_RUMBLE_PEAK_FRACTION;
+    rumble.connect(rumbleLow).connect(rumbleGain).connect(master);
+    rumble.start(now);
+    rumble.stop(end);
 
     // Cancel = windup interrupted: fast fade + stop. Safe to call twice and
     // after the natural end (stop() on a dead source just throws — swallow it).
@@ -343,7 +350,7 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
       master.gain.cancelScheduledValues(at);
       master.gain.setValueAtTime(Math.max(master.gain.value, 0.0001), at);
       master.gain.exponentialRampToValueAtTime(0.0001, at + RISER_CANCEL_FADE_SECONDS);
-      for (const source of [tone, hiss]) {
+      for (const source of [breath, rumble]) {
         try {
           source.stop(at + RISER_CANCEL_FADE_SECONDS + 0.01);
         } catch {
@@ -353,7 +360,7 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     };
     activeRiserCancels.add(cancel);
     // Natural end frees the concurrency slot without re-fading anything.
-    tone.onended = () => activeRiserCancels.delete(cancel);
+    breath.onended = () => activeRiserCancels.delete(cancel);
     return cancel;
   }
 

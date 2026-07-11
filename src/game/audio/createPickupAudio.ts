@@ -21,7 +21,9 @@ export interface PickupAudio {
 // ratio table (octave-extended); a gap resets to the base chime.
 const GEM_BASE_HZ = 740;
 export const GEM_STREAK_WINDOW_SECONDS = 1.5;
-export const GEM_LADDER_MAX_STEPS = 8;
+// High enough that a full payout burst climbs the whole way (playtest
+// 2026-07-12: 8 capped mid-burst — big drops flatlined). Step 12 ≈ 3.7kHz.
+export const GEM_LADDER_MAX_STEPS = 12;
 /** Major-pentatonic ratios across one octave; the ladder re-enters them ×2 above. */
 const GEM_LADDER_RATIOS = [1, 9 / 8, 5 / 4, 3 / 2, 5 / 3] as const;
 
@@ -38,15 +40,24 @@ export function nextGemStep(previousStep: number, secondsSinceLast: number): num
   return Math.min(GEM_LADDER_MAX_STEPS, Math.max(0, Math.floor(previousStep)) + 1);
 }
 
-// Big-pickup escalation: one chime per full 100 gems, staggered like a payout.
+// Big-pickup escalation, tiered so a huge drop earns a LONG climb (playtest
+// 2026-07-12: per-100-cap-8 made 5000 gems sound like 800): one chime per
+// full 100 up to 1,000, then one more per additional full 1,000. Cap 16 at
+// 0.11s spacing ≈ a 1.8s slot-machine payout.
 export const GEM_CHIME_PER_AMOUNT = 100;
-export const GEM_BURST_MAX_CHIMES = 8;
-export const GEM_BURST_SPACING_SECONDS = 0.07;
+export const GEM_CHIME_PER_BIG_AMOUNT = 1000;
+export const GEM_BURST_MAX_CHIMES = 16;
+export const GEM_BURST_SPACING_SECONDS = 0.11;
 
-/** PURE: chimes a pickup of `amount` gems earns — min 1, one per full 100, capped. */
+/** PURE: chimes a pickup of `amount` gems earns — min 1, per-100 to 1k, per-1000 beyond, capped. */
 export function gemChimeCount(amount: number): number {
-  if (!Number.isFinite(amount)) return 1;
-  return Math.min(GEM_BURST_MAX_CHIMES, Math.max(1, Math.floor(amount / GEM_CHIME_PER_AMOUNT)));
+  if (!Number.isFinite(amount) || amount < GEM_CHIME_PER_AMOUNT) return 1;
+  const hundreds = Math.min(
+    GEM_CHIME_PER_BIG_AMOUNT / GEM_CHIME_PER_AMOUNT,
+    Math.floor(amount / GEM_CHIME_PER_AMOUNT)
+  );
+  const extraThousands = Math.max(0, Math.floor(amount / GEM_CHIME_PER_BIG_AMOUNT) - 1);
+  return Math.min(GEM_BURST_MAX_CHIMES, hundreds + extraThousands);
 }
 
 // Gem chime voicing. The jitter is TINY on purpose (±2%) — the ladder's rungs

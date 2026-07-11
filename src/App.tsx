@@ -30,8 +30,8 @@ import { DEFAULT_HUD_THEME, isHudTheme } from './styles/hud/themes';
 
 const PARTY_SIZE = 4;
 
-/** Min gap between CRIT! popups — high DPS must not wallpaper the screen. */
-const CRIT_POPUP_THROTTLE_MS = 2000;
+/** Min gap between CRIT! popups — an occasional treat, not a DPS meter. */
+const CRIT_POPUP_THROTTLE_MS = 20000;
 
 const INITIAL_HUD_STATE: HudState = {
   attackCooldownFraction: 0,
