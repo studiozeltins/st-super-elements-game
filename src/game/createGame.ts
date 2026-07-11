@@ -22,6 +22,7 @@ import { createCharacterModel, createNameSprite, type CharacterModel } from './e
 import { createBoostOrbit } from './entities/createBoostOrbit';
 import { createInputSystem } from './systems/createInputSystem';
 import { createAudioSystem } from './audio/createAudioSystem';
+import { createCombatAudio } from './audio/createCombatAudio';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createAttackViewClock } from './systems/createAttackViewClock';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
@@ -135,12 +136,18 @@ export interface Game {
   handleRemotePlayerAttack(attack: RangedAttack): void;
   /** Floats a number over the local player — PVP damage taken, or heals. */
   spawnSelfNumber(amount: number, kind: DamageKind): void;
-  /** Floats a server-driven `enemy_hit` number at the enemy's world position (any attacker). */
-  spawnWorldNumber(positionX: number, positionZ: number, amount: number, kind: DamageKind): void;
+  /** Floats a server-driven `enemy_hit` number at the enemy's world position (any attacker). `isMine` = full-volume hit/crit SFX; others' hits play distance-attenuated. */
+  spawnWorldNumber(
+    positionX: number,
+    positionZ: number,
+    amount: number,
+    kind: DamageKind,
+    isMine: boolean
+  ): void;
   /** Shows a remote player's health bar for a few seconds (they were hit). */
   flashRemoteHealth(identityHex: string): void;
-  /** Floats a server-driven `pvp_hit` number at a remote player's live position. */
-  spawnPlayerNumber(identityHex: string, amount: number, kind: DamageKind): void;
+  /** Floats a server-driven `pvp_hit` number at a remote player's live position. `isMine` = my landed hit (full-volume SFX); spectated hits play distance-attenuated. */
+  spawnPlayerNumber(identityHex: string, amount: number, kind: DamageKind, isMine: boolean): void;
   /** Syncs the gem drops lying in the world (walk over to collect). */
   syncGemDrops(drops: readonly GemDrop[]): void;
   /** Syncs the rare transcend-shard drops lying in the world (purple, walk over to collect). */
@@ -279,6 +286,23 @@ export function createGame(
   const inputSystem = createInputSystem(canvas);
   // Hand-rolled WebAudio slam SFX (D4-15) — zero assets, zero dependencies.
   const audioSystem = createAudioSystem();
+  // Combat feedback SFX (hits/crits/hurt/stun/heal) on the same unlocked context.
+  const combatAudio = createCombatAudio(audioSystem.getContext);
+  // Same linear falloff shape the strike juice uses — a far fight is a faint
+  // tick, my own hit is full volume.
+  function hitAudioGain(x: number, z: number): number {
+    const distance = Math.hypot(x - playerPosition.x, z - playerPosition.z);
+    return Math.max(0, 1 - distance / STRIKE_JUICE_RANGE);
+  }
+  // Stereo position of a world sound: its screen-space X relative to me (the
+  // fixed-yaw camera means one constant basis). Full pan at ±AUDIO_PAN_RANGE,
+  // scaled to ±0.8 so nothing ever sits 100% in one ear.
+  const AUDIO_PAN_RANGE = 16; // world units
+  function hitAudioPan(x: number, z: number): number {
+    const screenX =
+      (x - playerPosition.x) * Math.cos(CAMERA_YAW) - (z - playerPosition.z) * Math.sin(CAMERA_YAW);
+    return THREE.MathUtils.clamp(screenX / AUDIO_PAN_RANGE, -1, 1) * 0.8;
+  }
 
   // Server-clock anchored unit-attack views + the shared alive gate (ANIM-01),
   // carved into its own system module (createAttackViewClock): goliath and
@@ -479,6 +503,9 @@ export function createGame(
       effectSystem.spawnBurst(remotePosition.clone().setY(1.2), 0xff4a4a, 14);
       // Instant local display number (D3-05) — the server pvp_hit event is the
       // truth; our own non-crit echo is suppressed in the App.tsx callback.
+      // Instant hit tick to match; a server-confirmed crit upgrades it with the
+      // crit pop via spawnPlayerNumber.
+      combatAudio.playEnemyHit(1, hitAudioPan(remotePosition.x, remotePosition.z));
       damageNumbers.spawn(remotePosition.clone().setY(remotePosition.y + 1), damage, kind);
     }
     return hitSomeone;
@@ -534,6 +561,9 @@ export function createGame(
     swingIndex++;
     const profile = swingProfile(swingIndex, combo);
     playerModel.triggerAttack(profile);
+    // Light air cut on every swing — the landed hit (enemy_hit event) carries
+    // the actual impact sound.
+    combatAudio.playWhoosh();
 
     const weapon = WEAPONS[activeCharacter.weapon];
     faceNearestTarget(weapon.range + 3);
@@ -1069,6 +1099,7 @@ export function createGame(
       enemyRenderer.dispose();
       goliathRenderer.dispose();
       telegraphSystem.dispose();
+      combatAudio.dispose();
       audioSystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
@@ -1203,6 +1234,8 @@ export function createGame(
                 1
               )
             : 0.5;
+          // Pop + wobble that winds down across the freeze, recovery blip at the end.
+          combatAudio.playStun(stunSeconds, intensity);
           onStunned?.(stunSeconds, intensity);
         }
       }
@@ -1223,9 +1256,19 @@ export function createGame(
     spawnSelfNumber(amount, kind) {
       // Account PvP damage so the synced HP drop isn't re-floated as a "taken" number.
       if (kind === 'pvp' || kind === 'pvpCrit') pvpDamageSinceSync += amount;
+      // Every self number has a feel: damage = low body thud (crit adds the
+      // alarm snap), heals = the soft chime.
+      if (kind === 'heal') combatAudio.playHeal();
+      else combatAudio.playPlayerHurt(kind === 'takenCrit' || kind === 'pvpCrit');
       damageNumbers.spawn(playerPosition.clone().setY(playerPosition.y + 1.4), amount, kind);
     },
-    spawnWorldNumber(positionX, positionZ, amount, kind) {
+    spawnWorldNumber(positionX, positionZ, amount, kind, isMine) {
+      // My hits play full volume; other players' fights tick faintly by distance,
+      // panned to where they sit on screen.
+      const gain = isMine ? 1 : hitAudioGain(positionX, positionZ);
+      const pan = hitAudioPan(positionX, positionZ);
+      if (kind === 'crit') combatAudio.playEnemyCrit(gain, pan);
+      else combatAudio.playEnemyHit(gain, pan);
       damageNumbers.spawn(new THREE.Vector3(positionX, 1.2, positionZ), amount, kind);
     },
     flashRemoteHealth(identityHex) {
@@ -1235,10 +1278,15 @@ export function createGame(
       const view = remotePlayers.get(identityHex);
       if (view) view.lastPvpHitShownAt = elapsedSeconds;
     },
-    spawnPlayerNumber(identityHex, amount, kind) {
+    spawnPlayerNumber(identityHex, amount, kind, isMine) {
       const view = remotePlayers.get(identityHex);
       if (!view) return; // victim despawned — drop silently
       const p = view.model.group.position;
+      // My landed PVP crit pops full volume; spectated hits tick by distance.
+      const gain = isMine ? 1 : hitAudioGain(p.x, p.z);
+      const pan = hitAudioPan(p.x, p.z);
+      if (kind === 'crit' || kind === 'pvpCrit') combatAudio.playEnemyCrit(gain, pan);
+      else combatAudio.playEnemyHit(gain, pan);
       damageNumbers.spawn(p.clone().setY(p.y + 1), amount, kind);
     },
     syncGemDrops(drops) {
@@ -1338,6 +1386,8 @@ export function createGame(
       );
       if (strikeDistance >= STRIKE_JUICE_RANGE) return;
       const juiceFalloff = 1 - strikeDistance / STRIKE_JUICE_RANGE;
+      // Stereo-place the strike where it lands on screen (3D read of the fight).
+      const strikePan = hitAudioPan(strike.landingX, strike.landingZ);
       // Juice tint comes from the ATTACK_RENDER element palette hint (05-05
       // round 2 — telegraphs stay Frost cyan; only the strike burst/shockwave
       // is element-colored). Unknown attackIds fall back to geo like the slam.
@@ -1348,7 +1398,7 @@ export function createGame(
         effectSystem.spawnBurst(landing, juiceColor, SWING_BURST_PARTICLES);
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
         shakeMagnitude = Math.max(shakeMagnitude, SWING_SHAKE_MAGNITUDE * juiceFalloff);
-        audioSystem.playSwing(juiceFalloff);
+        audioSystem.playSwing(juiceFalloff, strikePan);
         return;
       }
       if (strike.attackId === 'swordSwirl') {
@@ -1357,7 +1407,7 @@ export function createGame(
         effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
         shakeMagnitude = Math.max(shakeMagnitude, SWIRL_SHAKE_MAGNITUDE * juiceFalloff);
-        audioSystem.playSwirl(juiceFalloff);
+        audioSystem.playSwirl(juiceFalloff, strikePan);
         return;
       }
       if (strike.attackId === 'shieldDash') {
@@ -1387,7 +1437,7 @@ export function createGame(
         }
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
         shakeMagnitude = Math.max(shakeMagnitude, DASH_SHAKE_MAGNITUDE * juiceFalloff);
-        audioSystem.playDash(juiceFalloff);
+        audioSystem.playDash(juiceFalloff, strikePan);
         return;
       }
       // Default (leapSlam + any unknown attackId): the D4-15 full package.
@@ -1395,7 +1445,7 @@ export function createGame(
       effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
       telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
       shakeMagnitude = Math.max(shakeMagnitude, SHAKE_START_MAGNITUDE * juiceFalloff);
-      audioSystem.playSlam(juiceFalloff);
+      audioSystem.playSlam(juiceFalloff, strikePan);
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];

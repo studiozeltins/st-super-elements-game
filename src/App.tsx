@@ -254,11 +254,16 @@ export default function App() {
       if (row.attacker.toHexString() === myIdentityRef.current) {
         // D3-05: own non-crit already drawn locally in applyPvpDamage — suppress;
         // upgrade to the big crit number at the victim's live position on crit.
-        if (row.isCrit) gameRef.current?.spawnPlayerNumber(targetHex, row.amount, 'crit');
+        if (row.isCrit) gameRef.current?.spawnPlayerNumber(targetHex, row.amount, 'crit', true);
         return;
       }
       // Spectator: full shared visibility (D2-02).
-      gameRef.current?.spawnPlayerNumber(targetHex, row.amount, row.isCrit ? 'crit' : 'normal');
+      gameRef.current?.spawnPlayerNumber(
+        targetHex,
+        row.amount,
+        row.isCrit ? 'crit' : 'normal',
+        false
+      );
     },
   });
   // Server-authoritative enemy/goliath hit → the {amount, isCrit, position} truth
@@ -278,7 +283,8 @@ export default function App() {
         hit.positionX,
         hit.positionZ,
         hit.amount,
-        hit.isCrit ? 'crit' : 'normal'
+        hit.isCrit ? 'crit' : 'normal',
+        hit.attacker.toHexString() === myIdentityRef.current
       );
     },
   });
