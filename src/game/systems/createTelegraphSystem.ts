@@ -358,10 +358,19 @@ export function createTelegraphSystem(
         telegraphs.set(key, insert(row));
         continue;
       }
-      // Chain swap (Pitfall 3): a different attack arrived on the SAME key — the
-      // old mesh (wrong shape/size/yaw) must never linger through the new windup.
-      // Remove (disposes geometry) and rebuild fresh.
-      if (row.attackId !== existing.attackId) {
+      // Chain swap: a different attack arrived on the SAME key — the old mesh
+      // (wrong shape/size/yaw) must never linger through the new windup. A lane
+      // re-cast (same attack, fresh startedAtMicros) ALSO rebuilds instead of
+      // re-anchoring: a lane bakes |landing - cast| into its geometry, and
+      // clampToWorld can shorten a world-edge lane between casts (RESEARCH
+      // Pitfall 4), so a re-anchor would leave a stale-length rectangle.
+      // Circle/cone geometry depends only on row.radius (constant across re-casts)
+      // and takes the cheap re-anchor path below.
+      const laneRecast =
+        ATTACK_RENDER[row.attackId]?.shape === 'lane' &&
+        row.state === ATTACK_STATE_WINDUP &&
+        row.startedAtMicros !== existing.startedAtMicros;
+      if (row.attackId !== existing.attackId || laneRecast) {
         remove(key, existing);
         telegraphs.set(key, insert(row));
         continue;
@@ -406,8 +415,13 @@ export function createTelegraphSystem(
           ? Math.max(0.0001, progressFraction(telegraph))
           : 1;
       if (progressScale !== telegraph.lastProgressScale) {
-        telegraph.progress.scale.set(progressScale, 1, progressScale);
-        // The ring covers different ground at the new radius — re-drape.
+        // fillAxis stored at insert time keeps this the ONE progress-scaling site
+        // with zero per-frame shape lookups (T-06-05): lanes sweep only the lane
+        // axis (width constant, RESEARCH Pitfall 3); circle/cone expand uniformly
+        // across XZ from their anchor. Fraction stays row-derived (ANIM-01).
+        if (telegraph.fillAxis === 'x') telegraph.progress.scale.set(progressScale, 1, 1);
+        else telegraph.progress.scale.set(progressScale, 1, progressScale);
+        // The fill covers different ground at the new size — re-drape.
         drapeToGround(telegraph.progress, telegraph.group);
         telegraph.lastProgressScale = progressScale;
       }
