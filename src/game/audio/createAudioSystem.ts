@@ -12,8 +12,23 @@ export interface AudioSystem {
   playSwing(gain?: number): void;
   /** Medium swirl: longer noise swell + a low thump softer than the slam's. `gain` 0..1 scales loudness (distance attenuation); 0 skips playback. */
   playSwirl(gain?: number): void;
+  /** Metallic shield clang: high-Q bandpass hit + detuned oscillator ring. `gain` 0..1 scales loudness (distance attenuation); 0 skips playback. */
+  playDash(gain?: number): void;
   dispose(): void;
 }
+
+// shieldDash clang seeds (06-02) — playtest-tune at the 06-05 checkpoint.
+// Playtest lesson (05-05 round 2): a bandpass discards most of the noise
+// energy, so clang peaks must sit well ABOVE the slam's broadband 0.5 to be
+// audible mid-combat — the high-Q band here keeps even less, hence 0.9.
+/** Peak gain of the high-Q bandpass noise hit (the "clang" transient). */
+const DASH_CLANG_NOISE_GAIN = 0.9;
+/** Combined peak gain of the detuned oscillator pair (the metallic ring). */
+const DASH_CLANG_RING_GAIN = 0.5;
+/** Total clang duration in seconds (spec window 0.15–0.25s). */
+const DASH_CLANG_SECONDS = 0.2;
+/** Detuned ring pair: a few Hz apart so the beat between them reads metallic. */
+const DASH_CLANG_RING_FREQUENCIES = [620, 626] as const;
 
 /**
  * Clamps a caller-supplied loudness factor to (0..1]; returns 0 (= skip) for
@@ -189,10 +204,55 @@ export function createAudioSystem(): AudioSystem {
     thump.stop(now + 0.35);
   }
 
+  function playDash(gainFactor = 1) {
+    // Never throw mid-frame: silently skip until the gesture unlock has run.
+    if (!context || context.state !== 'running') return;
+    const level = clampGain(gainFactor);
+    if (level === 0) return;
+    const now = context.currentTime;
+
+    // Shield-clang transient: a short HIGH-Q bandpass noise hit — the narrow
+    // band reads as struck metal, not the swing's cut air. The band falls
+    // 1800 → 900Hz so the hit "rings down" instead of hissing.
+    const noise = createNoiseSource(context, DASH_CLANG_SECONDS);
+    const filter = context.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = 8;
+    filter.frequency.setValueAtTime(1800, now);
+    filter.frequency.exponentialRampToValueAtTime(900, now + DASH_CLANG_SECONDS);
+    const noiseGain = context.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, now);
+    noiseGain.gain.exponentialRampToValueAtTime(DASH_CLANG_NOISE_GAIN * level, now + 0.008);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + DASH_CLANG_SECONDS);
+    noise.connect(filter).connect(noiseGain).connect(context.destination);
+    noise.start(now);
+    noise.stop(now + DASH_CLANG_SECONDS);
+
+    // Metallic ring: a brief detuned oscillator pair — the few-Hz beat between
+    // them is the shield face still vibrating after the hit. Split the ring
+    // gain across the pair so their sum stays at the seed level.
+    for (const frequency of DASH_CLANG_RING_FREQUENCIES) {
+      const ring = context.createOscillator();
+      ring.type = 'triangle';
+      ring.frequency.setValueAtTime(frequency, now);
+      const ringGain = context.createGain();
+      ringGain.gain.setValueAtTime(0.0001, now);
+      ringGain.gain.exponentialRampToValueAtTime(
+        (DASH_CLANG_RING_GAIN / DASH_CLANG_RING_FREQUENCIES.length) * level,
+        now + 0.01
+      );
+      ringGain.gain.exponentialRampToValueAtTime(0.0001, now + DASH_CLANG_SECONDS);
+      ring.connect(ringGain).connect(context.destination);
+      ring.start(now);
+      ring.stop(now + DASH_CLANG_SECONDS + 0.02);
+    }
+  }
+
   return {
     playSlam,
     playSwing,
     playSwirl,
+    playDash,
     dispose() {
       removeGestureListeners();
       void context?.close();

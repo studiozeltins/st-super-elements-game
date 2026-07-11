@@ -916,6 +916,13 @@ export function createGame(
   const SWING_SHAKE_MAGNITUDE = 0.15;
   const SWIRL_BURST_PARTICLES = 18;
   const SWIRL_SHAKE_MAGNITUDE = 0.3;
+  // shieldDash tier seeds (06-02) — lighter than the slam, heavier than the swing.
+  const DASH_BURST_PARTICLES = 14;
+  const DASH_SHAKE_MAGNITUDE = 0.2;
+  /** Dust-wake bursts spaced along the cast→landing lane (bounded, event-scoped). */
+  const DASH_WAKE_POINTS = 4;
+  /** Particles per wake puff — small so the landing burst stays the accent. */
+  const DASH_WAKE_PARTICLES = 5;
   // Strike juice is LOCAL feedback: shake reads as "I was hit / something
   // landed nearby", so a strike farther than this from the local player plays
   // no juice at all, and within it both shake and SFX scale down linearly.
@@ -1351,6 +1358,36 @@ export function createGame(
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
         shakeMagnitude = Math.max(shakeMagnitude, SWIRL_SHAKE_MAGNITUDE * juiceFalloff);
         audioSystem.playSwirl(juiceFalloff);
+        return;
+      }
+      if (strike.attackId === 'shieldDash') {
+        // Charge tier: landing burst + a dust wake along the lane, light shake,
+        // shield clang — and NO shockwave (a circular wave misreads the lane,
+        // the same logic as the swing's cone above).
+        effectSystem.spawnBurst(landing, juiceColor, DASH_BURST_PARTICLES);
+        // Dust wake along the charge path: the cast point is NOT on the strike
+        // event — read it off the dash's unit_attack row (still carrying the
+        // lane geometry through recovery; dash has no chainsInto so no swap
+        // hazard). If the row lookup misses (cache-ordering, RESEARCH A1),
+        // degrade to the landing burst alone — never throw.
+        const dashRow = attackViewClock
+          .getAttackRows()
+          .find(row => row.unitKind === strike.unitKind && row.unitId === strike.unitId);
+        if (dashRow) {
+          for (let point = 1; point <= DASH_WAKE_POINTS; point++) {
+            const along = point / (DASH_WAKE_POINTS + 1);
+            const wakeX = dashRow.castX + (strike.landingX - dashRow.castX) * along;
+            const wakeZ = dashRow.castZ + (strike.landingZ - dashRow.castZ) * along;
+            effectSystem.spawnBurst(
+              new THREE.Vector3(wakeX, world.getGroundHeight(wakeX, wakeZ) + 0.05, wakeZ),
+              juiceColor,
+              DASH_WAKE_PARTICLES
+            );
+          }
+        }
+        telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
+        shakeMagnitude = Math.max(shakeMagnitude, DASH_SHAKE_MAGNITUDE * juiceFalloff);
+        audioSystem.playDash(juiceFalloff);
         return;
       }
       // Default (leapSlam + any unknown attackId): the D4-15 full package.
