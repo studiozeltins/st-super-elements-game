@@ -309,7 +309,7 @@ the hardest shape (a travelling hitbox), added last of the shapes.
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 06-03-PLAN.md — glue wiring (lane-end computation at selection + lane `resolveStrike` arm with per-victim knockback center) + local republish + bindings regen + populated-DB checks (wave 2)
+- [x] 06-03-PLAN.md — glue wiring (lane-end computation at selection + lane `resolveStrike` arm with per-victim knockback center) + local republish + bindings regen + populated-DB checks (wave 2)
 - [ ] 06-04-PLAN.md — lane rectangle telegraph branch (cast-anchor + yaw, axis-only fill sweep via `fillAxis`, re-cast rebuild rule) (wave 2)
 
 **Wave 3** *(blocked on Wave 2)*
@@ -357,7 +357,7 @@ do NOT elevate an untrusted bool to a state trigger.
 | 3. PVP crit | 2/2 | Complete    | 2026-07-09 |
 | 4. Attack state machine + leapSlam + delete drain | 6/7 | In Progress|  |
 | 5. swordSwing → swordSwirl combo | 5/5 | Complete    | 2026-07-11 |
-| 6. shieldDash lane | 2/5 | In Progress|  |
+| 6. shieldDash lane | 3/5 | In Progress|  |
 | 7. Crit poise interrupt | 0/TBD | Not started | - |
 
 ---

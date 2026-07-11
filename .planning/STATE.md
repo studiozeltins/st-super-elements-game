@@ -6,14 +6,14 @@ current_phase: 06
 current_phase_name: shieldDash lane
 status: executing
 stopped_at: Phase 06 context gathered
-last_updated: "2026-07-11T17:50:43.056Z"
+last_updated: "2026-07-11T17:59:26.830Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 25
-  completed_plans: 22
+  completed_plans: 23
   percent: 71
 ---
 
@@ -32,7 +32,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 ## Current Position
 
 Phase: 06 (shieldDash lane) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 06 execution started
 
@@ -89,6 +89,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | Phase 05 P05 | 13h (1h active) | 2 tasks | 7 files |
 | Phase 06 P01 | 12min | 3 tasks | 8 files |
 | Phase 06 P02 | 6min | 2 tasks | 3 files |
+| Phase 06 P03 | 6min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -170,6 +171,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: 06-01: relocate-at-strike gate generalized to spec.move !== 'none' — charge rides the proven leap seam, zero new TransitionPlan fields or glue changes
 - [Phase 06]: 06-02: goliathAttackClips.ts carve not triggered — renderer 217 functional LOC after animateDash; dash clip uses only resetAttackPose/applyCrouch-restored channels (leftArm rotation.x shield raise), zero restore-contract extension
 - [Phase 06]: 06-02: dash juice reads the cast point via getAttackRows() with a burst-only fallback (RESEARCH A1 cache-ordering); NO circular shockwave for the lane (swing-cone precedent)
+- [Phase 06]: 06-03: laneLengthBySize clampedIndex clamps against its OWN array length (mirrors enterWindup clamp shape); lane knockback center threaded as nullable laneCenter local so circle/cone path + WR-01 stun write stay untouched
 
 ### Pending Todos
 
@@ -213,7 +215,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-11T17:50:28.012Z
+Last session: 2026-07-11T17:58:28.156Z
 Stopped at: Phase 06 context gathered
 Resume file: .planning/phases/06-shielddash-lane/06-CONTEXT.md
 
