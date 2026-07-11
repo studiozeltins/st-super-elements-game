@@ -474,9 +474,10 @@ describe('client ATTACK_RENDER mirror stays in sync with server ATTACKS', () => 
   });
 
   it('every attack keeps graceTicks 1 — the client STRIKE_PHASE_MICROS window assumes it', () => {
-    // createGame.ts derives the strike-phase clip window as strikeAt + ONE world
-    // tick (the zero-storage grace deadline, D4-02). If an attack ever ships a
-    // different graceTicks, the client strike window must become per-attack data.
+    // createAttackViewClock.ts derives the strike-phase clip window as strikeAt
+    // + ONE world tick (the zero-storage grace deadline, D4-02). If an attack
+    // ever ships a different graceTicks, the client strike window must become
+    // per-attack data.
     for (const [id, spec] of Object.entries(ATTACKS)) {
       expect(spec.graceTicks, `${id} graceTicks changed — update STRIKE_PHASE_MICROS handling`).toBe(1);
     }
