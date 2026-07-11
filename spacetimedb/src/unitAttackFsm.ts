@@ -113,7 +113,7 @@ export interface AttackRow extends WindupEntry {
 export interface TransitionPlan<Row extends AttackRow> {
   row: Row; // the row after the walk — persist as-is
   emitStrike: boolean; // a STRIKE step occurred → emit attack_strike unconditionally
-  teleportToLanding: boolean; // STRIKE occurred AND spec.move === 'leap' (Pitfall 1 gate)
+  teleportToLanding: boolean; // STRIKE occurred AND the spec moves — 'leap'/'charge' relocate to the locked landing; 'none' stays planted (Pitfall 1 gate)
   resolveStrike: boolean; // a RECOVERY step occurred with strikeResolved false → resolve ONCE
   strikeSnapshot: Row | null; // the row at the pre-chain-swap point (old attackId/landing/radius) — event + resolution fields
   chainedInto: string | null; // spec.chainsInto when the chain entry fired (D5-01)
@@ -122,8 +122,9 @@ export interface TransitionPlan<Row extends AttackRow> {
 // Applies an ordered dueAttackTransitions list to a row as PURE data — the
 // Wave-0 chain-glue seam (D5-01): the reducer glue delegates its walk here so
 // the coalesced-tick chain contract is a plain unit test. Semantics:
-//   - STRIKE: state → STRIKE; a 'leap' spec moves the unit to the locked
-//     landing, so the chain (and the returned position intent) uses it;
+//   - STRIKE: state → STRIKE; a moving spec ('leap'/'charge', D6-01) relocates
+//     the unit to the locked landing, so the chain (and the returned position
+//     intent) uses it — 'none' stays planted (Pitfall 1 gate);
 //   - RECOVERY with spec.chainsInto authored: the walk spreads a SELF-CENTERED
 //     enterWindup for the chained attack over the row (cast == landing == the
 //     unit's effective position, D5-04) and STOPS IMMEDIATELY — the remaining
@@ -155,7 +156,7 @@ export function walkAttackTransitions<Row extends AttackRow>(
   for (const nextState of transitions) {
     if (nextState === ATTACK_STATE_STRIKE) {
       emitStrike = true;
-      if (spec.move === 'leap') {
+      if (spec.move !== 'none') {
         teleportToLanding = true;
         effectiveX = current.landingX;
         effectiveZ = current.landingZ;
