@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
-current_phase: 6
+current_phase: 06
 current_phase_name: shieldDash lane
 status: executing
 stopped_at: Phase 06 context gathered
-last_updated: "2026-07-11T17:25:54.649Z"
+last_updated: "2026-07-11T17:41:41.988Z"
 last_activity: 2026-07-11
-last_activity_desc: Phase 05 complete, transitioned to Phase 6
+last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 20
-  completed_plans: 20
+  total_plans: 25
+  completed_plans: 21
   percent: 71
 ---
 
@@ -27,14 +27,14 @@ See: .planning/PROJECT.md (updated 2026-07-08)
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor). This milestone deepens *combat feel*: enemy attacks become dodgeable and crit becomes a
 real per-character stat, so power investment (crit) buys tempo, not just damage.
-**Current focus:** Phase 05 — swordSwing → swordSwirl combo
+**Current focus:** Phase 06 — shieldDash lane
 
 ## Current Position
 
-Phase: 6 — shieldDash lane
-Plan: Not started
+Phase: 06 (shieldDash lane) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-07-11 — Phase 05 complete, transitioned to Phase 6
+Last activity: 2026-07-11 — Phase 06 execution started
 
 ## Roadmap Summary
 
@@ -87,6 +87,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | Phase 05 P03 | 8min | 2 tasks | 4 files |
 | Phase 05 P04 | 5min | 2 tasks | 3 files |
 | Phase 05 P05 | 13h (1h active) | 2 tasks | 7 files |
+| Phase 06 P01 | 12min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -162,6 +163,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 05]: 05-05: stun feel is per-attack — client freeze + STUNNED! popup ride the causing attack's ATTACK_RENDER.stunSeconds (swing 0.6, slam 1.05, swirl 0 = knockback only, no popup), parity-locked to server stunTicks; 1050ms fixed default only for unknown causes
 - [Phase 05]: 05-05: setActiveCharacter is stun-gated server-side (silent return while now < stunnedUntilMicros, same window as updatePosition) + client UI gate — mid-stun switch to a fresh HP pool would sidestep the swing tag's escape race
 - [Phase 05]: 05-05: ATTACK_RENDER.juiceColor = ELEMENTS-palette render hints (slam geo amber, swing anemo teal, swirl electro violet) — pure client visual data, NOT parity material; telegraphs stay Frost cyan
+- [Phase ?]: 06-01: leapSlam maxBand 8 -> 5.5 (Pitfall 1) — shared skill cooldown + slam-first order made shieldDash dead code; 5.5 creates the dash-only 5.5..8 zone; deviation queued for 06-05 checkpoint ruling
+- [Phase ?]: 06-01: size-2 laneLength seeded 7.95 not the locked 8.0 — 8.0 sits ON the client strict-greater SNAP_DISTANCE comparison (float-snap teleport risk); 06-05 ruling
+- [Phase ?]: 06-01: ATTACK_RENDER.shieldDash carries NO half-width mirror field — renderer reads row.radius (per-size correct); scalar cannot parity-lock to radiusBySize array (D6-13 letter deviation, 06-05 ruling)
+- [Phase ?]: 06-01: relocate-at-strike gate generalized to spec.move !== 'none' — charge rides the proven leap seam, zero new TransitionPlan fields or glue changes
 
 ### Pending Todos
 
@@ -205,7 +210,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-11T16:37:46.017Z
+Last session: 2026-07-11T17:40:23.253Z
 Stopped at: Phase 06 context gathered
 Resume file: .planning/phases/06-shielddash-lane/06-CONTEXT.md
 

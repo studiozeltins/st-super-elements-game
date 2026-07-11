@@ -304,7 +304,7 @@ the hardest shape (a travelling hitbox), added last of the shapes.
 
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — server pure layer test-first: lane geometry trio (`closestPointOnSegment`/`resolveLane`/`computeLaneEnd`), `shieldDash` registry entry BOTH sides + Pitfall-1 band fix (leapSlam maxBand 8→5.5) + selectability regression guards, generalized `move !== 'none'` relocate gate (wave 1)
+- [x] 06-01-PLAN.md — server pure layer test-first: lane geometry trio (`closestPointOnSegment`/`resolveLane`/`computeLaneEnd`), `shieldDash` registry entry BOTH sides + Pitfall-1 band fix (leapSlam maxBand 8→5.5) + selectability regression guards, generalized `move !== 'none'` relocate gate (wave 1)
 - [ ] 06-02-PLAN.md — client feel: `animateDash` grounded-lunge clip + `playDash` clang SFX + shieldDash strike-juice tier (burst + lane dust wake, no shockwave) (wave 1)
 
 **Wave 2** *(blocked on Wave 1)*
@@ -357,7 +357,7 @@ do NOT elevate an untrusted bool to a state trigger.
 | 3. PVP crit | 2/2 | Complete    | 2026-07-09 |
 | 4. Attack state machine + leapSlam + delete drain | 6/7 | In Progress|  |
 | 5. swordSwing → swordSwirl combo | 5/5 | Complete    | 2026-07-11 |
-| 6. shieldDash lane | 0/TBD | Not started | - |
+| 6. shieldDash lane | 1/5 | In Progress|  |
 | 7. Crit poise interrupt | 0/TBD | Not started | - |
 
 ---

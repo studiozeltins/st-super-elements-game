@@ -39,7 +39,7 @@ Requirements for this milestone. Each maps to exactly one roadmap phase.
 - [x] **ATK-01**: `leapSlam` — a circle AOE at a LOCKED landing (position sampled at cast; dodge by not being there when it lands).
 - [x] **ATK-02**: `swordSwing` — a frontal cone resolved vs live positions (close-range poke).
 - [x] **ATK-03**: `swordSwirl` — a 360° circle that chains immediately after `swordSwing`.
-- [ ] **ATK-04**: `shieldDash` — a lane/capsule moving hitbox gap-closer (`move:'charge'` body commit) resolved along the charge path.
+- [x] **ATK-04**: `shieldDash` — a lane/capsule moving hitbox gap-closer (`move:'charge'` body commit) resolved along the charge path.
 - [x] **ATK-05**: The goliath→player contact drain is removed (goliaths damage ONLY via telegraphed strikes), deleted in the same slice that guarantees the selection fn returns an attack in every distance band (no facetank dead zone). Camp and goliath→enemy drains are untouched.
 - [x] **ATK-06**: Three pure hitbox resolvers (circle / cone / lane) resolve a shape vs live positions, reusing existing geometry helpers (`distanceBetween`, `isWithinForwardArc`, ray/segment projection). *Spans Phases 4–6: circle lands in Phase 4 (leapSlam); cone lands in Phase 5 with ATK-02/03; lane lands in Phase 6 with ATK-04. No dead stubs earlier (CLAUDE.md no-dead-code) — Phase 4 verification scopes to the circle resolver + geometry-reuse pattern only.*
 
@@ -121,7 +121,7 @@ damage; attack shapes + interrupt in Phases 4–7).
 | HIT-01 | Phase 4 | Complete |
 | ATK-02 | Phase 5 | Complete |
 | ATK-03 | Phase 5 | Complete |
-| ATK-04 | Phase 6 | Pending |
+| ATK-04 | Phase 6 | Complete |
 | POISE-01 | Phase 7 | Pending |
 | POISE-02 | Phase 7 | Pending |
 | POISE-03 | Phase 7 | Pending |
