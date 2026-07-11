@@ -27,12 +27,9 @@ const FLASH_SECONDS = 0.2;
 const FLASH_SCALE = 1.08;
 // Lift above the terrain so the flat geometry never z-fights the ground.
 const GROUND_EPSILON = 0.06;
-// Ground telegraphs must NEVER be hidden by raised voxel terrain: depth-test is
-// off and a high renderOrder draws them after the world. Outer rim > progress
-// ring so the danger edge always wins the overdraw (depth is ignored, draw
-// order decides).
-const PROGRESS_RENDER_ORDER = 999;
-const OUTLINE_RENDER_ORDER = 1000;
+// Radial subdivisions of the filled cone sector so draping can follow terrace
+// steps between the apex and the danger edge (thin rims don't need this).
+const CONE_FILL_RINGS = 8;
 
 interface ActiveTelegraph {
   unitKind: number;
@@ -51,6 +48,9 @@ interface ActiveTelegraph {
   arrivalPerfMs: number;
   startedAtMicros: bigint;
   windupDurationMicros: bigint;
+  // Last progress scale the drape ran at — skips per-vertex ground sampling on
+  // frames where the ring didn't move (locked at 1 after strike).
+  lastProgressScale: number;
   flashRemainingSeconds: number;
   // Row left WINDUP/STRIKE (recovery/idle): keep only until the flash decays.
   fading: boolean;
@@ -68,6 +68,9 @@ export interface TelegraphSystem {
   dispose(): void;
 }
 
+// Depth-test stays ON so units walking over the telegraph draw on top of it
+// (they wrote depth in the opaque pass). Raised terrain can't bury it either:
+// the geometry is DRAPED per-vertex onto the ground (see drapeToGround).
 function flatMaterial(opacity: number): THREE.MeshBasicMaterial {
   return new THREE.MeshBasicMaterial({
     color: TELEGRAPH_COLOR,
@@ -75,10 +78,30 @@ function flatMaterial(opacity: number): THREE.MeshBasicMaterial {
     opacity,
     side: THREE.DoubleSide,
     depthWrite: false,
-    depthTest: false,
     // Additive = cheap icy glow against Mondstadt-green terrain (Frost language).
     blending: THREE.AdditiveBlending,
   });
+}
+
+// Rings are authored in the XZ plane (rotateX baked into the geometry) so a
+// vertex's local (x, z) maps straight to a ground sample point.
+function flatRing(
+  innerRadius: number,
+  outerRadius: number,
+  phiSegments = 1,
+  thetaStart?: number,
+  thetaLength?: number
+): THREE.RingGeometry {
+  const geometry = new THREE.RingGeometry(
+    innerRadius,
+    outerRadius,
+    RING_SEGMENTS,
+    phiSegments,
+    thetaStart,
+    thetaLength
+  );
+  geometry.rotateX(-Math.PI / 2);
+  return geometry;
 }
 
 export function createTelegraphSystem(
@@ -88,6 +111,24 @@ export function createTelegraphSystem(
   const telegraphs = new Map<string, ActiveTelegraph>();
   // Shared clock for the outer-ring pulse (cosmetic only — never drives timing).
   let pulseElapsedSeconds = 0;
+  const drapePoint = new THREE.Vector3();
+
+  // Conforms a flat XZ ring to the terrain: each vertex's world (x, z) is
+  // sampled against the ground and its local y set so the surface floats
+  // GROUND_EPSILON above the terrain everywhere — terraced hills can never
+  // bury the telegraph even with depth-testing on.
+  function drapeToGround(mesh: THREE.Mesh, group: THREE.Group) {
+    mesh.updateWorldMatrix(true, false);
+    const positions = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < positions.count; i++) {
+      drapePoint.set(positions.getX(i), 0, positions.getZ(i)).applyMatrix4(mesh.matrixWorld);
+      positions.setY(
+        i,
+        getGroundHeight(drapePoint.x, drapePoint.z) + GROUND_EPSILON - group.position.y
+      );
+    }
+    positions.needsUpdate = true;
+  }
 
   // Anchors the group: circles sit on the LOCKED landing; cone sectors sit at the
   // cast APEX yawed toward the aim (D5-14). Both are locked at windup entry (D5-05)
@@ -126,41 +167,37 @@ export function createTelegraphSystem(
       const fullAngle = THREE.MathUtils.degToRad(render.coneHalfAngleDegrees * 2);
       // Arc rim at the danger edge — instant at windup entry, like the circle rim.
       outline = new THREE.Mesh(
-        new THREE.RingGeometry(row.radius - RIM_WIDTH, row.radius, RING_SEGMENTS, 1, -fullAngle / 2, fullAngle),
+        flatRing(row.radius - RIM_WIDTH, row.radius, 1, -fullAngle / 2, fullAngle),
         outlineMaterial
       );
       // Progress: FILLED sector built at full size — the shared update() scaling
       // expands it from the apex for free because the group origin IS the apex.
       progress = new THREE.Mesh(
-        new THREE.RingGeometry(0.001, row.radius, RING_SEGMENTS, 1, -fullAngle / 2, fullAngle),
+        flatRing(0.001, row.radius, CONE_FILL_RINGS, -fullAngle / 2, fullAngle),
         flatMaterial(PROGRESS_OPACITY)
       );
     } else {
-      outline = new THREE.Mesh(
-        new THREE.RingGeometry(row.radius - RIM_WIDTH, row.radius, RING_SEGMENTS),
-        outlineMaterial
-      );
+      outline = new THREE.Mesh(flatRing(row.radius - RIM_WIDTH, row.radius), outlineMaterial);
       // Progress ring: built at FULL radius and scaled 0 → 1 over the windup, so
       // it expands from the center and meets the outer ring exactly at strike.
       // Its expansion IS the countdown.
       progress = new THREE.Mesh(
-        new THREE.RingGeometry(
-          Math.max(0.001, row.radius - PROGRESS_RIM_WIDTH),
-          row.radius,
-          RING_SEGMENTS
-        ),
+        flatRing(Math.max(0.001, row.radius - PROGRESS_RIM_WIDTH), row.radius),
         flatMaterial(PROGRESS_OPACITY)
       );
     }
-    outline.rotation.x = -Math.PI / 2;
     outline.position.y = 0.005;
-    outline.renderOrder = OUTLINE_RENDER_ORDER;
-    progress.rotation.x = -Math.PI / 2;
-    progress.renderOrder = PROGRESS_RENDER_ORDER;
-    progress.scale.setScalar(0.0001); // starts empty; never exactly 0 (degenerate matrix)
+    // Draping shifts vertex heights after the bounding sphere was computed —
+    // skip frustum culling rather than recomputing bounds every re-drape.
+    outline.frustumCulled = false;
+    progress.frustumCulled = false;
+    // Scale only XZ (never Y): draped vertex heights are authored in local
+    // space and must not stretch with the countdown expansion.
+    progress.scale.set(0.0001, 1, 0.0001); // starts empty; never exactly 0 (degenerate matrix)
     group.add(outline, progress);
     anchorGroup(group, row);
     scene.add(group);
+    drapeToGround(outline, group);
     const telegraph: ActiveTelegraph = {
       unitKind: row.unitKind,
       unitId: row.unitId,
@@ -173,6 +210,7 @@ export function createTelegraphSystem(
       arrivalPerfMs: performance.now(),
       startedAtMicros: row.startedAtMicros,
       windupDurationMicros: row.strikeAtMicros - row.startedAtMicros,
+      lastProgressScale: -1,
       flashRemainingSeconds: 0,
       fading: false,
     };
@@ -184,7 +222,7 @@ export function createTelegraphSystem(
   function flash(telegraph: ActiveTelegraph) {
     telegraph.flashRemainingSeconds = FLASH_SECONDS;
     telegraph.outlineMaterial.opacity = 1;
-    telegraph.outline.scale.setScalar(FLASH_SCALE);
+    telegraph.outline.scale.set(FLASH_SCALE, 1, FLASH_SCALE);
   }
 
   function remove(key: string, telegraph: ActiveTelegraph) {
@@ -231,6 +269,9 @@ export function createTelegraphSystem(
         existing.startedAtMicros = row.startedAtMicros;
         existing.windupDurationMicros = row.strikeAtMicros - row.startedAtMicros;
         anchorGroup(existing.group, row);
+        // Moved to new ground — heights baked into the vertices are stale.
+        drapeToGround(existing.outline, existing.group);
+        existing.lastProgressScale = -1;
       }
       if (existing.state === ATTACK_STATE_WINDUP && row.state === ATTACK_STATE_STRIKE) {
         flash(existing);
@@ -257,16 +298,22 @@ export function createTelegraphSystem(
       1 - PULSE_DEPTH * (0.5 + 0.5 * Math.sin(pulseElapsedSeconds * PULSE_HZ * Math.PI * 2));
     for (const [key, telegraph] of telegraphs) {
       // Progress ring: expands during windup; locked on the danger edge after.
-      telegraph.progress.scale.setScalar(
+      const progressScale =
         telegraph.state === ATTACK_STATE_WINDUP
           ? Math.max(0.0001, progressFraction(telegraph))
-          : 1
-      );
+          : 1;
+      if (progressScale !== telegraph.lastProgressScale) {
+        telegraph.progress.scale.set(progressScale, 1, progressScale);
+        // The ring covers different ground at the new radius — re-drape.
+        drapeToGround(telegraph.progress, telegraph.group);
+        telegraph.lastProgressScale = progressScale;
+      }
       if (telegraph.flashRemainingSeconds > 0) {
         telegraph.flashRemainingSeconds -= deltaSeconds;
         const decay = THREE.MathUtils.clamp(telegraph.flashRemainingSeconds / FLASH_SECONDS, 0, 1);
         telegraph.outlineMaterial.opacity = OUTLINE_OPACITY + (1 - OUTLINE_OPACITY) * decay;
-        telegraph.outline.scale.setScalar(1 + (FLASH_SCALE - 1) * decay);
+        const flashScale = 1 + (FLASH_SCALE - 1) * decay;
+        telegraph.outline.scale.set(flashScale, 1, flashScale);
         if (telegraph.flashRemainingSeconds <= 0 && telegraph.fading) remove(key, telegraph);
       } else {
         telegraph.outlineMaterial.opacity = OUTLINE_OPACITY * pulse;
