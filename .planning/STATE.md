@@ -6,14 +6,14 @@ current_phase: 06
 current_phase_name: shieldDash lane
 status: executing
 stopped_at: Phase 06 context gathered
-last_updated: "2026-07-11T17:59:26.830Z"
+last_updated: "2026-07-11T18:18:16.689Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 06 execution started
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 25
-  completed_plans: 23
+  completed_plans: 24
   percent: 71
 ---
 
@@ -32,7 +32,7 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 ## Current Position
 
 Phase: 06 (shieldDash lane) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-07-11 — Phase 06 execution started
 
@@ -90,6 +90,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | Phase 06 P01 | 12min | 3 tasks | 8 files |
 | Phase 06 P02 | 6min | 2 tasks | 3 files |
 | Phase 06 P03 | 6min | 2 tasks | 1 files |
+| Phase 06 P04 | 22min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -172,6 +173,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 06]: 06-02: goliathAttackClips.ts carve not triggered — renderer 217 functional LOC after animateDash; dash clip uses only resetAttackPose/applyCrouch-restored channels (leftArm rotation.x shield raise), zero restore-contract extension
 - [Phase 06]: 06-02: dash juice reads the cast point via getAttackRows() with a burst-only fallback (RESEARCH A1 cache-ordering); NO circular shockwave for the lane (swing-cone precedent)
 - [Phase 06]: 06-03: laneLengthBySize clampedIndex clamps against its OWN array length (mirrors enterWindup clamp shape); lane knockback center threaded as nullable laneCenter local so circle/cone path + WR-01 stun write stay untouched
+- [Phase ?]: [Phase 06]: 06-04: lane telegraph follows the CURRENT terrain-drape architecture (user rework 3f7be1a) not the pre-drape mesh recipe — geometry baked into XZ plane, draped per-vertex, depth-tested normally
+- [Phase ?]: [Phase 06]: 06-04: lane outline is ONE merged BufferGeometry from subdivided plane rails+inner-gap caps (local mergeStripPositions, no BufferGeometryUtils); single mesh for drape+flash, rails carry lengthSegments for terrace-following drape
+- [Phase ?]: [Phase 06]: 06-04: fillAxis ('uniform'|'x') stored on ActiveTelegraph at insert — lanes scale.x only (constant width), circle/cone uniform; per-frame loop branches on the stored enum, no ATTACK_RENDER lookup
+- [Phase ?]: [Phase 06]: 06-04: telegraphShapes.ts carved (lane branch tripped 322>300 functional LOC) — pure geometry builders extracted, createTelegraphSystem back to 263
 
 ### Pending Todos
 
@@ -215,7 +220,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-11T17:58:28.156Z
+Last session: 2026-07-11T18:17:37.090Z
 Stopped at: Phase 06 context gathered
 Resume file: .planning/phases/06-shielddash-lane/06-CONTEXT.md
 
