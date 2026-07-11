@@ -5,8 +5,8 @@ milestone_name: Combat Depth
 current_phase: 6
 current_phase_name: shieldDash lane
 status: verifying
-stopped_at: Completed 05-05-PLAN.md — phase 05 gate + playtest APPROVED (2 fix rounds), all 5 plans done, ready for verification
-last_updated: "2026-07-11T07:39:04.305Z"
+stopped_at: Phase 06 context gathered
+last_updated: "2026-07-11T16:37:46.053Z"
 last_activity: 2026-07-11
 last_activity_desc: Phase 05 complete, transitioned to Phase 6
 progress:
@@ -205,9 +205,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-11T07:16:17.056Z
-Stopped at: Completed 05-05-PLAN.md — phase 05 gate + playtest APPROVED (2 fix rounds), all 5 plans done, ready for verification
-Resume file: None
+Last session: 2026-07-11T16:37:46.017Z
+Stopped at: Phase 06 context gathered
+Resume file: .planning/phases/06-shielddash-lane/06-CONTEXT.md
 
 **Gate override (2026-07-09):** Phase 4 decision-coverage gate returned `could-not-parse` — CONTEXT.md uses `D4-NN` decision IDs, parser expects `D-NN`. Proceeded on plan-checker Dimension 7 PASS (all D4-01…D4-17 manually traced to plan tasks). verify-phase should re-confirm decision coverage semantically, not via the parser.
 
