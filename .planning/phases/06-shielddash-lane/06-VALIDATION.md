@@ -1,8 +1,8 @@
 ---
 phase: 06
 slug: shielddash-lane
-status: draft
-nyquist_compliant: false
+status: planned
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-11
 ---
@@ -38,12 +38,14 @@ created: 2026-07-11
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD (planner fills) | — | — | ATK-04 | — | resolveLane inside/edge/outside; zero-length degrades to circle | unit | `pnpm vitest run src/game/data/__tests__/attackHitbox.test.ts` | ✅ (add describes) | ⬜ pending |
-| TBD | — | — | ATK-04 | — | closestPointOnSegment interior/endpoint/degenerate; computeLaneEnd overshoot + zero-length fallback | unit | same file | ✅ (add) | ⬜ pending |
-| TBD | — | — | ATK-04 | — | charge STRIKE relocates (flag + effectiveX/Z); `move:'none'` stays planted; coalesced [STRIKE,RECOVERY,IDLE] relocates+resolves+cooldowns once | unit | `pnpm vitest run src/game/data/__tests__/unitAttackFsm.test.ts` | ✅ (add) | ⬜ pending |
-| TBD | — | — | ATK-04 | — | shieldDash registry numbers; dash selectable at 6.5u / slam wins overlap / shared gate blocks both (Pitfall-1 guards) | unit | `pnpm vitest run src/game/data/__tests__/attacks.test.ts` | ✅ (add) | ⬜ pending |
-| TBD | — | — | ATK-04 / SC3 | — | ATTACKS↔ATTACK_RENDER parity incl. new entry, damage triple, lane data ≤ 8, `move:'charge'` | unit | `pnpm vitest run src/game/data/__tests__/serverSync.test.ts` | ✅ (extend) | ⬜ pending |
-| TBD | — | — | Determinism | T-06 grep | no `Math.random`/`Date.now` in `spacetimedb/src` | automated | `grep -rn "Math.random\|Date.now" spacetimedb/src/` → empty | ✅ | ⬜ pending |
+| 06-01 T1 | 06-01 | 1 | ATK-04 | T-06-01 | resolveLane inside/edge/outside; zero-length degrades to circle | unit | `pnpm vitest run src/game/data/__tests__/attackHitbox.test.ts` | ✅ (add describes) | ⬜ pending |
+| 06-01 T1 | 06-01 | 1 | ATK-04 | T-06-01 | closestPointOnSegment interior/endpoint/degenerate; computeLaneEnd overshoot + zero-length fallback | unit | same file | ✅ (add) | ⬜ pending |
+| 06-01 T3 | 06-01 | 1 | ATK-04 | T-06-01 | charge STRIKE relocates (flag + effectiveX/Z); `move:'none'` stays planted; coalesced [STRIKE,RECOVERY,IDLE] relocates+resolves+cooldowns once | unit | `pnpm vitest run src/game/data/__tests__/unitAttackFsm.test.ts` | ✅ (add) | ⬜ pending |
+| 06-01 T2 | 06-01 | 1 | ATK-04 | T-06-01 | shieldDash registry numbers; dash selectable at 6.5u / slam wins overlap / shared gate blocks both (Pitfall-1 guards) | unit | `pnpm vitest run src/game/data/__tests__/attacks.test.ts` | ✅ (add) | ⬜ pending |
+| 06-01 T2 | 06-01 | 1 | ATK-04 / SC3 | T-06-01 | ATTACKS↔ATTACK_RENDER parity incl. new entry, damage triple, lane data ≤ 8, `move:'charge'` | unit | `pnpm vitest run src/game/data/__tests__/serverSync.test.ts` | ✅ (extend) | ⬜ pending |
+| 06-03 T2 / 06-05 T1 | 06-03, 06-05 | 2, 3 | Determinism | T-06-02 | no module randomness / wall-clock reads in `spacetimedb/src` | automated | `grep -rnE "Math\.random\|Date\.now" spacetimedb/src/` → empty | ✅ | ⬜ pending |
+| 06-03 T2 | 06-03 | 2 | ATK-04 / FSM-06 | T-06-06 | republished module clean on POPULATED local DB (sql exits 0, logs error-free) | automated | `spacetime sql 2d-impact-game-fr9ti "SELECT attack_id, state FROM unit_attack" --server local` + logs grep | ✅ | ⬜ pending |
+| 06-05 T1 | 06-05 | 3 | ATK-04 / SC3 | — | exclusive full gate: `pnpm test` + `pnpm build` green on merged tree | automated | `pnpm test && pnpm build` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 

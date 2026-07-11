@@ -300,10 +300,29 @@ the hardest shape (a travelling hitbox), added last of the shapes.
 
   3. Every player within `laneWidth` along the charge path is resolved (not just the first), and
      `serverSync.test.ts` `ATTACKS` parity stays green.
-**Plans**: TBD
-**Notes**: Add one `ATTACKS` entry + `resolveLane` (reuse `pickRayHit`/segment projection, collect
-ALL within `laneWidth`), the `move:'charge'` body commit layered as an override on the computed
-`goliathPosition` map before the single apply, and a client lane telegraph + charge animation.
+**Plans**: 5 plans
+
+**Wave 1**
+
+- [ ] 06-01-PLAN.md — server pure layer test-first: lane geometry trio (`closestPointOnSegment`/`resolveLane`/`computeLaneEnd`), `shieldDash` registry entry BOTH sides + Pitfall-1 band fix (leapSlam maxBand 8→5.5) + selectability regression guards, generalized `move !== 'none'` relocate gate (wave 1)
+- [ ] 06-02-PLAN.md — client feel: `animateDash` grounded-lunge clip + `playDash` clang SFX + shieldDash strike-juice tier (burst + lane dust wake, no shockwave) (wave 1)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 06-03-PLAN.md — glue wiring (lane-end computation at selection + lane `resolveStrike` arm with per-victim knockback center) + local republish + bindings regen + populated-DB checks (wave 2)
+- [ ] 06-04-PLAN.md — lane rectangle telegraph branch (cast-anchor + yaw, axis-only fill sweep via `fillAxis`, re-cast rebuild rule) (wave 2)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 06-05-PLAN.md — capstone: exclusive full suite + build + grep-gate + migrated-DB deploy checks + blocking human playtest (SC1/SC2/SC3, D6-07 emergence, deviation rulings, seed retunes) (wave 3)
+
+**Notes**: Add one `ATTACKS` entry + `resolveLane` (segment projection reimplemented locally — the
+nearest-only ray helper is REJECTED for the lane per D6-04; collect ALL within `laneWidth`), the
+`move:'charge'` body commit layered as an override on the computed `goliathPosition` map before
+the single apply, and a client lane telegraph + charge animation. Planner-documented seed
+deviations pending user ruling at the 06-05 checkpoint: leapSlam maxBand 8→5.5 (without it
+D6-06+D6-07 make shieldDash unreachable — RESEARCH Pitfall 1) and size-2 laneLength 7.95 not 8.0
+(strict-`>` SNAP_DISTANCE float hazard — RESEARCH Pitfall 2).
 
 #### Phase 7: Crit poise interrupt
 
