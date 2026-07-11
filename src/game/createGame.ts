@@ -23,6 +23,8 @@ import { createBoostOrbit } from './entities/createBoostOrbit';
 import { createInputSystem } from './systems/createInputSystem';
 import { createAudioSystem } from './audio/createAudioSystem';
 import { createCombatAudio } from './audio/createCombatAudio';
+import { createMovementAudio, type FootstepKind } from './audio/createMovementAudio';
+import { createWeaponAudio } from './audio/createWeaponAudio';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createAttackViewClock } from './systems/createAttackViewClock';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
@@ -288,6 +290,10 @@ export function createGame(
   const audioSystem = createAudioSystem();
   // Combat feedback SFX (hits/crits/hurt/stun/heal) on the same unlocked context.
   const combatAudio = createCombatAudio(audioSystem.getContext);
+  // Per-weapon swing/shot flavors + the goliath windup riser.
+  const weaponAudio = createWeaponAudio(audioSystem.getContext);
+  // Footstep ambience for every visible walker (distance-driven stride cadence).
+  const movementAudio = createMovementAudio(audioSystem.getContext);
   // Same linear falloff shape the strike juice uses — a far fight is a faint
   // tick, my own hit is full volume.
   function hitAudioGain(x: number, z: number): number {
@@ -561,9 +567,6 @@ export function createGame(
     swingIndex++;
     const profile = swingProfile(swingIndex, combo);
     playerModel.triggerAttack(profile);
-    // Light air cut on every swing — the landed hit (enemy_hit event) carries
-    // the actual impact sound.
-    combatAudio.playWhoosh();
 
     const weapon = WEAPONS[activeCharacter.weapon];
     faceNearestTarget(weapon.range + 3);
@@ -584,6 +587,9 @@ export function createGame(
     }
 
     if (weapon.isRanged) {
+      // Release flavor at launch — the landed hit (enemy_hit) carries the impact.
+      if (activeCharacter.weapon === 'bow') weaponAudio.playBowShot();
+      else weaponAudio.playArcaneBolt();
       // Fire ONE server hitscan at launch: the server picks the first enemy/goliath
       // the ray reaches using authoritative positions, so a shot lands the same at
       // any range. The projectile below is purely visual for enemy damage.
@@ -611,6 +617,10 @@ export function createGame(
       });
       return;
     }
+
+    // Melee air cut per weapon class — the landed hit carries the impact sound.
+    if (activeCharacter.weapon === 'spear') weaponAudio.playSpearThrust();
+    else weaponAudio.playSwordSwing();
 
     const hitCenter = {
       x: playerPosition.x + direction.x * weapon.range * 0.6,
@@ -933,6 +943,60 @@ export function createGame(
     }
   }
 
+  // Gait per camp-enemy archetype; windWisp is absent on purpose — it floats.
+  const FOOTSTEP_KIND_BY_ARCHETYPE: Partial<Record<string, FootstepKind>> = {
+    slime: 'slime',
+    spikySlime: 'slime',
+    stoneGolem: 'golem',
+  };
+  /** Own steps stay audible but never dominate the mix. */
+  const OWN_STEP_GAIN = 0.5;
+
+  // Feeds every visible walker's DISPLAY position (the lerped mesh — what the
+  // eye sees) to the movement audio each frame; stride cadence, distance culling,
+  // and spam limits all live inside createMovementAudio.
+  function updateFootsteps() {
+    enemyRenderer.forEachAliveUnit((key, position, row) => {
+      const kind = FOOTSTEP_KIND_BY_ARCHETYPE[row.archetypeId];
+      if (!kind) return;
+      movementAudio.updateUnit(
+        `enemy:${key}`,
+        kind,
+        position.x,
+        position.z,
+        hitAudioGain(position.x, position.z),
+        hitAudioPan(position.x, position.z)
+      );
+    });
+    goliathRenderer.forEachAliveUnit((key, position) => {
+      movementAudio.updateUnit(
+        `goliath:${key}`,
+        'goliath',
+        position.x,
+        position.z,
+        hitAudioGain(position.x, position.z),
+        hitAudioPan(position.x, position.z)
+      );
+    });
+    for (const [identityHex, view] of remotePlayers) {
+      const position = view.model.group.position;
+      movementAudio.updateUnit(
+        identityHex,
+        'player',
+        position.x,
+        position.z,
+        hitAudioGain(position.x, position.z),
+        hitAudioPan(position.x, position.z)
+      );
+    }
+    // Airborne frames feed nothing: the prune-and-reinsert cycle restarts the
+    // stride on landing, so a jump's horizontal drift never clicks out steps.
+    if (isGrounded()) {
+      movementAudio.updateUnit('me', 'player', playerPosition.x, playerPosition.z, OWN_STEP_GAIN, 0);
+    }
+    movementAudio.endFrame();
+  }
+
   // Slam camera shake (D4-15): taste-tunable. A strike sets shakeMagnitude; each
   // frame adds a random offset (render-only cosmetic randomness — the determinism
   // rule binds spacetimedb/src, not the renderer) and decays the magnitude
@@ -1063,6 +1127,7 @@ export function createGame(
     damageNumbers.update(deltaSeconds);
     world.update(deltaSeconds);
     updateRemotePlayerViews(deltaSeconds);
+    updateFootsteps();
     updateCamera(deltaSeconds);
     syncPositionToServer(deltaSeconds);
     healInSafeZone(deltaSeconds);
@@ -1084,6 +1149,37 @@ export function createGame(
     remotePlayers.delete(identityHex);
   }
 
+  // One riser per CAST (startedAtMicros in the key makes a re-cast a fresh
+  // riser): WINDUP starts it at the cast point, faded by distance. A cast whose
+  // row vanished or left windup/strike (death, interrupt) cancels; a riser that
+  // ran to its natural strike self-stops, so the late cancel is a safe no-op.
+  const ATTACK_STATE_WINDUP = 1;
+  const ATTACK_STATE_STRIKE = 2;
+  const activeRisers = new Map<string, () => void>();
+  function syncWindupRisers(rows: readonly UnitAttack[]) {
+    const live = new Set<string>();
+    for (const row of rows) {
+      if (row.state !== ATTACK_STATE_WINDUP && row.state !== ATTACK_STATE_STRIKE) continue;
+      const key = `${row.unitKind}:${row.unitId}:${row.startedAtMicros}`;
+      live.add(key);
+      if (row.state !== ATTACK_STATE_WINDUP || activeRisers.has(key)) continue;
+      const durationSeconds = Number(row.strikeAtMicros - row.startedAtMicros) / 1e6;
+      activeRisers.set(
+        key,
+        weaponAudio.playWindupRiser(
+          durationSeconds,
+          hitAudioGain(row.castX, row.castZ),
+          hitAudioPan(row.castX, row.castZ)
+        )
+      );
+    }
+    for (const [key, cancel] of activeRisers) {
+      if (live.has(key)) continue;
+      cancel();
+      activeRisers.delete(key);
+    }
+  }
+
   const game: Game = {
     onPartySlotRequested: null,
     start() {
@@ -1100,6 +1196,8 @@ export function createGame(
       goliathRenderer.dispose();
       telegraphSystem.dispose();
       combatAudio.dispose();
+      weaponAudio.dispose();
+      movementAudio.dispose();
       audioSystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
@@ -1357,6 +1455,7 @@ export function createGame(
       // and syncGoliaths can re-gate telegraphs between row updates.
       attackViewClock.syncAttackRows(rows);
       telegraphSystem.syncAttacks(rows, attackViewClock.isUnitAlive);
+      syncWindupRisers(rows);
     },
     handleAttackStrike(strike) {
       // Per-attack strike juice tiers (ANIM-04) — every component fires exactly
@@ -1473,6 +1572,19 @@ export function createGame(
       if (!character) return;
       const weapon = WEAPONS[character.weapon];
       if (!weapon.isRanged) return;
+      // The shooter's release, faint by distance and panned to where they stand
+      // on screen (gain 0 beyond earshot = the play call skips itself).
+      if (character.weapon === 'bow') {
+        weaponAudio.playBowShot(
+          hitAudioGain(attack.originX, attack.originZ),
+          hitAudioPan(attack.originX, attack.originZ)
+        );
+      } else {
+        weaponAudio.playArcaneBolt(
+          hitAudioGain(attack.originX, attack.originZ),
+          hitAudioPan(attack.originX, attack.originZ)
+        );
+      }
       effectSystem.spawnProjectile({
         origin: new THREE.Vector3(
           attack.originX,

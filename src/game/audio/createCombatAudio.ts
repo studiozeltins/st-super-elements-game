@@ -1,13 +1,14 @@
 // Procedural combat-feedback SFX: hit/crit ticks, player-hurt thuds, the stun
-// pop + wind-down, heals, and swing whooshes. Built on the anti-fatigue rules
-// that keep high-DPS audio rewarding instead of grating:
+// pop + wind-down, and heals. Built on the anti-fatigue rules that keep
+// high-DPS audio rewarding instead of grating:
 //  - every instance is pitch/gain-jittered (no two hits identical),
 //  - per-sound throttles MERGE bursts into one slightly fatter play,
 //  - generic hits live on a duckable bus; hurt/crit briefly duck it so danger
 //    and reward always cut through the spam,
 //  - consecutive crits climb a small pitch ladder (Hades-style escalation).
-// Frequency slots: hits mid (~2kHz), crits high (3–5kHz), hurt low (50–130Hz),
-// stun a detuned midrange wobble — nothing masks anything.
+// Frequency slots: hits mid (~2kHz), crit crack above ~2.4kHz with the ping
+// under 1kHz, hurt low (50–130Hz), stun a detuned midrange wobble — nothing
+// masks anything.
 
 import { clampGain, createNoiseSource, jitter, panned } from './audioCore';
 
@@ -22,8 +23,6 @@ export interface CombatAudio {
   playStun(durationSeconds: number, intensity: number): void;
   /** Soft two-note chime for an incoming heal. */
   playHeal(): void;
-  /** Very light air whoosh for the player's own swing (miss or hit). */
-  playWhoosh(): void;
   dispose(): void;
 }
 
@@ -32,7 +31,6 @@ const HIT_INTERVAL = 0.07;
 const CRIT_INTERVAL = 0.09;
 const HURT_INTERVAL = 0.15;
 const HEAL_INTERVAL = 0.25;
-const WHOOSH_INTERVAL = 0.12;
 /** Each merged (suppressed) play fattens the next allowed one by this much. */
 const MERGE_BOOST = 0.15;
 const MERGE_BOOST_CAP = 4;
@@ -43,9 +41,16 @@ const CRIT_STREAK_WINDOW_SECONDS = 1.2;
 const CRIT_STREAK_SEMITONES = 1.5;
 const CRIT_STREAK_MAX_STEPS = 4;
 
+// Crit voicing (playtest 2026-07-11: the original 1400→700 ping + 2600 sparkle
+// read as "too high" — everything dropped roughly a fifth, crack band with it).
+const CRIT_PING_START_HZ = 950;
+const CRIT_PING_END_HZ = 480;
+const CRIT_SPARKLE_HZ = 1700;
+const CRIT_CRACK_HIGHPASS_HZ = 2400;
+
 export function createCombatAudio(getContext: () => AudioContext | null): CombatAudio {
-  // Duckable bus for the spammy layer (hit ticks, whooshes). Hurt/crit go
-  // straight to the destination and momentarily duck this bus.
+  // Duckable bus for the spammy layer (hit ticks). Hurt/crit go straight to
+  // the destination and momentarily duck this bus.
   let hitBus: GainNode | null = null;
   let busContext: AudioContext | null = null;
   const throttles = new Map<string, { nextAt: number; merged: number }>();
@@ -156,7 +161,7 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     const crack = createNoiseSource(context, 0.07);
     const crackHigh = context.createBiquadFilter();
     crackHigh.type = 'highpass';
-    crackHigh.frequency.value = 3000;
+    crackHigh.frequency.value = CRIT_CRACK_HIGHPASS_HZ;
     const crackGain = context.createGain();
     crackGain.gain.setValueAtTime(0.5 * level * boost, now);
     crackGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.07);
@@ -167,8 +172,8 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     // Reward ping: descending triangle — the melodic part the ladder climbs.
     const ping = context.createOscillator();
     ping.type = 'triangle';
-    ping.frequency.setValueAtTime(1400 * ladder, now);
-    ping.frequency.exponentialRampToValueAtTime(700 * ladder, now + 0.16);
+    ping.frequency.setValueAtTime(CRIT_PING_START_HZ * ladder, now);
+    ping.frequency.exponentialRampToValueAtTime(CRIT_PING_END_HZ * ladder, now + 0.16);
     const pingGain = context.createGain();
     pingGain.gain.setValueAtTime(0.0001, now);
     pingGain.gain.exponentialRampToValueAtTime(0.4 * level, now + 0.008);
@@ -180,7 +185,7 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     // Sparkle tail: faint high sine sheen.
     const sparkle = context.createOscillator();
     sparkle.type = 'sine';
-    sparkle.frequency.value = 2600 * ladder;
+    sparkle.frequency.value = CRIT_SPARKLE_HZ * ladder;
     const sparkleGain = context.createGain();
     sparkleGain.gain.setValueAtTime(0.15 * level, now);
     sparkleGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
@@ -358,35 +363,12 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     });
   }
 
-  function playWhoosh() {
-    const context = ready();
-    if (!context) return;
-    const boost = throttle('whoosh', WHOOSH_INTERVAL, context.currentTime);
-    if (boost === null) return;
-    const now = context.currentTime;
-    // Feather-light air cut on the swing itself; the HIT carries the impact.
-    const air = createNoiseSource(context, 0.12);
-    const airBand = context.createBiquadFilter();
-    airBand.type = 'bandpass';
-    airBand.Q.value = 1.2;
-    airBand.frequency.setValueAtTime(500 * jitter(0.1), now);
-    airBand.frequency.exponentialRampToValueAtTime(1400 * jitter(0.1), now + 0.11);
-    const airGain = context.createGain();
-    airGain.gain.setValueAtTime(0.0001, now);
-    airGain.gain.exponentialRampToValueAtTime(0.1 * Math.min(boost, 1.3), now + 0.03);
-    airGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
-    air.connect(airBand).connect(airGain).connect(bus(context));
-    air.start(now);
-    air.stop(now + 0.12);
-  }
-
   return {
     playEnemyHit,
     playEnemyCrit,
     playPlayerHurt,
     playStun,
     playHeal,
-    playWhoosh,
     dispose() {
       stopActiveStun?.();
       hitBus?.disconnect();

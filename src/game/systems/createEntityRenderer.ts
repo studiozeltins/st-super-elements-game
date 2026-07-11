@@ -87,6 +87,12 @@ export interface EntityRenderer<Row> {
   /** Interpolates each model toward its server target and animates it. */
   update(deltaSeconds: number, getGroundHeight: GetGroundHeight): void;
   getAlivePositions(): THREE.Vector3[];
+  /**
+   * Visits each live entity at its DISPLAY (lerped mesh) position — for effects
+   * that must track what the eye sees (footstep audio), unlike getAlivePositions'
+   * authoritative aim targets. The Vector3 is the live mesh position: read, don't keep.
+   */
+  forEachAliveUnit(visit: (key: string, worldPosition: THREE.Vector3, row: Row) => void): void;
   /** Appends live pushable bodies (position refs) into the shared, reused array. */
   collectCollisionBodies(target: CollisionBody[]): void;
   dispose(): void;
@@ -107,10 +113,12 @@ const MOTION_EPSILON = 0.02;
  */
 const OVERLAY_VISIBLE_SECONDS = 4;
 
-interface RenderedEntity {
+interface RenderedEntity<Row> {
   model: EnemyModel;
   animation: EntityAnimation;
   collisionBody: CollisionBody;
+  /** Latest synced table row — exposed through forEachAliveUnit for kind lookups. */
+  row: Row;
   displayBaseGems: number;
   targetX: number;
   targetZ: number;
@@ -128,12 +136,12 @@ export function createEntityRenderer<Row>(
   options: EntityRendererOptions<Row>
 ): EntityRenderer<Row> {
   const { scene, adapter, onHealthDrop } = options;
-  const entities = new Map<string, RenderedEntity>();
+  const entities = new Map<string, RenderedEntity<Row>>();
   // Live attack views keyed by entity id string; replaced wholesale each refresh.
   let attackViews: Map<string, AttackAnimationView> = new Map();
   let elapsedSeconds = 0;
 
-  function insert(row: Row): RenderedEntity {
+  function insert(row: Row): RenderedEntity<Row> {
     const spawned = adapter.spawn(row);
     scene.add(spawned.model.group);
     const targetX = adapter.readPositionX(row);
@@ -149,6 +157,7 @@ export function createEntityRenderer<Row>(
         radius: spawned.collisionRadius,
         mass: spawned.collisionMass,
       },
+      row,
       displayBaseGems: adapter.displayBaseGems(row),
       targetX,
       targetZ,
@@ -164,7 +173,7 @@ export function createEntityRenderer<Row>(
     };
   }
 
-  function revive(entity: RenderedEntity) {
+  function revive(entity: RenderedEntity<Row>) {
     entity.deathStartedAt = null;
     entity.lastDamagedAt = -Infinity; // a full-health revived enemy shows no bar
     const group = entity.model.group;
@@ -173,14 +182,14 @@ export function createEntityRenderer<Row>(
     group.position.set(entity.targetX, group.position.y, entity.targetZ);
   }
 
-  function kill(entity: RenderedEntity) {
+  function kill(entity: RenderedEntity<Row>) {
     entity.deathStartedAt = elapsedSeconds;
     if (!adapter.onKilled) return;
     const position = entity.model.group.position;
     adapter.onKilled(position.clone().setY(position.y + 0.8));
   }
 
-  function remove(key: string, entity: RenderedEntity) {
+  function remove(key: string, entity: RenderedEntity<Row>) {
     disposeEnemyModel(entity.model);
     scene.remove(entity.model.group);
     entities.delete(key);
@@ -196,6 +205,7 @@ export function createEntityRenderer<Row>(
         entities.set(key, insert(row));
         continue;
       }
+      existing.row = row;
       existing.targetX = adapter.readPositionX(row);
       existing.targetZ = adapter.readPositionZ(row);
       existing.maxHealth = adapter.readMaxHealth(row);
@@ -222,7 +232,7 @@ export function createEntityRenderer<Row>(
     }
   }
 
-  function refreshOverlay(entity: RenderedEntity) {
+  function refreshOverlay(entity: RenderedEntity<Row>) {
     // Hidden until hit, then shown for a short window after the last hit.
     const recentlyHit = elapsedSeconds - entity.lastDamagedAt < OVERLAY_VISIBLE_SECONDS;
     entity.model.overlay.sprite.visible = entity.alive && recentlyHit;
@@ -235,7 +245,7 @@ export function createEntityRenderer<Row>(
     });
   }
 
-  function deathProgress(entity: RenderedEntity): number {
+  function deathProgress(entity: RenderedEntity<Row>): number {
     if (entity.deathStartedAt === null) return 1;
     return Math.min(1, (elapsedSeconds - entity.deathStartedAt) / adapter.deathDurationSeconds);
   }
@@ -294,6 +304,11 @@ export function createEntityRenderer<Row>(
         }
       }
       return positions;
+    },
+    forEachAliveUnit(visit) {
+      for (const [key, entity] of entities) {
+        if (entity.alive) visit(key, entity.model.group.position, entity.row);
+      }
     },
     collectCollisionBodies(target) {
       for (const entity of entities.values()) {
