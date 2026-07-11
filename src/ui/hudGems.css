@@ -1,0 +1,15 @@
+/* Roll-up flash on the gem counter. filter-based so it layers over every HUD
+   theme's own .hud__gems colors without a specificity fight. */
+
+.hud__gems--rolling {
+  animation: hud-gems-flash 0.5s ease infinite alternate;
+}
+
+@keyframes hud-gems-flash {
+  from {
+    filter: none;
+  }
+  to {
+    filter: drop-shadow(0 0 6px #86e2ff) brightness(1.3);
+  }
+}

@@ -15,6 +15,8 @@ import { PartyToast } from './ui/PartyToast';
 import { PartyFrames } from './ui/PartyFrames';
 import { Hud } from './ui/Hud';
 import { SfxPopup, type SfxPopupState } from './ui/SfxPopup';
+import { PickupFeed, usePickupFeed } from './ui/PickupFeed';
+import { DeathOverlay } from './ui/DeathOverlay';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
 import { GachaScreen, type GachaTab, type PityInfo, type PullView } from './ui/GachaScreen';
@@ -95,6 +97,10 @@ export default function App() {
     null
   );
   const [shardToast, setShardToast] = useState<{ text: string; key: number } | null>(null);
+  // Genshin-style pickup feed (confirmed ground pickups + shard-theft losses)
+  // and the death fade-to-black; both driven by game-layer callbacks below.
+  const { rows: pickupRows, push: pushPickup } = usePickupFeed();
+  const [isDead, setIsDead] = useState(false);
 
   // Resolve this device to its account's canonical identity BEFORE building the
   // subscription. The party_invite filter keys off the canonical recipient, and
@@ -746,6 +752,9 @@ export default function App() {
       const characterId = partyRef.current[slotIndex];
       if (characterId) selectCharacter(characterId);
     };
+    // MY confirmed ground-drop pickups → feed rows (sound plays in the game layer).
+    game.onPickup = pushPickup;
+    game.onDeathChange = setIsDead;
     // Tap/click a remote player's floating nameplate → open their slide-out sheet.
     game.setOnSelectPlayer(hex => setSheetTargetHex(hex));
     game.start();
@@ -755,7 +764,7 @@ export default function App() {
       game.dispose();
       gameRef.current = null;
     };
-  }, [connection, hasJoined, selectCharacter]);
+  }, [connection, hasJoined, selectCharacter, pushPickup]);
 
   useEffect(() => {
     gameRef.current?.syncRemotePlayers(players, myIdentityHex);
@@ -811,6 +820,11 @@ export default function App() {
         text: wasPvpKill ? 'Zvaigžņu šķemba nozagta!' : 'Zvaigžņu šķemba nokrita',
         key: now,
       });
+      // Theft: descending "stolen" sting + a red minus row in the pickup feed.
+      if (wasPvpKill) {
+        gameRef.current?.playShardLossSound();
+        pushPickup('shardLoss', prev - shards);
+      }
     }
   }, [myPlayer?.transcendShards]);
 
@@ -918,6 +932,8 @@ export default function App() {
         </div>
       )}
       <SfxPopup state={sfxPopup} />
+      <PickupFeed rows={pickupRows} />
+      <DeathOverlay dead={isDead} />
       <Hud
         playerName={myPlayer?.name ?? ''}
         health={myPlayer?.currentHealth ?? MAX_HEALTH}

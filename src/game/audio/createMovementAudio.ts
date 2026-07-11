@@ -17,12 +17,18 @@ export interface MovementAudio {
 }
 
 // World units travelled between steps — the per-kind gait signature.
+// Goliath 1.4: derived from the renderer's leg-swing rate (6 rad/s → a
+// footfall every π/6 ≈ 0.52s) × the server move-speed range 2.2–3.2 u/s
+// ≈ 1.2–1.7 u per visual step (3.0 played at HALF the visual cadence).
 const STRIDE_LENGTH: Record<FootstepKind, number> = {
   player: 1.5,
-  goliath: 3.0,
+  goliath: 1.4,
   slime: 1.1,
   golem: 2.4,
 };
+
+/** Every 2nd goliath "dun" pitches up slightly so the left/right march reads. */
+const GOLIATH_ALTERNATE_STEP_PITCH = 1.08;
 
 /** A between-frame jump larger than this is a teleport/respawn, not travel. */
 const TELEPORT_DISTANCE = 5;
@@ -43,6 +49,8 @@ interface UnitState {
   z: number;
   travelled: number;
   seenThisFrame: boolean;
+  /** Flips each emitted step — the left/right foot of the goliath march. */
+  stepParity: boolean;
 }
 
 export function createMovementAudio(getContext: () => AudioContext | null): MovementAudio {
@@ -93,8 +101,15 @@ export function createMovementAudio(getContext: () => AudioContext | null): Move
   }
 
   // The "dun": a deep descending sine felt in the chest + a lowpassed thud.
-  function playGoliathStep(context: AudioContext, level: number, out: AudioNode, now: number) {
-    const rate = jitter(0.08);
+  // `pitch` alternates per step (left/right foot) so the march reads as a gait.
+  function playGoliathStep(
+    context: AudioContext,
+    level: number,
+    out: AudioNode,
+    now: number,
+    pitch: number
+  ) {
+    const rate = jitter(0.08) * pitch;
     const dun = context.createOscillator();
     dun.type = 'sine';
     dun.frequency.setValueAtTime(55 * rate, now);
@@ -176,14 +191,15 @@ export function createMovementAudio(getContext: () => AudioContext | null): Move
     thud.stop(now + 0.14);
   }
 
-  function playStep(kind: FootstepKind, level: number, pan: number) {
+  function playStep(kind: FootstepKind, level: number, pan: number, stepParity: boolean) {
     const context = ready();
     if (!context) return;
     const now = context.currentTime;
     if (!underSpamBudget(now)) return;
     const out = panned(context, pan, context.destination);
     if (kind === 'player') playPlayerStep(context, level, out, now);
-    else if (kind === 'goliath') playGoliathStep(context, level, out, now);
+    else if (kind === 'goliath')
+      playGoliathStep(context, level, out, now, stepParity ? GOLIATH_ALTERNATE_STEP_PITCH : 1);
     else if (kind === 'slime') playSlimeStep(context, level, out, now);
     else playGolemStep(context, level, out, now);
   }
@@ -192,7 +208,7 @@ export function createMovementAudio(getContext: () => AudioContext | null): Move
     const state = units.get(key);
     if (!state) {
       // First sighting: record position only — a step here would fire on spawn.
-      units.set(key, { x, z, travelled: 0, seenThisFrame: true });
+      units.set(key, { x, z, travelled: 0, seenThisFrame: true, stepParity: false });
       return;
     }
     state.seenThisFrame = true;
@@ -208,10 +224,11 @@ export function createMovementAudio(getContext: () => AudioContext | null): Move
     const stride = STRIDE_LENGTH[kind];
     if (state.travelled < stride) return;
     state.travelled %= stride;
+    state.stepParity = !state.stepParity;
     // Culled-by-distance units keep their cadence tracked but stay silent.
     const level = clampGain(gain);
     if (level === 0) return;
-    playStep(kind, level, pan);
+    playStep(kind, level, pan, state.stepParity);
   }
 
   function endFrame() {

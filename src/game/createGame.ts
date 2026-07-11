@@ -25,6 +25,7 @@ import { createAudioSystem } from './audio/createAudioSystem';
 import { createCombatAudio } from './audio/createCombatAudio';
 import { createMovementAudio, type FootstepKind } from './audio/createMovementAudio';
 import { createWeaponAudio } from './audio/createWeaponAudio';
+import { createPickupAudio } from './audio/createPickupAudio';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createAttackViewClock } from './systems/createAttackViewClock';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
@@ -177,6 +178,12 @@ export interface Game {
    */
   isStunned(): boolean;
   onPartySlotRequested: ((slotIndex: number) => void) | null;
+  /** Fired when MY pickup of a ground drop is confirmed (the requested drop despawned). */
+  onPickup: ((kind: 'gem' | 'shard', amount: number) => void) | null;
+  /** Fired when my death state flips: true at the death moment, false when the respawned row arrives. */
+  onDeathChange: ((dead: boolean) => void) | null;
+  /** Descending "shard stolen" sting — the UI's theft toast path triggers this. */
+  playShardLossSound(): void;
 }
 
 interface HealthBar {
@@ -249,6 +256,12 @@ const POSITION_EPSILON = 0.01;
 const ROTATION_EPSILON = 0.02;
 const SERVER_TELEPORT_THRESHOLD = 20;
 const RESPAWN_HEALTH_JUMP = 100;
+/**
+ * Synthesized dead-window length. Death + respawn arrive in ONE server row
+ * (see the isDeadLocally note), so the UI's `dead` state is held this long
+ * locally — long enough to cover the ~1s death knell.
+ */
+const DEATH_STATE_SECONDS = 1.2;
 /** Ignore tiny health dips (regen jitter) so they don't spam damage numbers. */
 const TAKEN_DAMAGE_FLOOR = 3;
 /** A single drop this large reads as a heavy hit and floats a bigger crit number. */
@@ -294,6 +307,8 @@ export function createGame(
   const weaponAudio = createWeaponAudio(audioSystem.getContext);
   // Footstep ambience for every visible walker (distance-driven stride cadence).
   const movementAudio = createMovementAudio(audioSystem.getContext);
+  // Pickup chimes (gem streak ladder, shard gain/loss) + the death knell.
+  const pickupAudio = createPickupAudio(audioSystem.getContext);
   // Same linear falloff shape the strike juice uses — a far fight is a faint
   // tick, my own hit is full volume.
   function hitAudioGain(x: number, z: number): number {
@@ -383,6 +398,9 @@ export function createGame(
     {
       mesh: THREE.Mesh;
       rawId: bigint;
+      // Row amount kept locally so a confirmed pickup (row already despawned)
+      // can still report what was collected.
+      amount: number;
       age: number;
       baseY: number;
       sparkle: boolean;
@@ -398,6 +416,7 @@ export function createGame(
     {
       mesh: THREE.Mesh;
       rawId: bigint;
+      amount: number;
       age: number;
       baseY: number;
       sparkleAt: number;
@@ -425,6 +444,32 @@ export function createGame(
   let lastSentRotationY = Infinity;
   let fallPeakY = 0;
   let hasReportedVoidDeath = false;
+  // Death signal (INVESTIGATED 2026-07-12): the server NEVER syncs
+  // currentHealth 0 — every kill path (attackPlayer, takeDamage, worldTick,
+  // fallToDeath) calls respawnPlayerAtSpawn, which writes full HP + spawn
+  // position in the SAME transaction as the killing blow. The only combat-death
+  // observable is therefore the respawn row itself: a same-character health
+  // UP-jump > RESPAWN_HEALTH_JUMP (syncMyServerRow's wasRespawned), from which
+  // a short dead window is synthesized so onDeathChange gets a real
+  // true→false flip. Void falls are client-initiated (sendFallToDeath) and
+  // stay dead until the respawn row confirms (voidRespawnConfirmed).
+  let isDeadLocally = false;
+  let deadClearAtSeconds = Infinity;
+
+  function enterDeathState(clearAfterSeconds: number) {
+    if (isDeadLocally) return;
+    isDeadLocally = true;
+    deadClearAtSeconds = elapsedSeconds + clearAfterSeconds;
+    pickupAudio.playDeath();
+    game.onDeathChange?.(true);
+  }
+
+  function clearDeathState() {
+    if (!isDeadLocally) return;
+    isDeadLocally = false;
+    deadClearAtSeconds = Infinity;
+    game.onDeathChange?.(false);
+  }
 
   /** True if any rendered enemy/goliath sits inside the swing (drives combo + facing). */
   // Uses the SAME geometry the server's attackEnemies reducer damages with
@@ -769,6 +814,8 @@ export function createGame(
     if (playerPosition.y < VOID_KILL_DEPTH && !hasReportedVoidDeath) {
       hasReportedVoidDeath = true;
       network.sendFallToDeath();
+      // Void death is client-initiated: dead until the respawn row confirms.
+      enterDeathState(Infinity);
     }
 
     // Only drain one queued click per input-cooldown so rapid clicks buffer
@@ -1103,6 +1150,9 @@ export function createGame(
     if (combo > 0 && elapsedSeconds - lastComboHitAt > comboWindowSeconds(combo)) {
       combo = 0;
     }
+    // The synthesized dead window closes on its timer (Infinity while alive
+    // and for void falls, which clear on the confirmed respawn row instead).
+    if (elapsedSeconds >= deadClearAtSeconds) clearDeathState();
 
     updateLocalPlayer(deltaSeconds);
     boostOrbit.update({
@@ -1182,6 +1232,8 @@ export function createGame(
 
   const game: Game = {
     onPartySlotRequested: null,
+    onPickup: null,
+    onDeathChange: null,
     start() {
       lastFrameTime = performance.now();
       animationFrameHandle = requestAnimationFrame(frame);
@@ -1198,6 +1250,7 @@ export function createGame(
       combatAudio.dispose();
       weaponAudio.dispose();
       movementAudio.dispose();
+      pickupAudio.dispose();
       audioSystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
@@ -1343,6 +1396,16 @@ export function createGame(
         playerPosition.distanceTo(serverPosition) > SERVER_TELEPORT_THRESHOLD;
       const voidRespawnConfirmed =
         hasReportedVoidDeath && serverPosition.y >= 0 && playerPosition.y < 0;
+      // Combat death: the respawn up-jump IS the death signal (death + respawn
+      // ride one transaction — see the isDeadLocally note). A void fall is
+      // already dead locally, so its respawn row only clears the state. The
+      // sameCharacter gate keeps a switch to a bigger HP pool from reading as
+      // a death.
+      if (isDeadLocally) {
+        if (wasRespawned || voidRespawnConfirmed) clearDeathState();
+      } else if (wasRespawned && sameCharacter) {
+        enterDeathState(DEATH_STATE_SECONDS);
+      }
       if (wasRespawned || isFarFromServer || voidRespawnConfirmed) {
         playerPosition.copy(serverPosition);
         playerVelocityY = 0;
@@ -1397,6 +1460,7 @@ export function createGame(
           gemDrops.set(key, {
             mesh,
             rawId: drop.id,
+            amount: drop.amount,
             age: 0,
             baseY,
             sparkle: gemVisual(drop.amount).sparkle,
@@ -1406,6 +1470,12 @@ export function createGame(
       }
       for (const [key, gem] of gemDrops) {
         if (seen.has(key)) continue;
+        // A despawned drop I had requested = MY confirmed pickup. Any other
+        // despawn (someone else grabbed it, expiry) vanishes silently.
+        if (requestedGemPickups.has(key)) {
+          pickupAudio.playGemPickup();
+          game.onPickup?.('gem', gem.amount);
+        }
         scene.remove(gem.mesh);
         gem.mesh.traverse(object => {
           if (object instanceof THREE.Mesh) {
@@ -1424,11 +1494,23 @@ export function createGame(
         seen.add(key);
         if (!shardDrops.has(key)) {
           const { mesh, baseY } = createShardMesh(drop);
-          shardDrops.set(key, { mesh, rawId: drop.id, age: 0, baseY, sparkleAt: 0 });
+          shardDrops.set(key, {
+            mesh,
+            rawId: drop.id,
+            amount: drop.amount,
+            age: 0,
+            baseY,
+            sparkleAt: 0,
+          });
         }
       }
       for (const [key, shard] of shardDrops) {
         if (seen.has(key)) continue;
+        // Same confirmation read as gems: my requested shard despawning = mine.
+        if (requestedShardPickups.has(key)) {
+          pickupAudio.playShardGain();
+          game.onPickup?.('shard', shard.amount);
+        }
         scene.remove(shard.mesh);
         shard.mesh.traverse(object => {
           if (object instanceof THREE.Mesh) {
@@ -1614,6 +1696,9 @@ export function createGame(
     },
     isStunned() {
       return performance.now() < stunActiveUntilPerfMs;
+    },
+    playShardLossSound() {
+      pickupAudio.playShardLoss();
     },
   };
 

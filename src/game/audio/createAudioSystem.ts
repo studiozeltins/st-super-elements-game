@@ -12,11 +12,11 @@ import { clampGain, createNoiseSource, panned } from './audioCore';
 export interface AudioSystem {
   /** Procedural slam thump: low sine sweep + short filtered noise burst. */
   playSlam(gain?: number, pan?: number): void;
-  /** Light swing whoosh: short bandpass noise sweep — the quietest tier. */
+  /** Light swing whoosh: pure high-band air sweep, no low content — the quietest tier. */
   playSwing(gain?: number, pan?: number): void;
-  /** Medium swirl: longer noise swell + a low thump softer than the slam's. */
+  /** Medium swirl: tremolo'd (rotating) noise swell + a soft low thump under the slam's. */
   playSwirl(gain?: number, pan?: number): void;
-  /** Metallic shield clang: high-Q bandpass hit + detuned oscillator ring. */
+  /** Shield dash landing: skid-in scrape, then the high-Q metallic clang + detuned ring. */
   playDash(gain?: number, pan?: number): void;
   /** Shared gesture-unlocked context — sibling SFX modules (combat feedback) play through it. */
   getContext(): AudioContext | null;
@@ -35,6 +35,16 @@ const DASH_CLANG_RING_GAIN = 0.5;
 const DASH_CLANG_SECONDS = 0.2;
 /** Detuned ring pair: a few Hz apart so the beat between them reads metallic. */
 const DASH_CLANG_RING_FREQUENCIES = [620, 626] as const;
+// Pre-impact skid (playtest 2026-07-12: the four strikes read too alike): a
+// short low-band scrape leads the clang so the dash reads "skidding into you".
+const DASH_SCRAPE_SECONDS = 0.06;
+const DASH_SCRAPE_GAIN = 0.35;
+/** The clang lands this late so the skid audibly comes FIRST (visually imperceptible). */
+const DASH_IMPACT_DELAY_SECONDS = 0.05;
+// Swirl rotation cue (same playtest): a tremolo LFO on the swell spins the
+// circle-cut so the swirl reads as rotation, not another slam.
+const SWIRL_TREMOLO_HZ = 7;
+const SWIRL_TREMOLO_DEPTH = 0.45;
 
 export function createAudioSystem(): AudioSystem {
   let context: AudioContext | null = null;
@@ -98,40 +108,26 @@ export function createAudioSystem(): AudioSystem {
     const now = context.currentTime;
     const out = panned(context, pan, context.destination);
 
-    // Light whoosh (lightest tier): a short bandpass sweep rising through a
-    // noise burst — shorter and lighter than the slam, but clearly audible.
-    // Playtest fix (05-05 round 2): the original 0.25-gain Q1.2 recipe was
-    // inaudible under gameplay — a bandpass discards most of the noise energy,
-    // so the peak gain must sit far above the slam's broadband 0.5 to compete.
-    const seconds = 0.2;
+    // Pure air (playtest 2026-07-12: the swing's low thock made it read like
+    // the slam's little sibling — ALL low content removed, band raised to a
+    // bright 900→3000Hz cut, shorter): the lightest tier is now nothing but
+    // the blade slicing air. Peak stays 0.6 — a bandpass discards most of the
+    // noise energy (05-05 round 2 lesson), so it must sit above the slam's
+    // broadband 0.5 to compete.
+    const seconds = 0.15;
     const noise = createNoiseSource(context, seconds);
     const filter = context.createBiquadFilter();
     filter.type = 'bandpass';
     filter.Q.value = 0.8;
-    filter.frequency.setValueAtTime(500, now);
-    filter.frequency.exponentialRampToValueAtTime(2200, now + seconds);
+    filter.frequency.setValueAtTime(900, now);
+    filter.frequency.exponentialRampToValueAtTime(3000, now + seconds);
     const gain = context.createGain();
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.6 * level, now + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.6 * level, now + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
     noise.connect(filter).connect(gain).connect(out);
     noise.start(now);
     noise.stop(now + seconds);
-
-    // Light percussive "thock" under the whoosh so the hit registers on small
-    // speakers that reproduce little of the filtered hiss — well above the
-    // slam's 70Hz so the tiers stay distinct.
-    const thock = context.createOscillator();
-    thock.type = 'sine';
-    thock.frequency.setValueAtTime(160, now);
-    thock.frequency.exponentialRampToValueAtTime(95, now + 0.1);
-    const thockGain = context.createGain();
-    thockGain.gain.setValueAtTime(0.0001, now);
-    thockGain.gain.exponentialRampToValueAtTime(0.4 * level, now + 0.01);
-    thockGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-    thock.connect(thockGain).connect(out);
-    thock.start(now);
-    thock.stop(now + 0.16);
   }
 
   function playSwirl(gainFactor = 1, pan = 0) {
@@ -158,7 +154,18 @@ export function createAudioSystem(): AudioSystem {
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(0.75 * level, now + seconds * 0.5);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
-    noise.connect(filter).connect(gain).connect(out);
+    // ~7Hz tremolo (≈2-3 cycles across the swell) in series after the envelope:
+    // the pulsing is what reads "spinning" instead of a second slam boom.
+    const tremolo = context.createGain();
+    tremolo.gain.setValueAtTime(1, now);
+    const lfo = context.createOscillator();
+    lfo.frequency.value = SWIRL_TREMOLO_HZ;
+    const lfoDepth = context.createGain();
+    lfoDepth.gain.value = SWIRL_TREMOLO_DEPTH;
+    lfo.connect(lfoDepth).connect(tremolo.gain);
+    lfo.start(now);
+    lfo.stop(now + seconds);
+    noise.connect(filter).connect(gain).connect(tremolo).connect(out);
     noise.start(now);
     noise.stop(now + seconds);
 
@@ -176,15 +183,16 @@ export function createAudioSystem(): AudioSystem {
     impact.start(now);
     impact.stop(now + impactSeconds);
 
-    // A low thump under the swell — higher and softer than the slam's
-    // 70→40Hz 0.8-gain hit, so the slam stays the loudest tier.
+    // A low thump under the swell — higher and softer than the slam's 70→40Hz
+    // 0.8-gain hit. Halved 0.55 → 0.28 (playtest 2026-07-12): at 0.55 the
+    // thump WAS the sound and the swirl read as a slam.
     const thump = context.createOscillator();
     thump.type = 'sine';
     thump.frequency.setValueAtTime(85, now);
     thump.frequency.exponentialRampToValueAtTime(50, now + 0.2);
     const thumpGain = context.createGain();
     thumpGain.gain.setValueAtTime(0.0001, now);
-    thumpGain.gain.exponentialRampToValueAtTime(0.55 * level, now + 0.02);
+    thumpGain.gain.exponentialRampToValueAtTime(0.28 * level, now + 0.02);
     thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
     thump.connect(thumpGain).connect(out);
     thump.start(now);
@@ -199,22 +207,38 @@ export function createAudioSystem(): AudioSystem {
     const now = context.currentTime;
     const out = panned(context, pan, context.destination);
 
+    // Skid-in scrape: a very short low-band noise rising 400→900Hz right
+    // before the clang — the shield grinding the ground on the way in.
+    const scrape = createNoiseSource(context, DASH_SCRAPE_SECONDS);
+    const scrapeBand = context.createBiquadFilter();
+    scrapeBand.type = 'bandpass';
+    scrapeBand.Q.value = 2;
+    scrapeBand.frequency.setValueAtTime(400, now);
+    scrapeBand.frequency.exponentialRampToValueAtTime(900, now + DASH_SCRAPE_SECONDS);
+    const scrapeGain = context.createGain();
+    scrapeGain.gain.setValueAtTime(DASH_SCRAPE_GAIN * level, now);
+    scrapeGain.gain.exponentialRampToValueAtTime(0.0001, now + DASH_SCRAPE_SECONDS + 0.02);
+    scrape.connect(scrapeBand).connect(scrapeGain).connect(out);
+    scrape.start(now);
+    scrape.stop(now + DASH_SCRAPE_SECONDS + 0.02);
+
     // Shield-clang transient: a short HIGH-Q bandpass noise hit — the narrow
     // band reads as struck metal, not the swing's cut air. The band falls
     // 1800 → 900Hz so the hit "rings down" instead of hissing.
+    const impactAt = now + DASH_IMPACT_DELAY_SECONDS;
     const noise = createNoiseSource(context, DASH_CLANG_SECONDS);
     const filter = context.createBiquadFilter();
     filter.type = 'bandpass';
     filter.Q.value = 8;
-    filter.frequency.setValueAtTime(1800, now);
-    filter.frequency.exponentialRampToValueAtTime(900, now + DASH_CLANG_SECONDS);
+    filter.frequency.setValueAtTime(1800, impactAt);
+    filter.frequency.exponentialRampToValueAtTime(900, impactAt + DASH_CLANG_SECONDS);
     const noiseGain = context.createGain();
-    noiseGain.gain.setValueAtTime(0.0001, now);
-    noiseGain.gain.exponentialRampToValueAtTime(DASH_CLANG_NOISE_GAIN * level, now + 0.008);
-    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + DASH_CLANG_SECONDS);
+    noiseGain.gain.setValueAtTime(0.0001, impactAt);
+    noiseGain.gain.exponentialRampToValueAtTime(DASH_CLANG_NOISE_GAIN * level, impactAt + 0.008);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, impactAt + DASH_CLANG_SECONDS);
     noise.connect(filter).connect(noiseGain).connect(out);
-    noise.start(now);
-    noise.stop(now + DASH_CLANG_SECONDS);
+    noise.start(impactAt);
+    noise.stop(impactAt + DASH_CLANG_SECONDS);
 
     // Metallic ring: a brief detuned oscillator pair — the few-Hz beat between
     // them is the shield face still vibrating after the hit. Split the ring
@@ -222,17 +246,17 @@ export function createAudioSystem(): AudioSystem {
     for (const frequency of DASH_CLANG_RING_FREQUENCIES) {
       const ring = context.createOscillator();
       ring.type = 'triangle';
-      ring.frequency.setValueAtTime(frequency, now);
+      ring.frequency.setValueAtTime(frequency, impactAt);
       const ringGain = context.createGain();
-      ringGain.gain.setValueAtTime(0.0001, now);
+      ringGain.gain.setValueAtTime(0.0001, impactAt);
       ringGain.gain.exponentialRampToValueAtTime(
         (DASH_CLANG_RING_GAIN / DASH_CLANG_RING_FREQUENCIES.length) * level,
-        now + 0.01
+        impactAt + 0.01
       );
-      ringGain.gain.exponentialRampToValueAtTime(0.0001, now + DASH_CLANG_SECONDS);
+      ringGain.gain.exponentialRampToValueAtTime(0.0001, impactAt + DASH_CLANG_SECONDS);
       ring.connect(ringGain).connect(out);
-      ring.start(now);
-      ring.stop(now + DASH_CLANG_SECONDS + 0.02);
+      ring.start(impactAt);
+      ring.stop(impactAt + DASH_CLANG_SECONDS + 0.02);
     }
   }
 
