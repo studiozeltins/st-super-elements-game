@@ -80,7 +80,6 @@ export function CharacterChip({
   activated,
   transcend = 0,
   selected = false,
-  inParty = false,
   dragging = false,
   activeDot = false,
   onClick,
@@ -93,8 +92,6 @@ export function CharacterChip({
   transcend?: number;
   /** Highlight as the currently-viewed character (character screen). */
   selected?: boolean;
-  /** Inset ring for party members (team select). */
-  inParty?: boolean;
   dragging?: boolean;
   /** ● marker for the in-world active character. */
   activeDot?: boolean;
@@ -109,8 +106,8 @@ export function CharacterChip({
   return (
     <button
       className={`cchip rarity-${character.stars} ${selected ? 'cchip--on' : ''} ${
-        inParty ? 'cchip--in' : ''
-      } ${dragging ? 'cchip--dragging' : ''}`}
+        dragging ? 'cchip--dragging' : ''
+      }`}
       style={{ '--element-color': element.cssColor } as React.CSSProperties}
       onClick={onClick}
       {...handlers}

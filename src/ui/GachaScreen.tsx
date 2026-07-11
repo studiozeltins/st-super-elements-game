@@ -215,14 +215,16 @@ export function GachaScreen({
             ref={teamScroll.ref as React.RefObject<HTMLElement>}
             {...teamScroll.handlers}
           >
-            {CHARACTER_LIST.filter(character => ownedCharacterIds.has(character.id)).map(character => (
+            {CHARACTER_LIST.filter(
+              character =>
+                ownedCharacterIds.has(character.id) && !partyCharacterIds.includes(character.id)
+            ).map(character => (
               <CharacterChip
                 key={character.id}
                 characterId={character.id}
                 constellation={constellationById[character.id] ?? 0}
                 activated={activatedById[character.id] ?? constellationById[character.id] ?? 0}
                 transcend={transcendById[character.id] ?? 0}
-                inParty={partyCharacterIds.includes(character.id)}
                 dragging={teamDrag.dragId === character.id}
                 handlers={teamDrag.chipHandlers(
                   character.id,
