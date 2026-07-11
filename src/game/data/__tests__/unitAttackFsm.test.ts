@@ -300,6 +300,66 @@ describe('walkAttackTransitions (D5-01/D5-04 chain glue seam, Pitfalls 1+2)', ()
     expect(plan.row.state).toBe(ATTACK_STATE_RECOVERY);
   });
 
+  it('[STRIKE] with move charge relocates to landing exactly like leap (generalized gate, D6-01)', () => {
+    const charge = walkAttackTransitions(
+      rowFor('shieldDash'),
+      [ATTACK_STATE_STRIKE],
+      ATTACKS.shieldDash,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(charge.teleportToLanding).toBe(true);
+    expect(charge.emitStrike).toBe(true);
+    // The glue teleports from the SNAPSHOT (05-03 lesson) — it must carry the
+    // locked lane end, i.e. the row's landingX/Z.
+    expect(charge.strikeSnapshot!.landingX).toBe(14);
+    expect(charge.strikeSnapshot!.landingZ).toBe(26);
+  });
+
+  it('coalesced [STRIKE, RECOVERY, IDLE] charge walk: relocates once, resolves once, writes the SHARED skill cooldown once (D6-06/FSM-05)', () => {
+    const plan = walkAttackTransitions(
+      rowFor('shieldDash'),
+      [ATTACK_STATE_STRIKE, ATTACK_STATE_RECOVERY, ATTACK_STATE_IDLE],
+      ATTACKS.shieldDash,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(plan.teleportToLanding).toBe(true);
+    expect(plan.resolveStrike).toBe(true); // resolve-never-drop, exactly once (FSM-05)
+    expect(plan.chainedInto).toBeNull(); // the dash never chains
+    expect(plan.row.state).toBe(ATTACK_STATE_IDLE);
+    // role 'skill' writes the SHARED gate (D6-06); the basic cooldown stays
+    // untouched (D5-08 per-role split).
+    expect(plan.row.cooldownUntilMicros).toBe(NOW + 6_000_000n);
+    expect(plan.row.basicCooldownUntilMicros).toBe(222n);
+  });
+
+  it('charge strikeSnapshot carries the dash\'s OWN attackId/cast/landing/radius (no chain -> snapshot equals final geometry)', () => {
+    const plan = walkAttackTransitions(
+      rowFor('shieldDash'),
+      [ATTACK_STATE_STRIKE, ATTACK_STATE_RECOVERY, ATTACK_STATE_IDLE],
+      ATTACKS.shieldDash,
+      NOW,
+      TICK,
+      SIZE_INDEX,
+      POS_X,
+      POS_Z
+    );
+    expect(plan.strikeSnapshot).not.toBeNull();
+    expect(plan.strikeSnapshot!.attackId).toBe('shieldDash');
+    expect(plan.strikeSnapshot!.castX).toBe(10);
+    expect(plan.strikeSnapshot!.castZ).toBe(20);
+    expect(plan.strikeSnapshot!.landingX).toBe(14);
+    expect(plan.strikeSnapshot!.landingZ).toBe(26);
+    expect(plan.strikeSnapshot!.radius).toBe(3.5);
+  });
+
   it('a leap spec WITH a chain enters the chained windup at the LANDING coords (teleport before chain)', () => {
     const leapChain = { ...ATTACKS.leapSlam, chainsInto: 'swordSwirl' };
     const plan = walkAttackTransitions(
