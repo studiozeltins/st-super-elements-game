@@ -2,6 +2,13 @@ import * as THREE from 'three';
 import { ATTACK_RENDER } from '../data/attacks';
 import { disposeObject } from '../engine/disposeObject';
 import type { UnitAttack } from '../../module_bindings/types';
+import {
+  RIM_WIDTH,
+  PROGRESS_RIM_WIDTH,
+  CONE_FILL_RINGS,
+  flatRing,
+  buildLaneOutline,
+} from './telegraphShapes';
 
 // Attack FSM states mirrored from spacetimedb/src/attacks.ts (u32 in the row).
 const ATTACK_STATE_WINDUP = 1;
@@ -9,13 +16,8 @@ const ATTACK_STATE_STRIKE = 2;
 
 // Frost icy-cyan (D4-14) — the telegraph must read as "danger, but ours".
 const TELEGRAPH_COLOR = 0x86e2ff;
-// Static outer ring thickness in world units: the constant danger edge. Must stay
-// >= 0.2u so the ring survives the 440px internal pixel buffer at max pixelation
-// (ANIM-02).
-const RIM_WIDTH = 0.3;
-// Expanding progress ring is slightly thinner so the danger edge stays dominant.
-const PROGRESS_RIM_WIDTH = 0.22;
-const RING_SEGMENTS = 48;
+// RIM_WIDTH / PROGRESS_RIM_WIDTH / CONE_FILL_RINGS + the shape builders live in
+// ./telegraphShapes (carved out with the lane branch to hold the ≤300 LOC ceiling).
 const OUTLINE_OPACITY = 0.85;
 const PROGRESS_OPACITY = 0.6;
 // Subtle Frost pulse on the static outer ring: opacity oscillates by this
@@ -27,9 +29,6 @@ const FLASH_SECONDS = 0.2;
 const FLASH_SCALE = 1.08;
 // Lift above the terrain so the flat geometry never z-fights the ground.
 const GROUND_EPSILON = 0.06;
-// Radial subdivisions of the filled cone sector so draping can follow terrace
-// steps between the apex and the danger edge (thin rims don't need this).
-const CONE_FILL_RINGS = 8;
 
 interface ActiveTelegraph {
   unitKind: number;
@@ -86,87 +85,6 @@ function flatMaterial(opacity: number): THREE.MeshBasicMaterial {
     // Additive = cheap icy glow against Mondstadt-green terrain (Frost language).
     blending: THREE.AdditiveBlending,
   });
-}
-
-// Rings are authored in the XZ plane (rotateX baked into the geometry) so a
-// vertex's local (x, z) maps straight to a ground sample point.
-function flatRing(
-  innerRadius: number,
-  outerRadius: number,
-  phiSegments = 1,
-  thetaStart?: number,
-  thetaLength?: number
-): THREE.RingGeometry {
-  const geometry = new THREE.RingGeometry(
-    innerRadius,
-    outerRadius,
-    RING_SEGMENTS,
-    phiSegments,
-    thetaStart,
-    thetaLength
-  );
-  geometry.rotateX(-Math.PI / 2);
-  return geometry;
-}
-
-// A subdivided plane laid flat in the XZ plane (local +X = `width` axis, +Z =
-// `height` axis after the baked -PI/2 X-rotation), translated so its center sits
-// at local (centerX, 0, centerZ). Width subdivisions let the shared drape follow
-// terrace steps along a long lane rail (a thin strip needs none across).
-function flatStrip(
-  width: number,
-  height: number,
-  widthSegments: number,
-  centerX: number,
-  centerZ: number
-): THREE.PlaneGeometry {
-  const geometry = new THREE.PlaneGeometry(width, height, widthSegments, 1);
-  geometry.rotateX(-Math.PI / 2);
-  geometry.translate(centerX, 0, centerZ);
-  return geometry;
-}
-
-// Concatenates the position buffers of several plane strips into ONE non-indexed
-// BufferGeometry — kept local (no BufferGeometryUtils dependency; zero new deps).
-// Position is the only attribute the drape + additive MeshBasicMaterial need;
-// normals/uvs are dropped.
-function mergeStripPositions(strips: THREE.PlaneGeometry[]): THREE.BufferGeometry {
-  const expanded = strips.map(strip => strip.toNonIndexed());
-  let total = 0;
-  for (const strip of expanded) {
-    total += (strip.getAttribute('position').array as Float32Array).length;
-  }
-  const positions = new Float32Array(total);
-  let offset = 0;
-  for (const strip of expanded) {
-    const array = strip.getAttribute('position').array as Float32Array;
-    positions.set(array, offset);
-    offset += array.length;
-    strip.dispose();
-  }
-  const merged = new THREE.BufferGeometry();
-  merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  return merged;
-}
-
-// Rectangle OUTLINE as a single draped mesh: two full-length rails (RIM_WIDTH
-// thick, subdivided so the drape follows the ground) plus two end caps spanning
-// only the gap BETWEEN the rails — so the additive material never double-brightens
-// the corners. One BufferGeometry so the shared drape + flash treat it exactly
-// like the circle/cone rim mesh.
-function buildLaneOutline(length: number, halfWidth: number): THREE.BufferGeometry {
-  const innerHeight = Math.max(0.001, halfWidth * 2 - 2 * RIM_WIDTH);
-  const lengthSegments = Math.max(1, Math.round(length));
-  const railCenterZ = halfWidth - RIM_WIDTH / 2;
-  const strips = [
-    flatStrip(length, RIM_WIDTH, lengthSegments, length / 2, railCenterZ),
-    flatStrip(length, RIM_WIDTH, lengthSegments, length / 2, -railCenterZ),
-    flatStrip(RIM_WIDTH, innerHeight, 1, RIM_WIDTH / 2, 0),
-    flatStrip(RIM_WIDTH, innerHeight, 1, length - RIM_WIDTH / 2, 0),
-  ];
-  const merged = mergeStripPositions(strips);
-  for (const strip of strips) strip.dispose();
-  return merged;
 }
 
 export function createTelegraphSystem(
