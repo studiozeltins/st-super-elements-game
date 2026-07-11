@@ -22,7 +22,14 @@ import {
   stunDeadline,
   walkAttackTransitions,
 } from './unitAttackFsm';
-import { knockbackDisplacement, resolveCircleHit, resolveCone } from './attackHitbox';
+import {
+  closestPointOnSegment,
+  computeLaneEnd,
+  knockbackDisplacement,
+  resolveCircleHit,
+  resolveCone,
+  resolveLane,
+} from './attackHitbox';
 import { distanceBetween } from './combatMath';
 import { headingFromStep } from './goliathAI';
 import { aggroExpired, clampToWorld, isInsideSafeZone } from './worldRules';
@@ -53,9 +60,12 @@ function idleAttackRow(unitKind: number, unitId: bigint) {
 // The single damage-resolution moment (D4-02 zero-storage grace, D4-03 bystanders
 // included): EVERY online player is tested against the locked hitbox at their
 // LIVE row position — a victim who left within the grace window reads outside and
-// counts OUT. Shape branch (ATK-02, Pitfall 4): a 'cone' resolves via resolveCone
-// from the CAST apex with the aim locked at windup entry (landing minus cast,
-// D5-05); everything else stays the circle test on the landing. Hits get (a) RAW
+// counts OUT. Shape branch (ATK-02/ATK-04, Pitfall 4): a 'cone' resolves via
+// resolveCone from the CAST apex with the aim locked at windup entry (landing
+// minus cast, D5-05); a 'lane' resolves via resolveLane against the cast->landing
+// centerline with row.radius as the half-width (D6-04 — every victim in the
+// charge path counts, not just the aggro target); everything else stays the
+// circle test on the landing. Hits get (a) RAW
 // damage into the SHARED playerDamage map (the existing apply loop applies the
 // 'contact' resistance, death, shard spill, respawn — never the player-hit path,
 // whose 400 cap would clamp the slam), (b) a knockback displacement away from the
@@ -74,34 +84,56 @@ function resolveStrike(
   playerDamage: Map<string, number>
 ): void {
   const isCone = spec.shape === 'cone';
+  const isLane = spec.shape === 'lane';
   // Knockback center: the apex for cones (push AWAY from the goliath — the swing
   // seeds knockback 0 so this is inert this phase, but a later cone must never
   // pull victims toward the aim point), the landing for circles (swirl: landing
-  // equals cast so both are identical, D5-04).
+  // equals cast so both are identical, D5-04). Lanes have NO shared center —
+  // each victim's center is their closest point on the centerline, computed
+  // inside the loop after a hit (D6-05 perpendicular bulldoze).
   const centerX = isCone ? row.castX : row.landingX;
   const centerZ = isCone ? row.castZ : row.landingZ;
   for (const [hex, snapshot] of playerByHex) {
     const victim = ctx.db.player.identity.find(snapshot.identity);
     if (!victim || isInsideSafeZone(victim.positionX, victim.positionZ)) continue;
-    const hit = isCone
-      ? resolveCone(
+    const hit = isLane
+      ? resolveLane(
           victim.positionX,
           victim.positionZ,
           row.castX,
           row.castZ,
-          row.landingX - row.castX,
-          row.landingZ - row.castZ,
-          row.radius,
-          spec.coneMinDot ?? 0.5
+          row.landingX,
+          row.landingZ,
+          row.radius
         )
-      : resolveCircleHit(victim.positionX, victim.positionZ, row.landingX, row.landingZ, row.radius);
+      : isCone
+        ? resolveCone(
+            victim.positionX,
+            victim.positionZ,
+            row.castX,
+            row.castZ,
+            row.landingX - row.castX,
+            row.landingZ - row.castZ,
+            row.radius,
+            spec.coneMinDot ?? 0.5
+          )
+        : resolveCircleHit(victim.positionX, victim.positionZ, row.landingX, row.landingZ, row.radius);
     if (!hit) continue;
     playerDamage.set(hex, (playerDamage.get(hex) ?? 0) + goliathRow.contactDamage * spec.damageMultiplier);
+    // D6-05: a lane victim is shoved perpendicular OUT of the charge path — the
+    // knockback center is the PER-VICTIM closest point on the cast->landing
+    // centerline (only computed after a hit; circle/cone keep the pre-loop
+    // constant center). A victim standing exactly ON the centerline reads a
+    // zero-length delta and falls into knockbackDisplacement's existing heading
+    // fallback (the attacker's facing) — no new code path.
+    const laneCenter = isLane
+      ? closestPointOnSegment(victim.positionX, victim.positionZ, row.castX, row.castZ, row.landingX, row.landingZ)
+      : null;
     const pushed = knockbackDisplacement(
       victim.positionX,
       victim.positionZ,
-      centerX,
-      centerZ,
+      laneCenter === null ? centerX : laneCenter.x,
+      laneCenter === null ? centerZ : laneCenter.z,
       spec.knockback,
       heading.x,
       heading.z
@@ -173,16 +205,29 @@ export function runUnitAttacks(
       if (attackId === null) continue;
       // Landing LOCKED at this single target sample (ATK-01); cast root = the
       // goliath's current map position (D4-12); poise reset (Phase-7 seam).
-      const entry = enterWindup(
-        now,
-        tick,
-        ATTACKS[attackId],
-        goliathRow.sizeIndex,
-        from.x,
-        from.z,
-        target.positionX,
-        target.positionZ
-      );
+      // Lane attacks aim ONCE at cast (D6-02): the landing becomes the lane END —
+      // an overshoot PAST where the target stood (computeLaneEnd), so a sideways
+      // dodge beats the charge — with each axis clamped to the world (D6-14:
+      // clamp the GOLIATH's destination, never the victims). enterWindup is
+      // untouched: landingX/Z stores the lane end and row.radius the per-size
+      // half-width for free. This branch only selects arguments — all arithmetic
+      // lives in the pure helpers (glue header contract).
+      const selected = ATTACKS[attackId];
+      let aimX = target.positionX;
+      let aimZ = target.positionZ;
+      if (selected.shape === 'lane' && selected.laneLengthBySize) {
+        const clampedIndex = Math.min(Math.max(goliathRow.sizeIndex, 0), selected.laneLengthBySize.length - 1);
+        const laneEnd = computeLaneEnd(
+          from.x,
+          from.z,
+          target.positionX,
+          target.positionZ,
+          selected.laneLengthBySize[clampedIndex]
+        );
+        aimX = clampToWorld(laneEnd.x);
+        aimZ = clampToWorld(laneEnd.z);
+      }
+      const entry = enterWindup(now, tick, selected, goliathRow.sizeIndex, from.x, from.z, aimX, aimZ);
       row = { ...row, ...entry, attackId };
       attackTable.id.update(row);
     }
@@ -216,8 +261,10 @@ export function runUnitAttacks(
     const pos = goliathPosition.get(goliathRow.goliathId) ?? { x: goliathRow.positionX, z: goliathRow.positionZ };
     const plan = walkAttackTransitions(row, transitions, spec, now, tick, goliathRow.sizeIndex, pos.x, pos.z);
     const struck = plan.strikeSnapshot;
-    // The ONLY teleport in the strike path, gated on the applier's leap flag
-    // (Pitfall 1 fix): move 'none' attacks like the swing stay planted.
+    // The ONLY relocate in the strike path, gated on the applier's generalized
+    // move flag (D6-01): 'leap' (slam) and 'charge' (dash) both arrive at the
+    // locked landing here; move 'none' attacks like the swing stay planted
+    // (Pitfall 1 gate preserved).
     if (plan.teleportToLanding && struck) {
       goliathPosition.set(goliathRow.goliathId, { x: struck.landingX, z: struck.landingZ });
     }
