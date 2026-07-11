@@ -38,6 +38,7 @@ export interface AttackSpec {
   poiseThreshold: number; // consumed Phase 7; field exists now (FSM-04)
   chainsInto?: string; // D5-01: chaining is DATA — RECOVERY re-enters WINDUP on this attack id
   coneMinDot?: number; // D5-06: cos(half-angle) for shape 'cone'; 0.5 = 120° full angle
+  laneLengthBySize?: readonly number[]; // D6-03: charge distance per size for shape 'lane'; each <= 8 (client SNAP_DISTANCE ceiling — a bigger strike-frame gap snaps instead of lerping)
 }
 
 export const ATTACKS: Record<string, AttackSpec> = {
@@ -52,7 +53,14 @@ export const ATTACKS: Record<string, AttackSpec> = {
     radiusBySize: [4.0, 4.75, 5.5],
     damageMultiplier: 4.5,
     minBand: 0,
-    maxBand: 8,
+    // 8 -> 5.5 (RESEARCH Pitfall 1 — playtest seed, D-02 latitude): under the
+    // SHARED skill cooldown (D6-06) and slam-first list order (D6-07), a slam
+    // band of 0..8 fully shadows the dash band 3.5..8, making shieldDash
+    // unreachable dead code. 5.5 creates the dash-only 5.5..8 zone the D6-07
+    // after-whiff emergence story requires. DOCUMENTED DEVIATION from D6-07's
+    // literal numbers — surfaced for user confirmation at the 06-05 playtest
+    // checkpoint.
+    maxBand: 5.5,
     knockback: 6, // doubled from 3 after 04-07 local playtest — landed slam must throw players clear
     stunTicks: 7, // 2 -> 7 (~1.05s) after 04-07 playtest — 0.3s read as a stutter, not a stun
     move: 'leap',
@@ -99,12 +107,38 @@ export const ATTACKS: Record<string, AttackSpec> = {
     move: 'none',
     poiseThreshold: 600,
   },
+  shieldDash: {
+    shape: 'lane', // ATK-04: capsule test via resolveLane along the cast->landing charge path
+    role: 'skill', // D6-06: writes the SHARED cooldownUntilMicros at IDLE — slam and dash gate each other
+    windupTicks: 6, // 0.9s (D6-08 playtest seed) — the dodge is a short sidestep, not a sprint; aggressive vs the slam's 1.2s
+    activeTicks: 1,
+    graceTicks: 1, // D4-02 verbatim (serverSync locks graceTicks === 1)
+    recoveryTicks: 8, // 1.2s whiffed-charge punish window at the lane end (D6-08)
+    cooldownMicros: 6_000_000n, // 6.0s (D6-08 playtest seed)
+    radiusBySize: [1.6, 1.8, 2.0], // lane HALF-WIDTH per size (D6-03 playtest seed) — row.radius carries it to the client, no mirror field needed
+    // D6-03 seeds (playtest); size 2 backed off from the locked 8.0 to 7.95
+    // (RESEARCH Pitfall 2): 8.0 sits exactly ON the client's strict-greater
+    // SNAP_DISTANCE comparison — a float epsilon would render the size-2 charge
+    // as a teleport. DOCUMENTED DEVIATION, confirmed-or-retuned at the 06-05
+    // playtest checkpoint.
+    laneLengthBySize: [6.5, 7.25, 7.95],
+    damageMultiplier: 2.5, // 225/325/425 per size (D6-09 playtest seed) — between the swing chain and the slam
+    minBand: 3.5, // D6-07: point-blank belongs to the swing's melee band — no zero-distance body slam
+    maxBand: 8, // ≈ lane reach (length + halfWidth >= 8 for every size)
+    knockback: 3.5, // perpendicular bulldoze OUT of the lane (D6-05/D6-10 playtest seed)
+    stunTicks: 3, // 0.45s (D6-10 playtest seed) — parity: ATTACK_RENDER.stunSeconds 0.45
+    move: 'charge', // D6-01: relocate-at-strike on the proven leap seam, resolve ONCE vs live positions
+    poiseThreshold: 600,
+  },
 };
 
 // Per-archetype attack lists keyed by unit kind — a new unit is one list (FSM-04).
 // swordSwirl is deliberately ABSENT: it is reachable ONLY via the swing chain (D5-03).
+// shieldDash is listed LAST (D6-07): list order decides skill ties, so the dash
+// only wins where the slam is out of band (5.5..8) — the after-whiff gap-closer
+// emerges from plain band selection, no weighting code.
 export const UNIT_ATTACKS: Record<number, Record<string, readonly string[]>> = {
-  [UNIT_KIND_GOLIATH]: { default: ['leapSlam', 'swordSwing'] },
+  [UNIT_KIND_GOLIATH]: { default: ['leapSlam', 'swordSwing', 'shieldDash'] },
 };
 
 // Picks the attack a unit should open at the given distance (FSM-03), following

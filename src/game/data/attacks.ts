@@ -8,7 +8,7 @@ import { ELEMENTS } from './elements';
 // of the server module into the client bundle was explicitly rejected).
 
 export interface AttackRenderSpec {
-  shape: 'circle' | 'cone';
+  shape: 'circle' | 'cone' | 'lane';
   /** Cone half-angle in degrees; parity-locked to the server coneMinDot via cos(). */
   coneHalfAngleDegrees?: number;
   /**
@@ -40,4 +40,12 @@ export const ATTACK_RENDER: Record<string, AttackRenderSpec> = {
   },
   // Charged full-circle spin reads as electro violet — pops against the green terrain.
   swordSwirl: { shape: 'circle', stunSeconds: 0, juiceColor: ELEMENTS.electro.color },
+  // Shield bash reads physical/cryo — icy-white pops without stealing the
+  // telegraph cyan (D6-13 discretion; telegraphs stay Frost #86e2ff regardless).
+  // stunSeconds parity-locked to server stunTicks 3 x 0.15s tick (D6-10).
+  // Carries NO half-width field — DOCUMENTED DEVIATION from D6-13's letter
+  // (RESEARCH Pitfall 6): the renderer reads row.radius, which is per-size
+  // correct; a scalar mirror cannot parity-lock to the three-value server
+  // radiusBySize array and would be dead data.
+  shieldDash: { shape: 'lane', stunSeconds: 0.45, juiceColor: ELEMENTS.cryo.color },
 };
