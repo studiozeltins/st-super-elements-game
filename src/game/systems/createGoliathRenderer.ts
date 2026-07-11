@@ -58,6 +58,18 @@ const SWIRL_STRIKE_YAW = Math.PI * 0.9;
 /** Fraction of the recovery window that finishes the spin to exactly 2π. */
 const SWIRL_SPIN_TAIL = 0.35;
 
+// shieldDash clip seeds (D6-12) — playtest-tune at the 06-05 checkpoint.
+/** Crouch depth at full shield brace (D6-12 — heavier than the swing's opener). */
+const DASH_BRACE_CROUCH = 0.45;
+/** Torso lean into the locked aim at full brace (radians, D6-12 rooted windup). */
+const DASH_BRACE_LEAN = 0.2;
+/** Deep torso lean held while the grounded lunge rides the mesh travel (D6-12). */
+const DASH_LUNGE_LEAN = 0.55;
+/** Shield-arm raise at full brace (radians; negative rotation.x = arm forward, D6-12). */
+const DASH_SHIELD_RAISE = 1.2;
+/** Skid squash depth once the lunge arrives at the lane end (D6-12 heavy settle). */
+const DASH_SKID_SQUASH = 0.4;
+
 function resolveArchetype(sizeIndex: number): GoliathArchetype {
   return GOLIATH_ARCHETYPES_BY_SIZE[sizeIndex] ?? GOLIATH_ARCHETYPES_BY_SIZE[0];
 }
@@ -221,6 +233,51 @@ function createGoliathAnimation(model: EnemyModel): EntityAnimation {
     applyCrouch(landed ? SETTLE_SQUASH * (1 - settle) : 0);
   }
 
+  /**
+   * shieldDash (D6-12): shield-braced crouch → rapid GROUNDED lunge riding the
+   * actual mesh travel → heavy skid/settle at the lane end. The leap clip minus
+   * the parabola — this function NEVER writes the group's vertical position
+   * (grounded charge, the one deliberate leap-vs-dash difference). Every
+   * transform below is cleared by resetAttackPose (body rotation.x, arm
+   * rotation.x) or owned by applyCrouch — the 05-02 neutral-restore contract.
+   */
+  function animateDash(view: AttackAnimationView) {
+    if (view.phase === 'windup') {
+      // Rooted (D4-12): the braced crouch deepens with progress² while the
+      // torso leans into the locked aim and the shield arm raises front-on.
+      const wind = view.phaseProgress * view.phaseProgress;
+      applyCrouch(DASH_BRACE_CROUCH * wind);
+      model.body.rotation.x = DASH_BRACE_LEAN * wind;
+      if (leftArm) leftArm.rotation.x = -DASH_SHIELD_RAISE * wind;
+      return;
+    }
+    const travel = travelFraction(view);
+    if (view.phase === 'strike') {
+      // Release the crouch fast as travel begins and deepen into the lunge
+      // lean scaled by the ACTUAL travel toward the locked landing — the mesh
+      // lerp spills ~1.8u of an 8u lane into recovery by design, so the lean
+      // rides travel, not phase progress.
+      applyCrouch(DASH_BRACE_CROUCH * (1 - THREE.MathUtils.clamp(travel * 3, 0, 1)));
+      model.body.rotation.x = THREE.MathUtils.lerp(DASH_BRACE_LEAN, DASH_LUNGE_LEAN, travel);
+      if (leftArm) leftArm.rotation.x = -DASH_SHIELD_RAISE;
+      return;
+    }
+    // Recovery: hold the shield-first lunge until the mesh actually arrives
+    // (same LANDED_TRAVEL_FRACTION gate as the slam), then ease into a heavy
+    // skid/settle — squash + lean decay with the eased progress so progress 1
+    // is exactly the rest pose.
+    const landed = travel >= LANDED_TRAVEL_FRACTION;
+    if (!landed) {
+      model.body.rotation.x = DASH_LUNGE_LEAN;
+      if (leftArm) leftArm.rotation.x = -DASH_SHIELD_RAISE;
+      return;
+    }
+    const settle = 1 - (1 - view.phaseProgress) * (1 - view.phaseProgress);
+    applyCrouch(DASH_SKID_SQUASH * (1 - settle));
+    model.body.rotation.x = DASH_LUNGE_LEAN * (1 - settle);
+    if (leftArm) leftArm.rotation.x = -DASH_SHIELD_RAISE * (1 - settle);
+  }
+
   return {
     animateMovement(elapsedSeconds, isMoving) {
       // Neutral attack-pose restore: animateAttack (when a view is live) runs
@@ -248,6 +305,7 @@ function createGoliathAnimation(model: EnemyModel): EntityAnimation {
       // from the unit_attack row; unknown ids fall back to the slam clip.
       if (view.attackId === 'swordSwing') return animateSwing(view);
       if (view.attackId === 'swordSwirl') return animateSwirl(view);
+      if (view.attackId === 'shieldDash') return animateDash(view);
       animateLeapSlam(view);
     },
   };
