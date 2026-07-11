@@ -3,9 +3,12 @@ import { describe, expect, it } from 'vitest';
 // Import the real resolvers across the package boundary (server module → client
 // vitest runner), same mechanism as crit.test.ts — not a local re-implementation.
 import {
+  closestPointOnSegment,
+  computeLaneEnd,
   knockbackDisplacement,
   resolveCircleHit,
   resolveCone,
+  resolveLane,
 } from '../../../../spacetimedb/src/attackHitbox';
 
 describe('resolveCircleHit (ATK-06 circle resolver)', () => {
@@ -75,6 +78,129 @@ describe('resolveCone (ATK-02 cone resolver, D5-05/D5-06)', () => {
     // Within range → hit regardless of bearing; beyond range → miss.
     expect(resolveCone(APEX_X - 2, APEX_Z + 1, APEX_X, APEX_Z, 0, 0, RANGE, MIN_DOT)).toBe(true);
     expect(resolveCone(APEX_X + RANGE + 1, APEX_Z, APEX_X, APEX_Z, 0, 0, RANGE, MIN_DOT)).toBe(false);
+  });
+});
+
+describe('closestPointOnSegment (D6-04/D6-05 lane projection, ATK-06 geometry reuse)', () => {
+  // Horizontal segment along +X at z=0 so every perpendicular offset survives
+  // float roundtrip exactly (same exactness discipline as the cone edge tests).
+  const CAST_X = 10;
+  const CAST_Z = 0;
+  const LANDING_X = 18;
+  const LANDING_Z = 0;
+
+  it('returns the perpendicular foot for a point projecting onto the segment interior', () => {
+    expect(closestPointOnSegment(14, 3, CAST_X, CAST_Z, LANDING_X, LANDING_Z)).toEqual({
+      x: 14,
+      z: 0,
+    });
+  });
+
+  it('clamps to the landing endpoint for a point projecting past the far end', () => {
+    expect(closestPointOnSegment(25, 1, CAST_X, CAST_Z, LANDING_X, LANDING_Z)).toEqual({
+      x: LANDING_X,
+      z: LANDING_Z,
+    });
+  });
+
+  it('clamps to the cast endpoint for a point projecting before the near end', () => {
+    expect(closestPointOnSegment(5, -2, CAST_X, CAST_Z, LANDING_X, LANDING_Z)).toEqual({
+      x: CAST_X,
+      z: CAST_Z,
+    });
+  });
+
+  it('zero-length segment returns the start point (degenerate, no NaN)', () => {
+    expect(closestPointOnSegment(5, 5, CAST_X, CAST_Z, CAST_X, CAST_Z)).toEqual({
+      x: CAST_X,
+      z: CAST_Z,
+    });
+  });
+});
+
+describe('resolveLane (ATK-04 lane resolver, D6-04 inclusive segment-distance test)', () => {
+  // Lane from cast (10, 0) to landing (18, 0), half-width 1.5 — 1.5 is exactly
+  // representable in binary so the inclusive-edge assertions are float-safe.
+  const CAST_X = 10;
+  const CAST_Z = 0;
+  const LANDING_X = 18;
+  const LANDING_Z = 0;
+  const HALF_WIDTH = 1.5;
+
+  it('is true for a point within halfWidth of the centerline mid-segment', () => {
+    expect(
+      resolveLane(14, HALF_WIDTH - 0.1, CAST_X, CAST_Z, LANDING_X, LANDING_Z, HALF_WIDTH)
+    ).toBe(true);
+  });
+
+  it('boundary: is true at EXACTLY halfWidth from the centerline (inclusive <=, matches resolveCircleHit/resolveCone)', () => {
+    expect(resolveLane(14, HALF_WIDTH, CAST_X, CAST_Z, LANDING_X, LANDING_Z, HALF_WIDTH)).toBe(
+      true
+    );
+  });
+
+  it('is false just beyond halfWidth from the centerline', () => {
+    expect(
+      resolveLane(14, HALF_WIDTH + 0.01, CAST_X, CAST_Z, LANDING_X, LANDING_Z, HALF_WIDTH)
+    ).toBe(false);
+  });
+
+  it('is false past the landing end, more than halfWidth beyond the endpoint (along the axis)', () => {
+    expect(resolveLane(LANDING_X + 1.6, 0, CAST_X, CAST_Z, LANDING_X, LANDING_Z, HALF_WIDTH)).toBe(
+      false
+    );
+  });
+
+  it('is true past the landing end but within halfWidth of the endpoint (capsule cap)', () => {
+    expect(resolveLane(LANDING_X + 1.4, 0, CAST_X, CAST_Z, LANDING_X, LANDING_Z, HALF_WIDTH)).toBe(
+      true
+    );
+  });
+
+  it('is false before the cast end, more than halfWidth beyond the endpoint (along the axis)', () => {
+    expect(resolveLane(CAST_X - 1.6, 0, CAST_X, CAST_Z, LANDING_X, LANDING_Z, HALF_WIDTH)).toBe(
+      false
+    );
+  });
+
+  it('is true before the cast end but within halfWidth of the endpoint (capsule cap)', () => {
+    expect(resolveLane(CAST_X - 1.4, 0, CAST_X, CAST_Z, LANDING_X, LANDING_Z, HALF_WIDTH)).toBe(
+      true
+    );
+  });
+
+  it('zero-length segment (cast == landing) degrades to the circle test around that point (D6-04)', () => {
+    // Exactly ON the radius edge → hit (inclusive); beyond it → miss.
+    expect(resolveLane(CAST_X, HALF_WIDTH, CAST_X, CAST_Z, CAST_X, CAST_Z, HALF_WIDTH)).toBe(true);
+    expect(
+      resolveLane(CAST_X + HALF_WIDTH, 0, CAST_X, CAST_Z, CAST_X, CAST_Z, HALF_WIDTH)
+    ).toBe(true);
+    expect(resolveLane(CAST_X, HALF_WIDTH + 0.1, CAST_X, CAST_Z, CAST_X, CAST_Z, HALF_WIDTH)).toBe(
+      false
+    );
+  });
+});
+
+describe('computeLaneEnd (D6-02 overshoot lane end, aim locked at cast)', () => {
+  const CAST_X = 10;
+  const CAST_Z = 0;
+
+  it('returns a point exactly `length` from cast along the cast->target direction (overshoot PAST the target)', () => {
+    // Target 4 units due east; lane length 7.25 → the end overshoots to 17.25.
+    expect(computeLaneEnd(CAST_X, CAST_Z, 14, 0, 7.25)).toEqual({ x: 17.25, z: 0 });
+  });
+
+  it('result direction equals normalize(target - cast) on a diagonal aim', () => {
+    // Cast at origin, target (3, 4): delta length 5 → direction (0.6, 0.8).
+    const end = computeLaneEnd(0, 0, 3, 4, 7.25);
+    expect(end.x).toBeCloseTo(0.6 * 7.25, 10);
+    expect(end.z).toBeCloseTo(0.8 * 7.25, 10);
+    expect(Math.hypot(end.x, end.z)).toBeCloseTo(7.25, 10);
+  });
+
+  it('zero-length aim (target == cast) falls back to the cast point (defensive, no NaN)', () => {
+    // minBand 3.5 makes this unreachable in play, but a pure helper must not NaN.
+    expect(computeLaneEnd(CAST_X, CAST_Z, CAST_X, CAST_Z, 7.25)).toEqual({ x: CAST_X, z: CAST_Z });
   });
 });
 
