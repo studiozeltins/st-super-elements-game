@@ -11,6 +11,7 @@ import {
 } from '../game/data/constants';
 import { loreFor } from '../game/data/characterLore';
 import { CharacterPreview } from './CharacterPreview';
+import { CharacterChip } from './CharacterChip';
 import { ConstellationRing } from './ConstellationRing';
 import { CharacterIdentity } from './CharacterIdentity';
 import { useDragScroll } from './useDragScroll';
@@ -31,6 +32,8 @@ interface CharacterScreenProps {
   transcendById: Record<string, number>;
   /** Currently-active stars per character (manual). Absent = full ceiling active. */
   activatedById: Record<string, number>;
+  /** Current team, in slot order — shown first in the roster selector. */
+  partyCharacterIds: string[];
   /** Change which character is being viewed (roster tap / swipe). */
   onView(characterId: string): void;
   /** Set how many unlocked stars are active for a character. */
@@ -74,6 +77,7 @@ export function CharacterScreen({
   constellationById,
   transcendById,
   activatedById,
+  partyCharacterIds,
   onView,
   onSetConstellation,
   onTranscend,
@@ -156,8 +160,15 @@ export function CharacterScreen({
       : []),
   ];
 
-  // Only owned characters appear here (menu + swipe order).
-  const ownedList = CHARACTER_LIST.filter(entry => ownedCharacterIds.has(entry.id));
+  // Only owned characters appear here (menu + swipe order): current party
+  // first (in slot order), then the rest of the collection.
+  const ownedEntries = CHARACTER_LIST.filter(entry => ownedCharacterIds.has(entry.id));
+  const ownedList = [
+    ...partyCharacterIds
+      .map(id => ownedEntries.find(entry => entry.id === id))
+      .filter((entry): entry is (typeof ownedEntries)[number] => entry !== undefined),
+    ...ownedEntries.filter(entry => !partyCharacterIds.includes(entry.id)),
+  ];
   const order = ownedList.map(entry => entry.id);
   const viewIndex = order.indexOf(characterId);
   const step = (delta: number) => {
@@ -202,35 +213,21 @@ export function CharacterScreen({
           ref={rosterScroll.ref as React.RefObject<HTMLElement>}
           {...rosterScroll.handlers}
         >
-          {ownedList.map(entry => {
-            const entryElement = ELEMENTS[entry.element];
-            const selected = entry.id === characterId;
-            return (
-              <button
-                key={entry.id}
-                className={`roster-chip ${selected ? 'roster-chip--on' : ''}`}
-                style={{ '--element-color': entryElement.cssColor } as React.CSSProperties}
-                onClick={() => {
-                  setOpenResist(null);
-                  onView(entry.id);
-                }}
-              >
-                <span className="roster-chip__ring">
-                  <ConstellationRing
-                    variant="chip"
-                    letter={entry.displayName[0]}
-                    unlocked={constellationById[entry.id] ?? 0}
-                    activated={activatedById[entry.id] ?? constellationById[entry.id] ?? 0}
-                  />
-                </span>
-                <span className="roster-chip__text">
-                  <span className="roster-chip__name">{entry.displayName}</span>
-                  <span className="roster-chip__level">Līm. 1</span>
-                </span>
-                {entry.id === activeCharacterId && <span className="roster-chip__active">●</span>}
-              </button>
-            );
-          })}
+          {ownedList.map(entry => (
+            <CharacterChip
+              key={entry.id}
+              characterId={entry.id}
+              constellation={constellationById[entry.id] ?? 0}
+              activated={activatedById[entry.id] ?? constellationById[entry.id] ?? 0}
+              transcend={transcendById[entry.id] ?? 0}
+              selected={entry.id === characterId}
+              activeDot={entry.id === activeCharacterId}
+              onClick={() => {
+                setOpenResist(null);
+                onView(entry.id);
+              }}
+            />
+          ))}
         </nav>
         {/* Scarce transcend-shard balance — identical chip to the gacha wallet,
             pinned right of the scrolling roster, read-only from the player row. */}

@@ -1873,17 +1873,6 @@ button {
   color: var(--muted);
 }
 
-.inv-card__con {
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  font: 700 10px var(--font-display);
-  letter-spacing: 0.06em;
-  color: var(--gold);
-  border: 1px solid currentColor;
-  padding: 1px 5px;
-}
-
 /* Inline constellation dots + active bonus, shown on team cards. */
 .con-inline {
   display: flex;
@@ -2943,7 +2932,10 @@ button {
   display: none;
 }
 
-.roster-chip {
+/* ── Unified character chip (character-screen roster + team select) ────────
+   Rarity colors the left border + accents (5★ gold, 4★ blue); the element
+   color stays on the ring's letter disc only. */
+.cchip {
   position: relative;
   flex: 0 0 auto;
   display: flex;
@@ -2952,50 +2944,102 @@ button {
   padding: 3px 12px 3px 6px;
   scroll-snap-align: start;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--element-color);
+  border-left: 3px solid var(--rarity, var(--line));
   background: var(--panel);
-  opacity: 0.62;
   transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s;
+  touch-action: pan-x;
+  user-select: none;
 }
 
-.roster-chip--on {
-  opacity: 1;
+.cchip.rarity-5 {
+  --rarity: var(--gold);
+}
+
+.cchip.rarity-4 {
+  --rarity: #5aa9ff;
+}
+
+/* Character-screen roster dims everything but the viewed character. */
+.cscreen__roster .cchip:not(.cchip--on) {
+  opacity: 0.62;
+}
+
+.cchip--on {
   transform: translateY(-1px);
-  box-shadow: 0 0 0 1px var(--element-color);
+  box-shadow: 0 0 0 1px var(--rarity, var(--line));
 }
 
-.roster-chip--locked {
-  filter: grayscale(0.7);
+.cchip--in {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity) 60%, transparent);
 }
 
-.roster-chip__ring {
+.cchip--dragging {
+  opacity: 0.35;
+}
+
+.cchip__ring {
   display: block;
   width: 30px;
   height: 30px;
   flex-shrink: 0;
+  pointer-events: none;
 }
 
-.roster-chip__text {
+.cchip__text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+  pointer-events: none;
 }
 
-.roster-chip__name {
+.cchip__name {
   /* Character names always use the display font (matches cident/csheet names). */
   font: 700 11px var(--font-display);
   white-space: nowrap;
+  text-align: left;
 }
 
-.roster-chip__level {
-  font: 700 8px var(--font-display);
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-
-.roster-chip__active {
+.cchip__active {
   font-size: 9px;
   color: var(--accent);
+}
+
+/* ── [C5][B3][L1] mini-cards — shared progress badges on every character card:
+   C constellation (gold), B transcend boost (purple), L level (cyan). */
+.cbadges {
+  display: flex;
+  gap: 3px;
+}
+
+.cbadge {
+  font: 700 8px var(--font-display);
+  letter-spacing: 0.06em;
+  padding: 1px 4px;
+  border: 1px solid currentColor;
+}
+
+.cbadge--c {
+  color: var(--gold);
+}
+
+.cbadge--b {
+  color: var(--shard);
+}
+
+.cbadge--l {
+  color: var(--accent);
+}
+
+/* Collection cards park the badge row bottom-right (where C{n} used to sit). */
+.inv-card .cbadges {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+}
+
+.inv-card .cbadge {
+  font-size: 9px;
+  padding: 2px 5px;
 }
 
 /* Desktop drag-to-scroll affordance on horizontal lists. */
@@ -4303,64 +4347,6 @@ button {
   touch-action: none;
 }
 
-.team-chip {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 3px 12px 3px 5px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--rarity, var(--line));
-  background: var(--panel);
-  box-shadow: inset 0 0 0 1px transparent;
-  transition: transform 0.12s, box-shadow 0.12s, opacity 0.12s;
-  touch-action: pan-x;
-  user-select: none;
-}
-
-.team-chip.rarity-5 {
-  --rarity: var(--gold);
-}
-
-.team-chip.rarity-4 {
-  --rarity: #5aa9ff;
-}
-
-.team-chip--in {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity) 60%, transparent);
-}
-
-.team-chip--dragging {
-  opacity: 0.35;
-}
-
-.team-chip__ring {
-  display: block;
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  pointer-events: none;
-}
-
-.team-chip__text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  pointer-events: none;
-}
-
-.team-chip__name {
-  /* Character names always use the display font (matches cident/csheet names). */
-  font: 700 11px var(--font-display);
-  white-space: nowrap;
-}
-
-.team-chip__level {
-  font: 700 8px var(--font-display);
-  letter-spacing: 0.08em;
-  color: var(--rarity, var(--muted));
-}
-
 .team-hint {
   font: 700 10px var(--font-display);
   letter-spacing: 0.08em;
@@ -5238,8 +5224,7 @@ button {
    on desktop. Rings/icons/layout px are intentionally NOT scaled here.
    ============================================================ */
 .csheet__stat-label,
-.roster-chip__level,
-.team-chip__level {
+.cbadge {
   font-size: calc(8px * var(--ui-scale));
 }
 .stat-cell__label,
@@ -5253,8 +5238,7 @@ button {
 }
 .csheet__section,
 .ctab__section,
-.roster-chip__name,
-.team-chip__name {
+.cchip__name {
   font-size: calc(11px * var(--ui-scale));
 }
 .ctab__soon,

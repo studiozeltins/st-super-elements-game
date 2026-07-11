@@ -984,6 +984,7 @@ export default function App() {
           constellationById={constellationById}
           transcendById={transcendById}
           activatedById={activatedById}
+          partyCharacterIds={partyCharacterIds}
           onView={setCharacterPageId}
           onSetConstellation={setConstellation}
           onTranscend={transcendCharacter}

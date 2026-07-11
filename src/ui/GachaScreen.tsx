@@ -6,6 +6,7 @@ import { WEAPONS } from '../game/data/weapons';
 import { BANNERS, WEAPONS_BY_ID, fiveStarChanceForNextPull, HARD_PITY } from '../game/data/gacha';
 import { GACHA_PULL_COST } from '../game/data/constants';
 import { CharacterPreview } from './CharacterPreview';
+import { CharacterChip, CharacterBadges } from './CharacterChip';
 import { PullAnimation } from './PullAnimation';
 import { CharacterInfoSheet } from './CharacterInfoSheet';
 import { ConstellationRing } from './ConstellationRing';
@@ -214,33 +215,22 @@ export function GachaScreen({
             ref={teamScroll.ref as React.RefObject<HTMLElement>}
             {...teamScroll.handlers}
           >
-            {CHARACTER_LIST.filter(character => ownedCharacterIds.has(character.id)).map(character => {
-              const element = ELEMENTS[character.element];
-              const inParty = partyCharacterIds.includes(character.id);
-              return (
-                <button
-                  key={character.id}
-                  className={`team-chip rarity-${character.stars} ${inParty ? 'team-chip--in' : ''} ${
-                    teamDrag.dragId === character.id ? 'team-chip--dragging' : ''
-                  }`}
-                  style={{ '--element-color': element.cssColor } as React.CSSProperties}
-                  {...teamDrag.chipHandlers(character.id, character.displayName[0], element.cssColor)}
-                >
-                  <span className="team-chip__ring">
-                    <ConstellationRing
-                      variant="chip"
-                      letter={character.displayName[0]}
-                      unlocked={constellationById[character.id] ?? 0}
-                      activated={activatedById[character.id] ?? constellationById[character.id] ?? 0}
-                    />
-                  </span>
-                  <span className="team-chip__text">
-                    <span className="team-chip__name">{character.displayName}</span>
-                    <span className="team-chip__level">Līm. 1</span>
-                  </span>
-                </button>
-              );
-            })}
+            {CHARACTER_LIST.filter(character => ownedCharacterIds.has(character.id)).map(character => (
+              <CharacterChip
+                key={character.id}
+                characterId={character.id}
+                constellation={constellationById[character.id] ?? 0}
+                activated={activatedById[character.id] ?? constellationById[character.id] ?? 0}
+                transcend={transcendById[character.id] ?? 0}
+                inParty={partyCharacterIds.includes(character.id)}
+                dragging={teamDrag.dragId === character.id}
+                handlers={teamDrag.chipHandlers(
+                  character.id,
+                  character.displayName[0],
+                  ELEMENTS[character.element].cssColor
+                )}
+              />
+            ))}
           </nav>
         ) : (
           <span className="gacha__spacer" />
@@ -453,8 +443,12 @@ export function GachaScreen({
                     </span>
                     <span className="inv-card__name">{character.displayName}</span>
                     <span className="inv-card__sub">{element.displayName}</span>
-                    {isOwned && (constellationById[character.id] ?? 0) > 0 && (
-                      <span className="inv-card__con">C{constellationById[character.id]}</span>
+                    {isOwned && (
+                      <CharacterBadges
+                        constellation={constellationById[character.id] ?? 0}
+                        transcend={transcendById[character.id] ?? 0}
+                        level={1}
+                      />
                     )}
                     {isActive && <span className="inv-card__badge">AKTĪVS</span>}
                     {!isOwned && <span className="inv-card__lock">◈</span>}
