@@ -17,11 +17,12 @@ export interface MovementAudio {
 }
 
 // World units travelled between steps — the per-kind gait signature.
-// Goliath 1.4: derived from the renderer's leg-swing rate (6 rad/s → a
-// footfall every π/6 ≈ 0.52s) × the server move-speed range 2.2–3.2 u/s
-// ≈ 1.2–1.7 u per visual step (3.0 played at HALF the visual cadence).
+// Strides are DERIVED from each renderer's leg-swing rate × move speed so the
+// audio cadence matches the visible footfalls (playtest 2026-07-12 ×2):
+//  - player: legs sin(t·10) → footfall each π/10 ≈ 0.31s × ~7 u/s ≈ 2.2 u
+//  - goliath: legs sin(t·6) → footfall each π/6 ≈ 0.52s × 2.2–3.2 u/s ≈ 1.4 u
 const STRIDE_LENGTH: Record<FootstepKind, number> = {
-  player: 1.5,
+  player: 2.2,
   goliath: 1.4,
   slime: 1.1,
   golem: 2.4,
