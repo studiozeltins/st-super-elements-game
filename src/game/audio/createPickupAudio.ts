@@ -6,8 +6,8 @@
 import { createNoiseSource, jitter } from './audioCore';
 
 export interface PickupAudio {
-  /** Gem collect chime. Consecutive pickups within a streak window climb a pitch ladder — each pickup "tones up". */
-  playGemPickup(): void;
+  /** Gem collect chime, amount-aware. Small pickups play ONE chime on the streak ladder; every full 100 gems adds a staggered chime (capped), each stepping the ladder up — a slot-machine payout for big drops. */
+  playGemPickup(amount?: number): void;
   /** Rare shard collected: distinctly richer than a gem (small ascending arpeggio / bloom). */
   playShardGain(): void;
   /** Shard LOST (pvp theft/death): descending minor fall — unmistakably bad. */
@@ -36,6 +36,17 @@ export function gemLadderRatio(step: number): number {
 export function nextGemStep(previousStep: number, secondsSinceLast: number): number {
   if (secondsSinceLast > GEM_STREAK_WINDOW_SECONDS) return 0;
   return Math.min(GEM_LADDER_MAX_STEPS, Math.max(0, Math.floor(previousStep)) + 1);
+}
+
+// Big-pickup escalation: one chime per full 100 gems, staggered like a payout.
+export const GEM_CHIME_PER_AMOUNT = 100;
+export const GEM_BURST_MAX_CHIMES = 8;
+export const GEM_BURST_SPACING_SECONDS = 0.07;
+
+/** PURE: chimes a pickup of `amount` gems earns — min 1, one per full 100, capped. */
+export function gemChimeCount(amount: number): number {
+  if (!Number.isFinite(amount)) return 1;
+  return Math.min(GEM_BURST_MAX_CHIMES, Math.max(1, Math.floor(amount / GEM_CHIME_PER_AMOUNT)));
 }
 
 // Gem chime voicing. The jitter is TINY on purpose (±2%) — the ladder's rungs
@@ -103,10 +114,32 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
     note.stop(startAt + decaySeconds + 0.02);
   }
 
-  function playGemPickup() {
+  /** One gem chime (triangle body + faint octave sheen) at the given ladder step. */
+  function playGemChime(context: AudioContext, startAt: number, step: number, boost: number) {
+    const frequency = GEM_BASE_HZ * gemLadderRatio(step) * jitter(GEM_JITTER);
+    playNote(context, 'triangle', frequency, GEM_PEAK * boost, startAt, GEM_SECONDS);
+    // Faint octave sheen keeps the chime glassy without raising the peak much.
+    playNote(context, 'sine', frequency * 2, 0.07 * boost, startAt, GEM_SECONDS * 0.6);
+  }
+
+  function playGemPickup(amount = 0) {
     const context = ready();
     if (!context) return;
     const now = context.currentTime;
+    const chimes = gemChimeCount(amount);
+    if (chimes > 1) {
+      // Slot-machine payout: staggered chimes, EACH stepping the ladder up
+      // within the burst. Never merge-throttled — a big drop always sounds.
+      for (let chime = 0; chime < chimes; chime++) {
+        gemStep = nextGemStep(gemStep, chime === 0 ? now - lastGemAt : 0);
+        playGemChime(context, now + chime * GEM_BURST_SPACING_SECONDS, gemStep, 1);
+      }
+      // The streak (and the merge gate) continues from the burst's LAST chime.
+      lastGemAt = now + (chimes - 1) * GEM_BURST_SPACING_SECONDS;
+      gemMerged = 0;
+      gemMergeNextAt = lastGemAt + GEM_MERGE_SECONDS;
+      return;
+    }
     // The ladder advances on EVERY pickup — merged (throttled) plays included —
     // so a vacuumed burst still lands its next audible chime higher up.
     gemStep = nextGemStep(gemStep, now - lastGemAt);
@@ -118,10 +151,7 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
     const boost = 1 + gemMerged * GEM_MERGE_BOOST;
     gemMerged = 0;
     gemMergeNextAt = now + GEM_MERGE_SECONDS;
-    const frequency = GEM_BASE_HZ * gemLadderRatio(gemStep) * jitter(GEM_JITTER);
-    playNote(context, 'triangle', frequency, GEM_PEAK * boost, now, GEM_SECONDS);
-    // Faint octave sheen keeps the chime glassy without raising the peak much.
-    playNote(context, 'sine', frequency * 2, 0.07 * boost, now, GEM_SECONDS * 0.6);
+    playGemChime(context, now, gemStep, boost);
   }
 
   function playShardGain() {

@@ -1,17 +1,19 @@
 /* Manga-SFX action burst. Deliberately NOT Frost — one-shot comic juice text.
-   Bangers (self-hosted) + heavy dark outline; palette overridable per popup
-   via --sfx-fill/--sfx-outline/--sfx-glow (defaults = the stun look). */
+   Face, tilt, and screen position are randomized per popup (inline vars set by
+   SfxPopup); per-word fill comes from inline span colors. The heavy ink
+   outline/shadow stays shared so every face reads as the same burst family. */
 
 .sfx-popup {
   position: fixed;
-  left: 50%;
-  top: 34%;
+  left: var(--sfx-x, 50%);
+  top: var(--sfx-y, 34%);
   z-index: 40;
   pointer-events: none;
-  font-family: 'Bangers', 'Chakra Petch', sans-serif;
+  white-space: nowrap;
+  font-family: var(--sfx-font, 'Bangers'), 'Chakra Petch', sans-serif;
   font-size: calc(4.2rem * var(--sfx-scale, 1));
   letter-spacing: 0.06em;
-  color: var(--sfx-fill, #ffe14d);
+  color: #ffe14d; /* fallback — real fills live on the per-word spans */
   -webkit-text-stroke: 3px var(--sfx-outline, #1a1230);
   text-shadow:
     0 0 2px var(--sfx-outline, #1a1230),
@@ -20,18 +22,15 @@
   animation: sfx-pop var(--sfx-seconds, 1s) cubic-bezier(0.2, 0.9, 0.3, 1.2) forwards;
 }
 
-/* Entry variants — a different side each popup. The base transform of each
-   variant is carried through the keyframes via --sfx-tilt/--sfx-from. */
+/* Entry variants — a different side each popup. Tilt is per-popup random
+   (--sfx-tilt inline); the variant only picks the fly-in offset. */
 .sfx-popup--v0 {
-  --sfx-tilt: -8deg;
   --sfx-from: -140%;
 }
 .sfx-popup--v1 {
-  --sfx-tilt: 7deg;
   --sfx-from: 60%;
 }
 .sfx-popup--v2 {
-  --sfx-tilt: -3deg;
   --sfx-from: -50%;
 }
 

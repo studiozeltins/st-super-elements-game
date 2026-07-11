@@ -18,6 +18,8 @@ export interface AudioSystem {
   playSwirl(gain?: number, pan?: number): void;
   /** Shield dash landing: skid-in scrape, then the high-Q metallic clang + detuned ring. */
   playDash(gain?: number, pan?: number): void;
+  /** Deep airy whoosh riding a goliath leap's travel: broadband noise falling ~900→250Hz across durationSeconds. Noise-based on purpose — real displaced air, not another tonal cue. */
+  playLeapWhoosh(durationSeconds: number, gain?: number, pan?: number): void;
   /** Shared gesture-unlocked context — sibling SFX modules (combat feedback) play through it. */
   getContext(): AudioContext | null;
   dispose(): void;
@@ -45,6 +47,14 @@ const DASH_IMPACT_DELAY_SECONDS = 0.05;
 // circle-cut so the swirl reads as rotation, not another slam.
 const SWIRL_TREMOLO_HZ = 7;
 const SWIRL_TREMOLO_DEPTH = 0.45;
+// Leap-travel whoosh (playtest 2026-07-12: the leap read too "piano"/tonal —
+// the mass in the air needs actual AIR): a wide bandpass noise falling from
+// bright to deep across the travel, slow attack so it swells in rather than
+// clicking on.
+const WHOOSH_BAND_START_HZ = 900;
+const WHOOSH_BAND_END_HZ = 250;
+const WHOOSH_PEAK = 0.4;
+const WHOOSH_Q = 0.6; // wide band = airy, never whistly
 
 export function createAudioSystem(): AudioSystem {
   let context: AudioContext | null = null;
@@ -260,11 +270,38 @@ export function createAudioSystem(): AudioSystem {
     }
   }
 
+  function playLeapWhoosh(durationSeconds: number, gainFactor = 1, pan = 0) {
+    // Never throw mid-frame: silently skip until the gesture unlock has run.
+    if (!context || context.state !== 'running') return;
+    const level = clampGain(gainFactor);
+    if (level === 0 || durationSeconds <= 0) return;
+    const now = context.currentTime;
+    const end = now + durationSeconds;
+    const out = panned(context, pan, context.destination);
+
+    const air = createNoiseSource(context, durationSeconds);
+    const band = context.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = WHOOSH_Q;
+    band.frequency.setValueAtTime(WHOOSH_BAND_START_HZ, now);
+    band.frequency.exponentialRampToValueAtTime(WHOOSH_BAND_END_HZ, end);
+    const gain = context.createGain();
+    // Slow attack across ~40% of the travel, peaking as the mass bears down,
+    // then dying into the landing (the slam SFX owns the impact itself).
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(WHOOSH_PEAK * level, now + durationSeconds * 0.4);
+    gain.gain.exponentialRampToValueAtTime(0.0001, end);
+    air.connect(band).connect(gain).connect(out);
+    air.start(now);
+    air.stop(end);
+  }
+
   return {
     playSlam,
     playSwing,
     playSwirl,
     playDash,
+    playLeapWhoosh,
     getContext: () => context,
     dispose() {
       removeGestureListeners();

@@ -17,6 +17,10 @@ export interface WeaponAudio {
   playArcaneBolt(gain?: number, pan?: number): void;
   /** Rising tension swell across an attack windup (telegraph charge). Auto-ends at durationSeconds; returns a cancel fn that fades it out fast (call when the windup is interrupted). Multiple concurrent risers allowed (they're per-unit). */
   playWindupRiser(durationSeconds: number, gain?: number, pan?: number): () => void;
+  /** Slime hop launch: wet two-phase squish — compress down, then spring up. gain/pan place the hopping slime. */
+  playSlimeLeap(gain?: number, pan?: number): void;
+  /** Slime slam landing that HIT someone: fat wet splat (lowpassed burst + down-chirp). gain/pan place the landing. */
+  playSlimeSquash(gain?: number, pan?: number): void;
   dispose(): void;
 }
 
@@ -44,6 +48,21 @@ const ARCANE_SECONDS = 0.2;
 const ARCANE_PEAK = 0.15;
 const ARCANE_SHIMMER_HZ = 1600;
 const ARCANE_SHIMMER_PEAK = 0.05;
+
+// Slime leap: a two-phase bandpass squish — the body compressing (250→120Hz)
+// then springing off the ground (150→400Hz). Quiet: it fires per hop across a
+// whole camp, so it must read as ambience, not a combat cue.
+const SLIME_LEAP_SQUISH_SECONDS = 0.1;
+const SLIME_LEAP_SPRING_SECONDS = 0.15;
+const SLIME_LEAP_PEAK = 0.18;
+// Slime squash (landing HIT): a fat low-mid splat — lowpassed noise burst plus
+// a quick down-chirp body, ~0.18s. Wet and blunt, nothing like the goliath slam.
+const SLIME_SQUASH_SECONDS = 0.18;
+const SLIME_SQUASH_NOISE_HZ = 300;
+const SLIME_SQUASH_NOISE_PEAK = 0.5;
+const SLIME_SQUASH_CHIRP_START_HZ = 220;
+const SLIME_SQUASH_CHIRP_END_HZ = 90;
+const SLIME_SQUASH_CHIRP_PEAK = 0.35;
 
 // Riser: peaks just before the windup lands, capped so a mob pull can't
 // stack a siren out of per-unit risers.
@@ -189,6 +208,93 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     shimmer.stop(now + ARCANE_SECONDS + 0.02);
   }
 
+  function playSlimeLeap(gainFactor = 1, pan = 0) {
+    const context = ready();
+    if (!context) return;
+    const level = clampGain(gainFactor);
+    if (level === 0) return;
+    const now = context.currentTime;
+    const out = panned(context, pan, context.destination);
+    const rate = jitter(0.15); // heavy jitter: a camp of hoppers must not phase
+
+    // Phase 1 — compress: a falling wet squish as the blob loads up.
+    const squish = createNoiseSource(context, SLIME_LEAP_SQUISH_SECONDS);
+    const squishBand = context.createBiquadFilter();
+    squishBand.type = 'bandpass';
+    squishBand.Q.value = 2;
+    squishBand.frequency.setValueAtTime(250 * rate, now);
+    squishBand.frequency.exponentialRampToValueAtTime(
+      120 * rate,
+      now + SLIME_LEAP_SQUISH_SECONDS
+    );
+    const squishGain = context.createGain();
+    squishGain.gain.setValueAtTime(SLIME_LEAP_PEAK * level, now);
+    squishGain.gain.exponentialRampToValueAtTime(0.0001, now + SLIME_LEAP_SQUISH_SECONDS + 0.02);
+    squish.connect(squishBand).connect(squishGain).connect(out);
+    squish.start(now);
+    squish.stop(now + SLIME_LEAP_SQUISH_SECONDS + 0.02);
+
+    // Phase 2 — spring: a rising band as the body launches off the ground.
+    const springAt = now + SLIME_LEAP_SQUISH_SECONDS;
+    const spring = createNoiseSource(context, SLIME_LEAP_SPRING_SECONDS);
+    const springBand = context.createBiquadFilter();
+    springBand.type = 'bandpass';
+    springBand.Q.value = 2;
+    springBand.frequency.setValueAtTime(150 * rate, springAt);
+    springBand.frequency.exponentialRampToValueAtTime(
+      400 * rate,
+      springAt + SLIME_LEAP_SPRING_SECONDS
+    );
+    const springGain = context.createGain();
+    springGain.gain.setValueAtTime(0.0001, springAt);
+    springGain.gain.exponentialRampToValueAtTime(SLIME_LEAP_PEAK * level, springAt + 0.02);
+    springGain.gain.exponentialRampToValueAtTime(
+      0.0001,
+      springAt + SLIME_LEAP_SPRING_SECONDS
+    );
+    spring.connect(springBand).connect(springGain).connect(out);
+    spring.start(springAt);
+    spring.stop(springAt + SLIME_LEAP_SPRING_SECONDS);
+  }
+
+  function playSlimeSquash(gainFactor = 1, pan = 0) {
+    const context = ready();
+    if (!context) return;
+    const level = clampGain(gainFactor);
+    if (level === 0) return;
+    const now = context.currentTime;
+    const out = panned(context, pan, context.destination);
+    const rate = jitter(0.12);
+
+    // Fat splat body: a lowpassed noise burst — all low-mid, no crack.
+    const splat = createNoiseSource(context, SLIME_SQUASH_SECONDS);
+    const splatLow = context.createBiquadFilter();
+    splatLow.type = 'lowpass';
+    splatLow.frequency.value = SLIME_SQUASH_NOISE_HZ * rate;
+    const splatGain = context.createGain();
+    splatGain.gain.setValueAtTime(SLIME_SQUASH_NOISE_PEAK * level, now);
+    splatGain.gain.exponentialRampToValueAtTime(0.0001, now + SLIME_SQUASH_SECONDS);
+    splat.connect(splatLow).connect(splatGain).connect(out);
+    splat.start(now);
+    splat.stop(now + SLIME_SQUASH_SECONDS);
+
+    // Quick down-chirp under the splat — the blob deflating on impact.
+    const chirp = context.createOscillator();
+    chirp.type = 'sine';
+    chirp.frequency.setValueAtTime(SLIME_SQUASH_CHIRP_START_HZ * rate, now);
+    chirp.frequency.exponentialRampToValueAtTime(
+      SLIME_SQUASH_CHIRP_END_HZ * rate,
+      now + SLIME_SQUASH_SECONDS * 0.8
+    );
+    const chirpGain = context.createGain();
+    chirpGain.gain.setValueAtTime(0.0001, now);
+    chirpGain.gain.exponentialRampToValueAtTime(SLIME_SQUASH_CHIRP_PEAK * level, now + 0.012);
+    chirpGain.gain.exponentialRampToValueAtTime(0.0001, now + SLIME_SQUASH_SECONDS);
+    chirp.connect(chirpGain).connect(out);
+    chirp.start(now);
+    chirp.stop(now + SLIME_SQUASH_SECONDS + 0.02);
+  }
+
   function playWindupRiser(durationSeconds: number, gainFactor = 1, pan = 0): () => void {
     const context = ready();
     const level = clampGain(gainFactor);
@@ -257,6 +363,8 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     playBowShot,
     playArcaneBolt,
     playWindupRiser,
+    playSlimeLeap,
+    playSlimeSquash,
     dispose() {
       for (const cancel of [...activeRiserCancels]) cancel();
       activeRiserCancels.clear();

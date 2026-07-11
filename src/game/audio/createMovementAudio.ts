@@ -6,7 +6,9 @@
 
 import { clampGain, createNoiseSource, jitter, panned } from './audioCore';
 
-export type FootstepKind = 'player' | 'goliath' | 'slime' | 'golem';
+// No 'slime' kind: slimes move ONLY by hopping now — their locomotion sound is
+// the per-hop leap squish (createWeaponAudio.playSlimeLeap), not a stride.
+export type FootstepKind = 'player' | 'goliath' | 'golem';
 
 export interface MovementAudio {
   /** Call once per frame per visible moving unit. Accumulates travel distance and emits one footstep each time it crosses the kind's stride length. gain 0 (culled by distance) still advances tracking but plays nothing. */
@@ -24,7 +26,6 @@ export interface MovementAudio {
 const STRIDE_LENGTH: Record<FootstepKind, number> = {
   player: 2.2,
   goliath: 1.4,
-  slime: 1.1,
   golem: 2.4,
 };
 
@@ -42,7 +43,6 @@ const SPAM_MAX_PLAYS = 4;
 // Peak gains per kind (each × the caller's distance gain). Quiet by design.
 const PLAYER_STEP_PEAK = 0.12;
 const GOLIATH_STEP_PEAK = 0.5;
-const SLIME_STEP_PEAK = 0.15;
 const GOLEM_STEP_PEAK = 0.4;
 
 interface UnitState {
@@ -135,24 +135,6 @@ export function createMovementAudio(getContext: () => AudioContext | null): Move
     thud.stop(now + 0.1);
   }
 
-  // Wet squish: a down-sweeping bandpass — heavily jittered so a slime pack
-  // sounds like many wet things, not a metronome.
-  function playSlimeStep(context: AudioContext, level: number, out: AudioNode, now: number) {
-    const rate = jitter(0.2);
-    const squish = createNoiseSource(context, 0.1);
-    const squishBand = context.createBiquadFilter();
-    squishBand.type = 'bandpass';
-    squishBand.Q.value = 2;
-    squishBand.frequency.setValueAtTime(300 * rate, now);
-    squishBand.frequency.exponentialRampToValueAtTime(150 * rate, now + 0.1);
-    const squishGain = context.createGain();
-    squishGain.gain.setValueAtTime(SLIME_STEP_PEAK * level, now);
-    squishGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
-    squish.connect(squishBand).connect(squishGain).connect(out);
-    squish.start(now);
-    squish.stop(now + 0.1);
-  }
-
   // Stone grind + thud: broadband scrape, a midrange grind layer, and a low
   // sine so it reads heavier than the player but lighter than a goliath.
   function playGolemStep(context: AudioContext, level: number, out: AudioNode, now: number) {
@@ -201,7 +183,6 @@ export function createMovementAudio(getContext: () => AudioContext | null): Move
     if (kind === 'player') playPlayerStep(context, level, out, now);
     else if (kind === 'goliath')
       playGoliathStep(context, level, out, now, stepParity ? GOLIATH_ALTERNATE_STEP_PITCH : 1);
-    else if (kind === 'slime') playSlimeStep(context, level, out, now);
     else playGolemStep(context, level, out, now);
   }
 

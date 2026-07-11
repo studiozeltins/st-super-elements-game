@@ -3,8 +3,11 @@ import { describe, expect, it } from 'vitest';
 // Pure ladder math only — no AudioContext, no DOM. The play functions are
 // gesture-gated WebAudio and stay untested here by design.
 import {
+  GEM_BURST_MAX_CHIMES,
+  GEM_CHIME_PER_AMOUNT,
   GEM_LADDER_MAX_STEPS,
   GEM_STREAK_WINDOW_SECONDS,
+  gemChimeCount,
   gemLadderRatio,
   nextGemStep,
 } from '../createPickupAudio';
@@ -55,5 +58,31 @@ describe('nextGemStep (streak advance/reset)', () => {
 
   it('the very first pickup (infinite gap) starts at the base', () => {
     expect(nextGemStep(0, Infinity)).toBe(0);
+  });
+});
+
+describe('gemChimeCount (big-pickup chime burst)', () => {
+  it('small amounts (below one full hundred) play exactly one chime', () => {
+    expect(gemChimeCount(0)).toBe(1);
+    expect(gemChimeCount(1)).toBe(1);
+    expect(gemChimeCount(GEM_CHIME_PER_AMOUNT - 1)).toBe(1);
+  });
+
+  it('adds one chime per full hundred gems', () => {
+    expect(gemChimeCount(GEM_CHIME_PER_AMOUNT)).toBe(1);
+    expect(gemChimeCount(GEM_CHIME_PER_AMOUNT * 2)).toBe(2);
+    expect(gemChimeCount(250)).toBe(2);
+    expect(gemChimeCount(500)).toBe(5);
+  });
+
+  it('caps at GEM_BURST_MAX_CHIMES for jackpot amounts', () => {
+    expect(gemChimeCount(GEM_CHIME_PER_AMOUNT * GEM_BURST_MAX_CHIMES)).toBe(GEM_BURST_MAX_CHIMES);
+    expect(gemChimeCount(1_000_000)).toBe(GEM_BURST_MAX_CHIMES);
+  });
+
+  it('clamps junk input (negative / non-finite) to a single chime', () => {
+    expect(gemChimeCount(-500)).toBe(1);
+    expect(gemChimeCount(NaN)).toBe(1);
+    expect(gemChimeCount(Infinity)).toBe(1);
   });
 });

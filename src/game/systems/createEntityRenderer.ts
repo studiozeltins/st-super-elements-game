@@ -26,11 +26,18 @@ export interface AttackAnimationView {
 }
 
 /** Per-entity locomotion + death animation, closed over its own model and parts. */
-export interface EntityAnimation {
+export interface EntityAnimation<Row = unknown> {
   /** One alive frame: limb swing / body bob for the given motion state. */
   animateMovement(elapsedSeconds: number, isMoving: boolean): void;
   /** Death pose for progress 0 (just died) → 1 (fully toppled and hidden). */
   animateDeath(progress: number): void;
+  /**
+   * OPTIONAL per-frame pose derived from the entity's OWN latest table row
+   * (e.g. the slime hop arc riding the row's hop micros), applied right after
+   * animateMovement each alive frame. Kinds whose rows carry no pose data
+   * simply omit it.
+   */
+  animateFromRow?(row: Row): void;
   /**
    * OPTIONAL per-phase attack pose (ANIM-03), applied AFTER animateMovement each
    * frame while the unit has a live attack view. Kinds without attacks (camp
@@ -40,11 +47,11 @@ export interface EntityAnimation {
   animateAttack?(view: AttackAnimationView): void;
 }
 
-export interface SpawnedEntity {
+export interface SpawnedEntity<Row = unknown> {
   model: EnemyModel;
   collisionRadius: number;
   collisionMass: number;
-  animation: EntityAnimation;
+  animation: EntityAnimation<Row>;
 }
 
 /**
@@ -64,7 +71,7 @@ export interface EntityKindAdapter<Row> {
   readIsAlive(row: Row): boolean;
   /** Client-computed base stipend shown in the gem pill (server owns payout). */
   displayBaseGems(row: Row): number;
-  spawn(row: Row): SpawnedEntity;
+  spawn(row: Row): SpawnedEntity<Row>;
   /** One-shot effect when an entity watched alive dies (e.g. a death burst). */
   onKilled?(worldPosition: THREE.Vector3): void;
 }
@@ -115,7 +122,7 @@ const OVERLAY_VISIBLE_SECONDS = 4;
 
 interface RenderedEntity<Row> {
   model: EnemyModel;
-  animation: EntityAnimation;
+  animation: EntityAnimation<Row>;
   collisionBody: CollisionBody;
   /** Latest synced table row — exposed through forEachAliveUnit for kind lookups. */
   row: Row;
@@ -282,6 +289,7 @@ export function createEntityRenderer<Row>(
         group.lookAt(entity.targetX, group.position.y, entity.targetZ);
       }
       entity.animation.animateMovement(elapsedSeconds, isMoving);
+      entity.animation.animateFromRow?.(entity.row);
       if (view) entity.animation.animateAttack?.(view);
     }
   }

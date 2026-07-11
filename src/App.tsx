@@ -14,7 +14,12 @@ import { PartySheet } from './ui/PartySheet';
 import { PartyToast } from './ui/PartyToast';
 import { PartyFrames } from './ui/PartyFrames';
 import { Hud } from './ui/Hud';
-import { SfxPopup, type SfxPopupState } from './ui/SfxPopup';
+import {
+  SfxPopup,
+  createComicPopup,
+  type ComicPopupOptions,
+  type SfxPopupState,
+} from './ui/SfxPopup';
 import { PickupFeed, usePickupFeed } from './ui/PickupFeed';
 import { DeathOverlay } from './ui/DeathOverlay';
 import { SettingsScreen } from './ui/SettingsScreen';
@@ -24,6 +29,9 @@ import { CharacterScreen } from './ui/CharacterScreen';
 import { DEFAULT_HUD_THEME, isHudTheme } from './styles/hud/themes';
 
 const PARTY_SIZE = 4;
+
+/** Min gap between CRIT! popups — high DPS must not wallpaper the screen. */
+const CRIT_POPUP_THROTTLE_MS = 2000;
 
 const INITIAL_HUD_STATE: HudState = {
   attackCooldownFraction: 0,
@@ -52,10 +60,13 @@ export default function App() {
   const gameRef = useRef<Game | null>(null);
   const partyRef = useRef<string[]>([]);
   const [hudState, setHudState] = useState<HudState>(INITIAL_HUD_STATE);
-  // Manga SFX burst (stun today; freeze/PVP callouts reuse it): keyed remount
-  // per popup; variant cycles so each one enters from a different side.
+  // Comic callouts (STUNNED!/CRIT! today; any new word is one call away):
+  // keyed remount per popup; face/tilt/position/entry randomize per burst.
   const [sfxPopup, setSfxPopup] = useState<SfxPopupState | null>(null);
-  const sfxVariantRef = useRef(0);
+  const callSfxPopup = useCallback((text: string, options?: ComicPopupOptions) => {
+    setSfxPopup(createComicPopup(text, options));
+  }, []);
+  const lastCritPopupAtRef = useRef(-Infinity);
   const [isGachaOpen, setIsGachaOpen] = useState(false);
   const [gachaTab, setGachaTab] = useState<GachaTab>('banners');
   // The owned-only character detail/management modal (distinct from the VAROŅI
@@ -285,13 +296,24 @@ export default function App() {
   // this onInsert twice (two numbers ~0.16u apart). One subscription = one number.
   useTable(tables.enemyHit, {
     onInsert: hit => {
+      const isMine = hit.attacker.toHexString() === myIdentityRef.current;
       gameRef.current?.spawnWorldNumber(
         hit.positionX,
         hit.positionZ,
         hit.amount,
         hit.isCrit ? 'crit' : 'normal',
-        hit.attacker.toHexString() === myIdentityRef.current
+        isMine
       );
+      // MY crit lands a comic CRIT! — throttled so sustained DPS doesn't
+      // wallpaper the screen with popups.
+      if (
+        isMine &&
+        hit.isCrit &&
+        performance.now() - lastCritPopupAtRef.current >= CRIT_POPUP_THROTTLE_MS
+      ) {
+        lastCritPopupAtRef.current = performance.now();
+        callSfxPopup('CRIT!', { seconds: 0.9, intensity: 0.7 });
+      }
     },
   });
   // A unit attack landed (leapSlam impact) → the one-shot strike juice: impact
@@ -737,16 +759,8 @@ export default function App() {
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
       setHudState,
-      (durationSeconds, intensity) => {
-        sfxVariantRef.current = (sfxVariantRef.current + 1) % 3;
-        setSfxPopup({
-          key: performance.now(),
-          text: 'STUNNED!',
-          seconds: durationSeconds,
-          intensity,
-          variant: sfxVariantRef.current,
-        });
-      }
+      (durationSeconds, intensity) =>
+        callSfxPopup('STUNNED!', { seconds: durationSeconds, intensity })
     );
     game.onPartySlotRequested = slotIndex => {
       const characterId = partyRef.current[slotIndex];
@@ -764,7 +778,7 @@ export default function App() {
       game.dispose();
       gameRef.current = null;
     };
-  }, [connection, hasJoined, selectCharacter, pushPickup]);
+  }, [connection, hasJoined, selectCharacter, pushPickup, callSfxPopup]);
 
   useEffect(() => {
     gameRef.current?.syncRemotePlayers(players, myIdentityHex);

@@ -1,6 +1,6 @@
-/* Death sequence overlay. The text deliberately mirrors the manga-SFX burst
-   (sfxPopup.css) — Bangers, heavy ink outline — but lingers until respawn and
-   carries a red death glow instead of the stun palette. Never blocks input. */
+/* Death sequence overlay. The text rides the comic-callout system (SfxPopup's
+   random face/tilt/position, set as inline vars per death) but lingers through
+   the black hold and carries a red death accent. Never blocks input. */
 
 .death-overlay {
   position: fixed;
@@ -23,17 +23,18 @@
 
 .death-overlay__text {
   position: absolute;
-  left: 50%;
-  top: 42%;
-  font-family: 'Bangers', 'Chakra Petch', sans-serif;
+  left: var(--death-x, 50%);
+  top: var(--death-y, 42%);
+  white-space: nowrap;
+  font-family: var(--death-font, 'Bangers'), 'Chakra Petch', sans-serif;
   font-size: 5.4rem;
   letter-spacing: 0.08em;
-  color: #efe6e6;
+  color: #ff5c5c;
   -webkit-text-stroke: 3px #1a0d10;
   text-shadow:
     0 0 2px #1a0d10,
     4px 5px 0 #1a0d10,
-    0 0 32px rgba(229, 72, 77, 0.6);
+    0 0 32px rgba(229, 72, 77, 0.7);
   opacity: 0;
   /* Delay ≈ the fade-to-black, so the text pops IN the dark. */
   animation: death-text-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) 0.55s forwards;
@@ -42,14 +43,14 @@
 @keyframes death-text-pop {
   0% {
     opacity: 0;
-    transform: translate(-50%, -60%) rotate(-6deg) skewX(-6deg) scale(0.3);
+    transform: translate(-50%, -60%) rotate(var(--death-tilt, -6deg)) skewX(-6deg) scale(0.3);
   }
   60% {
     opacity: 1;
-    transform: translate(-50%, -50%) rotate(-6deg) skewX(-6deg) scale(1.15);
+    transform: translate(-50%, -50%) rotate(var(--death-tilt, -6deg)) skewX(-6deg) scale(1.15);
   }
   100% {
     opacity: 1;
-    transform: translate(-50%, -50%) rotate(-6deg) skewX(-6deg) scale(1);
+    transform: translate(-50%, -50%) rotate(var(--death-tilt, -6deg)) skewX(-6deg) scale(1);
   }
 }

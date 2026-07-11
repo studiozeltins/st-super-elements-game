@@ -14,9 +14,21 @@ importers:
       '@fontsource/bangers':
         specifier: ^5.2.8
         version: 5.2.8
+      '@fontsource/bungee':
+        specifier: ^5.2.7
+        version: 5.2.7
       '@fontsource/chakra-petch':
         specifier: ^5.2.7
         version: 5.2.7
+      '@fontsource/creepster':
+        specifier: ^5.2.7
+        version: 5.2.7
+      '@fontsource/luckiest-guy':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource/titan-one':
+        specifier: ^5.2.8
+        version: 5.2.8
       '@radix-ui/react-dialog':
         specifier: ^1.1.18
         version: 1.1.18(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -420,8 +432,20 @@ packages:
   '@fontsource/bangers@5.2.8':
     resolution: {integrity: sha512-fFFXg+IHf05TEQ4U0gS8f7B0JHrhAN7oEw/Q8wR0APPLXnhnQSfZz2QDjg0kmVuM+IsM28ODga+0rSpnHLqFfQ==}
 
+  '@fontsource/bungee@5.2.7':
+    resolution: {integrity: sha512-pzUlTXEFdiDM5p0inlWRM+1ovS3vTWG6NplJ65EpfBwZNQmM6wNS6z22tml07+NWKK+e8/FPPupBVbzd0th54w==}
+
   '@fontsource/chakra-petch@5.2.7':
     resolution: {integrity: sha512-GLbun5WZJNAEc8FtWxwcgo+4Kurqdwejvf671l+YfIjyQgPvTjyxXYP7Ffg2HAY89NGnp3oOvKQjRzfm/fBECw==}
+
+  '@fontsource/creepster@5.2.7':
+    resolution: {integrity: sha512-dKTVl/9boPwxGTI7A4MsBzvpk12S/1TvZid7CI0EFyWSthYmAviK+6RlJz/ZVHB/rSSRbdCphRhwSfIjdISc1g==}
+
+  '@fontsource/luckiest-guy@5.2.8':
+    resolution: {integrity: sha512-S1k8+PNHSdDkJy9f+0WIx8rfScj3BZTVgBQehMOtpYOwXZ4wZC1+D++NACbfdG9Ve2glVz1boLXjJMCeVPLifA==}
+
+  '@fontsource/titan-one@5.2.8':
+    resolution: {integrity: sha512-8HTVAlzC/LiQNiGdFZXWBWPOz/b4rp6KL7V+4FnyYMJWsJtqFWNFJkySrYoTxULy43vCngT2x1HiUZIu8y4tDQ==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -2174,7 +2198,15 @@ snapshots:
 
   '@fontsource/bangers@5.2.8': {}
 
+  '@fontsource/bungee@5.2.7': {}
+
   '@fontsource/chakra-petch@5.2.7': {}
+
+  '@fontsource/creepster@5.2.7': {}
+
+  '@fontsource/luckiest-guy@5.2.8': {}
+
+  '@fontsource/titan-one@5.2.8': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

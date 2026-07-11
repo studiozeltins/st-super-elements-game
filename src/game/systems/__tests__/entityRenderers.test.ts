@@ -37,6 +37,14 @@ function enemyRow(overrides: Partial<Enemy> = {}): Enemy {
     maxHealth: 320,
     carriedGems: 0,
     alive: true,
+    // Hop columns (grounded/idle by default; tests override to simulate a hop).
+    hopStartedAtMicros: 0n,
+    hopDurationMicros: 0n,
+    hopTargetX: 3,
+    hopTargetZ: 4,
+    patrolTargetX: 3,
+    patrolTargetZ: 4,
+    restUntilMicros: 0n,
     ...overrides,
   } as Enemy;
 }
@@ -84,6 +92,34 @@ describe('createEnemyRenderer', () => {
 
     // Display base gems come from the shared client formula (bosses pay more).
     expect(regularEnemyBaseGems(3, true)).toBeGreaterThan(regularEnemyBaseGems(1, false));
+    renderer.dispose();
+  });
+
+  it('bounces a slime along the server hop arc and squashes on landing', () => {
+    const nowSpy = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    const scene = new THREE.Scene();
+    const renderer = createEnemyRenderer(scene, createEffectSystem(scene));
+
+    // A live hop row: airtime 550ms, freshly started. The first update anchors
+    // the client's server-clock estimate at hopStartedAt.
+    renderer.syncRows([
+      enemyRow({ hopStartedAtMicros: 5_000_000n, hopDurationMicros: 550_000n }),
+    ]);
+    renderer.update(0.016, () => 0);
+    const group = scene.children.find((c): c is THREE.Group => c instanceof THREE.Group)!;
+    const rig = group.children.find((c): c is THREE.Group => c instanceof THREE.Group)!;
+    expect(rig.scale.y).toBeGreaterThan(1); // launch stretch
+
+    nowSpy.mockReturnValue(1275); // mid-hop (progress 0.5) → arc apex
+    renderer.update(0.016, () => 0);
+    expect(rig.position.y).toBeGreaterThan(0.5);
+
+    nowSpy.mockReturnValue(1600); // past the 550ms airtime → landed
+    renderer.update(0.016, () => 0);
+    expect(rig.position.y).toBe(0);
+    expect(rig.scale.y).toBeLessThan(1); // landing squash
+
+    nowSpy.mockRestore();
     renderer.dispose();
   });
 

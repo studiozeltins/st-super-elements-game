@@ -191,6 +191,13 @@ export interface EnemyModel {
   group: THREE.Group;
   body: THREE.Mesh;
   overlay: EnemyOverlay;
+  /**
+   * Slime-only inner group holding EVERY visual part (body, eyes, spikes) but
+   * NOT the overlay sprite — the hop bounce arcs/squashes this rig as one blob
+   * without dragging the health bar along. Origin sits at ground level so a
+   * squash presses the blob into the ground instead of scaling about its middle.
+   */
+  rig?: THREE.Group;
 }
 
 // Module-lifetime resources shared across all enemies and system instances.
@@ -211,7 +218,15 @@ function addEyes(group: THREE.Group, y: number, z: number) {
   group.add(leftEye, rightEye);
 }
 
-function buildSlimeBody(group: THREE.Group, archetype: EnemyArchetype, withSpikes: boolean) {
+function buildSlimeBody(
+  group: THREE.Group,
+  archetype: EnemyArchetype,
+  withSpikes: boolean
+): { body: THREE.Mesh; rig: THREE.Group } {
+  // Every visual part lives on the rig (origin at ground level) so the hop
+  // bounce moves body + eyes + spikes as one blob — see EnemyModel.rig.
+  const rig = new THREE.Group();
+  group.add(rig);
   const body = new THREE.Mesh(
     sharedBodyGeometry,
     new THREE.MeshLambertMaterial({ color: archetype.bodyColor, emissive: 0x000000 })
@@ -219,18 +234,18 @@ function buildSlimeBody(group: THREE.Group, archetype: EnemyArchetype, withSpike
   body.scale.y = 0.72;
   body.position.y = 0.55;
   body.castShadow = true;
-  group.add(body);
-  addEyes(group, 0.7, 0.6);
+  rig.add(body);
+  addEyes(rig, 0.7, 0.6);
 
-  if (!withSpikes) return body;
+  if (!withSpikes) return { body, rig };
   for (let spikeIndex = 0; spikeIndex < 6; spikeIndex++) {
     const angle = (spikeIndex / 6) * Math.PI * 2;
     const spike = new THREE.Mesh(sharedSpikeGeometry, sharedSpikeMaterial);
     spike.position.set(Math.cos(angle) * 0.5, 0.9, Math.sin(angle) * 0.5);
     spike.rotation.set(Math.sin(angle) * 0.6, 0, -Math.cos(angle) * 0.6);
-    group.add(spike);
+    rig.add(spike);
   }
-  return body;
+  return { body, rig };
 }
 
 function buildWispBody(group: THREE.Group, archetype: EnemyArchetype) {
@@ -274,16 +289,17 @@ function buildGolemBody(group: THREE.Group, archetype: EnemyArchetype) {
 export function createEnemyModel(archetype: EnemyArchetype, scale: number): EnemyModel {
   const group = new THREE.Group();
   let body: THREE.Mesh;
+  let rig: THREE.Group | undefined;
   if (archetype.id === 'stoneGolem') body = buildGolemBody(group, archetype);
   else if (archetype.id === 'windWisp') body = buildWispBody(group, archetype);
-  else body = buildSlimeBody(group, archetype, archetype.id === 'spikySlime');
+  else ({ body, rig } = buildSlimeBody(group, archetype, archetype.id === 'spikySlime'));
 
   const barHeight = archetype.id === 'stoneGolem' ? 2.7 : 2.0;
   const overlay = createEnemyOverlay(scale, barHeight);
   group.add(overlay.sprite);
 
   group.scale.setScalar(scale);
-  return { group, body, overlay };
+  return { group, body, overlay, rig };
 }
 
 export function disposeEnemyModel(model: EnemyModel) {

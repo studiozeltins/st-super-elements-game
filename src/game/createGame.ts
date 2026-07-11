@@ -45,6 +45,7 @@ import { transcendDamageMultiplier } from './combat/transcendScaling';
 import { attackHitsEntity } from './combat/hitTest';
 import { gemVisual } from './data/gemDrops';
 import { ATTACK_RENDER } from './data/attacks';
+import { isSlimeArchetype } from './data/slimeHop';
 import type {
   AttackStrike,
   Enemy,
@@ -991,9 +992,9 @@ export function createGame(
   }
 
   // Gait per camp-enemy archetype; windWisp is absent on purpose — it floats.
+  // Slimes are absent too: they move ONLY by hopping now, so their locomotion
+  // sound is the per-hop playSlimeLeap (syncSlimeLeaps), not a stride cadence.
   const FOOTSTEP_KIND_BY_ARCHETYPE: Partial<Record<string, FootstepKind>> = {
-    slime: 'slime',
-    spikySlime: 'slime',
     stoneGolem: 'golem',
   };
   /** Own steps stay audible but never dominate the mix. */
@@ -1057,6 +1058,13 @@ export function createGame(
   const SWING_SHAKE_MAGNITUDE = 0.15;
   const SWIRL_BURST_PARTICLES = 18;
   const SWIRL_SHAKE_MAGNITUDE = 0.3;
+  // Slime slam landing seeds: a wet splat, the LIGHTEST tier — small green
+  // burst, shake only when it lands practically on top of me, and none of the
+  // goliath package (no shockwave, no telegraph flash — slimes telegraph nothing).
+  const SLIME_SLAM_COLOR = 0x7ec843;
+  const SLIME_SLAM_BURST_PARTICLES = 12;
+  const SLIME_SLAM_SHAKE_MAGNITUDE = 0.12;
+  const SLIME_SLAM_SHAKE_RANGE = 8; // world units — "very close" only
   // shieldDash tier seeds (06-02) — lighter than the slam, heavier than the swing.
   const DASH_BURST_PARTICLES = 14;
   const DASH_SHAKE_MAGNITUDE = 0.2;
@@ -1227,6 +1235,58 @@ export function createGame(
       if (live.has(key)) continue;
       cancel();
       activeRisers.delete(key);
+    }
+  }
+
+  // One wet leap per hop START: the enemy row's hopStartedAtMicros changing
+  // (with a live duration) IS the launch. First sighting of each slime
+  // baselines silently so a page load never choruses every mid-hop slime.
+  const slimeHopStartsSeen = new Map<string, bigint>();
+  function syncSlimeLeaps(rows: readonly Enemy[]) {
+    const seen = new Set<string>();
+    for (const row of rows) {
+      if (!isSlimeArchetype(row.archetypeId) || !row.alive) continue;
+      const key = row.enemyId.toString();
+      seen.add(key);
+      const previous = slimeHopStartsSeen.get(key);
+      if (previous === row.hopStartedAtMicros) continue;
+      slimeHopStartsSeen.set(key, row.hopStartedAtMicros);
+      if (previous === undefined || row.hopDurationMicros === 0n) continue;
+      weaponAudio.playSlimeLeap(
+        hitAudioGain(row.positionX, row.positionZ),
+        hitAudioPan(row.positionX, row.positionZ)
+      );
+    }
+    for (const key of slimeHopStartsSeen.keys()) {
+      if (!seen.has(key)) slimeHopStartsSeen.delete(key);
+    }
+  }
+
+  // One airy whoosh per goliath leap TRAVEL: fired the first time a leapSlam
+  // row is seen in STRIKE (the row teleports to the landing there and the mesh
+  // lunge begins). Keyed by unit+cast so a re-cast is a fresh whoosh; keys are
+  // pruned when their row leaves (new cast or removal).
+  const firedLeapWhooshKeys = new Set<string>();
+  // Real travel length: the mesh lerp (rate 10) reaches the ~0.97 landed gate
+  // ≈0.35s after the strike snap; the arc's recovery tail stretches the felt
+  // airtime slightly past that.
+  const LEAP_TRAVEL_SECONDS = 0.5;
+  function syncLeapWhooshes(rows: readonly UnitAttack[]) {
+    const live = new Set<string>();
+    for (const row of rows) {
+      if (row.attackId !== 'leapSlam') continue;
+      const key = `${row.unitKind}:${row.unitId}:${row.startedAtMicros}`;
+      live.add(key);
+      if (row.state !== ATTACK_STATE_STRIKE || firedLeapWhooshKeys.has(key)) continue;
+      firedLeapWhooshKeys.add(key);
+      audioSystem.playLeapWhoosh(
+        LEAP_TRAVEL_SECONDS,
+        hitAudioGain(row.castX, row.castZ),
+        hitAudioPan(row.castX, row.castZ)
+      );
+    }
+    for (const key of firedLeapWhooshKeys) {
+      if (!live.has(key)) firedLeapWhooshKeys.delete(key);
     }
   }
 
@@ -1473,7 +1533,7 @@ export function createGame(
         // A despawned drop I had requested = MY confirmed pickup. Any other
         // despawn (someone else grabbed it, expiry) vanishes silently.
         if (requestedGemPickups.has(key)) {
-          pickupAudio.playGemPickup();
+          pickupAudio.playGemPickup(gem.amount);
           game.onPickup?.('gem', gem.amount);
         }
         scene.remove(gem.mesh);
@@ -1524,6 +1584,7 @@ export function createGame(
     },
     syncEnemies(rows) {
       enemyRenderer.syncRows(rows);
+      syncSlimeLeaps(rows);
     },
     syncGoliaths(rows) {
       goliathRenderer.syncRows(rows);
@@ -1538,6 +1599,7 @@ export function createGame(
       attackViewClock.syncAttackRows(rows);
       telegraphSystem.syncAttacks(rows, attackViewClock.isUnitAlive);
       syncWindupRisers(rows);
+      syncLeapWhooshes(rows);
     },
     handleAttackStrike(strike) {
       // Per-attack strike juice tiers (ANIM-04) — every component fires exactly
@@ -1573,6 +1635,17 @@ export function createGame(
       // round 2 — telegraphs stay Frost cyan; only the strike burst/shockwave
       // is element-colored). Unknown attackIds fall back to geo like the slam.
       const juiceColor = ATTACK_RENDER[strike.attackId]?.juiceColor ?? ELEMENTS.geo.color;
+      if (strike.attackId === 'slimeSlam' || strike.attackId === 'spikySlam') {
+        // Slime landing that hit someone: wet squash + a small green splash.
+        // MUST bail before the default tier — the goliath slam package (deep
+        // boom + shockwave + rim flash) on a slime hop reads absurd.
+        effectSystem.spawnBurst(landing, SLIME_SLAM_COLOR, SLIME_SLAM_BURST_PARTICLES);
+        if (strikeDistance < SLIME_SLAM_SHAKE_RANGE) {
+          shakeMagnitude = Math.max(shakeMagnitude, SLIME_SLAM_SHAKE_MAGNITUDE * juiceFalloff);
+        }
+        weaponAudio.playSlimeSquash(juiceFalloff, strikePan);
+        return;
+      }
       if (strike.attackId === 'swordSwing') {
         // Lightest tier: small burst, light shake, whoosh — and NO shockwave
         // (a circular shockwave misreads the swing's cone).
