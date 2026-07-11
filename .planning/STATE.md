@@ -4,17 +4,17 @@ milestone: v0.2.0-alpha
 milestone_name: Combat Depth
 current_phase: 05
 current_phase_name: swordSwing → swordSwirl combo
-status: executing
-stopped_at: "Phase 05 planned (5 plans, checker passed iteration 2). Gate override: decision-coverage parser could-not-parse (D5-NN vs D-NN, same as Phase 4) — proceeded on plan-checker Dimension 7 PASS (D5-01..D5-16 all traced)."
-last_updated: "2026-07-10T16:16:44.897Z"
+status: verifying
+stopped_at: Completed 05-05-PLAN.md — phase 05 gate + playtest APPROVED (2 fix rounds), all 5 plans done, ready for verification
+last_updated: "2026-07-11T07:16:17.082Z"
 last_activity: 2026-07-10
 last_activity_desc: Phase 05 execution started
 progress:
   total_phases: 7
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 20
-  completed_plans: 19
-  percent: 57
+  completed_plans: 20
+  percent: 71
 ---
 
 # Project State
@@ -31,10 +31,10 @@ real per-character stat, so power investment (crit) buys tempo, not just damage.
 
 ## Current Position
 
-Phase: 05 (swordSwing → swordSwirl combo) — EXECUTING
+Phase: 05 (swordSwing → swordSwirl combo) — COMPLETE (playtest approved)
 Plan: 5 of 5
-Status: Ready to execute
-Last activity: 2026-07-10 — Phase 05 execution started
+Status: Phase complete — ready for verification
+Last activity: 2026-07-11 — Phase 05 complete: 05-05 gate green + human playtest approved (2 fix rounds)
 
 ## Roadmap Summary
 
@@ -86,6 +86,7 @@ proven before the rest multiply (5, 6). Do not re-order.
 | Phase 05 P02 | 9min | 2 tasks | 3 files |
 | Phase 05 P03 | 8min | 2 tasks | 4 files |
 | Phase 05 P04 | 5min | 2 tasks | 3 files |
+| Phase 05 P05 | 13h (1h active) | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -157,6 +158,10 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 05-03]: Teleport target reads strikeSnapshot landing, not plan.row — after a chain swap the final row carries the swirl's geometry
 - [Phase 05-04]: Same-attack re-cast telegraph re-anchor made shape-aware via anchorGroup — stock branch would park a re-cast cone at the landing with stale yaw (Rule 2 deviation)
 - [Phase 05-04]: Sector yaw sign atan2(-(aimZ), aimX) applied as DERIVED (A1, MEDIUM confidence) — pixel-filter visual verification owned by plan 05-05; a flip is a one-line sign fix
+- [Phase 05]: 05-05: strike-phase clip window anchors on the graceTicks deadline (strikeAt + one 150ms tick, zero-storage D4-02), never recoveryEndsAtMicros — old denominator diluted in-strike progress to ~11% so clips never played; graceTicks=1 serverSync-locked
+- [Phase 05]: 05-05: stun feel is per-attack — client freeze + STUNNED! popup ride the causing attack's ATTACK_RENDER.stunSeconds (swing 0.6, slam 1.05, swirl 0 = knockback only, no popup), parity-locked to server stunTicks; 1050ms fixed default only for unknown causes
+- [Phase 05]: 05-05: setActiveCharacter is stun-gated server-side (silent return while now < stunnedUntilMicros, same window as updatePosition) + client UI gate — mid-stun switch to a fresh HP pool would sidestep the swing tag's escape race
+- [Phase 05]: 05-05: ATTACK_RENDER.juiceColor = ELEMENTS-palette render hints (slam geo amber, swing anemo teal, swirl electro violet) — pure client visual data, NOT parity material; telegraphs stay Frost cyan
 
 ### Pending Todos
 
@@ -200,12 +205,12 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ## Session Continuity
 
-Last session: 2026-07-10T16:16:03.496Z
-Stopped at: Phase 05 planned (5 plans, checker passed iteration 2). Gate override: decision-coverage parser could-not-parse (D5-NN vs D-NN, same as Phase 4) — proceeded on plan-checker Dimension 7 PASS (D5-01..D5-16 all traced).
-Resume file: .planning/phases/05-swordswing-swordswirl-combo/05-01-PLAN.md
+Last session: 2026-07-11T07:16:17.056Z
+Stopped at: Completed 05-05-PLAN.md — phase 05 gate + playtest APPROVED (2 fix rounds), all 5 plans done, ready for verification
+Resume file: None
 
 **Gate override (2026-07-09):** Phase 4 decision-coverage gate returned `could-not-parse` — CONTEXT.md uses `D4-NN` decision IDs, parser expects `D-NN`. Proceeded on plan-checker Dimension 7 PASS (all D4-01…D4-17 manually traced to plan tasks). verify-phase should re-confirm decision coverage semantically, not via the parser.
 
 ## Operator Next Steps
 
-- Execute Phase 4 with `/gsd-execute-phase 4`.
+- Verify Phase 5 with `/gsd-verify-work 5`, then plan Phase 6 (shieldDash lane) with `/gsd-discuss-phase 6`.

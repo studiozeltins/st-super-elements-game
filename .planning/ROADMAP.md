@@ -56,7 +56,7 @@ phase; the four attack shapes + interrupt follow in Phases 4–7.
 - [x] **Phase 2: Server-authoritative damage + crit on enemies** - Server computes base damage + rolls crit via `ctx.random`; client sends intent; old client roll deleted; crit event table feeds truthful crit numbers.
 - [x] **Phase 3: PVP crit** - Same server damage/crit path extended to `attackPlayer`; truthful, un-spoofable PVP crit numbers. (completed 2026-07-09)
 - [x] **Phase 4: Attack state machine + leapSlam end-to-end + delete goliath drain** - The risky vertical slice: unit-agnostic attack state machine (windup → strike → recovery) proven on ONE circle attack, contact drain deleted. (completed 2026-07-10; SC5 maincloud RTT obsolete after self-host pivot — two-client check carried to the prod-deploy gate)
-- [ ] **Phase 5: swordSwing → swordSwirl combo** - Cone shape + immediate chaining on the proven spine.
+- [x] **Phase 5: swordSwing → swordSwirl combo** - Cone shape + immediate chaining on the proven spine. (completed 2026-07-11; SC1/SC2/SC3 human-playtest approved on the migrated local DB, zero seed retunes)
 - [ ] **Phase 6: shieldDash lane** - The travelling-hitbox lane gap-closer — the hardest shape, done last.
 - [ ] **Phase 7: Crit poise interrupt** - A crit during a windup accrues poise → cancel + visible stagger; the un-spoofable differentiator.
 
@@ -277,7 +277,7 @@ proving attack chaining and a second/third hitbox shape on the validated spine.
 
 **Wave 3**
 
-- [ ] 05-05-PLAN.md — capstone: full suite + build + migrated-DB deploy checks + blocking human playtest (SC1/SC2/SC3, seed retunes) (wave 3)
+- [x] 05-05-PLAN.md — capstone: full suite + build + migrated-DB deploy checks + blocking human playtest (SC1/SC2/SC3, seed retunes) (wave 3)
 
 **Notes**: Mechanical repeat of the Phase 4 pattern — add two `ATTACKS` entries + `resolveCone`
 (reuse `isWithinForwardArc`), chain selection (swirl after swing), a client cone telegraph branch,
@@ -337,7 +337,7 @@ do NOT elevate an untrusted bool to a state trigger.
 | 2. Server-authoritative damage + crit on enemies | 0/TBD | Not started | - |
 | 3. PVP crit | 2/2 | Complete    | 2026-07-09 |
 | 4. Attack state machine + leapSlam + delete drain | 6/7 | In Progress|  |
-| 5. swordSwing → swordSwirl combo | 4/5 | In Progress|  |
+| 5. swordSwing → swordSwirl combo | 5/5 | Complete   | 2026-07-11 |
 | 6. shieldDash lane | 0/TBD | Not started | - |
 | 7. Crit poise interrupt | 0/TBD | Not started | - |
 
