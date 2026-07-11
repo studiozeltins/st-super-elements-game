@@ -1738,9 +1738,37 @@ button {
 }
 
 .pull-btn--ten {
+  position: relative;
+  overflow: hidden;
   color: var(--ink);
   background: var(--gold);
   border-color: var(--gold);
+  /* Hidden hold-gesture (max-pull) — long-tap must never pop selection/callout. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+/* HOLD ×10 → max-pull: a charge bar sweeps the button while the press is armed;
+   reaching the right edge = the max-pull fires. Releasing early = normal ×10. */
+.pull-btn--charging::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform-origin: left;
+  background: color-mix(in srgb, var(--accent) 55%, #ffffff 20%);
+  mix-blend-mode: screen;
+  animation: pull-charge 0.6s linear forwards;
+  pointer-events: none;
+}
+@keyframes pull-charge {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 
 .pull-btn:hover:not(:disabled) {
@@ -2119,6 +2147,99 @@ button {
   100% {
     opacity: 0;
     transform: translateY(-28px) scale(1);
+  }
+}
+
+/* ── Max-pull aggregated reveal (>10 results) ──────────────────────────────
+   Characters keep full cards (their C-badge pops through each gained level);
+   weapons collapse into compact ×N rows so 100 pulls fit one screen. */
+.pull-reveal--big {
+  justify-content: flex-start;
+  gap: 20px;
+  padding: 36px 30px;
+  overflow-y: auto;
+}
+.bigpull-total {
+  font: 700 13px var(--font-display);
+  letter-spacing: 0.24em;
+  color: var(--muted);
+}
+.bigpull-chars {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  max-width: 900px;
+}
+.bigpull-char {
+  width: 148px;
+  animation: reveal-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.reveal-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  min-height: 15px;
+}
+/* Re-mounts on every constellation step (key=C level) so the pop replays. */
+.bigpull-char__constellation {
+  color: var(--accent);
+  animation: constellation-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes constellation-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  45% {
+    transform: scale(1.55);
+    text-shadow: 0 0 16px currentColor;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.bigpull-weapons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, max-content));
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 880px;
+}
+.bigpull-weapon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  animation: reveal-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.bigpull-weapon__rarity {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+.bigpull-weapon__name {
+  flex: 1;
+  font: 600 12px var(--font-body);
+}
+.bigpull-weapon__count {
+  font: 700 13px var(--font-display);
+  color: var(--rarity-color);
+}
+
+@media (max-width: 720px) {
+  .pull-reveal--big {
+    padding: 24px 14px;
+  }
+  .bigpull-char {
+    width: 124px;
+  }
+  .bigpull-weapons {
+    grid-template-columns: 1fr 1fr;
   }
 }
 

@@ -2504,7 +2504,15 @@ export const pullBanner = spacetimedb.reducer(
     const banner = BANNERS[bannerId];
     if (!banner) throw new SenderError('Unknown banner');
 
-    const pullCount = count >= MAX_PULLS_PER_REQUEST ? MAX_PULLS_PER_REQUEST : 1;
+    // count semantics: 0 = "max" (long-press ×10 → spend the whole wallet in
+    // one atomic transaction), otherwise the classic ×1 / ×10 buttons.
+    const pullCount =
+      count === 0
+        ? Math.floor(currentPlayer.gems / GACHA_PULL_COST)
+        : count >= MAX_PULLS_PER_REQUEST
+          ? MAX_PULLS_PER_REQUEST
+          : 1;
+    if (pullCount < 1) throw new SenderError('Not enough gems');
     const totalCost = GACHA_PULL_COST * pullCount;
     if (currentPlayer.gems < totalCost) throw new SenderError('Not enough gems');
 

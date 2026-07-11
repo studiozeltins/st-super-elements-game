@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CHARACTERS } from '../game/data/characters';
 import { WEAPONS_BY_ID, RARITY_CSS } from '../game/data/gacha';
 import { SplashModel } from './SplashModel';
+import { PullSummaryBig } from './PullSummaryBig';
+import { ShardCounter } from './ShardCounter';
 import type { PullView } from './GachaScreen';
 
 function itemName(view: PullView): string {
@@ -174,32 +176,9 @@ export function PullAnimation({
     [sorted]
   );
   const shardsBefore = wallet.transcendShards - mintedShards;
-  const [displayShards, setDisplayShards] = useState(shardsBefore);
-  // Bumps on every +1 so the value's pop animation re-runs each tick.
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    if (phase !== 'summary' || mintedShards <= 0) return;
-    setDisplayShards(shardsBefore);
-    setTick(0);
-    // Kick off once the cards have landed, then count up one shard per step.
-    const startDelay = sorted.length * 50 + 700;
-    const stepMs = mintedShards > 6 ? 130 : 300;
-    let current = shardsBefore;
-    let interval = 0;
-    const kickoff = window.setTimeout(() => {
-      interval = window.setInterval(() => {
-        current += 1;
-        setDisplayShards(current);
-        setTick(t => t + 1);
-        if (current >= wallet.transcendShards) window.clearInterval(interval);
-      }, stepMs);
-    }, startDelay);
-    return () => {
-      window.clearTimeout(kickoff);
-      window.clearInterval(interval);
-    };
-  }, [phase, mintedShards, shardsBefore, wallet.transcendShards, sorted.length]);
+  // Max-pulls (>10) skip the per-item splash walk (100 taps = tedium) and land
+  // on the aggregated summary instead.
+  const isBigPull = sorted.length > 10;
 
   const starColors = useMemo(() => {
     const rarities = results.map(view => view.rarity).sort((a, b) => b - a);
@@ -210,6 +189,10 @@ export function PullAnimation({
   }, [results]);
 
   const toSplash = () => {
+    if (isBigPull) {
+      setPhase('summary');
+      return;
+    }
     setIndex(0);
     setPhase('splash');
   };
@@ -275,6 +258,16 @@ export function PullAnimation({
     );
   }
 
+  if (isBigPull) {
+    return (
+      <PullSummaryBig
+        results={sorted}
+        transcendShards={wallet.transcendShards}
+        onClose={onClose}
+      />
+    );
+  }
+
   return (
     <div className="pull-reveal" onClick={onClose}>
       <div
@@ -312,19 +305,13 @@ export function PullAnimation({
       </div>
 
       {/* Shard payoff: only shown when this pull actually minted shards. The
-          number ticks up one-by-one, popping on each +1. */}
+          number ticks up one-by-one, popping + chiming on each +1. */}
       {mintedShards > 0 && (
-        <div className={`pull-shards ${tick > 0 ? 'pull-shards--live' : ''}`}>
-          <span className="pull-shards__icon">◈</span>
-          <span key={tick} className="pull-shards__val">
-            {displayShards}
-          </span>
-          {tick > 0 && (
-            <span key={`float-${tick}`} className="pull-shards__float" aria-hidden="true">
-              +1
-            </span>
-          )}
-        </div>
+        <ShardCounter
+          before={shardsBefore}
+          after={wallet.transcendShards}
+          startDelayMs={sorted.length * 50 + 700}
+        />
       )}
 
       <span className="pull-reveal__hint">Pieskaries, lai aizvērtu</span>

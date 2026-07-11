@@ -12,6 +12,7 @@ import { ConstellationRing } from './ConstellationRing';
 import { CharacterIdentity } from './CharacterIdentity';
 import { useTeamDrag } from './useTeamDrag';
 import { useDragScroll } from './useDragScroll';
+import { useLongPress } from './useLongPress';
 import { MAIN_MENU } from './menu';
 
 const PARTY_SIZE = 4;
@@ -158,6 +159,10 @@ export function GachaScreen({
   };
   const shownGems = pullSnapshot?.gems ?? gems;
   const shownShards = pullSnapshot?.shards ?? transcendShards;
+
+  // Hidden power-user gesture: HOLD the ×10 button → one max-pull (count 0 =
+  // server spends the whole wallet in a single atomic transaction).
+  const maxPull = useLongPress(() => startPull(banner.id, 0));
 
   const weaponInventory = useMemo(() => {
     // One row per (owner, weapon) stack now — the count comes from the server.
@@ -326,9 +331,10 @@ export function GachaScreen({
                   <span className="pull-btn__cost">✦ {GACHA_PULL_COST}</span>
                 </button>
                 <button
-                  className="pull-btn pull-btn--ten"
+                  className={`pull-btn pull-btn--ten ${maxPull.holding ? 'pull-btn--charging' : ''}`}
                   disabled={!canPullTen}
                   onClick={() => startPull(banner.id, 10)}
+                  {...maxPull.handlers}
                 >
                   <span className="pull-btn__count">VĒLĒTIES ×10</span>
                   <span className="pull-btn__cost">✦ {GACHA_PULL_COST * 10}</span>
