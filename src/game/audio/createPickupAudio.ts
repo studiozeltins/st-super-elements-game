@@ -40,24 +40,22 @@ export function nextGemStep(previousStep: number, secondsSinceLast: number): num
   return Math.min(GEM_LADDER_MAX_STEPS, Math.max(0, Math.floor(previousStep)) + 1);
 }
 
-// Big-pickup escalation, tiered so a huge drop earns a LONG climb (playtest
-// 2026-07-12: per-100-cap-8 made 5000 gems sound like 800): one chime per
-// full 100 up to 1,000, then one more per additional full 1,000. Cap 16 at
-// 0.11s spacing ≈ a 1.8s slot-machine payout.
+// Big-pickup payout, modelled on the gacha ShardCounter the playtests keep
+// praising (2026-07-12 ×3): 130ms ticks, one chime per full 100 gems, cap 24
+// — a 6,000-gem drop counts up for ~3s instead of blinking past.
 export const GEM_CHIME_PER_AMOUNT = 100;
-export const GEM_CHIME_PER_BIG_AMOUNT = 1000;
-export const GEM_BURST_MAX_CHIMES = 16;
-export const GEM_BURST_SPACING_SECONDS = 0.11;
+export const GEM_BURST_MAX_CHIMES = 24;
+export const GEM_BURST_SPACING_SECONDS = 0.13;
 
-/** PURE: chimes a pickup of `amount` gems earns — min 1, per-100 to 1k, per-1000 beyond, capped. */
+/** PURE: chimes a pickup of `amount` gems earns — min 1, one per full 100, capped. */
 export function gemChimeCount(amount: number): number {
-  if (!Number.isFinite(amount) || amount < GEM_CHIME_PER_AMOUNT) return 1;
-  const hundreds = Math.min(
-    GEM_CHIME_PER_BIG_AMOUNT / GEM_CHIME_PER_AMOUNT,
-    Math.floor(amount / GEM_CHIME_PER_AMOUNT)
-  );
-  const extraThousands = Math.max(0, Math.floor(amount / GEM_CHIME_PER_BIG_AMOUNT) - 1);
-  return Math.min(GEM_BURST_MAX_CHIMES, hundreds + extraThousands);
+  if (!Number.isFinite(amount)) return 1;
+  return Math.min(GEM_BURST_MAX_CHIMES, Math.max(1, Math.floor(amount / GEM_CHIME_PER_AMOUNT)));
+}
+
+/** PURE: seconds a payout burst lasts — the HUD counter roll syncs to this. */
+export function gemBurstSeconds(amount: number): number {
+  return (gemChimeCount(amount) - 1) * GEM_BURST_SPACING_SECONDS;
 }
 
 // Gem chime voicing. The jitter is TINY on purpose (±2%) — the ladder's rungs
@@ -68,6 +66,14 @@ const GEM_MERGE_BOOST_CAP = 3;
 const GEM_SECONDS = 0.15;
 const GEM_PEAK = 0.25;
 const GEM_JITTER = 0.02;
+
+// Payout-burst voicing = the ShardCounter bell verbatim (ui/pullSounds
+// playChime): warm 660Hz triangle + octave shimmer, 0.4s decay, rising a
+// QUARTER-TONE per tick capped one octave up — the smooth climb is the loved
+// part, so bursts skip the pentatonic ladder entirely.
+const PAYOUT_BASE_HZ = 660;
+const PAYOUT_PEAK = 0.3;
+const PAYOUT_DECAY_SECONDS = 0.4;
 
 // Shard gain: quick ascending arpeggio + a soft high shimmer = "rare loot".
 const SHARD_GAIN_NOTES_HZ = [520, 660, 880] as const;
@@ -133,19 +139,26 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
     playNote(context, 'sine', frequency * 2, 0.07 * boost, startAt, GEM_SECONDS * 0.6);
   }
 
+  /** One payout tick: the warm ShardCounter bell at burst step n (quarter-tone rise, octave cap). */
+  function playPayoutChime(context: AudioContext, startAt: number, step: number) {
+    const frequency = PAYOUT_BASE_HZ * Math.min(2, 2 ** (step / 24)) * jitter(GEM_JITTER);
+    playNote(context, 'triangle', frequency, PAYOUT_PEAK, startAt, PAYOUT_DECAY_SECONDS);
+    playNote(context, 'sine', frequency * 2, PAYOUT_PEAK * 0.35, startAt, 0.25);
+  }
+
   function playGemPickup(amount = 0) {
     const context = ready();
     if (!context) return;
     const now = context.currentTime;
     const chimes = gemChimeCount(amount);
     if (chimes > 1) {
-      // Slot-machine payout: staggered chimes, EACH stepping the ladder up
-      // within the burst. Never merge-throttled — a big drop always sounds.
+      // ShardCounter-style payout: warm bells ticking up a quarter-tone per
+      // step. Never merge-throttled — a big drop always counts itself out.
       for (let chime = 0; chime < chimes; chime++) {
-        gemStep = nextGemStep(gemStep, chime === 0 ? now - lastGemAt : 0);
-        playGemChime(context, now + chime * GEM_BURST_SPACING_SECONDS, gemStep, 1);
+        playPayoutChime(context, now + chime * GEM_BURST_SPACING_SECONDS, chime);
       }
-      // The streak (and the merge gate) continues from the burst's LAST chime.
+      // The streak ladder + merge gate continue from the burst's LAST chime.
+      gemStep = GEM_LADDER_MAX_STEPS;
       lastGemAt = now + (chimes - 1) * GEM_BURST_SPACING_SECONDS;
       gemMerged = 0;
       gemMergeNextAt = lastGemAt + GEM_MERGE_SECONDS;

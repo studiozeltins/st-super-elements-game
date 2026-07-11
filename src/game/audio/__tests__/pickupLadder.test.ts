@@ -4,10 +4,11 @@ import { describe, expect, it } from 'vitest';
 // gesture-gated WebAudio and stay untested here by design.
 import {
   GEM_BURST_MAX_CHIMES,
+  GEM_BURST_SPACING_SECONDS,
   GEM_CHIME_PER_AMOUNT,
-  GEM_CHIME_PER_BIG_AMOUNT,
   GEM_LADDER_MAX_STEPS,
   GEM_STREAK_WINDOW_SECONDS,
+  gemBurstSeconds,
   gemChimeCount,
   gemLadderRatio,
   nextGemStep,
@@ -69,22 +70,23 @@ describe('gemChimeCount (big-pickup chime burst)', () => {
     expect(gemChimeCount(GEM_CHIME_PER_AMOUNT - 1)).toBe(1);
   });
 
-  it('adds one chime per full hundred gems up to a thousand', () => {
+  it('adds one chime per full hundred gems', () => {
     expect(gemChimeCount(GEM_CHIME_PER_AMOUNT)).toBe(1);
     expect(gemChimeCount(GEM_CHIME_PER_AMOUNT * 2)).toBe(2);
     expect(gemChimeCount(250)).toBe(2);
-    expect(gemChimeCount(500)).toBe(5);
-    expect(gemChimeCount(GEM_CHIME_PER_BIG_AMOUNT)).toBe(10);
-  });
-
-  it('adds one chime per additional full thousand beyond the first', () => {
-    expect(gemChimeCount(GEM_CHIME_PER_BIG_AMOUNT * 2)).toBe(11);
-    expect(gemChimeCount(GEM_CHIME_PER_BIG_AMOUNT * 5)).toBe(14);
+    expect(gemChimeCount(1000)).toBe(10);
   });
 
   it('caps at GEM_BURST_MAX_CHIMES for jackpot amounts', () => {
-    expect(gemChimeCount(GEM_CHIME_PER_BIG_AMOUNT * 7)).toBe(GEM_BURST_MAX_CHIMES);
+    expect(gemChimeCount(GEM_CHIME_PER_AMOUNT * GEM_BURST_MAX_CHIMES)).toBe(GEM_BURST_MAX_CHIMES);
     expect(gemChimeCount(1_000_000)).toBe(GEM_BURST_MAX_CHIMES);
+  });
+
+  it('gemBurstSeconds spans the full burst so the HUD roll can sync to it', () => {
+    expect(gemBurstSeconds(50)).toBe(0);
+    expect(gemBurstSeconds(6000)).toBeCloseTo(
+      (GEM_BURST_MAX_CHIMES - 1) * GEM_BURST_SPACING_SECONDS
+    );
   });
 
   it('clamps junk input (negative / non-finite) to a single chime', () => {
