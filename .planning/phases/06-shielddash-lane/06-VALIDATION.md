@@ -1,0 +1,76 @@
+---
+phase: 06
+slug: shielddash-lane
+status: draft
+nyquist_compliant: false
+wave_0_complete: false
+created: 2026-07-11
+---
+
+# Phase 06 — Validation Strategy
+
+> Per-phase validation contract for feedback sampling during execution.
+
+---
+
+## Test Infrastructure
+
+| Property | Value |
+|----------|-------|
+| **Framework** | vitest 3.2.4 |
+| **Config file** | vite defaults (no dedicated vitest config — existing suite runs today) |
+| **Quick run command** | `pnpm vitest run src/game/data/__tests__/<file>.test.ts` |
+| **Full suite command** | `pnpm test` (= `vitest run`) |
+| **Estimated runtime** | ~10 seconds |
+
+---
+
+## Sampling Rate
+
+- **After every task commit:** Run the touched file's vitest target (`pnpm vitest run src/game/data/__tests__/attackHitbox.test.ts` etc.)
+- **After every plan wave:** Run `pnpm test` + `pnpm build`
+- **Before `/gsd-verify-work`:** Full suite green + build green + grep-gate + migrated-DB playtest
+- **Max feedback latency:** ~30 seconds
+
+---
+
+## Per-Task Verification Map
+
+| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
+|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
+| TBD (planner fills) | — | — | ATK-04 | — | resolveLane inside/edge/outside; zero-length degrades to circle | unit | `pnpm vitest run src/game/data/__tests__/attackHitbox.test.ts` | ✅ (add describes) | ⬜ pending |
+| TBD | — | — | ATK-04 | — | closestPointOnSegment interior/endpoint/degenerate; computeLaneEnd overshoot + zero-length fallback | unit | same file | ✅ (add) | ⬜ pending |
+| TBD | — | — | ATK-04 | — | charge STRIKE relocates (flag + effectiveX/Z); `move:'none'` stays planted; coalesced [STRIKE,RECOVERY,IDLE] relocates+resolves+cooldowns once | unit | `pnpm vitest run src/game/data/__tests__/unitAttackFsm.test.ts` | ✅ (add) | ⬜ pending |
+| TBD | — | — | ATK-04 | — | shieldDash registry numbers; dash selectable at 6.5u / slam wins overlap / shared gate blocks both (Pitfall-1 guards) | unit | `pnpm vitest run src/game/data/__tests__/attacks.test.ts` | ✅ (add) | ⬜ pending |
+| TBD | — | — | ATK-04 / SC3 | — | ATTACKS↔ATTACK_RENDER parity incl. new entry, damage triple, lane data ≤ 8, `move:'charge'` | unit | `pnpm vitest run src/game/data/__tests__/serverSync.test.ts` | ✅ (extend) | ⬜ pending |
+| TBD | — | — | Determinism | T-06 grep | no `Math.random`/`Date.now` in `spacetimedb/src` | automated | `grep -rn "Math.random\|Date.now" spacetimedb/src/` → empty | ✅ | ⬜ pending |
+
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+---
+
+## Wave 0 Requirements
+
+Existing infrastructure covers all phase requirements — every new test lands as added cases in existing files. No Wave 0 needed.
+
+---
+
+## Manual-Only Verifications
+
+| Behavior | Requirement | Why Manual | Test Instructions |
+|----------|-------------|------------|-------------------|
+| Lane telegraph renders + fills through pixel filter; goliath visibly charges (no snap, all sizes); step-out dodges; in-lane bystander hit | ATK-04 SC1/SC2 | Pixel-filter legibility + two-client feel cannot be asserted headlessly (04/05 precedent) | Migrated-DB human playtest: engage at 5.5–8u, verify telegraph, sidestep dodge, bystander hit |
+| `unit_attack` rows appear with `shieldDash` on the POPULATED local DB after a real 5.5–8u engage | FSM-06 | Migrated-DB state can't be seeded in unit tests | Deploy capstone: `spacetime sql 2d-impact-game-fr9ti "SELECT attack_id, state FROM unit_attack"` |
+
+---
+
+## Validation Sign-Off
+
+- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
+- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
+- [ ] Wave 0 covers all MISSING references (N/A — none)
+- [ ] No watch-mode flags
+- [ ] Feedback latency < 30s
+- [ ] `nyquist_compliant: true` set in frontmatter
+
+**Approval:** pending
