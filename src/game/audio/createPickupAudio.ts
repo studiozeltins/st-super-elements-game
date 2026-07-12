@@ -78,6 +78,10 @@ const PAYOUT_BASE_HZ = 880;
 const PAYOUT_PEAK = 0.14;
 const PAYOUT_DECAY_SECONDS = 0.3;
 const PAYOUT_CLIMB_CAP = 2 ** 1.5;
+// Jackpot cherry: a sweep past this total earns ONE extra bell after the
+// chain finishes — a beat of silence, then the next pitch step up.
+const JACKPOT_PING_THRESHOLD = 10_000;
+const JACKPOT_PING_DELAY_SECONDS = 0.5;
 // Multi-drop pickups (a golem's pile = many 500-max drop rows collected in
 // one sweep) CHAIN into one continuous count-up — overlapped per-drop bursts
 // summed to a loud pitched blur that read far shorter than the total
@@ -121,6 +125,7 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
   let payoutEndStep = 0;
   let chainTotal = 0;
   let chainChimes = 0;
+  let jackpotTimer = 0;
 
   function ready(): AudioContext | null {
     const context = getContext();
@@ -186,6 +191,20 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
       lastGemAt = payoutUntil;
       gemMerged = 0;
       gemMergeNextAt = payoutUntil + GEM_MERGE_SECONDS;
+      // Jackpot cherry: one delayed bell at the NEXT pitch step after the
+      // chain's last chime. Re-armed on every extension so it always lands
+      // after the true end; a JS timer (not pre-scheduled WebAudio) because
+      // the chain's final length isn't known until pickups stop.
+      if (chainTotal >= JACKPOT_PING_THRESHOLD) {
+        window.clearTimeout(jackpotTimer);
+        const fireInMs =
+          (payoutUntil - context.currentTime + JACKPOT_PING_DELAY_SECONDS) * 1000;
+        const pingStep = payoutEndStep + 1;
+        jackpotTimer = window.setTimeout(() => {
+          const pingContext = ready();
+          if (pingContext) playGemBell(pingContext, pingContext.currentTime, pingStep, 1);
+        }, fireInMs);
+      }
       return;
     }
     // No new tier crossed. During an active count-up stay silent (the chain
@@ -296,6 +315,9 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
       gemMerged = 0;
       payoutUntil = 0;
       payoutEndStep = 0;
+      chainTotal = 0;
+      chainChimes = 0;
+      window.clearTimeout(jackpotTimer);
     },
   };
 }

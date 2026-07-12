@@ -1387,14 +1387,18 @@ export function createGame(
       }
     },
     syncMyServerRow(row) {
-      // A big health jump only happens on death respawn (heals are +60/s).
-      const wasRespawned = row.currentHealth > myServerHealth + RESPAWN_HEALTH_JUMP;
+      // Health up-jump alone is NOT a death signal: active healers restore 20%
+      // of max HP in one event (Marina/Nereida — 280 on a 1400 tank), which
+      // cleared RESPAWN_HEALTH_JUMP and fired a false DEAD! screen mid-fight
+      // (playtest 2026-07-12). A real respawn also TELEPORTS to spawn, so the
+      // death read requires the up-jump AND the position snap together.
+      const healthUpJump = row.currentHealth > myServerHealth + RESPAWN_HEALTH_JUMP;
       // Contact damage from worldTick only reaches us via this synced HP drop, so
-      // float a "taken" number for it. Skip respawns (up-jump) and character
+      // float a "taken" number for it. Skip up-jumps (respawn/heal) and character
       // switches (different HP pool = false drop), and net out PvP already shown.
       const sameCharacter = row.activeCharacterId === lastSyncedCharacterId;
       const drop = myServerHealth - row.currentHealth;
-      if (!wasRespawned && sameCharacter && drop > 0) {
+      if (!healthUpJump && sameCharacter && drop > 0) {
         const enemyDamage = drop - pvpDamageSinceSync;
         if (enemyDamage >= TAKEN_DAMAGE_FLOOR) {
           game.spawnSelfNumber(
@@ -1447,17 +1451,19 @@ export function createGame(
         playerPosition.distanceTo(serverPosition) > SERVER_TELEPORT_THRESHOLD;
       const voidRespawnConfirmed =
         hasReportedVoidDeath && serverPosition.y >= 0 && playerPosition.y < 0;
-      // Combat death: the respawn up-jump IS the death signal (death + respawn
-      // ride one transaction — see the isDeadLocally note). A void fall is
-      // already dead locally, so its respawn row only clears the state. The
-      // sameCharacter gate keeps a switch to a bigger HP pool from reading as
-      // a death.
+      // Combat death = up-jump + spawn teleport in one row (death + respawn
+      // ride one transaction — see the isDeadLocally note). Heals up-jump
+      // without moving you; teleports without an up-jump are lag snaps. A void
+      // fall is already dead locally, so its respawn row only clears the
+      // state. The sameCharacter gate keeps a switch to a bigger HP pool from
+      // reading as a death.
+      const wasRespawned = healthUpJump && isFarFromServer;
       if (isDeadLocally) {
         if (wasRespawned || voidRespawnConfirmed) clearDeathState();
       } else if (wasRespawned && sameCharacter) {
         enterDeathState(DEATH_STATE_SECONDS);
       }
-      if (wasRespawned || isFarFromServer || voidRespawnConfirmed) {
+      if (isFarFromServer || voidRespawnConfirmed) {
         playerPosition.copy(serverPosition);
         playerVelocityY = 0;
         fallPeakY = serverPosition.y;
