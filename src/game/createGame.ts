@@ -304,6 +304,8 @@ export function createGame(
       influence: groundInfluence,
     },
   });
+  // The overlay pass only draws sprites — skip walking the whole static world.
+  pixelRenderer.setOverlayCullTarget(world.group);
   // Light pool must exist before the effect system (projectiles borrow lights).
   const fxEnabled = !perfFlags.has('nofx');
   const lightPool = fxEnabled ? createLightPool(scene) : undefined;

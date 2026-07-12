@@ -56,9 +56,15 @@ export function isInsideSafeZone(positionX: number, positionZ: number): boolean 
 
 function createLighting(group: THREE.Group) {
   const skyLight = new THREE.HemisphereLight(0xbfe3ff, 0x4a7a3a, 0.9);
+  // EVERY light must be visible to EVERY camera layer (world pass + overlay
+  // pass). If a pass culls lights, the renderer's lights-state hash flips each
+  // frame and three re-initializes every lit material per pass — a massive
+  // getParameters/getProgramCacheKey CPU storm.
+  skyLight.layers.enableAll();
   group.add(skyLight);
 
   const sunLight = new THREE.DirectionalLight(0xfff2d8, 1.4);
+  sunLight.layers.enableAll();
   sunLight.position.set(30, 50, 20);
   sunLight.castShadow = true;
   // 1024 halves shadow raster cost vs 2048; at the pixelated internal

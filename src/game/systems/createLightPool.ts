@@ -27,6 +27,9 @@ export function createLightPool(scene: THREE.Scene, size = POOL_SIZE): LightPool
   const entries = Array.from({ length: size }, () => {
     const light = new THREE.PointLight(0xffffff, 0, LIGHT_DISTANCE, 2);
     light.castShadow = false;
+    // All camera layers: a pass that culls lights flips the lights-state hash
+    // and re-inits every lit material per frame (see createLighting).
+    light.layers.enableAll();
     scene.add(light);
     return { pooled: { light } as PooledLight, busy: false };
   });

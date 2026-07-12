@@ -7,6 +7,11 @@ export interface PixelRenderer {
   resize(): void;
   render(scene: THREE.Scene): void;
   setPixelated(enabled: boolean): void;
+  /**
+   * A big static subtree (the world) to hide during the overlay pass, so
+   * pass 3 does not walk thousands of prop nodes to find a few sprites.
+   */
+  setOverlayCullTarget(target: THREE.Object3D | null): void;
   dispose(): void;
 }
 
@@ -40,6 +45,7 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
 
   let pixelated = true;
   let frameParity = false;
+  let overlayCullTarget: THREE.Object3D | null = null;
 
   // Low-res world buffer. Nearest filtering is what upscales into visible pixels.
   const worldTarget = new THREE.WebGLRenderTarget(1, 1, {
@@ -93,6 +99,12 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       frameParity = !frameParity;
       if (frameParity) renderer.shadowMap.needsUpdate = true;
 
+      // Scene matrices are computed exactly ONCE per frame, here. The auto
+      // update would otherwise re-compose every dynamic node's matrices again
+      // on each render pass below (world + overlay).
+      scene.matrixWorldAutoUpdate = false;
+      scene.updateMatrixWorld();
+
       camera.layers.set(0);
       if (pixelated) {
         // Pass 1: world (layer 0) → low-res target.
@@ -117,10 +129,15 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       renderer.autoClear = false;
       camera.layers.set(OVERLAY_LAYER);
       renderer.clearDepth();
+      if (overlayCullTarget) overlayCullTarget.visible = false;
       renderer.render(scene, camera);
+      if (overlayCullTarget) overlayCullTarget.visible = true;
       renderer.autoClear = true;
       scene.background = savedBackground;
       camera.layers.set(0);
+    },
+    setOverlayCullTarget(target) {
+      overlayCullTarget = target;
     },
     setPixelated(enabled) {
       if (pixelated === enabled) return;

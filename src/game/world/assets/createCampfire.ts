@@ -71,6 +71,9 @@ export function createCampfire(random: SeededRandom): WorldAsset {
 
   const fireLight = new THREE.PointLight(GLOW_COLOR, 2.5, 9, 2);
   fireLight.name = CAMPFIRE_LIGHT_NAME;
+  // Visible to all camera layers — a pass that culls lights flips the
+  // renderer's lights-state hash and re-inits every lit material per frame.
+  fireLight.layers.enableAll();
   fireLight.position.y = 1;
   group.add(fireLight);
 
