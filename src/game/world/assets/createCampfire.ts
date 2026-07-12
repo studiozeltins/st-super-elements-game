@@ -8,6 +8,29 @@ const FLAME_OUTER_COLOR = 0xe8722f;
 const FLAME_INNER_COLOR = 0xffe066;
 const GLOW_COLOR = 0xffb84a;
 
+/** Name of the flame PointLight — the world flickers these each frame. */
+export const CAMPFIRE_LIGHT_NAME = 'campfireLight';
+
+/** Three stacked shrinking boxes — a chunky voxel flame. */
+function createBoxFlame(baseWidth: number, height: number, color: number): THREE.Group {
+  const flame = new THREE.Group();
+  const material = new THREE.MeshBasicMaterial({ color });
+  const tiers = 3;
+  let tierY = 0;
+  for (let index = 0; index < tiers; index += 1) {
+    const shrink = 1 - index / tiers;
+    const tierHeight = height / tiers;
+    const tier = new THREE.Mesh(
+      new THREE.BoxGeometry(baseWidth * shrink, tierHeight, baseWidth * shrink),
+      material
+    );
+    tier.position.y = tierY + tierHeight / 2;
+    tierY += tierHeight;
+    flame.add(tier);
+  }
+  return flame;
+}
+
 export function createCampfire(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
 
@@ -17,7 +40,7 @@ export function createCampfire(random: SeededRandom): WorldAsset {
     const stoneAngle = (index / stoneCount) * Math.PI * 2 + random() * 0.4;
     const stoneRadius = randomBetween(random, 0.12, 0.2);
     const stone = new THREE.Mesh(
-      new THREE.DodecahedronGeometry(stoneRadius, 0),
+      new THREE.BoxGeometry(stoneRadius * 1.6, stoneRadius * 1.2, stoneRadius * 1.6),
       lambert(STONE_COLOR)
     );
     stone.position.set(
@@ -39,19 +62,15 @@ export function createCampfire(random: SeededRandom): WorldAsset {
     group.add(log);
   }
 
-  const outerFlame = new THREE.Mesh(
-    new THREE.ConeGeometry(0.32, 0.85, 6),
-    new THREE.MeshBasicMaterial({ color: FLAME_OUTER_COLOR })
-  );
-  outerFlame.position.y = 0.62;
-  const innerFlame = new THREE.Mesh(
-    new THREE.ConeGeometry(0.17, 0.5, 6),
-    new THREE.MeshBasicMaterial({ color: FLAME_INNER_COLOR })
-  );
-  innerFlame.position.y = 0.5;
+  const outerFlame = createBoxFlame(0.55, 0.85, FLAME_OUTER_COLOR);
+  outerFlame.position.y = 0.2;
+  const innerFlame = createBoxFlame(0.3, 0.5, FLAME_INNER_COLOR);
+  innerFlame.position.y = 0.25;
+  innerFlame.rotation.y = 0.6;
   group.add(outerFlame, innerFlame);
 
   const fireLight = new THREE.PointLight(GLOW_COLOR, 2.5, 9, 2);
+  fireLight.name = CAMPFIRE_LIGHT_NAME;
   fireLight.position.y = 1;
   group.add(fireLight);
 

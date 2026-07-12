@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import type { SeededRandom, WorldAsset } from './types';
 import { lambert, pickRandom, randomBetween, randomIntBetween } from './assetHelpers';
+import { buildVoxelCluster, coneVoxelCells, voxelSizeFor } from './voxelHelpers';
 
 const CANVAS_COLOR = 0xe8dcc8;
+const CANVAS_SHADE = 0xd8ccb8;
 const POLE_COLOR = 0x6b4a2f;
 const DOORWAY_COLOR = 0x2a2420;
 const TRIM_COLORS = [0xd84a3a, 0x4a7ab0, 0xe8722f] as const;
@@ -12,36 +14,34 @@ export function createTeepee(random: SeededRandom): WorldAsset {
   const teepeeHeight = randomBetween(random, 3, 3.8);
   const baseRadius = teepeeHeight * 0.55;
 
-  const canvas = new THREE.Mesh(
-    new THREE.ConeGeometry(baseRadius, teepeeHeight, 6),
-    lambert(CANVAS_COLOR)
+  const voxelSize = voxelSizeFor(teepeeHeight);
+  const canvas = buildVoxelCluster(
+    coneVoxelCells(baseRadius, teepeeHeight, voxelSize),
+    voxelSize,
+    [CANVAS_COLOR, CANVAS_SHADE],
+    random
   );
-  canvas.position.y = teepeeHeight / 2;
   canvas.castShadow = true;
   group.add(canvas);
 
-  const trimHeight = teepeeHeight * 0.14;
-  const trimBottomY = 0.25;
-  const coneRadiusAt = (height: number): number => baseRadius * (1 - height / teepeeHeight);
-  const trim = new THREE.Mesh(
-    new THREE.CylinderGeometry(
-      coneRadiusAt(trimBottomY + trimHeight) + 0.05,
-      coneRadiusAt(trimBottomY) + 0.05,
-      trimHeight,
-      6,
-      1,
-      true
-    ),
-    lambert(pickRandom(random, TRIM_COLORS))
-  );
-  trim.position.y = trimBottomY + trimHeight / 2;
-  group.add(trim);
+  // Trim band: a ring of small boxes hugging the cone near the base.
+  const trimMaterial = lambert(pickRandom(random, TRIM_COLORS));
+  const trimY = 0.45;
+  const trimRadius = baseRadius * (1 - trimY / teepeeHeight) + voxelSize * 0.35;
+  const trimSegments = 8;
+  for (let index = 0; index < trimSegments; index += 1) {
+    const angle = (index / trimSegments) * Math.PI * 2;
+    const segment = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.18), trimMaterial);
+    segment.position.set(Math.cos(angle) * trimRadius, trimY, Math.sin(angle) * trimRadius);
+    segment.rotation.y = -angle + Math.PI / 2;
+    group.add(segment);
+  }
 
   const poleCount = randomIntBetween(random, 2, 3);
   const poleMaterial = lambert(POLE_COLOR);
   for (let index = 0; index < poleCount; index += 1) {
     const poleAngle = (index / poleCount) * Math.PI * 2 + random() * 0.8;
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.4, 5), poleMaterial);
+    const pole = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.4, 0.08), poleMaterial);
     pole.position.set(
       Math.cos(poleAngle) * 0.18,
       teepeeHeight + 0.25,

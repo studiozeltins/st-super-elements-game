@@ -10,13 +10,20 @@ export function createSpikes(random: SeededRandom): WorldAsset {
 
   for (let index = 0; index < spikeCount; index += 1) {
     const spikeHeight = randomBetween(random, 0.6, 1.1);
-    const spike = new THREE.Mesh(
-      new THREE.ConeGeometry(0.1, spikeHeight, 4),
-      lambert(pickRandom(random, SPIKE_COLORS))
+    const material = lambert(pickRandom(random, SPIKE_COLORS));
+    // Two-box mini pyramid: fat base, thin tip.
+    const spike = new THREE.Group();
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16, spikeHeight * 0.6, 0.16),
+      material
     );
+    base.position.y = spikeHeight * 0.3;
+    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.08, spikeHeight * 0.4, 0.08), material);
+    tip.position.y = spikeHeight * 0.8;
+    spike.add(base, tip);
     spike.position.set(
       randomBetween(random, -0.6, 0.6),
-      spikeHeight * 0.42,
+      -spikeHeight * 0.08,
       randomBetween(random, -0.6, 0.6)
     );
     spike.rotation.set(
