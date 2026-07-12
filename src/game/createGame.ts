@@ -12,6 +12,8 @@ import {
   WORLD_BOUND,
 } from './data/constants';
 import { createPixelRenderer } from './engine/createPixelRenderer';
+import { detectQualityProfile } from './engine/deviceProfile';
+import { createGroundInfluence } from './systems/createGroundInfluence';
 import { createMondstadtWorld, isInsideSafeZone } from './world/createMondstadtWorld';
 import {
   resolveBodyCollisions,
@@ -45,7 +47,7 @@ import { transcendDamageMultiplier } from './combat/transcendScaling';
 import { attackHitsEntity } from './combat/hitTest';
 import { gemVisual } from './data/gemDrops';
 import { ATTACK_RENDER } from './data/attacks';
-import { isSlimeArchetype } from './data/slimeHop';
+import { SLIME_SLAM_RADIUS, isSlimeArchetype } from './data/slimeHop';
 import type {
   AttackStrike,
   Enemy,
@@ -285,8 +287,15 @@ export function createGame(
 ): Game {
   const scene = new THREE.Scene();
   const pixelRenderer = createPixelRenderer(canvas);
-  const world = createMondstadtWorld(scene);
-  const effectSystem = createEffectSystem(scene);
+  // Ground influence map: everything that moves stamps into it, grass bends out.
+  const quality = detectQualityProfile();
+  const groundInfluence = createGroundInfluence(quality.influenceResolution);
+  const world = createMondstadtWorld(scene, {
+    grass: { bladeCount: quality.grassBladeCount, influence: groundInfluence },
+  });
+  const effectSystem = createEffectSystem(scene, (x, z, radius, strength, dirX, dirZ) =>
+    groundInfluence.stamp(x, z, radius, strength, dirX, dirZ)
+  );
   const damageNumbers = createDamageNumbers(scene);
   // Enemies and goliaths are now server-authoritative: these renderers only draw
   // the `enemy`/`goliath` table rows and interpolate them. Damage/HP/economy all
@@ -296,7 +305,10 @@ export function createGame(
   // position (App.tsx → spawnWorldNumber), so own AND other players' hits land ON
   // the enemy. The renderers still flash the health bar on any HP drop
   // (lastDamagedAt, set independently of this callback).
-  const enemyRenderer = createEnemyRenderer(scene, effectSystem);
+  // Slime hops thump the grass flat where they land (render-side, all clients).
+  const enemyRenderer = createEnemyRenderer(scene, effectSystem, (x, z) =>
+    groundInfluence.stamp(x, z, SLIME_SLAM_RADIUS * 0.8, 1)
+  );
   const goliathRenderer = createGoliathRenderer(scene);
   // Ground telegraphs for server unit_attack windups (D4-14): discs sit on the
   // terrain at the LOCKED landing so the dodge read matches the server hitbox.
@@ -788,6 +800,9 @@ export function createGame(
       const stepZ = worldMoveZ * activeCharacter.moveSpeed * deltaSeconds;
       if (!tryMove(stepX, stepZ) && !tryMove(stepX, 0)) tryMove(0, stepZ);
       playerRotationY = Math.atan2(worldMoveX, worldMoveZ);
+      if (isGrounded()) {
+        groundInfluence.stamp(playerPosition.x, playerPosition.z, 0.6, 0.85, worldMoveX, worldMoveZ);
+      }
     }
 
     // Stunned: adopt the server's knockback — lerp x/z toward the authoritative
@@ -807,6 +822,10 @@ export function createGame(
     fallPeakY = Math.max(fallPeakY, playerPosition.y);
     const groundBelow = reachableGroundHeight(playerPosition.x, playerPosition.z);
     if (playerPosition.y <= groundBelow) {
+      // A real landing (not resting contact) thumps the grass flat around it.
+      if (playerVelocityY < -4) {
+        groundInfluence.stamp(playerPosition.x, playerPosition.z, 1.2, 1);
+      }
       playerPosition.y = groundBelow;
       playerVelocityY = 0;
       applyFallDamage(groundBelow);
@@ -993,11 +1012,28 @@ export function createGame(
   /** Own steps stay audible but never dominate the mix. */
   const OWN_STEP_GAIN = 0.5;
 
+  // Tracks each walker's previous display position so grass trails push along
+  // the real motion direction. Only actually-moving walkers stamp.
+  const walkerTrails = new Map<string, { x: number; z: number }>();
+  function stampWalkerTrail(key: string, x: number, z: number, radius: number, strength: number) {
+    const last = walkerTrails.get(key);
+    if (last) {
+      const deltaX = x - last.x;
+      const deltaZ = z - last.z;
+      if (Math.hypot(deltaX, deltaZ) > 0.02) {
+        groundInfluence.stamp(x, z, radius, strength, deltaX, deltaZ);
+      }
+    }
+    if (walkerTrails.size > 512) walkerTrails.clear(); // dead-key backstop
+    walkerTrails.set(key, { x, z });
+  }
+
   // Feeds every visible walker's DISPLAY position (the lerped mesh — what the
   // eye sees) to the movement audio each frame; stride cadence, distance culling,
   // and spam limits all live inside createMovementAudio.
   function updateFootsteps() {
     enemyRenderer.forEachAliveUnit((key, position, row) => {
+      stampWalkerTrail(`enemy:${key}`, position.x, position.z, 0.5, 0.7);
       const kind = FOOTSTEP_KIND_BY_ARCHETYPE[row.archetypeId];
       if (!kind) return;
       movementAudio.updateUnit(
@@ -1010,6 +1046,8 @@ export function createGame(
       );
     });
     goliathRenderer.forEachAliveUnit((key, position) => {
+      // Goliaths tear a wide trail through the grass that lingers behind them.
+      stampWalkerTrail(`goliath:${key}`, position.x, position.z, 1.3, 1);
       movementAudio.updateUnit(
         `goliath:${key}`,
         'goliath',
@@ -1021,6 +1059,7 @@ export function createGame(
     });
     for (const [identityHex, view] of remotePlayers) {
       const position = view.model.group.position;
+      stampWalkerTrail(`player:${identityHex}`, position.x, position.z, 0.6, 0.7);
       movementAudio.updateUnit(
         identityHex,
         'player',
@@ -1189,6 +1228,9 @@ export function createGame(
       pushHudState();
     }
 
+    // All stampers above have queued this frame's marks; bake them into the
+    // influence map before the world render samples it.
+    groundInfluence.update(pixelRenderer.renderer, deltaSeconds);
     pixelRenderer.render(scene);
   }
 
@@ -1311,6 +1353,7 @@ export function createGame(
       scene.remove(boostOrbit.group);
       boostOrbit.dispose();
       world.dispose();
+      groundInfluence.dispose();
       pixelRenderer.dispose();
     },
     setOnSelectPlayer(handler) {

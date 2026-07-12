@@ -76,7 +76,11 @@ function createBurstPoints(color: number, particleCount: number): THREE.Points {
   return new THREE.Points(geometry, material);
 }
 
-export function createEffectSystem(scene: THREE.Scene): EffectSystem {
+export function createEffectSystem(
+  scene: THREE.Scene,
+  /** Ground-influence stamp — flying projectiles part the grass beneath them. */
+  stampGround?: (x: number, z: number, radius: number, strength: number, dirX?: number, dirZ?: number) => void
+): EffectSystem {
   const activeEffects: ActiveEffect[] = [];
 
   function addEffect(effect: ActiveEffect) {
@@ -188,6 +192,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
         ageSeconds += deltaSeconds;
         projectile.position.addScaledVector(velocity, deltaSeconds);
         projectile.rotation.y += deltaSeconds * 10;
+        stampGround?.(projectile.position.x, projectile.position.z, 0.5, 0.35, velocity.x, velocity.z);
         const hitSomething = options.applyDamage?.(
           projectile.position,
           options.hitRadius,

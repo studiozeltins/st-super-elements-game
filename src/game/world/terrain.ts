@@ -123,7 +123,8 @@ export function getTerrainSlope(x: number, z: number, sampleStep = 1): number {
 
 const ABYSS_COLOR = new THREE.Color(0x232833);
 
-function vertexColorAt(x: number, z: number, height: number): THREE.Color {
+/** Ground color at a world point — shared by the terrain mesh and grass field. */
+export function terrainColorAt(x: number, z: number, height: number): THREE.Color {
   if (height < -15) return ABYSS_COLOR.clone();
   if (getTerrainSlope(x, z) > 0.85) return CLIFF_COLOR.clone();
   const tintNoise = valueNoise(x * 0.25, z * 0.25, TERRAIN_SEED ^ 0xc2b2ae35);
@@ -148,7 +149,7 @@ export function createTerrainMesh(): THREE.Mesh {
     const z = positions.getZ(vertexIndex);
     const height = getTerrainHeight(x, z);
     positions.setY(vertexIndex, height);
-    const color = vertexColorAt(x, z, height);
+    const color = terrainColorAt(x, z, height);
     colors[vertexIndex * 3] = color.r;
     colors[vertexIndex * 3 + 1] = color.g;
     colors[vertexIndex * 3 + 2] = color.b;

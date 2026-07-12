@@ -12,7 +12,6 @@ import {
   createCampfire,
   createCanopyTree,
   createFlower,
-  createGrassTuft,
   createMushroom,
   createPalmTree,
   createRockSpire,
@@ -23,6 +22,8 @@ import {
   type SeededRandom,
   type WorldAsset,
 } from './assets';
+import { createGrassField } from './createGrassField';
+import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
 
 export interface MondstadtWorld {
   group: THREE.Group;
@@ -167,48 +168,6 @@ function createFountain(): THREE.Group {
   return fountain;
 }
 
-function createInstancedGroundCover(group: THREE.Group, random: SeededRandom) {
-  const placeOnTerrain = (
-    geometry: THREE.BufferGeometry,
-    material: THREE.Material,
-    count: number,
-    minRadius: number,
-    yOffset: number
-  ) => {
-    const landPositions = Array.from({ length: count }, () =>
-      findRandomLandPosition(random, minRadius)
-    ).filter((position): position is { x: number; z: number } => position !== null);
-    const instancedMesh = new THREE.InstancedMesh(geometry, material, landPositions.length);
-    const dummy = new THREE.Object3D();
-    landPositions.forEach((landPosition, instanceIndex) => {
-      dummy.position.set(
-        landPosition.x,
-        getTerrainHeight(landPosition.x, landPosition.z) + yOffset,
-        landPosition.z
-      );
-      dummy.rotation.set(0, random() * Math.PI, 0);
-      dummy.updateMatrix();
-      instancedMesh.setMatrixAt(instanceIndex, dummy.matrix);
-    });
-    group.add(instancedMesh);
-  };
-
-  placeOnTerrain(
-    new THREE.BoxGeometry(0.22, 0.5, 0.22),
-    new THREE.MeshLambertMaterial({ color: 0xfff0a8 }),
-    50,
-    SAFE_ZONE_RADIUS + 1,
-    0.25
-  );
-  placeOnTerrain(
-    new THREE.BoxGeometry(0.1, 0.55, 0.1),
-    new THREE.MeshLambertMaterial({ color: 0x86c86a }),
-    70,
-    SAFE_ZONE_RADIUS + 1,
-    0.27
-  );
-}
-
 interface AssetScatterRule {
   create(random: SeededRandom): WorldAsset;
   count: number;
@@ -242,7 +201,17 @@ const BRIDGE_WALK_RADIUS = 1.85;
 const PILLAR_STAIR_CLUSTER_COUNT = 5;
 const PILLAR_STEP_HEIGHT = 1.5;
 
-export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
+export interface MondstadtWorldOptions {
+  grass: {
+    bladeCount: number;
+    influence: GroundInfluenceUniforms;
+  };
+}
+
+export function createMondstadtWorld(
+  scene: THREE.Scene,
+  options: MondstadtWorldOptions
+): MondstadtWorld {
   scene.background = new THREE.Color(0x8ecae6);
   scene.fog = new THREE.Fog(0x8ecae6, 80, 300);
 
@@ -384,7 +353,8 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
   createPlaza(group);
   group.add(createFountain());
   obstacles.push({ x: 0, y: 0, z: 0, radius: 3.0 }); // fountain basin, plaza is flat at y=0
-  createInstancedGroundCover(group, random);
+  const grassField = createGrassField(options.grass);
+  group.add(grassField.group);
   buildBridges();
   buildPillarStairs();
 
@@ -424,7 +394,6 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     { create: createBush, count: 24, minRadius: SAFE_ZONE_RADIUS + 2, maxSlope: 0.6 },
     { create: createMushroom, count: 12, minRadius: SAFE_ZONE_RADIUS + 4, maxSlope: 0.6 },
     { create: createFlower, count: 16, minRadius: SAFE_ZONE_RADIUS + 1, maxSlope: 0.5 },
-    { create: createGrassTuft, count: 20, minRadius: SAFE_ZONE_RADIUS + 1, maxSlope: 0.5 },
   ];
   for (const rule of scatterRules) scatterAssets(rule);
 
@@ -456,6 +425,7 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     group,
     update(deltaSeconds) {
       blades.rotation.z += deltaSeconds * 0.6;
+      grassField.update(deltaSeconds);
     },
     getGroundHeight(x, z, maxSurfaceY = Infinity) {
       let groundHeight = getTerrainHeight(x, z);
@@ -471,6 +441,7 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
       return obstacles;
     },
     dispose() {
+      grassField.dispose();
       scene.remove(group);
       disposeObject(group);
     },

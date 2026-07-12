@@ -59,7 +59,7 @@ function resolveArchetype(archetypeId: string): EnemyArchetype {
  * serverNow ≈ hopStartedAt); each frame re-derives serverNow from that anchor +
  * performance.now(), never a free-running timer.
  */
-function createSlimeHopPose(rig: THREE.Group) {
+function createSlimeHopPose(rig: THREE.Group, onHopLanding?: (x: number, z: number) => void) {
   let anchoredHopStart = -1n;
   let anchorPerfMs = 0;
   let wasAirborne = false;
@@ -93,6 +93,7 @@ function createSlimeHopPose(rig: THREE.Group) {
     if (wasAirborne) {
       wasAirborne = false;
       landedAtPerfMs = perfNow;
+      onHopLanding?.(row.positionX, row.positionZ);
     }
     // Landing squash: held flat for a beat, then eased back up to neutral.
     const sinceLanding = perfNow - landedAtPerfMs;
@@ -109,7 +110,8 @@ function createSlimeHopPose(rig: THREE.Group) {
 
 function createEnemyAnimation(
   model: EnemyModel,
-  archetype: EnemyArchetype
+  archetype: EnemyArchetype,
+  onHopLanding?: (x: number, z: number) => void
 ): EntityAnimation<Enemy> {
   const baseBodyY = model.body.position.y;
   return {
@@ -119,7 +121,9 @@ function createEnemyAnimation(
     // Slimes bounce on the REAL server hop; other archetypes have no row pose,
     // so they skip the per-frame hop math entirely.
     animateFromRow:
-      isSlimeArchetype(archetype.id) && model.rig ? createSlimeHopPose(model.rig) : undefined,
+      isSlimeArchetype(archetype.id) && model.rig
+        ? createSlimeHopPose(model.rig, onHopLanding)
+        : undefined,
     animateDeath() {
       model.group.visible = false;
     },
@@ -129,7 +133,9 @@ function createEnemyAnimation(
 /** Renders the server-authoritative camp enemies from the `enemy` table rows. */
 export function createEnemyRenderer(
   scene: THREE.Scene,
-  effectSystem: EffectSystem
+  effectSystem: EffectSystem,
+  /** Fired the frame a slime's hop arc touches down (grass thump, dust…). */
+  onHopLanding?: (x: number, z: number) => void
 ): EntityRenderer<Enemy> {
   const adapter: EntityKindAdapter<Enemy> = {
     deathDurationSeconds: ENEMY_DEATH_DURATION_SECONDS,
@@ -149,7 +155,7 @@ export function createEnemyRenderer(
         model,
         collisionRadius: archetype.collisionRadius * scale,
         collisionMass: archetype.mass * (row.isBoss ? BOSS_MASS_MULTIPLIER : 1),
-        animation: createEnemyAnimation(model, archetype),
+        animation: createEnemyAnimation(model, archetype, onHopLanding),
       };
     },
     onKilled: worldPosition => effectSystem.spawnBurst(worldPosition, 0xffffff, 26),
