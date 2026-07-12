@@ -10,8 +10,8 @@ import { WORLD_BOUND } from '../data/constants';
 export const INFLUENCE_WORLD_MIN = -(WORLD_BOUND + 6);
 export const INFLUENCE_WORLD_SIZE = (WORLD_BOUND + 6) * 2;
 
-/** Trail persistence tuned at 60fps; ~2–3s readable trail. */
-const DECAY_PER_FRAME_AT_60 = 0.975;
+/** Trail persistence tuned at 60fps; footsteps stay readable ~4–5s. */
+const DECAY_PER_FRAME_AT_60 = 0.985;
 
 /** World XZ → influence-map UV (0..1 on both axes). */
 export function worldToInfluenceUv(x: number, z: number): { u: number; v: number } {

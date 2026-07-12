@@ -1,11 +1,21 @@
 import { createSeededRandom } from './rng';
 import { SAFE_ZONE_RADIUS } from '../data/constants';
-import { ISLANDS, getTerrainHeight, getTerrainSlope, isOnLand, terrainColorAt } from './terrain';
+import {
+  ISLANDS,
+  getTerrainHeight,
+  getTerrainSlope,
+  isOnLand,
+  meadowLushness,
+  terrainColorAt,
+} from './terrain';
 
 /**
- * Deterministic grass blade placement. Pure — no THREE objects — so the
- * scatter rules are unit-testable. Blades are grouped one chunk per island so
- * each island's InstancedMesh can frustum-cull independently.
+ * Deterministic grass placement, clustered into lush meadow patches instead of
+ * a uniform sprinkle: tuft anchors are accepted only where `meadowLushness` is
+ * high (the same mask that darkens the ground there), and each anchor grows a
+ * small clump of blades. Dense-where-it-grows, bare in between — the
+ * Genshin/Ghost-of-Tsushima meadow read. Pure — no THREE — unit-testable.
+ * Blades are grouped one chunk per island for per-island frustum culling.
  */
 export interface GrassBladeSpec {
   x: number;
@@ -21,6 +31,11 @@ const GRASS_SEED = 0x67b35a;
 const MAX_GRASS_SLOPE = 0.85;
 /** Keep the stone plaza clear. */
 const PLAZA_RADIUS = SAFE_ZONE_RADIUS + 1;
+/** Blades per tuft anchor; clumping is what makes patches read as lush. */
+const BLADES_PER_TUFT = 3;
+const TUFT_SPREAD = 0.55;
+/** Lushness below this grows nothing; acceptance ramps up above it. */
+const LUSHNESS_FLOOR = 0.45;
 /** Fraction of blades tinted as tiny meadow flowers (replaces the old yellow bed). */
 const FLOWER_FRACTION = 0.01;
 const FLOWER_COLOR = { r: 1, g: 0.94, b: 0.66 }; // 0xfff0a8
@@ -33,35 +48,41 @@ export function generateGrassBlades(totalCount: number): GrassBladeSpec[][] {
     const islandBudget = Math.round((totalCount * island.radius * island.radius) / areaTotal);
     const blades: GrassBladeSpec[] = [];
     let attempts = 0;
-    const maxAttempts = islandBudget * 4;
+    const maxAttempts = islandBudget * 10;
     while (blades.length < islandBudget && attempts < maxAttempts) {
       attempts += 1;
       // Uniform in the island disc.
       const distance = island.radius * Math.sqrt(random());
       const angle = random() * Math.PI * 2;
-      const x = island.centerX + Math.cos(angle) * distance;
-      const z = island.centerZ + Math.sin(angle) * distance;
-      if (!isOnLand(x, z)) continue;
-      if (Math.hypot(x, z) < PLAZA_RADIUS) continue;
-      if (getTerrainSlope(x, z) > MAX_GRASS_SLOPE) continue;
+      const anchorX = island.centerX + Math.cos(angle) * distance;
+      const anchorZ = island.centerZ + Math.sin(angle) * distance;
+      // Meadow mask: dense acceptance in lush patches, none outside them.
+      const lushness = meadowLushness(anchorX, anchorZ);
+      if (lushness < LUSHNESS_FLOOR + random() * 0.3) continue;
 
-      const y = getTerrainHeight(x, z);
-      const isFlower = random() < FLOWER_FRACTION;
-      const color = isFlower ? { ...FLOWER_COLOR } : bladeColorAt(x, z, y, random);
-      blades.push({
-        x,
-        y,
-        z,
-        rotationY: random() * Math.PI * 2,
-        scale: 0.7 + random() * 0.6,
-        color,
-      });
+      for (let blade = 0; blade < BLADES_PER_TUFT && blades.length < islandBudget; blade += 1) {
+        const x = anchorX + (random() - 0.5) * TUFT_SPREAD;
+        const z = anchorZ + (random() - 0.5) * TUFT_SPREAD;
+        if (!isOnLand(x, z)) continue;
+        if (Math.hypot(x, z) < PLAZA_RADIUS) continue;
+        if (getTerrainSlope(x, z) > MAX_GRASS_SLOPE) continue;
+        const y = getTerrainHeight(x, z);
+        const isFlower = random() < FLOWER_FRACTION;
+        blades.push({
+          x,
+          y,
+          z,
+          rotationY: random() * Math.PI * 2,
+          scale: 0.8 + random() * 0.6,
+          color: isFlower ? { ...FLOWER_COLOR } : bladeColorAt(x, z, y, random),
+        });
+      }
     }
     return blades;
   });
 }
 
-/** Ground color, slightly lightened with per-blade jitter, so blades sit IN the ground tone. */
+/** Ground color, lightened with per-blade jitter — patch blades pop against the moss. */
 function bladeColorAt(
   x: number,
   z: number,
@@ -69,7 +90,7 @@ function bladeColorAt(
   random: () => number
 ): { r: number; g: number; b: number } {
   const ground = terrainColorAt(x, z, y);
-  const jitter = 1.02 + random() * 0.1;
+  const jitter = 1.08 + random() * 0.14;
   return {
     r: Math.min(1, ground.r * jitter),
     g: Math.min(1, ground.g * jitter),

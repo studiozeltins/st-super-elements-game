@@ -127,6 +127,15 @@ const ABYSS_COLOR = new THREE.Color(0x232833);
 const MEADOW_DRY = new THREE.Color(0x84a851);
 const MEADOW_MOSS = new THREE.Color(0x3f7d40);
 
+/**
+ * Low-frequency meadow mask, 0..1. High values = lush moss patches: the ground
+ * tints darker there AND the grass field only grows there, so dense grass
+ * clumps sit on visibly lusher soil (Genshin-style meadow patches).
+ */
+export function meadowLushness(x: number, z: number): number {
+  return valueNoise(x * 0.045, z * 0.045, TERRAIN_SEED ^ 0x27d4eb2f);
+}
+
 /** Ground color at a world point — shared by the terrain mesh and grass field. */
 export function terrainColorAt(x: number, z: number, height: number): THREE.Color {
   if (height < -15) return ABYSS_COLOR.clone();
@@ -135,9 +144,9 @@ export function terrainColorAt(x: number, z: number, height: number): THREE.Colo
   const heightFraction = Math.min(1, height / (MAX_HILL_HEIGHT * 0.7));
   const grassColor = GRASS_LOW.clone().lerp(GRASS_HIGH, heightFraction);
   grassColor.lerp(GRASS_TINT, tintNoise * 0.5);
-  const patchNoise = valueNoise(x * 0.045, z * 0.045, TERRAIN_SEED ^ 0x27d4eb2f);
-  grassColor.lerp(MEADOW_DRY, smoothstep(0.6, 0.85, patchNoise) * 0.5);
-  grassColor.lerp(MEADOW_MOSS, smoothstep(0.6, 0.85, 1 - patchNoise) * 0.45);
+  const lushness = meadowLushness(x, z);
+  grassColor.lerp(MEADOW_DRY, smoothstep(0.6, 0.85, 1 - lushness) * 0.5);
+  grassColor.lerp(MEADOW_MOSS, smoothstep(0.55, 0.8, lushness) * 0.45);
   return grassColor;
 }
 

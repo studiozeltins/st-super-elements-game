@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateGrassBlades } from '../grassPlacement';
-import { ISLANDS, getTerrainHeight, getTerrainSlope, isOnLand } from '../terrain';
+import { ISLANDS, getTerrainHeight, getTerrainSlope, isOnLand, meadowLushness } from '../terrain';
 import { SAFE_ZONE_RADIUS } from '../../data/constants';
 
 const TOTAL = 2000;
@@ -29,6 +29,13 @@ describe('generateGrassBlades', () => {
     }
   });
 
+  it('clusters blades into lush meadow patches only', () => {
+    for (const blade of allBlades) {
+      // Tuft spread can drift slightly off the anchor; mask varies slowly.
+      expect(meadowLushness(blade.x, blade.z)).toBeGreaterThan(0.35);
+    }
+  });
+
   it('budgets blades roughly by island area', () => {
     const mainIsland = ISLANDS[0];
     const areaTotal = ISLANDS.reduce((sum, island) => sum + island.radius ** 2, 0);
@@ -40,8 +47,8 @@ describe('generateGrassBlades', () => {
 
   it('keeps scale and color in range', () => {
     for (const blade of allBlades) {
-      expect(blade.scale).toBeGreaterThanOrEqual(0.7);
-      expect(blade.scale).toBeLessThanOrEqual(1.3);
+      expect(blade.scale).toBeGreaterThanOrEqual(0.8);
+      expect(blade.scale).toBeLessThanOrEqual(1.4);
       for (const channel of [blade.color.r, blade.color.g, blade.color.b]) {
         expect(channel).toBeGreaterThanOrEqual(0);
         expect(channel).toBeLessThanOrEqual(1);

@@ -825,7 +825,7 @@ export function createGame(
       if (!tryMove(stepX, stepZ) && !tryMove(stepX, 0)) tryMove(0, stepZ);
       playerRotationY = Math.atan2(worldMoveX, worldMoveZ);
       if (isGrounded()) {
-        groundInfluence.stamp(playerPosition.x, playerPosition.z, 0.6, 0.85, worldMoveX, worldMoveZ);
+        groundInfluence.stamp(playerPosition.x, playerPosition.z, 0.8, 1, worldMoveX, worldMoveZ);
       }
     }
 
