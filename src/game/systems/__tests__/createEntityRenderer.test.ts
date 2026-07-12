@@ -77,6 +77,12 @@ function row(overrides: Partial<FakeRow> = {}): FakeRow {
 const groupCount = (scene: THREE.Scene) =>
   scene.children.filter(child => child instanceof THREE.Group).length;
 
+const aliveTargetCount = (renderer: { forEachAliveTarget(visit: () => void): void }) => {
+  let count = 0;
+  renderer.forEachAliveTarget(() => count++);
+  return count;
+};
+
 describe('createEntityRenderer — reconciliation', () => {
   it('inserts a model into the scene for a new row', () => {
     const { scene, adapter } = makeHarness();
@@ -85,7 +91,7 @@ describe('createEntityRenderer — reconciliation', () => {
     renderer.syncRows([row({ id: 5n })]);
 
     expect(groupCount(scene)).toBe(1);
-    expect(renderer.getAlivePositions()).toHaveLength(1);
+    expect(aliveTargetCount(renderer)).toBe(1);
   });
 
   it('does not spawn a second model when the same id syncs again', () => {
@@ -108,7 +114,7 @@ describe('createEntityRenderer — reconciliation', () => {
 
     expect(spawned[0].model.overlay.dispose).toHaveBeenCalledTimes(1);
     expect(groupCount(scene)).toBe(0);
-    expect(renderer.getAlivePositions()).toHaveLength(0);
+    expect(aliveTargetCount(renderer)).toBe(0);
   });
 
   it('propagates health + carriedGems into the overlay once the enemy is hit', () => {
@@ -162,7 +168,7 @@ describe('createEntityRenderer — life and death', () => {
 
     expect(onKilled).toHaveBeenCalledTimes(1);
     expect(spawned[0].animation.animateDeath).toHaveBeenCalled();
-    expect(renderer.getAlivePositions()).toHaveLength(0);
+    expect(aliveTargetCount(renderer)).toBe(0);
   });
 
   it('does not fire onKilled for a row first seen already dead', () => {
@@ -173,7 +179,7 @@ describe('createEntityRenderer — life and death', () => {
     renderer.update(0.016, () => 0);
 
     expect(onKilled).not.toHaveBeenCalled();
-    expect(renderer.getAlivePositions()).toHaveLength(0);
+    expect(aliveTargetCount(renderer)).toBe(0);
   });
 
   it('revives (snaps visible) when a dead row flips back to alive', () => {
@@ -187,16 +193,16 @@ describe('createEntityRenderer — life and death', () => {
 
     expect(spawned[0].model.group.visible).toBe(true);
     expect(spawned[0].model.group.position.x).toBe(12); // snapped to respawn spot
-    expect(renderer.getAlivePositions()).toHaveLength(1);
+    expect(aliveTargetCount(renderer)).toBe(1);
   });
 
-  it('reflects only alive rows in getAlivePositions', () => {
+  it('visits only alive rows in forEachAliveTarget', () => {
     const { scene, adapter } = makeHarness();
     const renderer = createEntityRenderer({ scene, adapter });
 
     renderer.syncRows([row({ id: 1n, alive: true }), row({ id: 2n, alive: false })]);
 
-    expect(renderer.getAlivePositions()).toHaveLength(1);
+    expect(aliveTargetCount(renderer)).toBe(1);
   });
 });
 

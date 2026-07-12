@@ -518,8 +518,14 @@ export function createGame(
     center: { x: number; y: number; z: number },
     radius: number
   ): boolean {
-    const positions = [...enemyRenderer.getAlivePositions(), ...goliathRenderer.getAlivePositions()];
-    return positions.some(position => attackHitsEntity(position.x, position.z, center.x, center.z, radius));
+    // Runs per projectile per frame — iterate in place, no position arrays.
+    let hit = false;
+    const check = (x: number, _y: number, z: number) => {
+      if (!hit && attackHitsEntity(x, z, center.x, center.z, radius)) hit = true;
+    };
+    enemyRenderer.forEachAliveTarget(check);
+    goliathRenderer.forEachAliveTarget(check);
+    return hit;
   }
 
   function dealDamage(
@@ -625,18 +631,28 @@ export function createGame(
     return true;
   }
 
+  // Reused across calls — the returned position is read immediately by facing
+  // logic, never kept. Keeps nearest-target scans allocation-free.
+  const nearestEnemyScratch = new THREE.Vector3();
+
   function findNearestEnemyPosition(maxRange: number): THREE.Vector3 | null {
-    let nearestPosition: THREE.Vector3 | null = null;
     let nearestDistance = maxRange;
-    const targetPositions = [...enemyRenderer.getAlivePositions(), ...goliathRenderer.getAlivePositions()];
-    for (const candidate of targetPositions) {
-      const distance = playerPosition.distanceTo(candidate);
+    let found = false;
+    const consider = (x: number, y: number, z: number) => {
+      const distance = Math.hypot(
+        x - playerPosition.x,
+        y - playerPosition.y,
+        z - playerPosition.z
+      );
       if (distance < nearestDistance) {
         nearestDistance = distance;
-        nearestPosition = candidate;
+        nearestEnemyScratch.set(x, y, z);
+        found = true;
       }
-    }
-    return nearestPosition;
+    };
+    enemyRenderer.forEachAliveTarget(consider);
+    goliathRenderer.forEachAliveTarget(consider);
+    return found ? nearestEnemyScratch : null;
   }
 
   let activeConstellation = 0;

@@ -21,6 +21,7 @@ import {
   type SfxPopupState,
 } from './ui/SfxPopup';
 import { PickupFeed, usePickupFeed } from './ui/PickupFeed';
+import { useGameTableBridge } from './hooks/useGameTableBridge';
 import { DeathOverlay } from './ui/DeathOverlay';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
@@ -211,11 +212,10 @@ export default function App() {
       : tables.weaponItem,
     { enabled: haveCanonical }
   );
-  const [gemDropRows] = useTable(tables.gemDrop);
-  const [shardDropRows] = useTable(tables.shardDrop);
-  const [enemyRows] = useTable(tables.enemy);
-  const [goliathRows] = useTable(tables.goliath);
-  const [unitAttackRows] = useTable(tables.unitAttack);
+  // enemy/goliath/unit_attack/gem_drop/shard_drop bypass React entirely — they
+  // flow from connection callbacks straight into the game layer (the useTable
+  // versions re-rendered the whole App on every world tick = combat fps cliff).
+  const gameTables = useGameTableBridge(connection, gameRef);
   const [parties] = useTable(tables.party);
   const [partyMembers] = useTable(tables.partyMember);
   const [myInvites] = useTable(tables.partyInvite);
@@ -338,8 +338,9 @@ export default function App() {
     },
   });
 
-  const myPlayer: Player | undefined = players.find(
-    row => row.identity.toHexString() === myIdentityHex
+  const myPlayer: Player | undefined = useMemo(
+    () => players.find(row => row.identity.toHexString() === myIdentityHex),
+    [players, myIdentityHex]
   );
   // useTable snapshots are reference-stable until THEIR table changes, so these
   // memos skip the identity hex-compares on the ~16/s unrelated transactions
@@ -408,48 +409,63 @@ export default function App() {
   );
 
   // ---- Player-party (Bars) derivations — all identity comparisons key off the
-  // canonical myIdentityHex, since party_member.identity is the canonical id. ----
-  const myMembership = partyMembers.find(
-    member => member.identity.toHexString() === myIdentityHex
-  );
-  const myPartyId = myMembership?.partyId ?? null;
-  const myRoster =
-    myPartyId !== null ? partyMembers.filter(member => member.partyId === myPartyId) : [];
+  // canonical myIdentityHex, since party_member.identity is the canonical id.
+  // Memoized on their source snapshots: identity hex-compares are BSATN
+  // serializations, and App re-renders on every server transaction. ----
+  const { myPartyId, myRoster, partyAllyKey } = useMemo(() => {
+    const membership = partyMembers.find(
+      member => member.identity.toHexString() === myIdentityHex
+    );
+    const partyId = membership?.partyId ?? null;
+    const roster =
+      partyId !== null ? partyMembers.filter(member => member.partyId === partyId) : [];
+    return {
+      myPartyId: partyId,
+      myRoster: roster,
+      // Stable key of my party's identities → pushed to the game so PVP skips allies.
+      partyAllyKey: roster
+        .map(member => member.identity.toHexString())
+        .sort()
+        .join(','),
+    };
+  }, [partyMembers, myIdentityHex]);
   const myPartyCount = myRoster.length;
   const isInParty = myPartyId !== null;
-  // Stable key of my party's identities → pushed to the game so PVP skips allies.
-  const partyAllyKey = myRoster
-    .map(member => member.identity.toHexString())
-    .sort()
-    .join(',');
   const isPartyFull = myPartyCount >= RAID_PARTY_SIZE;
-  const myPartyLeaderHex =
-    myPartyId !== null
-      ? parties.find(party => party.id === myPartyId)?.leaderIdentity.toHexString() ?? null
-      : null;
+  const myPartyLeaderHex = useMemo(
+    () =>
+      myPartyId !== null
+        ? parties.find(party => party.id === myPartyId)?.leaderIdentity.toHexString() ?? null
+        : null,
+    [parties, myPartyId]
+  );
   const iAmLeader = myPartyLeaderHex !== null && myPartyLeaderHex === myIdentityHex;
   // All my party members on one page (leader first, then oldest-joined) for the
   // party-management sheet. Player row supplies name / character / online / health.
-  const partyMemberViews = [...myRoster]
-    .sort((a, b) => {
-      const aLeader = a.identity.toHexString() === myPartyLeaderHex;
-      const bLeader = b.identity.toHexString() === myPartyLeaderHex;
-      if (aLeader !== bLeader) return aLeader ? -1 : 1;
-      return a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1;
-    })
-    .map(member => {
-      const hex = member.identity.toHexString();
-      const player = players.find(p => p.identity.toHexString() === hex);
-      return {
-        hex,
-        name: player?.name ?? 'Spēlētājs',
-        activeCharacterId: player?.activeCharacterId ?? '',
-        online: player?.online ?? false,
-        currentHealth: player?.currentHealth ?? 0,
-        isLeader: hex === myPartyLeaderHex,
-        isSelf: hex === myIdentityHex,
-      };
-    });
+  const partyMemberViews = useMemo(
+    () =>
+      [...myRoster]
+        .sort((a, b) => {
+          const aLeader = a.identity.toHexString() === myPartyLeaderHex;
+          const bLeader = b.identity.toHexString() === myPartyLeaderHex;
+          if (aLeader !== bLeader) return aLeader ? -1 : 1;
+          return a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1;
+        })
+        .map(member => {
+          const hex = member.identity.toHexString();
+          const player = players.find(p => p.identity.toHexString() === hex);
+          return {
+            hex,
+            name: player?.name ?? 'Spēlētājs',
+            activeCharacterId: player?.activeCharacterId ?? '',
+            online: player?.online ?? false,
+            currentHealth: player?.currentHealth ?? 0,
+            isLeader: hex === myPartyLeaderHex,
+            isSelf: hex === myIdentityHex,
+          };
+        }),
+    [myRoster, myPartyLeaderHex, players, myIdentityHex]
+  );
 
   // The tapped target for the slide-out sheet, re-derived from the live player rows.
   const sheetTarget = sheetTargetHex
@@ -464,11 +480,15 @@ export default function App() {
   // Invites addressed to me (the subscription already filters to my canonical id;
   // the extra guard keeps the derivation correct against any cache overlap), newest
   // first so the freshest invite tops the toast stack.
-  const myPendingInvites = myInvites
-    .filter(invite => invite.recipientIdentity.toHexString() === myIdentityHex)
-    .sort((a, b) =>
-      a.createdAt.microsSinceUnixEpoch < b.createdAt.microsSinceUnixEpoch ? 1 : -1
-    );
+  const myPendingInvites = useMemo(
+    () =>
+      myInvites
+        .filter(invite => invite.recipientIdentity.toHexString() === myIdentityHex)
+        .sort((a, b) =>
+          a.createdAt.microsSinceUnixEpoch < b.createdAt.microsSinceUnixEpoch ? 1 : -1
+        ),
+    [myInvites, myIdentityHex]
+  );
 
   // Resolve each pending invite to a display view (kind + other player's name +
   // ready-to-render Latvian message). kind is DISPLAY only: 'request' = the joiner
@@ -478,7 +498,7 @@ export default function App() {
   // The flow drives both the toast copy and which action buttons render (onClick is
   // attached at render time, where the reducer callbacks are in scope).
   type InviteFlow = 'accept' | 'merge' | 'poach_forward' | 'forward' | 'promote';
-  const invitesWithNames = myPendingInvites.map(invite => {
+  const invitesWithNames = useMemo(() => myPendingInvites.map(invite => {
     const kind = invite.kind as 'invite' | 'request' | 'promote';
     const partyLeaderHex = parties
       .find(party => party.id === invite.partyId)
@@ -514,7 +534,7 @@ export default function App() {
                 ? `${name} lūdz pievienoties tavam baram`
                 : `${name} aicina tevi savā barā`;
     return { id: invite.id, kind, name, message, flow };
-  });
+  }), [myPendingInvites, parties, players, isInParty, iAmLeader, myIdentityHex]);
 
   // Live toasts = pending invites not yet toast-dismissed. The Settings missed list
   // shows ALL of invitesWithNames (including dismissed/expired ones).
@@ -780,12 +800,14 @@ export default function App() {
     game.setPixelFilter(localStorage.getItem('settings.pixelFilter') !== '0');
     game.start();
     gameRef.current = game;
+    // Seed the world state that arrived before this game instance existed.
+    gameTables.syncAll(game);
 
     return () => {
       game.dispose();
       gameRef.current = null;
     };
-  }, [connection, hasJoined, selectCharacter, pushPickup, callSfxPopup]);
+  }, [connection, hasJoined, selectCharacter, pushPickup, callSfxPopup, gameTables]);
 
   useEffect(() => {
     gameRef.current?.syncRemotePlayers(players, myIdentityHex);
@@ -793,28 +815,8 @@ export default function App() {
   }, [players, myPlayer, myIdentityHex]);
 
   useEffect(() => {
-    gameRef.current?.syncGemDrops(gemDropRows);
-  }, [gemDropRows]);
-
-  useEffect(() => {
-    gameRef.current?.syncShardDrops(shardDropRows);
-  }, [shardDropRows]);
-
-  useEffect(() => {
     gameRef.current?.setPartyAllies(partyAllyKey ? partyAllyKey.split(',') : []);
   }, [partyAllyKey]);
-
-  useEffect(() => {
-    gameRef.current?.syncEnemies(enemyRows);
-  }, [enemyRows]);
-
-  useEffect(() => {
-    gameRef.current?.syncGoliaths(goliathRows);
-  }, [goliathRows]);
-
-  useEffect(() => {
-    gameRef.current?.syncUnitAttacks(unitAttackRows);
-  }, [unitAttackRows]);
 
   // Shard counter flash + movement toast, driven by the reactive transcendShards diff.
   useEffect(() => {

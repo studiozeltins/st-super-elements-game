@@ -94,9 +94,22 @@ function buildSword(): THREE.Group {
  * disposeEnemyModel. Named parts: torso, head, leftLeg, rightLeg, leftArm,
  * rightArm, shield, sword.
  */
+// Armor is never mutated per-instance, so each size shares ONE material —
+// same rule as camp enemies' sharedBodyMaterials: per-spawn materials make
+// three re-resolve shader programs on every goliath (re)spawn.
+const sharedArmorMaterials = new Map<number, THREE.MeshLambertMaterial>();
+function armorMaterialFor(archetype: GoliathArchetype): THREE.MeshLambertMaterial {
+  let material = sharedArmorMaterials.get(archetype.sizeIndex);
+  if (!material) {
+    material = new THREE.MeshLambertMaterial({ color: archetype.bodyColor });
+    sharedArmorMaterials.set(archetype.sizeIndex, material);
+  }
+  return material;
+}
+
 export function createGoliathModel(archetype: GoliathArchetype): EnemyModel {
   const group = new THREE.Group();
-  const armorMaterial = new THREE.MeshLambertMaterial({ color: archetype.bodyColor });
+  const armorMaterial = armorMaterialFor(archetype);
 
   const torso = new THREE.Mesh(torsoGeometry, armorMaterial);
   torso.position.y = 1.85;

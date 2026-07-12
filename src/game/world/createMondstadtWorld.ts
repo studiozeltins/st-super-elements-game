@@ -50,6 +50,38 @@ interface Platform {
 
 const WORLD_DECOR_SEED = 0xa11ce;
 
+// getGroundHeight is HOT (per entity, per debris particle, and per telegraph
+// vertex each drape). Scanning all ~100 platforms with hypot per call was a
+// large share of combat frame CPU — so platforms are bucketed once into a
+// coarse XZ grid and each query touches only its own cell's bucket.
+const PLATFORM_CELL_SIZE = 8;
+// Offset keeps cell coordinates positive so one number can key the Map.
+const PLATFORM_CELL_OFFSET = 512;
+
+function platformCellKey(cellX: number, cellZ: number): number {
+  return (cellX + PLATFORM_CELL_OFFSET) * (PLATFORM_CELL_OFFSET * 2) + (cellZ + PLATFORM_CELL_OFFSET);
+}
+
+/** Buckets each platform into every grid cell its circle overlaps. */
+function buildPlatformGrid(platforms: readonly Platform[]): Map<number, Platform[]> {
+  const grid = new Map<number, Platform[]>();
+  for (const platform of platforms) {
+    const minCellX = Math.floor((platform.x - platform.radius) / PLATFORM_CELL_SIZE);
+    const maxCellX = Math.floor((platform.x + platform.radius) / PLATFORM_CELL_SIZE);
+    const minCellZ = Math.floor((platform.z - platform.radius) / PLATFORM_CELL_SIZE);
+    const maxCellZ = Math.floor((platform.z + platform.radius) / PLATFORM_CELL_SIZE);
+    for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+      for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+        const key = platformCellKey(cellX, cellZ);
+        const bucket = grid.get(key);
+        if (bucket) bucket.push(platform);
+        else grid.set(key, [platform]);
+      }
+    }
+  }
+  return grid;
+}
+
 export function isInsideSafeZone(positionX: number, positionZ: number): boolean {
   return Math.hypot(positionX, positionZ) <= SAFE_ZONE_RADIUS;
 }
@@ -360,6 +392,9 @@ export function createMondstadtWorld(
   group.updateMatrixWorld(true);
   group.matrixWorldAutoUpdate = false;
 
+  // All platforms are placed by now — freeze them into the query grid.
+  const platformGrid = buildPlatformGrid(platforms);
+
   // Campfire flames flicker — collect the named lights once, wobble per frame.
   const campfireLights: THREE.PointLight[] = [];
   group.traverse(node => {
@@ -382,9 +417,15 @@ export function createMondstadtWorld(
     },
     getGroundHeight(x, z, maxSurfaceY = Infinity) {
       let groundHeight = getTerrainHeight(x, z);
-      for (const platform of platforms) {
+      const bucket = platformGrid.get(
+        platformCellKey(Math.floor(x / PLATFORM_CELL_SIZE), Math.floor(z / PLATFORM_CELL_SIZE))
+      );
+      if (!bucket) return groundHeight;
+      for (const platform of bucket) {
         if (platform.topY <= groundHeight || platform.topY > maxSurfaceY) continue;
-        if (Math.hypot(platform.x - x, platform.z - z) <= platform.radius) {
+        const deltaX = platform.x - x;
+        const deltaZ = platform.z - z;
+        if (deltaX * deltaX + deltaZ * deltaZ <= platform.radius * platform.radius) {
           groundHeight = platform.topY;
         }
       }

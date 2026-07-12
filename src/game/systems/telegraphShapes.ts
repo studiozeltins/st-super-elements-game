@@ -14,7 +14,9 @@ export const PROGRESS_RIM_WIDTH = 0.22;
 const RING_SEGMENTS = 48;
 // Radial subdivisions of the filled cone sector so draping can follow terrace
 // steps between the apex and the danger edge (thin rims don't need this).
-export const CONE_FILL_RINGS = 8;
+// 4 rings track a terrace step within ~1.5u on the biggest cone while halving
+// the fill's drape vertex count (each drape samples ground per vertex).
+export const CONE_FILL_RINGS = 4;
 
 // Rings are authored in the XZ plane (rotateX baked into the geometry) so a
 // vertex's local (x, z) maps straight to a ground sample point.

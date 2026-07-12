@@ -28,6 +28,12 @@ const FLASH_SECONDS = 0.2;
 const FLASH_SCALE = 1.08;
 // Lift above the terrain so the flat geometry never z-fights the ground.
 const GROUND_EPSILON = 0.06;
+// The fill's per-vertex ground re-drape is the most expensive telegraph work
+// (vertices × getGroundHeight × golems in windup). The fill SCALES smoothly
+// every frame, but only re-drapes after growing this much — ~25 drapes per
+// windup instead of one per frame. The rim (the danger edge) is draped exactly
+// once at insert and stays precise.
+const DRAPE_SCALE_STEP = 0.04;
 
 interface ActiveTelegraph {
   unitKind: number;
@@ -54,6 +60,9 @@ interface ActiveTelegraph {
   // Last progress scale the drape ran at — skips per-vertex ground sampling on
   // frames where the ring didn't move (locked at 1 after strike).
   lastProgressScale: number;
+  // Scale the fill was last DRAPED at; re-drapes are throttled to
+  // DRAPE_SCALE_STEP increments while the scale animates every frame.
+  lastDrapedScale: number;
   flashRemainingSeconds: number;
   // Row left WINDUP/STRIKE (recovery/idle): keep only until the flash decays.
   fading: boolean;
@@ -243,6 +252,7 @@ export function createTelegraphSystem(
       startedAtMicros: row.startedAtMicros,
       windupDurationMicros: row.strikeAtMicros - row.startedAtMicros,
       lastProgressScale: -1,
+      lastDrapedScale: -1,
       flashRemainingSeconds: 0,
       fading: false,
     };
@@ -320,6 +330,7 @@ export function createTelegraphSystem(
         // Moved to new ground — heights baked into the vertices are stale.
         drapeToGround(existing.outline, existing.group);
         existing.lastProgressScale = -1;
+        existing.lastDrapedScale = -1;
       }
       if (existing.state === ATTACK_STATE_WINDUP && row.state === ATTACK_STATE_STRIKE) {
         flash(existing);
@@ -357,9 +368,17 @@ export function createTelegraphSystem(
         // across XZ from their anchor. Fraction stays row-derived (ANIM-01).
         if (telegraph.fillAxis === 'x') telegraph.progress.scale.set(progressScale, 1, 1);
         else telegraph.progress.scale.set(progressScale, 1, progressScale);
-        // The fill covers different ground at the new size — re-drape.
-        drapeToGround(telegraph.progress, telegraph.group);
         telegraph.lastProgressScale = progressScale;
+        // The fill covers different ground at the new size, but a full per-vertex
+        // re-drape every frame was the top combat CPU cost — throttle it to
+        // DRAPE_SCALE_STEP growth increments (always draping the final size).
+        if (
+          progressScale === 1 ||
+          Math.abs(progressScale - telegraph.lastDrapedScale) >= DRAPE_SCALE_STEP
+        ) {
+          drapeToGround(telegraph.progress, telegraph.group);
+          telegraph.lastDrapedScale = progressScale;
+        }
       }
       if (telegraph.flashRemainingSeconds > 0) {
         telegraph.flashRemainingSeconds -= deltaSeconds;

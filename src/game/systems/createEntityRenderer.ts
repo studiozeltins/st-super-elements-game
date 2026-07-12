@@ -93,10 +93,16 @@ export interface EntityRenderer<Row> {
   setAttackViews(views: Map<string, AttackAnimationView>): void;
   /** Interpolates each model toward its server target and animates it. */
   update(deltaSeconds: number, getGroundHeight: GetGroundHeight): void;
-  getAlivePositions(): THREE.Vector3[];
+  /**
+   * Visits each live entity's AUTHORITATIVE aim target: the server position
+   * (targetX/Z) with the display height. Zero-allocation on purpose — hit
+   * checks and target searches run per projectile per frame, and the previous
+   * array-of-fresh-Vector3s shape was steady combat GC pressure.
+   */
+  forEachAliveTarget(visit: (x: number, y: number, z: number) => void): void;
   /**
    * Visits each live entity at its DISPLAY (lerped mesh) position — for effects
-   * that must track what the eye sees (footstep audio), unlike getAlivePositions'
+   * that must track what the eye sees (footstep audio), unlike forEachAliveTarget's
    * authoritative aim targets. The Vector3 is the live mesh position: read, don't keep.
    */
   forEachAliveUnit(visit: (key: string, worldPosition: THREE.Vector3, row: Row) => void): void;
@@ -300,18 +306,14 @@ export function createEntityRenderer<Row>(
       attackViews = views;
     },
     update,
-    getAlivePositions() {
-      // Return the AUTHORITATIVE server position (targetX/Z), not the lerped
+    forEachAliveTarget(visit) {
+      // Visit the AUTHORITATIVE server position (targetX/Z), not the lerped
       // display mesh, so the player's aim and client hit-detection agree with the
       // server's damage check. The mesh lags a moving enemy, which made shots
       // land visually but miss server-side ("hitting them but no damage").
-      const positions: THREE.Vector3[] = [];
       for (const entity of entities.values()) {
-        if (entity.alive) {
-          positions.push(new THREE.Vector3(entity.targetX, entity.model.group.position.y, entity.targetZ));
-        }
+        if (entity.alive) visit(entity.targetX, entity.model.group.position.y, entity.targetZ);
       }
-      return positions;
     },
     forEachAliveUnit(visit) {
       for (const [key, entity] of entities) {

@@ -75,7 +75,9 @@ describe('createEnemyRenderer', () => {
     renderer.syncRows([enemyRow()]);
     expect(groupCount(scene)).toBeGreaterThan(0);
     expect(() => renderer.update(0.016, () => 0)).not.toThrow();
-    expect(renderer.getAlivePositions()).toHaveLength(1);
+    let aliveCount = 0;
+    renderer.forEachAliveTarget(() => aliveCount++);
+    expect(aliveCount).toBe(1);
 
     renderer.dispose();
   });
