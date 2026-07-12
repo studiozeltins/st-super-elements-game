@@ -20,6 +20,7 @@ import './index.css';
 import './styles/hud/index.css';
 import App from './App.tsx';
 import { COMIC_FONTS } from './ui/SfxPopup.tsx';
+import { setElementFavicon } from './ui/setElementFavicon.ts';
 import { SpacetimeDBProvider } from 'spacetimedb/react';
 import { DbConnection } from './module_bindings/index.ts';
 import { MODULE_NAME, SPACETIMEDB_URI } from './config.ts';
@@ -28,6 +29,9 @@ import { MODULE_NAME, SPACETIMEDB_URI } from './config.ts';
 // popup's randomly drawn face would otherwise render in the fallback and blink
 // when the real font arrives mid-animation.
 for (const family of COMIC_FONTS) document.fonts?.load(`400 1rem '${family}'`);
+
+// Tab icon: the gem octahedron in a random element color, re-rolled per load.
+setElementFavicon();
 
 const TOKEN_KEY = `${SPACETIMEDB_URI}/${MODULE_NAME}/auth_token`;
 
