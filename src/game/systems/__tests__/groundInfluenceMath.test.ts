@@ -4,6 +4,7 @@ import {
   INFLUENCE_WORLD_SIZE,
   decayForDelta,
   encodeBendDirection,
+  wearDecayForDelta,
   worldToInfluenceUv,
 } from '../groundInfluenceMath';
 
@@ -64,5 +65,22 @@ describe('decayForDelta', () => {
   it('composes: two half-steps equal one full step', () => {
     const half = decayForDelta(1 / 120);
     expect(half * half).toBeCloseTo(decayForDelta(1 / 60), 10);
+  });
+});
+
+describe('wearDecayForDelta', () => {
+  it('composes: two half-steps equal one full step (frame-rate independent)', () => {
+    const half = wearDecayForDelta(1 / 120);
+    expect(half * half).toBeCloseTo(wearDecayForDelta(1 / 60), 10);
+  });
+
+  it('regrows much slower than the bend decay', () => {
+    expect(wearDecayForDelta(1 / 60)).toBeGreaterThan(decayForDelta(1 / 60));
+  });
+
+  it('full wear regrows within about a minute, but not much sooner', () => {
+    // Destroyed grass (wear 1) should still read at 30s and be gone by ~60s.
+    expect(wearDecayForDelta(30)).toBeGreaterThan(0.1);
+    expect(wearDecayForDelta(60)).toBeLessThan(0.1);
   });
 });

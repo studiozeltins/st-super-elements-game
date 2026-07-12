@@ -329,9 +329,10 @@ export function createGame(
   // position (App.tsx → spawnWorldNumber), so own AND other players' hits land ON
   // the enemy. The renderers still flash the health bar on any HP drop
   // (lastDamagedAt, set independently of this callback).
-  // Slime hops thump the grass flat where they land (render-side, all clients).
+  // Slime hops thump the grass flat where they land (render-side, all clients)
+  // and leave a lingering crushed patch (wear) so you can read where they hopped.
   const enemyRenderer = createEnemyRenderer(scene, effectSystem, (x, z) =>
-    groundInfluence.stamp(x, z, SLIME_SLAM_RADIUS * 0.8, 1)
+    groundInfluence.stamp(x, z, SLIME_SLAM_RADIUS * 0.8, 1, 0, 0, 0.55)
   );
   const goliathRenderer = createGoliathRenderer(scene);
   // Ground telegraphs for server unit_attack windups (D4-14): discs sit on the
@@ -856,7 +857,16 @@ export function createGame(
       if (!tryMove(stepX, stepZ) && !tryMove(stepX, 0)) tryMove(0, stepZ);
       playerRotationY = Math.atan2(worldMoveX, worldMoveZ);
       if (isGrounded()) {
-        groundInfluence.stamp(playerPosition.x, playerPosition.z, 0.8, 1, worldMoveX, worldMoveZ);
+        // Small per-frame wear: repeated passes tread a lasting footpath.
+        groundInfluence.stamp(
+          playerPosition.x,
+          playerPosition.z,
+          0.8,
+          1,
+          worldMoveX,
+          worldMoveZ,
+          0.03
+        );
       }
     }
 
@@ -879,7 +889,7 @@ export function createGame(
     if (playerPosition.y <= groundBelow) {
       // A real landing (not resting contact) thumps the grass flat around it.
       if (playerVelocityY < -4) {
-        groundInfluence.stamp(playerPosition.x, playerPosition.z, 1.2, 1);
+        groundInfluence.stamp(playerPosition.x, playerPosition.z, 1.2, 1, 0, 0, 0.3);
       }
       playerPosition.y = groundBelow;
       playerVelocityY = 0;
@@ -1079,13 +1089,20 @@ export function createGame(
   // Tracks each walker's previous display position so grass trails push along
   // the real motion direction. Only actually-moving walkers stamp.
   const walkerTrails = new Map<string, { x: number; z: number }>();
-  function stampWalkerTrail(key: string, x: number, z: number, radius: number, strength: number) {
+  function stampWalkerTrail(
+    key: string,
+    x: number,
+    z: number,
+    radius: number,
+    strength: number,
+    wearPerFrame: number
+  ) {
     const last = walkerTrails.get(key);
     if (last) {
       const deltaX = x - last.x;
       const deltaZ = z - last.z;
       if (Math.hypot(deltaX, deltaZ) > 0.02) {
-        groundInfluence.stamp(x, z, radius, strength, deltaX, deltaZ);
+        groundInfluence.stamp(x, z, radius, strength, deltaX, deltaZ, wearPerFrame);
       }
     }
     if (walkerTrails.size > 512) walkerTrails.clear(); // dead-key backstop
@@ -1097,7 +1114,7 @@ export function createGame(
   // and spam limits all live inside createMovementAudio.
   function updateFootsteps() {
     enemyRenderer.forEachAliveUnit((key, position, row) => {
-      stampWalkerTrail(`enemy:${key}`, position.x, position.z, 0.5, 0.7);
+      stampWalkerTrail(`enemy:${key}`, position.x, position.z, 0.5, 0.7, 0.02);
       const kind = FOOTSTEP_KIND_BY_ARCHETYPE[row.archetypeId];
       if (!kind) return;
       movementAudio.updateUnit(
@@ -1111,7 +1128,7 @@ export function createGame(
     });
     goliathRenderer.forEachAliveUnit((key, position) => {
       // Goliaths tear a wide trail through the grass that lingers behind them.
-      stampWalkerTrail(`goliath:${key}`, position.x, position.z, 1.3, 1);
+      stampWalkerTrail(`goliath:${key}`, position.x, position.z, 1.3, 1, 0.06);
       movementAudio.updateUnit(
         `goliath:${key}`,
         'goliath',
@@ -1123,7 +1140,7 @@ export function createGame(
     });
     for (const [identityHex, view] of remotePlayers) {
       const position = view.model.group.position;
-      stampWalkerTrail(`player:${identityHex}`, position.x, position.z, 0.6, 0.7);
+      stampWalkerTrail(`player:${identityHex}`, position.x, position.z, 0.6, 0.7, 0.03);
       movementAudio.updateUnit(
         identityHex,
         'player',
@@ -1734,6 +1751,14 @@ export function createGame(
       } else if (strike.attackId !== 'swordSwing' && strike.attackId !== 'shieldDash') {
         scorchSystem?.addScorch(strike.landingX, strike.landingZ, strike.radius * 0.9, strikeJuiceColor);
       }
+      // Every landed unit attack DESTROYS the grass under it (wear 1 → blades
+      // squash to the sod, regrowing over ~a minute). Cone/lane strikes misread
+      // as circles, so they burn a smaller core instead of the full radius.
+      const wearRadius =
+        strike.attackId === 'swordSwing' || strike.attackId === 'shieldDash'
+          ? strike.radius * 0.55
+          : strike.radius;
+      groundInfluence.stamp(strike.landingX, strike.landingZ, wearRadius, 1, 0, 0, 1);
       // Distance gate + linear falloff (lastStrike above stays unconditional —
       // stun attribution must survive even for a strike this gate mutes): a
       // strike beyond STRIKE_JUICE_RANGE plays NOTHING here; inside it, shake

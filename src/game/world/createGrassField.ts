@@ -97,11 +97,13 @@ function createGrassMaterial(
                    + 0.4 * sin(uTime * 3.3 + bladeOrigin.z * 0.7);
         transformed.xz += vec2(0.85, 0.55) * sway * 0.09 * heightFactor;
         // Ground influence: bend tips along the recorded push, squash by flatten.
+        // A = accumulated wear (trampled trails / strike destruction): squashes
+        // the whole blade toward the sod and regrows as the channel decays.
         vec2 influenceUv = (bladeOrigin.xz - uInfluenceBounds.xy) * uInfluenceBounds.zw;
         vec4 influence = texture2D(uInfluenceMap, influenceUv);
         vec2 bendDirection = influence.rg * 2.0 - 1.0;
         transformed.xz += bendDirection * influence.b * heightFactor * 0.55;
-        transformed.y *= 1.0 - influence.b * 0.9 * heightFactor;
+        transformed.y *= (1.0 - influence.b * 0.9 * heightFactor) * (1.0 - influence.a * 0.92);
         `
       );
   };

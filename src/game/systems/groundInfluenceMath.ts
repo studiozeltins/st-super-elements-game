@@ -35,3 +35,15 @@ export function encodeBendDirection(dx: number, dz: number): { r: number; g: num
 export function decayForDelta(deltaSeconds: number): number {
   return Math.pow(DECAY_PER_FRAME_AT_60, deltaSeconds * 60);
 }
+
+/**
+ * Trampled/destroyed grass (the influence map's A "wear" channel) regrows on a
+ * much slower clock than the springy bend: full wear stays visibly flat for
+ * ~a minute (exp(-t/25) drops below 0.1 at ~58s), light footpath wear sooner.
+ */
+const WEAR_REGROW_TIME_CONSTANT_SECONDS = 25;
+
+/** Frame-rate-independent wear (regrow) decay factor for one frame. */
+export function wearDecayForDelta(deltaSeconds: number): number {
+  return Math.exp(-deltaSeconds / WEAR_REGROW_TIME_CONSTANT_SECONDS);
+}
