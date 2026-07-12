@@ -290,21 +290,34 @@ export function createGame(
 ): Game {
   const scene = new THREE.Scene();
   const pixelRenderer = createPixelRenderer(canvas);
+  // Perf bisect kill-switches: append ?nograss / ?nobend / ?noshadow / ?nofx
+  // to the URL to disable one ambiance system and find a frame-cost culprit.
+  const perfFlags = new URLSearchParams(window.location.search);
+  if (perfFlags.has('noshadow')) pixelRenderer.renderer.shadowMap.enabled = false;
   // Ground influence map: everything that moves stamps into it, grass bends out.
   const quality = detectQualityProfile();
   const groundInfluence = createGroundInfluence(quality.influenceResolution);
+  const influenceEnabled = !perfFlags.has('nobend');
   const world = createMondstadtWorld(scene, {
-    grass: { bladeCount: quality.grassBladeCount, influence: groundInfluence },
+    grass: {
+      bladeCount: perfFlags.has('nograss') ? 0 : quality.grassBladeCount,
+      influence: groundInfluence,
+    },
   });
   // Light pool must exist before the effect system (projectiles borrow lights).
-  const lightPool = createLightPool(scene);
+  const fxEnabled = !perfFlags.has('nofx');
+  const lightPool = fxEnabled ? createLightPool(scene) : undefined;
   const effectSystem = createEffectSystem(
     scene,
     (x, z, radius, strength, dirX, dirZ) => groundInfluence.stamp(x, z, radius, strength, dirX, dirZ),
     lightPool
   );
-  const debrisSystem = createDebrisSystem(scene, (x, z) => world.getGroundHeight(x, z));
-  const scorchSystem = createScorchSystem(scene, (x, z) => world.getGroundHeight(x, z));
+  const debrisSystem = fxEnabled
+    ? createDebrisSystem(scene, (x, z) => world.getGroundHeight(x, z))
+    : undefined;
+  const scorchSystem = fxEnabled
+    ? createScorchSystem(scene, (x, z) => world.getGroundHeight(x, z))
+    : undefined;
   const damageNumbers = createDamageNumbers(scene);
   // Enemies and goliaths are now server-authoritative: these renderers only draw
   // the `enemy`/`goliath` table rows and interpolate them. Damage/HP/economy all
@@ -750,8 +763,8 @@ export function createGame(
   ) {
     if (skill.kind !== 'nova' && skill.kind !== 'dash') return;
     const color = ELEMENTS[element].color;
-    scorchSystem.addScorch(x, z, skill.radius * 0.8, color);
-    debrisSystem.spawn(new THREE.Vector3(x, world.getGroundHeight(x, z), z), color, debrisCount);
+    scorchSystem?.addScorch(x, z, skill.radius * 0.8, color);
+    debrisSystem?.spawn(new THREE.Vector3(x, world.getGroundHeight(x, z), z), color, debrisCount);
   }
 
   function reachableGroundHeight(x: number, z: number): number {
@@ -1228,8 +1241,8 @@ export function createGame(
       deltaSeconds,
     });
     effectSystem.update(deltaSeconds);
-    debrisSystem.update(deltaSeconds);
-    scorchSystem.update(deltaSeconds);
+    debrisSystem?.update(deltaSeconds);
+    scorchSystem?.update(deltaSeconds);
     // Enemies/goliaths are drawn straight from the server tables and interpolated;
     // the server tick owns their combat and damages players (reflected through
     // syncMyServerRow), so there is no local contact-damage path here anymore.
@@ -1258,7 +1271,7 @@ export function createGame(
 
     // All stampers above have queued this frame's marks; bake them into the
     // influence map before the world render samples it.
-    groundInfluence.update(pixelRenderer.renderer, deltaSeconds);
+    if (influenceEnabled) groundInfluence.update(pixelRenderer.renderer, deltaSeconds);
     pixelRenderer.render(scene);
   }
 
@@ -1380,9 +1393,9 @@ export function createGame(
       playerModel.dispose();
       scene.remove(boostOrbit.group);
       boostOrbit.dispose();
-      debrisSystem.dispose();
-      scorchSystem.dispose();
-      lightPool.dispose();
+      debrisSystem?.dispose();
+      scorchSystem?.dispose();
+      lightPool?.dispose();
       world.dispose();
       groundInfluence.dispose();
       pixelRenderer.dispose();
@@ -1696,9 +1709,9 @@ export function createGame(
       // swing's cone (and dash's lane) misread as circles, so those skip it.
       const strikeJuiceColor = ATTACK_RENDER[strike.attackId]?.juiceColor ?? ELEMENTS.geo.color;
       if (strike.attackId === 'slimeSlam' || strike.attackId === 'spikySlam') {
-        scorchSystem.addScorch(strike.landingX, strike.landingZ, strike.radius * 0.6, SLIME_SLAM_COLOR);
+        scorchSystem?.addScorch(strike.landingX, strike.landingZ, strike.radius * 0.6, SLIME_SLAM_COLOR);
       } else if (strike.attackId !== 'swordSwing' && strike.attackId !== 'shieldDash') {
-        scorchSystem.addScorch(strike.landingX, strike.landingZ, strike.radius * 0.9, strikeJuiceColor);
+        scorchSystem?.addScorch(strike.landingX, strike.landingZ, strike.radius * 0.9, strikeJuiceColor);
       }
       // Distance gate + linear falloff (lastStrike above stays unconditional —
       // stun attribution must survive even for a strike this gate mutes): a
@@ -1723,7 +1736,7 @@ export function createGame(
         // MUST bail before the default tier — the goliath slam package (deep
         // boom + shockwave + rim flash) on a slime hop reads absurd.
         effectSystem.spawnBurst(landing, SLIME_SLAM_COLOR, SLIME_SLAM_BURST_PARTICLES);
-        debrisSystem.spawn(landing, SLIME_SLAM_COLOR, 6);
+        debrisSystem?.spawn(landing, SLIME_SLAM_COLOR, 6);
         if (strikeDistance < SLIME_SLAM_SHAKE_RANGE) {
           shakeMagnitude = Math.max(shakeMagnitude, SLIME_SLAM_SHAKE_MAGNITUDE * juiceFalloff);
         }
@@ -1775,14 +1788,14 @@ export function createGame(
         }
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
         shakeMagnitude = Math.max(shakeMagnitude, DASH_SHAKE_MAGNITUDE * juiceFalloff);
-        debrisSystem.spawn(landing, EARTH_DEBRIS_COLOR, 10);
+        debrisSystem?.spawn(landing, EARTH_DEBRIS_COLOR, 10);
         audioSystem.playDash(juiceFalloff, strikePan);
         return;
       }
       // Default (leapSlam + any unknown attackId): the D4-15 full package.
       effectSystem.spawnBurst(landing, juiceColor, 26);
       effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
-      debrisSystem.spawn(landing, EARTH_DEBRIS_COLOR, Math.round(14 * juiceFalloff) + 6);
+      debrisSystem?.spawn(landing, EARTH_DEBRIS_COLOR, Math.round(14 * juiceFalloff) + 6);
       telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
       shakeMagnitude = Math.max(shakeMagnitude, SHAKE_START_MAGNITUDE * juiceFalloff);
       audioSystem.playSlam(juiceFalloff, strikePan);
