@@ -60,3 +60,61 @@ export function playShardChime(step: number) {
 export function playConstellationChime(step: number) {
   playChime(880, step, 0.22);
 }
+
+/**
+ * Būsts install payoff: a low power-swell under a fast rising major arpeggio
+ * (root · third · fifth · octave) capped by a bright shimmer. Higher boost
+ * levels start a hair higher so B10 feels grander than B1.
+ */
+export function playTranscendBoost(level: number) {
+  if (!context || context.state !== 'running') return;
+  const now = context.currentTime;
+  // Whole tone up per level, capped a fifth so late boosts stay musical.
+  const root = 262 * Math.min(1.5, Math.pow(2, Math.max(0, level - 1) / 24));
+
+  const master = context.createGain();
+  master.gain.setValueAtTime(0.0001, now);
+  master.gain.exponentialRampToValueAtTime(0.32, now + 0.02);
+  master.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+  master.connect(context.destination);
+
+  // Sub swell — the "power surge" body under the sparkle.
+  const sub = context.createOscillator();
+  sub.type = 'sine';
+  sub.frequency.setValueAtTime(root / 2, now);
+  sub.frequency.exponentialRampToValueAtTime(root, now + 0.5);
+  const subGain = context.createGain();
+  subGain.gain.setValueAtTime(0.5, now);
+  subGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+  sub.connect(subGain).connect(master);
+  sub.start(now);
+  sub.stop(now + 0.72);
+
+  // Rising major arpeggio: 1 · 5/4 · 3/2 · 2, one note every 70ms.
+  const ratios = [1, 5 / 4, 3 / 2, 2];
+  ratios.forEach((r, i) => {
+    const t = now + i * 0.07;
+    const osc = context!.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.value = root * r;
+    const g = context!.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.28, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+    osc.connect(g).connect(master);
+    osc.start(t);
+    osc.stop(t + 0.36);
+  });
+
+  // Bright shimmer sparkle on the final octave landing.
+  const spark = context.createOscillator();
+  spark.type = 'sine';
+  spark.frequency.value = root * 4;
+  const sparkGain = context.createGain();
+  sparkGain.gain.setValueAtTime(0.0001, now + 0.21);
+  sparkGain.gain.exponentialRampToValueAtTime(0.16, now + 0.24);
+  sparkGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+  spark.connect(sparkGain).connect(master);
+  spark.start(now + 0.21);
+  spark.stop(now + 0.62);
+}

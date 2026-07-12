@@ -15,6 +15,7 @@ import { CharacterChip } from './CharacterChip';
 import { ConstellationRing } from './ConstellationRing';
 import { CharacterIdentity } from './CharacterIdentity';
 import { useDragScroll } from './useDragScroll';
+import { playTranscendBoost } from './pullSounds';
 import { MAIN_MENU } from './menu';
 
 type Tab = 'info' | 'weapon' | 'constellation' | 'transcend';
@@ -536,6 +537,7 @@ export function CharacterScreen({
                             <button
                               className="transcend__btn transcend__btn--yes"
                               onClick={() => {
+                                playTranscendBoost(nextTranscendLevel);
                                 onTranscend(characterId);
                                 setConfirmingTranscendId(null);
                               }}
