@@ -16,6 +16,7 @@ Usage:
     python scripts/fps_playtest.py
 """
 
+import os
 import re
 import statistics
 import subprocess
@@ -26,7 +27,8 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 DB = "2d-impact-game-fr9ti"
-BASE_URL = "http://localhost:4173"
+# FPS_QUERY="?nograss" (or ?nofx / ?noshadow / ?nobend) bisects a frame cost.
+BASE_URL = "http://localhost:4173" + os.environ.get("FPS_QUERY", "")
 USERNAME = "perfbot"
 EMAIL = "perfbot@test.local"
 PASSWORD = "perfbot12345"
@@ -191,11 +193,12 @@ def walk_to(page, basis, target_x, target_z, arrive_within=9.0):
         hold([])
 
 
-def fight(page, screenshot_path: str) -> list[float]:
+def fight(page, basis, camp, screenshot_path: str) -> tuple[list[float], int]:
     page.evaluate("window.__fpsFrames = []; window.__fpsRecord = true;")
     started = time.time()
     last_skill = 0.0
     respawned_wave = False
+    deaths = 0
     wiggle = ["a", "d", "w", "s"]
     step = 0
     while time.time() - started < FIGHT_SECONDS:
@@ -209,14 +212,29 @@ def fight(page, screenshot_path: str) -> list[float]:
         time.sleep(0.25)
         page.keyboard.up(key)
         step += 1
+        # A death respawns the player at the plaza — without this check the
+        # rest of the "combat" sample would silently measure an idle plaza.
+        if step % 14 == 0:
+            player = get_player()
+            displaced = (
+                player
+                and ((player["x"] - camp[0]) ** 2 + (player["z"] - camp[1]) ** 2) ** 0.5 > 15
+            )
+            if displaced:
+                deaths += 1
+                print("  died — walking back to re-engage")
+                walk_to(page, basis, *camp)
         if not respawned_wave and time.time() - started > FIGHT_SECONDS / 2:
             # Top the wave back up to 3 full-HP goliaths for the second half.
-            call_reducer("debug_spawn_goliaths", str(CAMP[0]), str(CAMP[1]))
+            call_reducer("debug_spawn_goliaths", str(camp[0]), str(camp[1]))
             respawned_wave = True
+        # Early + late shots: the late one shows worn trails / destroyed patches.
         if step == 8:
             page.screenshot(path=screenshot_path)
+        if step == 130:
+            page.screenshot(path=screenshot_path.replace(".png", "-late.png"))
     page.evaluate("window.__fpsRecord = false;")
-    return page.evaluate("window.__fpsFrames")
+    return page.evaluate("window.__fpsFrames"), deaths
 
 
 def print_stats(label: str, frame_deltas: list[float]) -> None:
@@ -252,6 +270,12 @@ def main() -> None:
             lambda msg: console_errors.append(msg.text) if msg.type == "error" else None,
         )
 
+        # Reset world state from any previous run BEFORE the client loads its
+        # player row: clear leftover goliaths (they'd stunlock the idle baseline
+        # and the key calibration) and park the player back at the plaza.
+        run_cli("sql", DB, "DELETE FROM goliath")
+        run_cli("sql", DB, f"UPDATE player SET positionX = 6, positionZ = 6 WHERE name = '{USERNAME}'")
+
         ensure_logged_in(page)
         page.evaluate(FPS_SAMPLER)
         player = get_player()
@@ -281,11 +305,12 @@ def main() -> None:
         print("spawned 3 goliaths — fighting")
         time.sleep(1.5)
 
-        frames = fight(page, str(scratch / "fight.png"))
+        frames, deaths = fight(page, basis, spawn_at, str(scratch / "fight.png"))
         print_stats(f"combat vs 3 goliaths ({FIGHT_SECONDS}s)", frames)
 
         end_player = get_player()
-        print(f"\nplayer hp after fight: {end_player['hp']}")
+        print(f"\ndeaths during fight: {deaths}")
+        print(f"player hp after fight: {end_player['hp']}")
         goliaths = sql("SELECT sizeIndex, health, alive FROM goliath")
         print(f"goliaths after fight: {goliaths}")
         if console_errors:
