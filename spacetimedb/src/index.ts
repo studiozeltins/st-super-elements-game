@@ -3543,6 +3543,91 @@ export const seedWorld = spacetimedb.reducer(ctx => {
   spawnCamps(ctx);
 });
 
+// ---- Dev/test harness reducers (perf playtests) ------------------------------
+// Called from the CLI / test scripts, never from game UI. They exist so an
+// automated combat playtest can build a maxed roster and force a full goliath
+// batch on demand instead of waiting out the 5-minute spawn window.
+
+const DEBUG_LOADOUT_CHARACTERS = ['terron', 'glacia', 'nereida', 'ignis'];
+
+// Grants the owner four maxed 5★ characters (C6, B10, full HP) and sets them
+// as the active party, so a test player survives a multi-goliath fight.
+export const debugGrantLoadout = spacetimedb.reducer(
+  { owner: t.identity() },
+  (ctx, { owner }) => {
+    for (const characterId of DEBUG_LOADOUT_CHARACTERS) {
+      const maxHealth = statsFor(characterId).maxHealth;
+      const owned = [...ctx.db.ownedCharacter.owner.filter(owner)].find(
+        (row: any) => row.characterId === characterId
+      );
+      if (owned) {
+        ctx.db.ownedCharacter.id.update({
+          ...owned,
+          constellation: MAX_CONSTELLATION,
+          transcendLevel: MAX_TRANSCEND_LEVEL,
+          currentHealth: maxHealth,
+        });
+      } else {
+        ctx.db.ownedCharacter.insert({
+          id: 0n,
+          owner,
+          characterId,
+          currentHealth: maxHealth,
+          constellation: MAX_CONSTELLATION,
+          transcendLevel: MAX_TRANSCEND_LEVEL,
+        });
+      }
+      setActivation(ctx, owner, characterId, MAX_CONSTELLATION);
+    }
+    const existingPlayer = ctx.db.player.identity.find(owner);
+    if (existingPlayer) {
+      ctx.db.player.identity.update({
+        ...existingPlayer,
+        partyOrder: DEBUG_LOADOUT_CHARACTERS,
+        activeCharacterId: DEBUG_LOADOUT_CHARACTERS[0],
+        currentHealth: statsFor(DEBUG_LOADOUT_CHARACTERS[0]).maxHealth,
+      });
+    }
+  }
+);
+
+// Replaces the current goliath batch with one raider of EVERY size around the
+// given point — the "3 golems at once" worst case the fps playtest measures.
+export const debugSpawnGoliaths = spacetimedb.reducer(
+  { x: t.f64(), z: t.f64() },
+  (ctx, { x, z }) => {
+    const nowMicros = ctx.timestamp.microsSinceUnixEpoch;
+    const windowBucket = windowBucketFor(nowMicros, GOLIATH_BATCH_WINDOW_MICROS);
+    for (const goliathRow of [...ctx.db.goliath.iter()]) {
+      ctx.db.goliath.goliathId.delete(goliathRow.goliathId);
+    }
+    GOLIATH_SIZE_STATS.forEach((stats, sizeIndex) => {
+      const angle = (sizeIndex / GOLIATH_SIZE_STATS.length) * Math.PI * 2;
+      ctx.db.goliath.insert({
+        goliathId: GOLIATH_SLOT_ID_BASE + BigInt(sizeIndex + 1),
+        sizeIndex,
+        positionX: clampToWorld(x + Math.cos(angle) * 6),
+        positionZ: clampToWorld(z + Math.sin(angle) * 6),
+        health: stats.maxHealth,
+        maxHealth: stats.maxHealth,
+        contactDamage: stats.contactDamage,
+        moveSpeed: stats.moveSpeed,
+        splashes: stats.splashesOnAttack,
+        carriedGems: 0,
+        targetCampIndex: -1,
+        engageEndsAtMicros: 0n,
+        lastRaidedCampIndex: -1,
+        headingX: 0,
+        headingZ: 0,
+        aggroPlayer: undefined,
+        aggroExpiresAtMicros: 0n,
+        alive: true,
+        windowBucket,
+      });
+    });
+  }
+);
+
 export const onConnect = spacetimedb.clientConnected(ctx => {
   const canonical = accountIdentity(ctx);
   if (!canonical) return; // anonymous device, not logged in yet
