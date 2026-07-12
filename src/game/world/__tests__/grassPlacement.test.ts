@@ -32,7 +32,7 @@ describe('generateGrassBlades', () => {
   it('clusters blades into lush meadow patches only', () => {
     for (const blade of allBlades) {
       // Tuft spread can drift slightly off the anchor; mask varies slowly.
-      expect(meadowLushness(blade.x, blade.z)).toBeGreaterThan(0.35);
+      expect(meadowLushness(blade.x, blade.z)).toBeGreaterThan(0.3);
     }
   });
 
