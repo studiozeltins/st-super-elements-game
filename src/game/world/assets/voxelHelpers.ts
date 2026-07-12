@@ -15,9 +15,13 @@ export interface VoxelCell {
   z: number;
 }
 
-/** Chunky-but-readable voxel size for a shape's largest dimension. */
+/**
+ * Chunky-but-readable voxel size for a shape's largest dimension. Coarser than
+ * the first cut (dim/6, cap 0.6): every shell cell is 24 verts redrawn into the
+ * per-frame sun shadow map, and the finer grid tanked low-end GPUs.
+ */
 export function voxelSizeFor(largestDimension: number): number {
-  return Math.min(0.6, Math.max(0.3, largestDimension / 6));
+  return Math.min(0.75, Math.max(0.35, largestDimension / 4.5));
 }
 
 /** Generic shell scan: keep inside-cells that touch the outside via a 6-neighbor. */

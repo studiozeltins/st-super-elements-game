@@ -22,7 +22,7 @@ const MAX_GRASS_SLOPE = 0.85;
 /** Keep the stone plaza clear. */
 const PLAZA_RADIUS = SAFE_ZONE_RADIUS + 1;
 /** Fraction of blades tinted as tiny meadow flowers (replaces the old yellow bed). */
-const FLOWER_FRACTION = 0.02;
+const FLOWER_FRACTION = 0.01;
 const FLOWER_COLOR = { r: 1, g: 0.94, b: 0.66 }; // 0xfff0a8
 
 export function generateGrassBlades(totalCount: number): GrassBladeSpec[][] {
@@ -61,7 +61,7 @@ export function generateGrassBlades(totalCount: number): GrassBladeSpec[][] {
   });
 }
 
-/** Ground color darkened ~8% with ±5% per-blade jitter so blades sit IN the ground tone. */
+/** Ground color, slightly lightened with per-blade jitter, so blades sit IN the ground tone. */
 function bladeColorAt(
   x: number,
   z: number,
@@ -69,7 +69,7 @@ function bladeColorAt(
   random: () => number
 ): { r: number; g: number; b: number } {
   const ground = terrainColorAt(x, z, y);
-  const jitter = 0.92 + (random() - 0.5) * 0.1;
+  const jitter = 1.02 + random() * 0.1;
   return {
     r: Math.min(1, ground.r * jitter),
     g: Math.min(1, ground.g * jitter),

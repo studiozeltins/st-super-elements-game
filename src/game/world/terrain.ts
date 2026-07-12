@@ -122,6 +122,10 @@ export function getTerrainSlope(x: number, z: number, sampleStep = 1): number {
 }
 
 const ABYSS_COLOR = new THREE.Color(0x232833);
+// Large-scale meadow patches breaking up the "one flat green": sun-dried
+// blond-green highs and darker moss lows, blended by low-frequency noise.
+const MEADOW_DRY = new THREE.Color(0x84a851);
+const MEADOW_MOSS = new THREE.Color(0x3f7d40);
 
 /** Ground color at a world point — shared by the terrain mesh and grass field. */
 export function terrainColorAt(x: number, z: number, height: number): THREE.Color {
@@ -130,7 +134,11 @@ export function terrainColorAt(x: number, z: number, height: number): THREE.Colo
   const tintNoise = valueNoise(x * 0.25, z * 0.25, TERRAIN_SEED ^ 0xc2b2ae35);
   const heightFraction = Math.min(1, height / (MAX_HILL_HEIGHT * 0.7));
   const grassColor = GRASS_LOW.clone().lerp(GRASS_HIGH, heightFraction);
-  return grassColor.lerp(GRASS_TINT, tintNoise * 0.5);
+  grassColor.lerp(GRASS_TINT, tintNoise * 0.5);
+  const patchNoise = valueNoise(x * 0.045, z * 0.045, TERRAIN_SEED ^ 0x27d4eb2f);
+  grassColor.lerp(MEADOW_DRY, smoothstep(0.6, 0.85, patchNoise) * 0.5);
+  grassColor.lerp(MEADOW_MOSS, smoothstep(0.6, 0.85, 1 - patchNoise) * 0.45);
+  return grassColor;
 }
 
 export function createTerrainMesh(): THREE.Mesh {

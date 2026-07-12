@@ -18,20 +18,38 @@ export interface GrassField {
   dispose(): void;
 }
 
-const BLADE_HALF_WIDTH = 0.07;
-const BLADE_HEIGHT = 0.5;
+const BLADE_HALF_WIDTH = 0.12;
+const BLADE_HEIGHT = 0.42;
 
+/**
+ * Two triangles, front and back winding, FrontSide material. NOT DoubleSide:
+ * three flips normals on backfaces, which lit half the blades with the dark
+ * ground hemisphere and rendered them near-black.
+ */
 function createBladeGeometry(): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry();
+  const left = [-BLADE_HALF_WIDTH, 0, 0];
+  const right = [BLADE_HALF_WIDTH, 0, 0];
+  const tip = [0, BLADE_HEIGHT, 0];
   geometry.setAttribute(
     'position',
+    new THREE.Float32BufferAttribute([...left, ...right, ...tip, ...right, ...left, ...tip], 3)
+  );
+  // Up-facing normals on every vertex — blades inherit the ground's lighting.
+  geometry.setAttribute(
+    'normal',
+    new THREE.Float32BufferAttribute(Array.from({ length: 6 }, () => [0, 1, 0]).flat(), 3)
+  );
+  // Root→tip brightness gradient, multiplied with the per-instance color.
+  const root = [0.82, 0.82, 0.82];
+  const tipShade = [1.12, 1.12, 1.12];
+  geometry.setAttribute(
+    'color',
     new THREE.Float32BufferAttribute(
-      [-BLADE_HALF_WIDTH, 0, 0, BLADE_HALF_WIDTH, 0, 0, 0, BLADE_HEIGHT, 0],
+      [...root, ...root, ...tipShade, ...root, ...root, ...tipShade],
       3
     )
   );
-  // Up-facing normals on every vertex — blades inherit the ground's lighting.
-  geometry.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
   return geometry;
 }
 
@@ -39,7 +57,7 @@ function createGrassMaterial(
   influence: GroundInfluenceUniforms,
   timeUniform: { value: number }
 ): THREE.MeshLambertMaterial {
-  const material = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
+  const material = new THREE.MeshLambertMaterial({ vertexColors: true });
   material.onBeforeCompile = shader => {
     shader.uniforms.uTime = timeUniform;
     shader.uniforms.uInfluenceMap = influence.textureUniform;
@@ -113,8 +131,8 @@ export function createGrassField(options: {
       new THREE.Vector3(island.centerX, 0, island.centerZ),
       island.radius + BLADE_HEIGHT + 8
     );
-    mesh.castShadow = false; // 28k casters would rebuild the sun map every frame
-    mesh.receiveShadow = true;
+    mesh.castShadow = false; // thousands of casters would rebuild the sun map every frame
+    mesh.receiveShadow = false; // skip per-fragment shadow sampling over the whole field
     group.add(mesh);
   });
 

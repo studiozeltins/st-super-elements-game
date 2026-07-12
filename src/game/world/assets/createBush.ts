@@ -6,7 +6,7 @@ import { buildVoxelCluster, sphereVoxelCells } from './voxelHelpers';
 const BUSH_GREENS = [0x58a24f, 0x4f9147, 0x67b35a] as const;
 
 const BUSH_Y_SCALE = 0.65;
-const BUSH_VOXEL_SIZE = 0.3;
+const BUSH_VOXEL_SIZE = 0.35;
 
 export function createBush(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();

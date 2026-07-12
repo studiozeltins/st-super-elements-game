@@ -27,10 +27,10 @@ function expectShellProperty(
 }
 
 describe('voxelSizeFor', () => {
-  it('clamps to [0.3, 0.6]', () => {
-    expect(voxelSizeFor(0.5)).toBe(0.3);
-    expect(voxelSizeFor(3)).toBe(0.5);
-    expect(voxelSizeFor(20)).toBe(0.6);
+  it('clamps to [0.35, 0.75]', () => {
+    expect(voxelSizeFor(0.5)).toBe(0.35);
+    expect(voxelSizeFor(3)).toBeCloseTo(3 / 4.5);
+    expect(voxelSizeFor(20)).toBe(0.75);
   });
 });
 

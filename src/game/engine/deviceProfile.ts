@@ -10,8 +10,8 @@ export interface QualityProfile {
 
 export function chooseQualityProfile(isCoarsePointer: boolean): QualityProfile {
   return isCoarsePointer
-    ? { grassBladeCount: 6000, influenceResolution: 256 }
-    : { grassBladeCount: 28000, influenceResolution: 512 };
+    ? { grassBladeCount: 4000, influenceResolution: 256 }
+    : { grassBladeCount: 12000, influenceResolution: 512 };
 }
 
 export function detectQualityProfile(): QualityProfile {
