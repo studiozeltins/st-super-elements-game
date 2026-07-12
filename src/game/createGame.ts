@@ -129,6 +129,8 @@ export interface GameNetworkActions {
 export interface Game {
   start(): void;
   dispose(): void;
+  /** Switches between the chunky-pixel render path and native resolution. */
+  setPixelFilter(enabled: boolean): void;
   setActiveCharacter(characterId: string): void;
   /** Active character's constellation level, scaling its damage. */
   setActiveConstellation(constellation: number): void;
@@ -1313,6 +1315,9 @@ export function createGame(
     },
     setOnSelectPlayer(handler) {
       onSelectPlayer = handler;
+    },
+    setPixelFilter(enabled) {
+      pixelRenderer.setPixelated(enabled);
     },
     setPartyAllies(identityHexes) {
       partyAllyHexes = new Set(identityHexes);

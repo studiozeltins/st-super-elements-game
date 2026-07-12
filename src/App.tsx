@@ -75,6 +75,10 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showFps, setShowFps] = useState(() => localStorage.getItem('settings.showFps') === '1');
   const [showPing, setShowPing] = useState(() => localStorage.getItem('settings.showPing') === '1');
+  // Chunky-pixel render path; absent key = enabled (the game's default look).
+  const [pixelFilter, setPixelFilter] = useState(
+    () => localStorage.getItem('settings.pixelFilter') !== '0'
+  );
   // Which gameplay-HUD skin is active. Drives `data-hud-theme` on the .app root;
   // the CSS in src/styles/hud/ reskins the HUD accordingly. Persisted per device.
   const [hudTheme, setHudTheme] = useState(() => {
@@ -771,6 +775,9 @@ export default function App() {
     game.onDeathChange = setIsDead;
     // Tap/click a remote player's floating nameplate → open their slide-out sheet.
     game.setOnSelectPlayer(hex => setSheetTargetHex(hex));
+    // The [pixelFilter] effect only fires on toggle changes; new games read the
+    // persisted value directly so a reconnect keeps the chosen render path.
+    game.setPixelFilter(localStorage.getItem('settings.pixelFilter') !== '0');
     game.start();
     gameRef.current = game;
 
@@ -877,6 +884,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('settings.hudTheme', hudTheme);
   }, [hudTheme]);
+  useEffect(() => {
+    localStorage.setItem('settings.pixelFilter', pixelFilter ? '1' : '0');
+    gameRef.current?.setPixelFilter(pixelFilter);
+  }, [pixelFilter]);
 
   // ESC opens settings (closes the gacha screen first if it's open). The Radix
   // dialog handles ESC-to-close itself, so here we only need the open path.
@@ -1039,6 +1050,8 @@ export default function App() {
         showPing={showPing}
         onToggleFps={setShowFps}
         onTogglePing={setShowPing}
+        pixelFilter={pixelFilter}
+        onTogglePixelFilter={setPixelFilter}
         hudTheme={hudTheme}
         onHudThemeChange={setHudTheme}
         missedInvites={invitesWithNames.map(invite => ({

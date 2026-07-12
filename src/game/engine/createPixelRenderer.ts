@@ -6,6 +6,7 @@ export interface PixelRenderer {
   camera: THREE.PerspectiveCamera;
   resize(): void;
   render(scene: THREE.Scene): void;
+  setPixelated(enabled: boolean): void;
   dispose(): void;
 }
 
@@ -36,6 +37,8 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
   renderer.shadowMap.autoUpdate = false;
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
+
+  let pixelated = true;
 
   // Low-res world buffer. Nearest filtering is what upscales into visible pixels.
   const worldTarget = new THREE.WebGLRenderTarget(1, 1, {
@@ -70,7 +73,7 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
     // Canvas backing store renders at native (× DPR) resolution — the overlay
     // pass draws here directly and stays crisp. The world target stays small.
     renderer.setSize(displayWidth, displayHeight, false);
-    worldTarget.setSize(internalWidth, internalHeight);
+    if (pixelated) worldTarget.setSize(internalWidth, internalHeight);
     camera.aspect = displayWidth / displayHeight;
     camera.updateProjectionMatrix();
   }
@@ -84,22 +87,28 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
     resize,
     render(scene) {
       // Rebuild the sun shadow map exactly once this frame (auto-resets to false
-      // after the first render() below, so pass 3 reuses it instead of redrawing).
+      // after the first render() below, so later passes reuse it).
       renderer.shadowMap.needsUpdate = true;
 
-      // Pass 1: world (layer 0) → low-res target.
       camera.layers.set(0);
-      renderer.setRenderTarget(worldTarget);
-      renderer.render(scene, camera);
+      if (pixelated) {
+        // Pass 1: world (layer 0) → low-res target.
+        renderer.setRenderTarget(worldTarget);
+        renderer.render(scene, camera);
 
-      // Pass 2: upscale the pixelated world onto the canvas.
-      renderer.setRenderTarget(null);
-      renderer.render(blitScene, blitCamera);
+        // Pass 2: upscale the pixelated world onto the canvas.
+        renderer.setRenderTarget(null);
+        renderer.render(blitScene, blitCamera);
+      } else {
+        // Native path: world straight to the canvas, no low-res target, no blit.
+        renderer.setRenderTarget(null);
+        renderer.render(scene, camera);
+      }
 
-      // Pass 3: crisp overlay billboards on top, native resolution, no colour clear.
+      // Overlay pass: crisp billboards on top, native resolution, no colour clear.
       // scene.background is a solid Color, which forces WebGLBackground to clear the
-      // canvas even with autoClear off — that would repaint sky over the blitted
-      // world and leave only these sprites. Null it for this pass, then restore.
+      // canvas even with autoClear off — that would repaint sky over the world
+      // and leave only these sprites. Null it for this pass, then restore.
       const savedBackground = scene.background;
       scene.background = null;
       renderer.autoClear = false;
@@ -109,6 +118,13 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       renderer.autoClear = true;
       scene.background = savedBackground;
       camera.layers.set(0);
+    },
+    setPixelated(enabled) {
+      if (pixelated === enabled) return;
+      pixelated = enabled;
+      // Release the low-res buffer while native rendering; resize() restores it.
+      if (enabled) resize();
+      else worldTarget.setSize(1, 1);
     },
     dispose() {
       window.removeEventListener('resize', resize);
