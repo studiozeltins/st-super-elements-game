@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { ELEMENTS, type ElementId } from '../data/elements';
 import type { SkillDefinition } from '../data/characters';
 import type { DamageKind } from '../combat/damageKind';
-import { disposeObject } from '../engine/disposeObject';
 import type { LightPool } from './createLightPool';
 
 /** Applies damage around a point; returns true when something was hit. */
@@ -63,19 +62,8 @@ export interface EffectSystem {
 export const PROJECTILE_LIFETIME_SECONDS = 2.5;
 const RING_TICK_SECONDS = 0.5;
 
-function createBurstPoints(color: number, particleCount: number): THREE.Points {
-  const positions = new Float32Array(particleCount * 3);
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const material = new THREE.PointsMaterial({
-    color,
-    size: 0.28,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  return new THREE.Points(geometry, material);
-}
+const BURST_POINT_SIZE = 0.28;
+const SPARKLE_POINT_SIZE = 0.22;
 
 export function createEffectSystem(
   scene: THREE.Scene,
@@ -86,6 +74,69 @@ export function createEffectSystem(
 ): EffectSystem {
   const activeEffects: ActiveEffect[] = [];
 
+  // Pooled materials + shared static geometries: creating fresh ones per
+  // burst/ring/slash made three re-resolve shader programs constantly —
+  // getParameters/getProgramCacheKey were ~15% of combat frame time.
+  const materialPools = new Map<string, THREE.Material[]>();
+  function acquireMaterial<T extends THREE.Material>(key: string, create: () => T): T {
+    const reused = materialPools.get(key)?.pop() as T | undefined;
+    if (reused) return reused;
+    const material = create();
+    material.userData.poolKey = key;
+    return material;
+  }
+  function releaseMaterial(material: THREE.Material) {
+    const key = material.userData.poolKey as string | undefined;
+    if (!key) {
+      material.dispose();
+      return;
+    }
+    let pool = materialPools.get(key);
+    if (!pool) {
+      pool = [];
+      materialPools.set(key, pool);
+    }
+    if (pool.length < 24) pool.push(material);
+    else material.dispose();
+  }
+  function markShared(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+    geometry.userData.shared = true;
+    return geometry;
+  }
+
+  // Static geometries reused across every spawn of their effect type.
+  const ringGeometry = markShared(new THREE.RingGeometry(0.4, 0.9, 32));
+  const slashGeometry = markShared(new THREE.RingGeometry(0.9, 1.5, 16, 1, 0, Math.PI * 0.8));
+  const projectileGeometry = markShared(new THREE.OctahedronGeometry(0.22));
+  const torusGeometries = new Map<number, THREE.BufferGeometry>();
+  function torusGeometryFor(radius: number): THREE.BufferGeometry {
+    let geometry = torusGeometries.get(radius);
+    if (!geometry) {
+      geometry = markShared(new THREE.TorusGeometry(radius, 0.12, 8, 32));
+      torusGeometries.set(radius, geometry);
+    }
+    return geometry;
+  }
+
+  function createBurstPoints(color: number, particleCount: number, size: number): THREE.Points {
+    const positions = new Float32Array(particleCount * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = acquireMaterial(
+      `points:${color}:${size}`,
+      () =>
+        new THREE.PointsMaterial({
+          color,
+          size,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+    );
+    material.opacity = 1;
+    return new THREE.Points(geometry, material);
+  }
+
   function addEffect(effect: ActiveEffect) {
     scene.add(effect.object);
     activeEffects.push(effect);
@@ -93,11 +144,16 @@ export function createEffectSystem(
 
   function removeEffect(effect: ActiveEffect) {
     scene.remove(effect.object);
-    disposeObject(effect.object);
+    effect.object.traverse(node => {
+      const renderable = node as THREE.Mesh;
+      if (!renderable.geometry) return;
+      if (!renderable.geometry.userData.shared) renderable.geometry.dispose();
+      releaseMaterial(renderable.material as THREE.Material);
+    });
   }
 
   function spawnBurst(position: THREE.Vector3, color: number, particleCount = 18) {
-    const points = createBurstPoints(color, particleCount);
+    const points = createBurstPoints(color, particleCount, BURST_POINT_SIZE);
     points.position.copy(position);
     const velocities = Array.from({ length: particleCount }, () =>
       new THREE.Vector3(
@@ -132,8 +188,7 @@ export function createEffectSystem(
   // A slow, gentle sparkle: a handful of pixel motes that rise a little and fade
   // over ~1.4s. Chunky point size keeps it reading as pixels, not smoke.
   function spawnSparkle(position: THREE.Vector3, color: number, particleCount = 5) {
-    const points = createBurstPoints(color, particleCount);
-    (points.material as THREE.PointsMaterial).size = 0.22;
+    const points = createBurstPoints(color, particleCount, SPARKLE_POINT_SIZE);
     points.position.copy(position);
     const velocities = Array.from({ length: particleCount }, () =>
       new THREE.Vector3(
@@ -180,8 +235,11 @@ export function createEffectSystem(
   }) {
     const elementColor = ELEMENTS[options.element].color;
     const projectile = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.22),
-      new THREE.MeshBasicMaterial({ color: elementColor })
+      projectileGeometry,
+      acquireMaterial(
+        `projectile:${elementColor}`,
+        () => new THREE.MeshBasicMaterial({ color: elementColor })
+      )
     );
     projectile.position.copy(options.origin);
     projectile.position.y = Math.max(projectile.position.y, 1.1);
@@ -225,13 +283,17 @@ export function createEffectSystem(
     expandSeconds: number
   ) {
     const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.4, 0.9, 32),
-      new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      })
+      ringGeometry,
+      acquireMaterial(
+        `ring:${color}`,
+        () =>
+          new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          })
+      )
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(x, y, z);
@@ -277,10 +339,12 @@ export function createEffectSystem(
 
   function spawnDamageRing(options: SkillEffectOptions) {
     const elementColor = ELEMENTS[options.element].color;
-    const torus = new THREE.Mesh(
-      new THREE.TorusGeometry(options.skill.radius, 0.12, 8, 32),
-      new THREE.MeshBasicMaterial({ color: elementColor, transparent: true, opacity: 0.85 })
+    const torusMaterial = acquireMaterial(
+      `torus:${elementColor}`,
+      () => new THREE.MeshBasicMaterial({ color: elementColor, transparent: true })
     );
+    torusMaterial.opacity = 0.85;
+    const torus = new THREE.Mesh(torusGeometryFor(options.skill.radius), torusMaterial);
     torus.rotation.x = -Math.PI / 2;
     let ageSeconds = 0;
     let nextTickSeconds = 0;
@@ -331,13 +395,17 @@ export function createEffectSystem(
 
   function spawnMeleeSlash(position: THREE.Vector3, facingAngle: number, color: number) {
     const slash = new THREE.Mesh(
-      new THREE.RingGeometry(0.9, 1.5, 16, 1, 0, Math.PI * 0.8),
-      new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      })
+      slashGeometry,
+      acquireMaterial(
+        `slash:${color}`,
+        () =>
+          new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          })
+      )
     );
     slash.rotation.x = -Math.PI / 2;
     slash.rotation.z = facingAngle - Math.PI * 0.4;
@@ -399,6 +467,13 @@ export function createEffectSystem(
     dispose() {
       for (const effect of activeEffects) removeEffect(effect);
       activeEffects.length = 0;
+      for (const pool of materialPools.values()) for (const material of pool) material.dispose();
+      materialPools.clear();
+      ringGeometry.dispose();
+      slashGeometry.dispose();
+      projectileGeometry.dispose();
+      for (const geometry of torusGeometries.values()) geometry.dispose();
+      torusGeometries.clear();
     },
   };
 }

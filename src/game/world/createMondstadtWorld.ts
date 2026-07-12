@@ -347,6 +347,13 @@ export function createMondstadtWorld(
 
   scene.add(group);
 
+  // The world is static: compute every matrix ONCE and freeze the subtree.
+  // Recomputing thousands of prop matrices on every render pass was ~11% of
+  // combat frame CPU. The windmill blades are the only mover — world.update
+  // refreshes just their branch each frame.
+  group.updateMatrixWorld(true);
+  group.matrixWorldAutoUpdate = false;
+
   // Campfire flames flicker — collect the named lights once, wobble per frame.
   const campfireLights: THREE.PointLight[] = [];
   group.traverse(node => {
@@ -358,6 +365,9 @@ export function createMondstadtWorld(
     group,
     update(deltaSeconds) {
       blades.rotation.z += deltaSeconds * 0.6;
+      // The frozen world subtree skips auto matrix updates; push the blades'
+      // rotation through by hand.
+      blades.updateMatrixWorld(true);
       grassField.update(deltaSeconds);
       flickerSeconds += deltaSeconds;
       campfireLights.forEach((light, index) => {
