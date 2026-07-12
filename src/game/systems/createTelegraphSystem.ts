@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { ATTACK_RENDER } from '../data/attacks';
-import { disposeObject } from '../engine/disposeObject';
 import type { UnitAttack } from '../../module_bindings/types';
 import {
   RIM_WIDTH,
@@ -92,6 +91,18 @@ export function createTelegraphSystem(
   getGroundHeight: (x: number, z: number) => number
 ): TelegraphSystem {
   const telegraphs = new Map<string, ActiveTelegraph>();
+  // Telegraphs spawn per enemy attack — pooling the (opacity-animated)
+  // materials avoids three re-resolving shader parameters on every windup.
+  const materialPool: THREE.MeshBasicMaterial[] = [];
+  function acquireFlat(opacity: number): THREE.MeshBasicMaterial {
+    const material = materialPool.pop() ?? flatMaterial(opacity);
+    material.opacity = opacity;
+    return material;
+  }
+  function releaseFlat(material: THREE.MeshBasicMaterial) {
+    if (materialPool.length < 32) materialPool.push(material);
+    else material.dispose();
+  }
   // Shared clock for the outer-ring pulse (cosmetic only — never drives timing).
   let pulseElapsedSeconds = 0;
   const drapePoint = new THREE.Vector3();
@@ -141,7 +152,7 @@ export function createTelegraphSystem(
     const group = new THREE.Group();
     // Static full-radius outer ring appears instantly at windup entry (D4-14):
     // the constant danger edge.
-    const outlineMaterial = flatMaterial(OUTLINE_OPACITY);
+    const outlineMaterial = acquireFlat(OUTLINE_OPACITY);
     // Shape lookup by attackId; unknown/missing entry → circle (back-compat with
     // rows written before the client updated).
     const render = ATTACK_RENDER[row.attackId];
@@ -173,7 +184,7 @@ export function createTelegraphSystem(
       );
       fillGeometry.rotateX(-Math.PI / 2);
       fillGeometry.translate(length / 2, 0, 0);
-      progress = new THREE.Mesh(fillGeometry, flatMaterial(PROGRESS_OPACITY));
+      progress = new THREE.Mesh(fillGeometry, acquireFlat(PROGRESS_OPACITY));
       // Lane fill scales ONLY along the lane axis (width constant); update() reads
       // this to avoid a growing wedge (RESEARCH Pitfall 3).
       fillAxis = 'x';
@@ -190,7 +201,7 @@ export function createTelegraphSystem(
       // expands it from the apex for free because the group origin IS the apex.
       progress = new THREE.Mesh(
         flatRing(0.001, row.radius, CONE_FILL_RINGS, -fullAngle / 2, fullAngle),
-        flatMaterial(PROGRESS_OPACITY)
+        acquireFlat(PROGRESS_OPACITY)
       );
     } else {
       outline = new THREE.Mesh(flatRing(row.radius - RIM_WIDTH, row.radius), outlineMaterial);
@@ -199,7 +210,7 @@ export function createTelegraphSystem(
       // Its expansion IS the countdown.
       progress = new THREE.Mesh(
         flatRing(Math.max(0.001, row.radius - PROGRESS_RIM_WIDTH), row.radius),
-        flatMaterial(PROGRESS_OPACITY)
+        acquireFlat(PROGRESS_OPACITY)
       );
     }
     outline.position.y = 0.005;
@@ -248,7 +259,14 @@ export function createTelegraphSystem(
 
   function remove(key: string, telegraph: ActiveTelegraph) {
     scene.remove(telegraph.group);
-    disposeObject(telegraph.group);
+    // Geometry is per-telegraph (draped in place) — dispose it. Materials are
+    // pooled — release them for the next windup instead of disposing.
+    telegraph.group.traverse(node => {
+      const mesh = node as THREE.Mesh;
+      if (!mesh.geometry) return;
+      mesh.geometry.dispose();
+      releaseFlat(mesh.material as THREE.MeshBasicMaterial);
+    });
     telegraphs.delete(key);
   }
 
@@ -365,6 +383,8 @@ export function createTelegraphSystem(
     },
     dispose() {
       for (const [key, telegraph] of telegraphs) remove(key, telegraph);
+      for (const material of materialPool) material.dispose();
+      materialPool.length = 0;
     },
   };
 }

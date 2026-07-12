@@ -210,6 +210,21 @@ const sharedGolemArmGeometry = new THREE.BoxGeometry(0.35, 1.1, 0.4);
 const sharedEyeMaterial = new THREE.MeshBasicMaterial({ color: 0x101410 });
 const sharedSpikeMaterial = new THREE.MeshLambertMaterial({ color: 0x3a4a2a });
 
+// Body materials are never mutated per-instance, so each archetype shares ONE —
+// respawns during farming otherwise made three re-resolve shader programs.
+const sharedBodyMaterials = new Map<string, THREE.MeshLambertMaterial>();
+function bodyMaterialFor(
+  archetype: EnemyArchetype,
+  create: () => THREE.MeshLambertMaterial
+): THREE.MeshLambertMaterial {
+  let material = sharedBodyMaterials.get(archetype.id);
+  if (!material) {
+    material = create();
+    sharedBodyMaterials.set(archetype.id, material);
+  }
+  return material;
+}
+
 function addEyes(group: THREE.Group, y: number, z: number) {
   const leftEye = new THREE.Mesh(sharedEyeGeometry, sharedEyeMaterial);
   leftEye.position.set(-0.22, y, z);
@@ -229,7 +244,10 @@ function buildSlimeBody(
   group.add(rig);
   const body = new THREE.Mesh(
     sharedBodyGeometry,
-    new THREE.MeshLambertMaterial({ color: archetype.bodyColor, emissive: 0x000000 })
+    bodyMaterialFor(
+      archetype,
+      () => new THREE.MeshLambertMaterial({ color: archetype.bodyColor, emissive: 0x000000 })
+    )
   );
   body.scale.y = 0.72;
   body.position.y = 0.55;
@@ -251,13 +269,17 @@ function buildSlimeBody(
 function buildWispBody(group: THREE.Group, archetype: EnemyArchetype) {
   const body = new THREE.Mesh(
     sharedBodyGeometry,
-    new THREE.MeshLambertMaterial({
-      color: archetype.bodyColor,
-      emissive: archetype.bodyColor,
-      emissiveIntensity: 0.4,
-      transparent: true,
-      opacity: 0.85,
-    })
+    bodyMaterialFor(
+      archetype,
+      () =>
+        new THREE.MeshLambertMaterial({
+          color: archetype.bodyColor,
+          emissive: archetype.bodyColor,
+          emissiveIntensity: 0.4,
+          transparent: true,
+          opacity: 0.85,
+        })
+    )
   );
   body.scale.setScalar(0.7);
   body.position.y = 1.1;
@@ -267,10 +289,10 @@ function buildWispBody(group: THREE.Group, archetype: EnemyArchetype) {
 }
 
 function buildGolemBody(group: THREE.Group, archetype: EnemyArchetype) {
-  const stoneMaterial = new THREE.MeshLambertMaterial({
-    color: archetype.bodyColor,
-    emissive: 0x000000,
-  });
+  const stoneMaterial = bodyMaterialFor(
+    archetype,
+    () => new THREE.MeshLambertMaterial({ color: archetype.bodyColor, emissive: 0x000000 })
+  );
   const body = new THREE.Mesh(sharedGolemTorsoGeometry, stoneMaterial);
   body.position.y = 0.9;
   body.castShadow = true;
@@ -303,7 +325,7 @@ export function createEnemyModel(archetype: EnemyArchetype, scale: number): Enem
 }
 
 export function disposeEnemyModel(model: EnemyModel) {
-  (model.body.material as THREE.Material).dispose();
+  // Body material is shared per archetype (sharedBodyMaterials) — never dispose.
   model.overlay.dispose();
   model.group.traverse(node => {
     if (node instanceof THREE.Sprite) node.material.dispose();

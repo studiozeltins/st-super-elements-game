@@ -910,16 +910,27 @@ export function createGame(
     network.sendPosition(playerPosition.x, playerPosition.y, playerPosition.z, playerRotationY);
   }
 
+  // Gems/shards drop constantly while farming: their materials and geometry
+  // are created ONCE per denomination and shared — a fresh material per drop
+  // made three re-resolve shader parameters mid-fight, over and over.
+  const gemGeometry = new THREE.OctahedronGeometry(GEM_RADIUS);
+  const shardGeometry = new THREE.OctahedronGeometry(SHARD_RADIUS);
+  const dropMaterials = new Map<string, THREE.MeshLambertMaterial>();
+  function dropMaterial(color: number, emissiveIntensity: number): THREE.MeshLambertMaterial {
+    const key = `${color}:${emissiveIntensity}`;
+    let material = dropMaterials.get(key);
+    if (!material) {
+      material = new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity });
+      dropMaterials.set(key, material);
+    }
+    return material;
+  }
+
   function createGemMesh(drop: GemDrop): { mesh: THREE.Mesh; baseY: number } {
     // All gems are the same small size; only the color reads the denomination.
     // No halo and a low emissive keep the glow subtle.
     const visual = gemVisual(drop.amount);
-    const material = new THREE.MeshLambertMaterial({
-      color: visual.color,
-      emissive: visual.color,
-      emissiveIntensity: GEM_EMISSIVE_INTENSITY,
-    });
-    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(GEM_RADIUS), material);
+    const mesh = new THREE.Mesh(gemGeometry, dropMaterial(visual.color, GEM_EMISSIVE_INTENSITY));
     const baseY = world.getGroundHeight(drop.positionX, drop.positionZ) + 0.9;
     mesh.position.set(drop.positionX, baseY, drop.positionZ);
     scene.add(mesh);
@@ -960,12 +971,10 @@ export function createGame(
     // A rarer purple relative of the gem: same crystalline octahedron, scaled 1.4x
     // with a brighter self-glow so a scarce shard is immediately distinguishable
     // from a gold gem. Always "rare tier" — always sparkling.
-    const material = new THREE.MeshLambertMaterial({
-      color: SHARD_COLOR,
-      emissive: SHARD_COLOR,
-      emissiveIntensity: SHARD_EMISSIVE_INTENSITY,
-    });
-    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(SHARD_RADIUS), material);
+    const mesh = new THREE.Mesh(
+      shardGeometry,
+      dropMaterial(SHARD_COLOR, SHARD_EMISSIVE_INTENSITY)
+    );
     // Raise slightly above the gem baseline so the larger mesh clears the ground.
     const baseY = world.getGroundHeight(drop.positionX, drop.positionZ) + 1.0;
     mesh.position.set(drop.positionX, baseY, drop.positionZ);
@@ -1398,6 +1407,10 @@ export function createGame(
       debrisSystem?.dispose();
       scorchSystem?.dispose();
       lightPool?.dispose();
+      gemGeometry.dispose();
+      shardGeometry.dispose();
+      for (const material of dropMaterials.values()) material.dispose();
+      dropMaterials.clear();
       world.dispose();
       groundInfluence.dispose();
       pixelRenderer.dispose();
@@ -1625,13 +1638,8 @@ export function createGame(
           pickupAudio.playGemPickup(gem.amount);
           game.onPickup?.('gem', gem.amount);
         }
+        // Geometry + material are shared across all drops — remove only.
         scene.remove(gem.mesh);
-        gem.mesh.traverse(object => {
-          if (object instanceof THREE.Mesh) {
-            object.geometry.dispose();
-            (object.material as THREE.Material).dispose();
-          }
-        });
         gemDrops.delete(key);
         requestedGemPickups.delete(key);
       }
@@ -1660,13 +1668,8 @@ export function createGame(
           pickupAudio.playShardGain();
           game.onPickup?.('shard', shard.amount);
         }
+        // Geometry + material are shared across all drops — remove only.
         scene.remove(shard.mesh);
-        shard.mesh.traverse(object => {
-          if (object instanceof THREE.Mesh) {
-            object.geometry.dispose();
-            (object.material as THREE.Material).dispose();
-          }
-        });
         shardDrops.delete(key);
         requestedShardPickups.delete(key);
       }
