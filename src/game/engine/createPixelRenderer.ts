@@ -39,6 +39,7 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);
 
   let pixelated = true;
+  let frameParity = false;
 
   // Low-res world buffer. Nearest filtering is what upscales into visible pixels.
   const worldTarget = new THREE.WebGLRenderTarget(1, 1, {
@@ -86,9 +87,11 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
     camera,
     resize,
     render(scene) {
-      // Rebuild the sun shadow map exactly once this frame (auto-resets to false
-      // after the first render() below, so later passes reuse it).
-      renderer.shadowMap.needsUpdate = true;
+      // Rebuild the sun shadow map every OTHER frame — the whole world redraws
+      // into the depth map on update, and 30Hz shadows on slow-moving units are
+      // imperceptible while halving the biggest single GPU cost.
+      frameParity = !frameParity;
+      if (frameParity) renderer.shadowMap.needsUpdate = true;
 
       camera.layers.set(0);
       if (pixelated) {

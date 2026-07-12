@@ -61,7 +61,9 @@ function createLighting(group: THREE.Group) {
   const sunLight = new THREE.DirectionalLight(0xfff2d8, 1.4);
   sunLight.position.set(30, 50, 20);
   sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(2048, 2048);
+  // 1024 halves shadow raster cost vs 2048; at the pixelated internal
+  // resolution the softer edge is invisible.
+  sunLight.shadow.mapSize.set(1024, 1024);
   const shadowSpan = WORLD_BOUND + 10;
   sunLight.shadow.camera.left = -shadowSpan;
   sunLight.shadow.camera.right = shadowSpan;
