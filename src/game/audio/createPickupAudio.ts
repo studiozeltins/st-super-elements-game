@@ -73,9 +73,16 @@ const GEM_MERGE_BOOST = 0.15;
 const GEM_MERGE_BOOST_CAP = 3;
 const GEM_JITTER = 0.02;
 const PAYOUT_BASE_HZ = 880;
-const PAYOUT_PEAK = 0.28;
+// 0.28 was too loud once bursts chained (playtest 2026-07-12) — bells are
+// reward garnish, not a combat cue.
+const PAYOUT_PEAK = 0.14;
 const PAYOUT_DECAY_SECONDS = 0.3;
 const PAYOUT_CLIMB_CAP = 2 ** 1.5;
+// Multi-drop pickups (a golem's pile = many 500-max drop rows collected in
+// one sweep) CHAIN into one continuous count-up — overlapped per-drop bursts
+// summed to a loud pitched blur that read far shorter than the total
+// (playtest 2026-07-12, worst on magenta 500s). The 10s ceiling falls out of
+// GEM_BURST_MAX_CHIMES: the chain never rings more than 77 bells total.
 
 // Shard gain: quick ascending arpeggio + a soft high shimmer = "rare loot".
 const SHARD_GAIN_NOTES_HZ = [520, 660, 880] as const;
@@ -106,6 +113,14 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
   let lastGemAt = -Infinity;
   let gemMergeNextAt = -Infinity;
   let gemMerged = 0;
+  // Payout chain state (context.currentTime domain). A kill's hoard arrives
+  // as MANY drop rows (500-gem max denomination), so the tier curve must run
+  // on the sweep's CUMULATIVE total: each pickup raises chainTotal, and only
+  // the chimes the new total EARNS beyond those already scheduled are added.
+  let payoutUntil = 0;
+  let payoutEndStep = 0;
+  let chainTotal = 0;
+  let chainChimes = 0;
 
   function ready(): AudioContext | null {
     const context = getContext();
@@ -146,20 +161,36 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
     const context = ready();
     if (!context) return;
     const now = context.currentTime;
-    const chimes = gemChimeCount(amount);
-    if (chimes > 1) {
-      // ShardCounter-style payout: bells ticking up a quarter-tone per step.
-      // Never merge-throttled — a big drop always counts itself out.
-      for (let chime = 0; chime < chimes; chime++) {
-        playGemBell(context, now + chime * GEM_BURST_SPACING_SECONDS, chime, 1);
+    // Sweep chain: reset when the previous payout finished ringing.
+    if (now >= payoutUntil) {
+      chainTotal = 0;
+      chainChimes = 0;
+      payoutEndStep = 0;
+      payoutUntil = now;
+    }
+    chainTotal += amount;
+    const earnedChimes = chainTotal >= GEM_CHIME_TIERS[0].perAmount ? gemChimeCount(chainTotal) : 0;
+    const newChimes = earnedChimes - chainChimes;
+    if (newChimes > 0) {
+      // ShardCounter-style payout: bells ticking up a quarter-tone per step,
+      // appended to the chain's tail — a multi-drop sweep reads as ONE long
+      // count-up whose length tracks the swept TOTAL (tier curve, ~10s cap).
+      for (let chime = 0; chime < newChimes; chime++) {
+        playGemBell(context, payoutUntil + chime * GEM_BURST_SPACING_SECONDS, payoutEndStep + chime, 1);
       }
-      // The streak + merge gate continue from the burst's LAST chime.
-      gemStep = chimes;
-      lastGemAt = now + (chimes - 1) * GEM_BURST_SPACING_SECONDS;
+      payoutUntil += newChimes * GEM_BURST_SPACING_SECONDS;
+      payoutEndStep += newChimes;
+      chainChimes = earnedChimes;
+      // The streak + merge gate continue from the chain's LAST chime.
+      gemStep = GEM_LADDER_MAX_STEPS;
+      lastGemAt = payoutUntil;
       gemMerged = 0;
-      gemMergeNextAt = lastGemAt + GEM_MERGE_SECONDS;
+      gemMergeNextAt = payoutUntil + GEM_MERGE_SECONDS;
       return;
     }
+    // No new tier crossed. During an active count-up stay silent (the chain
+    // owns the soundscape); otherwise fall through to the single streak bell.
+    if (chainChimes > 0) return;
     // The streak advances on EVERY pickup — merged (throttled) plays included —
     // so a vacuumed trail still lands its next audible bell higher up.
     gemStep = nextGemStep(gemStep, now - lastGemAt);
@@ -263,6 +294,8 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
       lastGemAt = -Infinity;
       gemMergeNextAt = -Infinity;
       gemMerged = 0;
+      payoutUntil = 0;
+      payoutEndStep = 0;
     },
   };
 }

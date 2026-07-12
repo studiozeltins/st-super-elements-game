@@ -404,8 +404,6 @@ export function createGame(
       amount: number;
       age: number;
       baseY: number;
-      sparkle: boolean;
-      sparkleAt: number;
     }
   >();
   const requestedGemPickups = new Set<string>();
@@ -865,8 +863,8 @@ export function createGame(
     const baseY = world.getGroundHeight(drop.positionX, drop.positionZ) + 0.9;
     mesh.position.set(drop.positionX, baseY, drop.positionZ);
     scene.add(mesh);
-    // Small sparkle on landing (color-matched for the rarer tiers).
-    effectSystem.spawnBurst(mesh.position.clone(), visual.sparkle ? visual.color : 0xffe08a, 10);
+    // Small one-shot burst on landing so a fresh drop catches the eye.
+    effectSystem.spawnBurst(mesh.position.clone(), 0xffe08a, 10);
     return { mesh, baseY };
   }
 
@@ -875,13 +873,6 @@ export function createGame(
       gem.age += deltaSeconds;
       gem.mesh.rotation.y += deltaSeconds * 2.4;
       gem.mesh.position.y = gem.baseY + Math.sin(elapsedSeconds * 3) * 0.12;
-
-      // Rarer tiers emit a gentle, slow-burn pixel sparkle on a throttle.
-      if (gem.sparkle && elapsedSeconds >= gem.sparkleAt) {
-        gem.sparkleAt = elapsedSeconds + GEM_SPARKLE_INTERVAL;
-        const material = gem.mesh.material as THREE.MeshLambertMaterial;
-        effectSystem.spawnSparkle(gem.mesh.position.clone(), material.color.getHex(), 4);
-      }
 
       if (gem.age < GEM_PICKUP_DELAY) continue;
 
@@ -1523,8 +1514,6 @@ export function createGame(
             amount: drop.amount,
             age: 0,
             baseY,
-            sparkle: gemVisual(drop.amount).sparkle,
-            sparkleAt: 0,
           });
         }
       }
