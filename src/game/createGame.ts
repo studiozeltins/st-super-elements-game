@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CHARACTERS, healSpecFor, type CharacterDefinition } from './data/characters';
+import { CHARACTERS, healSpecFor, type CharacterDefinition, type SkillDefinition } from './data/characters';
 import { WEAPONS } from './data/weapons';
 import { ELEMENTS, type ElementId } from './data/elements';
 import {
@@ -29,6 +29,9 @@ import { createMovementAudio, type FootstepKind } from './audio/createMovementAu
 import { createWeaponAudio } from './audio/createWeaponAudio';
 import { createPickupAudio } from './audio/createPickupAudio';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
+import { createDebrisSystem } from './systems/createDebrisSystem';
+import { createScorchSystem } from './systems/createScorchSystem';
+import { createLightPool } from './systems/createLightPool';
 import { createAttackViewClock } from './systems/createAttackViewClock';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
 import { createGoliathRenderer } from './systems/createGoliathRenderer';
@@ -293,9 +296,15 @@ export function createGame(
   const world = createMondstadtWorld(scene, {
     grass: { bladeCount: quality.grassBladeCount, influence: groundInfluence },
   });
-  const effectSystem = createEffectSystem(scene, (x, z, radius, strength, dirX, dirZ) =>
-    groundInfluence.stamp(x, z, radius, strength, dirX, dirZ)
+  // Light pool must exist before the effect system (projectiles borrow lights).
+  const lightPool = createLightPool(scene);
+  const effectSystem = createEffectSystem(
+    scene,
+    (x, z, radius, strength, dirX, dirZ) => groundInfluence.stamp(x, z, radius, strength, dirX, dirZ),
+    lightPool
   );
+  const debrisSystem = createDebrisSystem(scene, (x, z) => world.getGroundHeight(x, z));
+  const scorchSystem = createScorchSystem(scene, (x, z) => world.getGroundHeight(x, z));
   const damageNumbers = createDamageNumbers(scene);
   // Enemies and goliaths are now server-authoritative: these renderers only draw
   // the `enemy`/`goliath` table rows and interpolate them. Damage/HP/economy all
@@ -717,6 +726,7 @@ export function createGame(
         transcendDamageMultiplier(activeConstellation, activeTranscend),
       followPosition: () => playerPosition,
     });
+    spawnSkillGroundMarks(skill, activeCharacter.element, playerPosition.x, playerPosition.z, 8);
     network.sendCastSkill(skill.id, playerPosition.x, playerPosition.z, direction.x, direction.z);
 
     // Active healers (e.g. Marina, Lapa) heal the whole owned party on cast.
@@ -728,6 +738,20 @@ export function createGame(
   function clampPlayerToWorld() {
     playerPosition.x = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.x));
     playerPosition.z = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.z));
+  }
+
+  /** Ground-touching skills (nova, dash) char the ground and kick up cubes. */
+  function spawnSkillGroundMarks(
+    skill: SkillDefinition,
+    element: ElementId,
+    x: number,
+    z: number,
+    debrisCount: number
+  ) {
+    if (skill.kind !== 'nova' && skill.kind !== 'dash') return;
+    const color = ELEMENTS[element].color;
+    scorchSystem.addScorch(x, z, skill.radius * 0.8, color);
+    debrisSystem.spawn(new THREE.Vector3(x, world.getGroundHeight(x, z), z), color, debrisCount);
   }
 
   function reachableGroundHeight(x: number, z: number): number {
@@ -1097,6 +1121,8 @@ export function createGame(
   const SLIME_SLAM_BURST_PARTICLES = 12;
   const SLIME_SLAM_SHAKE_MAGNITUDE = 0.12;
   const SLIME_SLAM_SHAKE_RANGE = 8; // world units — "very close" only
+  /** Kicked-up dirt cubes for slams/dashes — earth tone regardless of element. */
+  const EARTH_DEBRIS_COLOR = 0x8a7a5a;
   // shieldDash tier seeds (06-02) — lighter than the slam, heavier than the swing.
   const DASH_BURST_PARTICLES = 14;
   const DASH_SHAKE_MAGNITUDE = 0.2;
@@ -1202,6 +1228,8 @@ export function createGame(
       deltaSeconds,
     });
     effectSystem.update(deltaSeconds);
+    debrisSystem.update(deltaSeconds);
+    scorchSystem.update(deltaSeconds);
     // Enemies/goliaths are drawn straight from the server tables and interpolated;
     // the server tick owns their combat and damages players (reflected through
     // syncMyServerRow), so there is no local contact-damage path here anymore.
@@ -1352,6 +1380,9 @@ export function createGame(
       playerModel.dispose();
       scene.remove(boostOrbit.group);
       boostOrbit.dispose();
+      debrisSystem.dispose();
+      scorchSystem.dispose();
+      lightPool.dispose();
       world.dispose();
       groundInfluence.dispose();
       pixelRenderer.dispose();
@@ -1660,6 +1691,15 @@ export function createGame(
         radius: strike.radius,
         atMs: performance.now(),
       };
+      // Persistent ground marks land BEFORE the juice distance gate — a scorch
+      // is world state you can walk up to later, not proximity juice. The
+      // swing's cone (and dash's lane) misread as circles, so those skip it.
+      const strikeJuiceColor = ATTACK_RENDER[strike.attackId]?.juiceColor ?? ELEMENTS.geo.color;
+      if (strike.attackId === 'slimeSlam' || strike.attackId === 'spikySlam') {
+        scorchSystem.addScorch(strike.landingX, strike.landingZ, strike.radius * 0.6, SLIME_SLAM_COLOR);
+      } else if (strike.attackId !== 'swordSwing' && strike.attackId !== 'shieldDash') {
+        scorchSystem.addScorch(strike.landingX, strike.landingZ, strike.radius * 0.9, strikeJuiceColor);
+      }
       // Distance gate + linear falloff (lastStrike above stays unconditional —
       // stun attribution must survive even for a strike this gate mutes): a
       // strike beyond STRIKE_JUICE_RANGE plays NOTHING here; inside it, shake
@@ -1677,12 +1717,13 @@ export function createGame(
       // Juice tint comes from the ATTACK_RENDER element palette hint (05-05
       // round 2 — telegraphs stay Frost cyan; only the strike burst/shockwave
       // is element-colored). Unknown attackIds fall back to geo like the slam.
-      const juiceColor = ATTACK_RENDER[strike.attackId]?.juiceColor ?? ELEMENTS.geo.color;
+      const juiceColor = strikeJuiceColor;
       if (strike.attackId === 'slimeSlam' || strike.attackId === 'spikySlam') {
         // Slime landing that hit someone: wet squash + a small green splash.
         // MUST bail before the default tier — the goliath slam package (deep
         // boom + shockwave + rim flash) on a slime hop reads absurd.
         effectSystem.spawnBurst(landing, SLIME_SLAM_COLOR, SLIME_SLAM_BURST_PARTICLES);
+        debrisSystem.spawn(landing, SLIME_SLAM_COLOR, 6);
         if (strikeDistance < SLIME_SLAM_SHAKE_RANGE) {
           shakeMagnitude = Math.max(shakeMagnitude, SLIME_SLAM_SHAKE_MAGNITUDE * juiceFalloff);
         }
@@ -1734,12 +1775,14 @@ export function createGame(
         }
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
         shakeMagnitude = Math.max(shakeMagnitude, DASH_SHAKE_MAGNITUDE * juiceFalloff);
+        debrisSystem.spawn(landing, EARTH_DEBRIS_COLOR, 10);
         audioSystem.playDash(juiceFalloff, strikePan);
         return;
       }
       // Default (leapSlam + any unknown attackId): the D4-15 full package.
       effectSystem.spawnBurst(landing, juiceColor, 26);
       effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
+      debrisSystem.spawn(landing, EARTH_DEBRIS_COLOR, Math.round(14 * juiceFalloff) + 6);
       telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
       shakeMagnitude = Math.max(shakeMagnitude, SHAKE_START_MAGNITUDE * juiceFalloff);
       audioSystem.playSlam(juiceFalloff, strikePan);
@@ -1762,6 +1805,7 @@ export function createGame(
         applyDamage: null,
         followPosition: casterView ? () => casterView.model.group.position : undefined,
       });
+      spawnSkillGroundMarks(character.skill, character.element, cast.originX, cast.originZ, 6);
     },
     handleRemotePlayerAttack(attack) {
       // Purely visual: render another player's bow/book shot flying from where it

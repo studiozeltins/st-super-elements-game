@@ -23,6 +23,7 @@ import {
   type WorldAsset,
 } from './assets';
 import { createGrassField } from './createGrassField';
+import { CAMPFIRE_LIGHT_NAME } from './assets/createCampfire';
 import { createFountain, createHouse, createWindmill } from './createPlazaStructures';
 import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
 
@@ -344,11 +345,22 @@ export function createMondstadtWorld(
 
   scene.add(group);
 
+  // Campfire flames flicker — collect the named lights once, wobble per frame.
+  const campfireLights: THREE.PointLight[] = [];
+  group.traverse(node => {
+    if (node.name === CAMPFIRE_LIGHT_NAME) campfireLights.push(node as THREE.PointLight);
+  });
+  let flickerSeconds = 0;
+
   return {
     group,
     update(deltaSeconds) {
       blades.rotation.z += deltaSeconds * 0.6;
       grassField.update(deltaSeconds);
+      flickerSeconds += deltaSeconds;
+      campfireLights.forEach((light, index) => {
+        light.intensity = 2.5 + Math.sin(flickerSeconds * 9 + index * 2.1) * 0.35;
+      });
     },
     getGroundHeight(x, z, maxSurfaceY = Infinity) {
       let groundHeight = getTerrainHeight(x, z);

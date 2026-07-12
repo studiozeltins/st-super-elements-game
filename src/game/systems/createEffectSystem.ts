@@ -3,6 +3,7 @@ import { ELEMENTS, type ElementId } from '../data/elements';
 import type { SkillDefinition } from '../data/characters';
 import type { DamageKind } from '../combat/damageKind';
 import { disposeObject } from '../engine/disposeObject';
+import type { LightPool } from './createLightPool';
 
 /** Applies damage around a point; returns true when something was hit. */
 export type DamageApplier = (
@@ -79,7 +80,9 @@ function createBurstPoints(color: number, particleCount: number): THREE.Points {
 export function createEffectSystem(
   scene: THREE.Scene,
   /** Ground-influence stamp — flying projectiles part the grass beneath them. */
-  stampGround?: (x: number, z: number, radius: number, strength: number, dirX?: number, dirZ?: number) => void
+  stampGround?: (x: number, z: number, radius: number, strength: number, dirX?: number, dirZ?: number) => void,
+  /** Pooled point lights — projectiles glow and light the world around them. */
+  lightPool?: LightPool
 ): EffectSystem {
   const activeEffects: ActiveEffect[] = [];
 
@@ -186,6 +189,8 @@ export function createEffectSystem(
       .normalize()
       .multiplyScalar(options.speed);
     let ageSeconds = 0;
+    // First 4 concurrent projectiles glow; pool exhaustion degrades to no light.
+    const pooledLight = lightPool?.acquire(elementColor) ?? null;
     addEffect({
       object: projectile,
       update(deltaSeconds) {
@@ -193,6 +198,7 @@ export function createEffectSystem(
         projectile.position.addScaledVector(velocity, deltaSeconds);
         projectile.rotation.y += deltaSeconds * 10;
         stampGround?.(projectile.position.x, projectile.position.z, 0.5, 0.35, velocity.x, velocity.z);
+        pooledLight?.light.position.copy(projectile.position).setY(projectile.position.y + 0.4);
         const hitSomething = options.applyDamage?.(
           projectile.position,
           options.hitRadius,
@@ -200,11 +206,10 @@ export function createEffectSystem(
           options.element,
           options.damageKind
         );
-        if (hitSomething) {
-          spawnBurst(projectile.position, elementColor);
-          return false;
-        }
-        return ageSeconds < PROJECTILE_LIFETIME_SECONDS;
+        const alive = !hitSomething && ageSeconds < PROJECTILE_LIFETIME_SECONDS;
+        if (!alive && pooledLight) lightPool?.release(pooledLight);
+        if (hitSomething) spawnBurst(projectile.position, elementColor);
+        return alive;
       },
     });
   }
