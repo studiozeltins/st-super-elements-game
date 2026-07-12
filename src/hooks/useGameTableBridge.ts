@@ -35,25 +35,28 @@ interface TableHandle<Row> {
   removeOnDelete(cb: (ctx: unknown, row: Row) => void): void;
 }
 
-function mirror<Row extends { id: bigint }>(
+function mirror<Row>(
   handle: TableHandle<Row>,
   map: Map<bigint, Row>,
+  // Primary-key accessor — the tables disagree on the column name
+  // (enemyId / goliathId / id), so the key is injected per table.
+  keyOf: (row: Row) => bigint,
   markDirty: () => void
 ): () => void {
   // Rows cached before this effect ran (reconnect, effect ordering) never fire
   // onInsert — seed from the client cache first.
-  for (const row of handle.iter()) map.set(row.id, row);
+  for (const row of handle.iter()) map.set(keyOf(row), row);
   markDirty();
   const onInsert = (_ctx: unknown, row: Row) => {
-    map.set(row.id, row);
+    map.set(keyOf(row), row);
     markDirty();
   };
   const onUpdate = (_ctx: unknown, _oldRow: Row, row: Row) => {
-    map.set(row.id, row);
+    map.set(keyOf(row), row);
     markDirty();
   };
   const onDelete = (_ctx: unknown, row: Row) => {
-    map.delete(row.id);
+    map.delete(keyOf(row));
     markDirty();
   };
   handle.onInsert(onInsert);
@@ -117,11 +120,11 @@ export function useGameTableBridge(
       }
     };
     const unregister = [
-      mirror(connection.db.enemy, rows.enemy, markDirty('enemy')),
-      mirror(connection.db.goliath, rows.goliath, markDirty('goliath')),
-      mirror(connection.db.unitAttack, rows.unitAttack, markDirty('unitAttack')),
-      mirror(connection.db.gemDrop, rows.gemDrop, markDirty('gemDrop')),
-      mirror(connection.db.shardDrop, rows.shardDrop, markDirty('shardDrop')),
+      mirror(connection.db.enemy, rows.enemy, row => row.enemyId, markDirty('enemy')),
+      mirror(connection.db.goliath, rows.goliath, row => row.goliathId, markDirty('goliath')),
+      mirror(connection.db.unitAttack, rows.unitAttack, row => row.id, markDirty('unitAttack')),
+      mirror(connection.db.gemDrop, rows.gemDrop, row => row.id, markDirty('gemDrop')),
+      mirror(connection.db.shardDrop, rows.shardDrop, row => row.id, markDirty('shardDrop')),
     ];
     return () => {
       disposed = true;
