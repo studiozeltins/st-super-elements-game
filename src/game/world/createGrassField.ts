@@ -18,37 +18,40 @@ export interface GrassField {
   dispose(): void;
 }
 
-const BLADE_HALF_WIDTH = 0.14;
-const BLADE_HEIGHT = 0.55;
+const BLADE_HEIGHT = 0.6;
 
 /**
- * Two triangles, front and back winding, FrontSide material. NOT DoubleSide:
- * three flips normals on backfaces, which lit half the blades with the dark
- * ground hemisphere and rendered them near-black.
+ * A real grass blade, not a spike: a tapering two-segment strip that arcs
+ * forward (root → mid → tip), 3 triangles. Rendered DoubleSide with the
+ * backface normal flip disabled in the shader (see createGrassMaterial) so
+ * both faces shade like the ground beneath — no doubled geometry, no black
+ * backface needles.
  */
 function createBladeGeometry(): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry();
-  const left = [-BLADE_HALF_WIDTH, 0, 0];
-  const right = [BLADE_HALF_WIDTH, 0, 0];
-  const tip = [0, BLADE_HEIGHT, 0];
-  geometry.setAttribute(
-    'position',
-    new THREE.Float32BufferAttribute([...left, ...right, ...tip, ...right, ...left, ...tip], 3)
-  );
+  // x = width taper, y = height, z = forward arc.
+  const rootHalf = 0.055;
+  const midHalf = 0.032;
+  const positions = [
+    [-rootHalf, 0, 0],
+    [rootHalf, 0, 0],
+    [-midHalf, BLADE_HEIGHT * 0.55, 0.06],
+    [midHalf, BLADE_HEIGHT * 0.55, 0.06],
+    [0, BLADE_HEIGHT, 0.16],
+  ].flat();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex([0, 1, 3, 0, 3, 2, 2, 3, 4]);
   // Up-facing normals on every vertex — blades inherit the ground's lighting.
   geometry.setAttribute(
     'normal',
-    new THREE.Float32BufferAttribute(Array.from({ length: 6 }, () => [0, 1, 0]).flat(), 3)
+    new THREE.Float32BufferAttribute(Array.from({ length: 5 }, () => [0, 1, 0]).flat(), 3)
   );
-  // Root→tip brightness gradient, multiplied with the per-instance color.
-  const root = [0.82, 0.82, 0.82];
-  const tipShade = [1.12, 1.12, 1.12];
+  // Root→tip brightness gradient, multiplied with the per-instance color:
+  // dark in the sod, bright at the waving tip.
+  const shades = [0.72, 0.72, 0.98, 0.98, 1.18];
   geometry.setAttribute(
     'color',
-    new THREE.Float32BufferAttribute(
-      [...root, ...root, ...tipShade, ...root, ...root, ...tipShade],
-      3
-    )
+    new THREE.Float32BufferAttribute(shades.flatMap(shade => [shade, shade, shade]), 3)
   );
   return geometry;
 }
@@ -57,8 +60,19 @@ function createGrassMaterial(
   influence: GroundInfluenceUniforms,
   timeUniform: { value: number }
 ): THREE.MeshLambertMaterial {
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   material.onBeforeCompile = shader => {
+    // Kill the DoubleSide backface normal flip: flipped normals face the dark
+    // ground hemisphere and render blades near-black from behind. Every blade
+    // face shades with the ground's up-normal instead.
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <normal_fragment_begin>',
+      /* glsl */ `
+      float faceDirection = 1.0;
+      vec3 normal = normalize( vNormal );
+      vec3 nonPerturbedNormal = normal;
+      `
+    );
     shader.uniforms.uTime = timeUniform;
     shader.uniforms.uInfluenceMap = influence.textureUniform;
     shader.uniforms.uInfluenceBounds = influence.boundsUniform;
@@ -77,7 +91,7 @@ function createGrassMaterial(
         /* glsl */ `
         vec3 transformed = vec3(position);
         vec4 bladeOrigin = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-        float heightFactor = position.y * ${(1 / BLADE_HEIGHT).toFixed(1)};
+        float heightFactor = position.y * ${(1 / BLADE_HEIGHT).toFixed(4)};
         // Wind: two-octave sway, phase from world position so gusts roll across the field.
         float sway = sin(uTime * 1.7 + bladeOrigin.x * 0.35 + bladeOrigin.z * 0.25)
                    + 0.4 * sin(uTime * 3.3 + bladeOrigin.z * 0.7);

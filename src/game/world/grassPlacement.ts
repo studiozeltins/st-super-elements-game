@@ -32,8 +32,8 @@ const MAX_GRASS_SLOPE = 0.85;
 /** Keep the stone plaza clear. */
 const PLAZA_RADIUS = SAFE_ZONE_RADIUS + 1;
 /** Blades per tuft anchor; clumping is what makes patches read as lush. */
-const BLADES_PER_TUFT = 3;
-const TUFT_SPREAD = 0.55;
+const BLADES_PER_TUFT = 6;
+const TUFT_SPREAD = 0.45;
 /** Lushness below this grows nothing; acceptance ramps up above it. */
 const LUSHNESS_FLOOR = 0.45;
 /** Fraction of blades tinted as tiny meadow flowers (replaces the old yellow bed). */
