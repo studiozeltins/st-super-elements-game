@@ -19,6 +19,7 @@ import {
   createTeepee,
   createTotem,
   createWoodenArch,
+  initCanopyWind,
   type SeededRandom,
   type WorldAsset,
 } from './assets';
@@ -383,6 +384,10 @@ export function createMondstadtWorld(
     z: windmill.position.z,
     radius: 2.1,
   });
+
+  // Canopy caps sway in-shader on the shared wind clock — the factory only
+  // receives a seeded random through the scatter table, so inject wind first.
+  initCanopyWind(options.wind);
 
   const scatterRules: AssetScatterRule[] = [
     // Boulders and spires declare their own per-piece footprints (asset.obstacles):

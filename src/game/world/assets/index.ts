@@ -1,7 +1,7 @@
 export type { SeededRandom, WorldAsset } from './types';
 export { createBoulder } from './createBoulder';
 export { createRockSpire } from './createRockSpire';
-export { createCanopyTree } from './createCanopyTree';
+export { createCanopyTree, initCanopyWind } from './createCanopyTree';
 export { createPalmTree } from './createPalmTree';
 export { createBush } from './createBush';
 export { createFlower } from './createFlower';

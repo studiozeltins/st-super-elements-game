@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { createSeededRandom } from '../../rng';
+import { createWind } from '../../../systems/createWind';
 import {
   createBoulder,
   createBush,
@@ -14,9 +15,14 @@ import {
   createTeepee,
   createTotem,
   createWoodenArch,
+  initCanopyWind,
   type SeededRandom,
   type WorldAsset,
 } from '../index';
+
+// Canopy caps read the shared wind uniforms — the world injects them before
+// scattering trees; tests mirror that contract (fail-fast without injection).
+initCanopyWind(createWind(true));
 
 type AssetFactory = (random: SeededRandom) => WorldAsset;
 
