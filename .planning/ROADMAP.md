@@ -64,7 +64,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 08-03-PLAN.md — canopy shader sway (pooled materials) + new camp flag assets [Wave 3]
+- [x] 08-03-PLAN.md — canopy shader sway (pooled materials) + new camp flag assets [Wave 3]
 - [ ] 08-04-PLAN.md — campfire smoke columns (instanced voxel puffs) + ?nosmoke [Wave 3]
 
 **Wave 4** *(blocked on Wave 3 completion)*
@@ -151,7 +151,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Wind Core | 2/5 | In Progress|  |
+| 8. Wind Core | 3/5 | In Progress|  |
 | 9. Atmosphere & Day/Night | 0/TBD | Not started | - |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
