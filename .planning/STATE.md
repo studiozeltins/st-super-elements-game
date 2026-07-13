@@ -4,9 +4,9 @@ milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 8
 current_phase_name: Wind Core
-status: ready-to-plan
+status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-07-13T22:31:08.332Z"
+last_updated: "2026-07-13T23:10:40.381Z"
 last_activity: 2026-07-14
 last_activity_desc: v0.3.0-alpha roadmap created (Phases 8–13, 32/32 requirements mapped)
 progress:
@@ -32,7 +32,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 
 Phase: 8 of 13 (Wind Core) — first of 6 milestone phases
 Plan: — (not yet planned)
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-07-14 — v0.3.0-alpha roadmap created (Phases 8–13, 32/32 requirements mapped)
 
 Progress: [░░░░░░░░░░] 0%

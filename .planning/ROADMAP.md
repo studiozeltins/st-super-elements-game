@@ -40,79 +40,108 @@ enabled — per-phase costs sum.
 ## Phase Details
 
 ### Phase 8: Wind Core
+
 **Goal**: Everything that sways in the world moves on one coherent, gusting wind
 **Depends on**: Nothing (first phase of milestone)
 **Requirements**: WIND-01, WIND-02, WIND-03
 **Success Criteria** (what must be TRUE):
+
   1. Grass, camp flags/banners, tree canopies, and campfire smoke columns all sway from ONE shared wind phase — no system drifts out of sync
   2. Gusts visibly TRAVEL across the field as a moving wave (spatial phase offset), not the whole world bowing in unison
   3. Each consumer keeps its own character on the shared phase — flags flap faster, smoke drifts laterally as it rises, canopies sway low-amplitude/low-frequency
   4. Grass rendering looks unchanged after the `uTime` extraction, and a `?nowind` flag kills all sway for bisecting
+
 **Plans**: 5 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 08-01-PLAN.md — windMath pure helper, test-first (gust envelope, traveling front, wander) [Wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 08-02-PLAN.md — createWind module + grass extraction onto shared clock + ?nowind [Wave 2]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 08-03-PLAN.md — canopy shader sway (pooled materials) + new camp flag assets [Wave 3]
 - [ ] 08-04-PLAN.md — campfire smoke columns (instanced voxel puffs) + ?nosmoke [Wave 3]
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 08-05-PLAN.md — full gate + human playtest checkpoint (grass unchanged, gust travel, character) [Wave 4]
 
 ### Phase 9: Atmosphere & Day/Night
+
 **Goal**: The world has horizon depth and a shared time-of-day palette that never hurts combat readability
 **Depends on**: Nothing (independent of Phase 8; ordered second because fog/sky/day-night are one color pipeline that gates fireflies and lanterns)
 **Requirements**: ATMO-01, ATMO-02, ATMO-03, DAYNITE-01, DAYNITE-02, DAYNITE-03, DAYNITE-04
 **Success Criteria** (what must be TRUE):
+
   1. Distant terrain dissolves into the sky color and the world edge is hidden, while telegraphs, enemies, and gem drops inside the gameplay radius keep ~full contrast at all times of day
   2. The sky/horizon gradient's bottom color always equals the fog color — fog, sky, and day/night blend from a single source
   3. World color drifts dawn → day → dusk → night over a ~20min day-weighted cycle while the sun/shadow direction never moves
   4. All LAN players see the same time of day, and night keeps a blue combat-readable ambient floor — night is a palette, never darkness
   5. Plaza lanterns fade in at dusk and out at dawn (intensity fade on build-time lights, no runtime light add/remove)
+
 **Plans**: TBD
 
 ### Phase 10: Ambient Audio & Music
+
 **Goal**: The world sounds alive — a layered procedural ambience bed and region music, both combat-aware
 **Depends on**: Phase 8 (gust envelope sidechains the wind bed), Phase 9 (time-of-day ambience variation)
 **Requirements**: AMBI-01, AMBI-02, AMBI-03, AMBI-04, AMBI-05, AMBI-06, AMBI-07, MUSIC-01, MUSIC-02, MUSIC-03
 **Success Criteria** (what must be TRUE):
+
   1. All game audio routes through master/ambient/music/sfx buses with a compressor — existing SFX migrated off `context.destination`, dense fights never clip
   2. Player hears a continuous wind bed that swells with the visible gusts, plus randomized bird chirps, sprint grass rustle, and camp-proximity goliath grunts — never a fixed-interval metronome
   3. Ambience follows the time of day — birds by day, crickets/owl at night
   4. Combat ducks the ambience (birds stop, bed drops −6..−12dB over ~1s) and crossfades combat music in and back out on the same combat signal — never a hard cut
   5. Player can mute/adjust music independently of SFX, persisted locally
+
 **Plans**: TBD
 **UI hint**: yes
 
 ### Phase 11: Lived-in Props & Wear
+
 **Goal**: The world looks inhabited and reacts to traffic — paths, props, and healing battle wear
 **Depends on**: Nothing (static bakes + tuning of existing systems; conventionally after Phase 10)
 **Requirements**: WEAR-01, WEAR-02, WEAR-03, WEAR-04, WEAR-05
 **Success Criteria** (what must be TRUE):
+
   1. Worn footpaths run along REAL routes (camp↔camp, plaza↔bridge) as a static bake — they never fade away
   2. The plaza reads lived-in — crates, fences, and lanterns arranged to answer "who put this here"
   3. Scorch marks regrow over minutes, and the player leaves a lingering ~2s grass-bend trail
   4. Sprint steps on dirt/path puff small pooled dust sprites
+
 **Plans**: TBD
 
 ### Phase 12: Wildlife
+
 **Goal**: Sparse, reactive wildlife makes encounters feel like events, at zero frame cost blowout
 **Depends on**: Phase 8 (wind drift), Phase 9 (firefly dusk gate), Phase 10 (wing one-shot on the sfx bus)
 **Requirements**: WILD-01, WILD-02, WILD-03
 **Success Criteria** (what must be TRUE):
+
   1. Butterflies wander over grass patches by day — sparse enough that spotting one feels like an event, spawning/despawning near the player
   2. Sprinting through grass flushes 2–4 birds bursting up on a rising arc with a wing one-shot, then despawning
   3. Fireflies pulse at dusk/night as emissive instanced quads — the combat light pool is never touched
   4. Frame rate holds through a golem-class fight with ALL ambiance systems enabled (`scripts/fps_playtest.py` run as the milestone-wide perf gate)
+
 **Plans**: TBD
 
 ### Phase 13: Camera Feel
+
 **Goal**: Motion micro-polish that rewards movement and combat — and can be fully disabled
 **Depends on**: Nothing structurally — ordered LAST by design (accessibility risk; PROJECT.md ruling)
 **Requirements**: CAM-01, CAM-02, CAM-03, CAM-04
 **Success Criteria** (what must be TRUE):
+
   1. The character (not the camera) leans slightly into run direction with a spring, and idle characters have a subtle breathing sway on the model — never continuous camera motion
   2. Burst damage triggers a brief FOV kick on rare high-tier events only, never every hit
   3. A "reduce camera motion" toggle zeroes lean/roll/FOV kick and persists locally
   4. Pixelated mode shows no pixel-crawl from any camera-feel effect (tuned in pixel-filter mode)
+
 **Plans**: TBD
 **UI hint**: yes
 
