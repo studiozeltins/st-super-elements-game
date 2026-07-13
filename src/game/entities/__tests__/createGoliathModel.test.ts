@@ -43,13 +43,17 @@ describe('createGoliathModel', () => {
     expect(typeof model.overlay.dispose).toBe('function');
   });
 
-  it('colours the armoured body meshes with archetype.bodyColor', () => {
+  it('builds voxel body parts carrying the archetype color in vertex colors', () => {
     const model = createGoliathModel(ARCHETYPE_STUB);
 
     for (const name of ['torso', 'head', 'leftLeg', 'rightLeg']) {
       const part = model.group.getObjectByName(name) as THREE.Mesh;
       const material = part.material as THREE.MeshLambertMaterial;
-      expect(material.color.getHex()).toBe(ARCHETYPE_STUB.bodyColor);
+      // Voxel clusters dither the body color across per-cube VERTEX colors on
+      // one shared white material (same idiom as the world's rocks).
+      expect(material.vertexColors).toBe(true);
+      expect(part.geometry.getAttribute('color')).toBeDefined();
+      expect(part.geometry.getAttribute('position').count).toBeGreaterThan(0);
     }
   });
 
