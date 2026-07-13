@@ -1965,8 +1965,9 @@ function killGoliathRow(
 // Server-authoritative resolution of ONE landed player hit into a final
 // {amount, isCrit}. Composes the pure helpers: base via computeBaseDamage (weapon
 // or skill ramp + constellation/transcend), the seeded crit roll (ctx.random —
-// the sole client-untrusted decision, CRIT-02), the target's resistance, and the
-// MAX_HIT_DAMAGE clamp. Apply order is load-bearing: base → × crit → resist → clamp.
+// the sole client-untrusted decision, CRIT-02), and the target's resistance.
+// Apply order is load-bearing: base → × crit → resist. No output cap — every
+// input is server-derived, so the full computed value is the real hit.
 // grantSkill gates the uncapped skill multiplier to the authoritative cast window.
 function resolvePlayerHit(
   ctx: any,
@@ -1997,7 +1998,7 @@ function resolvePlayerHit(
   const stat = CHARACTER_STATS[hitter.activeCharacterId];
   const { isCrit, multiplier } = rollCrit(stat ? stat.critRate : 0, stat ? stat.critDmg : 1, () => ctx.random());
   const resisted = resistedDamage(base * multiplier, profile, dmgType);
-  const amount = Math.min(Math.round(resisted), MAX_HIT_DAMAGE);
+  const amount = Math.round(resisted);
   return { amount, isCrit };
 }
 

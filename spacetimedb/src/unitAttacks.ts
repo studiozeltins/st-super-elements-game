@@ -104,7 +104,7 @@ function strikeHits(x: number, z: number, row: any, spec: AttackSpec): boolean {
 // circle test on the landing. Hits get (a) RAW
 // damage into the SHARED playerDamage map (the existing apply loop applies the
 // 'contact' resistance, death, shard spill, respawn — never the player-hit path,
-// whose 400 cap would clamp the slam), (b) a knockback displacement away from the
+// which is player→enemy composition, not unit→player), (b) a knockback displacement away from the
 // center written onto the row (clamped to world bounds only — D4-11: edge deaths
 // are a feature), and (c) an enforced stun window (HIT-01; updatePosition rejects
 // the client while it runs).
