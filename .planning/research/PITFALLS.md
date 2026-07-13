@@ -1,284 +1,344 @@
 # Pitfalls Research
 
-**Domain:** Server-authoritative telegraphed-attack FSM + crit/poise + animation state machine, added additively to a LIVE SpacetimeDB (TS module) multiplayer game with a Three.js pixel-filter client.
-**Researched:** 2026-07-08
-**Confidence:** HIGH on the determinism + additive-migrate + mirror-drift traps (verified against `CLAUDE.md`, `PROJECT.md`, and the actual `worldTick`/`combatMath` source). MEDIUM on the dodge-feel and pixel-filter-readability traps (design/UX judgement, not yet exercised in this repo).
+**Domain:** Client-only ambiance layer (procedural audio, fog/day-night, wildlife, wear, camera feel) added to an existing performance-sensitive Three.js pixel-filter browser game
+**Researched:** 2026-07-13
+**Confidence:** HIGH for integration pitfalls (grounded in direct reads of `createPixelRenderer.ts`, `createGrassField.ts`, `createScorchMap.ts`, `createLightPool.ts`, `createAudioSystem.ts`, `groundInfluenceMath.ts`); MEDIUM for ecosystem claims (web-verified via MDN / WebKit bugs / three.js forum & issues / Xbox Accessibility Guidelines)
 
-Phase labels below map to the SPEC's build slices:
-- **A** = crit system (critRate/critDmg, `isCrit` arg)
-- **B1** = `unit_attack`+`attack_strike` schema, `ATTACKS`/`UNIT_ATTACKS`, FSM + `leapSlam`, remove goliath drain
-- **B2** = `swordSwing`→`swordSwirl` combo · **B3** = `shieldDash` lane · **B4** = crit interrupt (poise)
-
----
+This milestone is unusual: every feature is bolted onto systems that already carry hard-won perf rules (frozen matrices, pooled materials, 2-pass pixel renderer, half-rate shadow map, no per-frame allocs, React table bypass). Most pitfalls below are not "the feature is hard" — they are "the naive version of the feature silently violates one of those rules."
 
 ## Critical Pitfalls
 
-### Pitfall 1: Phase math derived from wall-clock deltas instead of the fixed tick, drifting per-unit clocks
+### Pitfall 1: Ambient bed summed straight into `destination` — no bus, no ducking, clipping
 
 **What goes wrong:**
-The FSM stores `startedAt` micros and each tick asks "has `windupMicros` elapsed?" via `now - startedAt >= windupMicros`. If you instead accumulate a per-unit elapsed counter, or compute `now` more than once per reducer call, or compare against a `now` sampled at a different point than the one written into `startedAt`, phase boundaries land on different ticks for different units and are not reproducible. Because the world tick is scheduled at a ~150 ms interval but SpacetimeDB does **not** guarantee the reducer fires exactly on that boundary (ticks can be late/coalesced under load), a windup authored as "0.9 s" is really "the first tick at/after startedAt+900 000 µs" — anywhere from 900 ms to ~1050 ms. Authoring windups that are not clean multiples of the tick makes the realized windup silently longer than the number in `ATTACKS`, and the client (mirroring the same number) shows the ring finishing before the server strikes.
+Every existing SFX connects directly to `context.destination` (via `panned()`), fire-and-forget, with combat peaks already at 0.8–0.9 gain (`playSlam` thump 0.8, dash clang 0.9). A continuous wind/ambience layer added the same way (a) has no single knob to duck under combat, (b) pushes the summed signal past 1.0 whenever a slam lands over wind + chirps + rustle → audible hard clipping/distortion, worst on the loud fights the game is proudest of.
 
 **Why it happens:**
-Devs reason in seconds and assume the scheduled reducer is a metronome. The existing code already sidesteps this by using `WORLD_TICK_INTERVAL_MICROS` as `tick` for movement (`Number(tick)/1_000_000`) rather than measuring real elapsed — the FSM must follow that same convention. `ctx.timestamp` is deterministic per call, but a *late* tick still advances the wall clock more than one interval.
+The current architecture never needed a mixer — one-shots are short and rarely overlap at peak. A persistent bed changes the summing math permanently, and the clipping only shows up in dense combat, not in the quiet dev test.
 
 **How to avoid:**
-- Sample `const now = ctx.timestamp.microsSinceUnixEpoch` **once** at the top of `worldTick` (the code already does this at line 2809) and thread that single value into every phase comparison and every new `startedAt`.
-- Compare against absolute deadlines: `now >= startedAt + windupMicros`, never an accumulated delta.
-- Author every duration in `ATTACKS` as an exact multiple of `WORLD_TICK_INTERVAL_MICROS`, and add a pure-helper `phaseFor(startedAt, now, attackDef) -> {phase, phaseEndsAt}` unit-tested in `src/game/combat/` so the boundary logic runs without a DB.
-- Decide explicitly how to handle a *late/coalesced* tick that skips a whole phase (e.g. strike deadline already passed by the time the tick runs): the strike must still resolve on the first tick that observes `now >= strikeAt`, not be dropped. Test a "jumped two intervals" input.
+First task of the audio phase, before any wind synth: introduce a tiny bus layer in `audioCore` — `masterGain (~0.8 headroom) → DynamicsCompressorNode → destination`, with an `ambientBus` GainNode and an `sfxBus` GainNode feeding it. Route existing SFX through `sfxBus` in the same change (repo rule: no legacy path left behind). Ducking = `ambientBus.gain.setTargetAtTime(low, now, 0.05)` on combat SFX, released with a slower time constant. MDN explicitly recommends compressor-on-master for games mixing many simultaneous sources. Keep the ambient bed's resting gain LOW (~0.1–0.2) — it plays 100% of the time; fatigue is the failure mode.
 
 **Warning signs:**
-Telegraph ring completes but damage lands a tick later; realized windup measured in a two-client playtest is consistently longer than the authored number; a unit occasionally "eats" its own strike (skips straight windup→recovery) after a server hitch.
+Crackle/distortion during goliath fights with sound on; ambience audible *over* strike SFX; needing per-callsite gain fudging to make combat readable.
 
-**Phase to address:** B1 (the FSM core + `phaseFor` helper). Get the boundary math and late-tick handling right before any second attack shape exists.
+**Phase to address:** Ambient audio phase (as its opening plan step — it's a prerequisite, not a polish item).
 
 ---
 
-### Pitfall 2: The new `unit_attack` table starts EMPTY on the live DB and nothing ever activates it (INV-migrate)
+### Pitfall 2: Long-lived WebAudio graph leaks and cumulative gain stacking
 
 **What goes wrong:**
-You publish the additive schema to maincloud, the migrate succeeds, tests are green — and goliaths deal **zero** damage, because `init` (which seeds/schedules) only runs on a **fresh** DB. On a migrated DB the new `unit_attack` table is empty and, more importantly, the FSM only produces rows if the tick logic is already deployed and running. If the *only* damage path (Pitfall 5's drain removal) has shipped but the activation of the FSM for existing goliaths hasn't, goliaths are harmless in production while looking fine locally (where you re-seeded on a fresh DB).
+The existing modules are one-shot: nodes `stop()` and get garbage-collected. An ambient bed is the first *persistent* graph, and three classic leaks appear:
+1. **Double-started beds.** The gesture-unlock path (`pointerdown`/`keydown` → `unlock()`) can run more than once before listeners are removed, and game restarts / HMR / character-switch re-inits can call "start ambience" again — each call stacks another wind loop at full gain. Two stacked beds = +6dB and a phasing "chorus" that sounds like a bug nobody can reproduce.
+2. **Orphaned LFOs.** Oscillators connected to `AudioParam`s (gust LFO → wind filter frequency) keep running forever if a rebuild path forgets `stop()` — they hold the whole subgraph alive (no GC while a source is live).
+3. **Per-call buffer allocation.** `createNoiseSource()` allocates and fills a fresh `AudioBuffer` every call. Fine for a 0.15s swing; a looping wind that re-triggers gust buffers every few seconds via this helper allocates multi-second Float32 buffers repeatedly. The bed must build ONE looping noise buffer at init and reuse it (`loop = true`), with gusts as gain/filter automation on top, not new sources.
+
+Also: bird chirps scheduled with `setTimeout` drift against the audio clock and get throttled to ~1/min in background tabs, so chirps burst-fire on tab refocus.
 
 **Why it happens:**
-The repo has been bitten by this exact class before ("`init` only runs on a fresh DB", "new tables start EMPTY on migrate — a seed/activation call is needed"). `unit_attack` rows are created lazily by the tick (idle→windup transition), so there's no *seed* step per se — but there IS a latent assumption that the tick loops over *existing* goliaths. Verify the tick enumerates live goliath/enemy rows and lazily attaches an attack machine to each; if instead it iterates `ctx.db.unitAttack.iter()` (empty on migrate) you get zero attacks forever.
+The one-shot mental model ("create nodes, start, forget") is exactly wrong for a bed. And idempotency of the start path is never tested because dev flow is one clean page load.
 
 **How to avoid:**
-- Design the FSM to be **row-optional**: the tick iterates the *unit* tables (`goliath`, `enemy`) each tick and looks up / lazily inserts the `unit_attack` row by the `by_unit (unitKind, unitId)` index. Never assume a `unit_attack` row already exists.
-- If any activation/scheduling is needed on an existing DB (e.g. a feature flag, or resetting stuck rows), ship an **idempotent** activation reducer (the repo's `seed_world` pattern) and call it explicitly after publish — do not rely on `init`.
-- Add a post-deploy verification to the phase's deploy step: on the migrated DB, `spacetime sql` count of `unit_attack` rows should climb above 0 within seconds of a player engaging a goliath; and a scripted two-client run must confirm a goliath actually strikes.
-- Never `--delete-data` maincloud (real accounts + `account`/`account_link` are NOT in the backup set). Migrate-publish only.
+- The ambient module owns a singleton state: `start()` is idempotent (guard flag), `dispose()` stops and disconnects every persistent node including LFOs.
+- One looping noise buffer, created once; gusts = automation curves on a gain/filter, loosely keyed to the shared wind phase.
+- Schedule chirps/grunts from the *game loop* (accumulate `deltaSeconds`, fire when due, randomize next interval) — the loop already pauses with the tab, which is the correct behavior; never `setTimeout`.
+- All ramp targets strictly > 0 (`exponentialRampToValueAtTime(0)` throws — already documented in `clampGain`).
 
 **Warning signs:**
-`spacetime sql <db> "SELECT COUNT(*) FROM unit_attack"` stays at 0 on the migrated DB; goliaths chase but never wind up; "works locally" (you tested on a freshly-seeded local DB) but not on the migrated cloud DB.
+Ambience gets louder after dying/rejoining or after HMR; growing audio node activity in `chrome://media-internals`; chirp machine-gun burst when returning to the tab.
 
-**Phase to address:** B1 deploy step (owns schema + activation). Bake the "count > 0 after engage on a *migrated* (not freshly seeded) DB" check into the phase's done-criteria, not just green vitest.
+**Phase to address:** Ambient audio phase; verify in its playtest with an explicit "restart game twice, listen" step.
 
 ---
 
-### Pitfall 3: Client mirror of `ATTACKS` durations drifts from the server → dodging becomes unfair (INV-5)
+### Pitfall 3: Tab blur / iOS interruption: wind keeps howling over a hidden tab, or never comes back
 
 **What goes wrong:**
-The client renders the telegraph purely from `attackId, phase, startedAt` + its **own copy** of `windupMicros/activeMicros`. If the client's mirrored duration is even slightly shorter than the server's, the ring visually completes early and a player who "dodged on the tell" still gets hit — or the reverse, the ring lingers after the strike already fired and players learn to distrust the tell. This is exactly the INV-5 failure class (client/server number drift), but `serverSync.test.ts` currently guards *stat* constants parsed out of `index.ts`; it does **not** yet know about `ATTACKS`.
+Two opposite failures:
+- **Desktop:** `requestAnimationFrame` stops on a hidden tab but the AudioContext keeps rendering — the wind bed plays forever over the hidden tab (users *will* report "the game keeps making noise"). Meanwhile the game-loop-driven parts (chirp scheduler, gust sync) freeze, so on refocus the bed is desynced from grass sway and a huge `deltaSeconds` spike hits every ambience `update()`.
+- **iOS/Safari:** the context enters a non-standard `"interrupted"` state on backgrounding, screen lock, or an incoming call (WebKit bug 237878, web-audio-api#2585) and does NOT self-resume; and if it was `suspended` when the interruption hit, it won't even transition until `resume()` is called. Result: ambience (and all SFX) permanently silent after the first phone call, with `state` lying as `suspended`.
 
 **Why it happens:**
-`ATTACKS` is described as "shared client + server," but SpacetimeDB TS has two separate source trees (`spacetimedb/src` vs `src/game`) with no shared import at runtime — "shared" in practice means "copied and must be kept identical." The serverSync regex harness only checks the fields someone wired into it. New tables/registries slip through because no test asserts parity.
+The current unlock logic handles cold-start autoplay policy only (`pointerdown` → `resume()`, then listeners removed) — after unlock, nothing ever watches `context.state` again.
 
 **How to avoid:**
-- Make `ATTACKS` a single authored source and mirror it deliberately, then **extend `serverSync.test.ts`** to parse the server `ATTACKS` block and assert every `windupMicros/activeMicros/recoveryMicros/cooldownMicros/damage/radius/angle/reach` equals the client mirror. This is a hard gate for every attack added in B1–B3.
-- Prefer the client deriving telegraph geometry/timing *entirely* from server-broadcast fields where possible (the row carries `attackId, phase, startedAt, targetX/Z`); the only thing the client needs locally is the per-`attackId` durations + shape params — which is exactly what the parity test must lock.
-- The strike VFX must be driven by the `attack_strike` **event** (server's actual strike instant), not by the client's own timer expiring. That decouples the "flash" from mirror drift even if the ring animation is client-timed.
+- `visibilitychange` handler: on hidden, ramp `ambientBus` gain to ~0 (short `setTargetAtTime`); on visible, restore and `resume()` if `state !== 'running'` (checking the string `'interrupted'` too — it's not in the TS union, compare via `as string`).
+- Keep (or re-add) a lightweight pointerdown "recovery" listener that calls `resume()` when state is not running — cheap insurance for mobile.
+- Clamp the post-refocus `deltaSeconds` in ambience/wind updates (the game loop likely already clamps; verify the new consumers use the clamped value).
 
 **Warning signs:**
-`serverSync` passes but a two-client playtest shows the ring filling before/after the hit; players report "I dodged and still died"; a duration changed on one side only in a diff.
+Audio continues after switching tabs; game permanently silent on a phone after locking the screen; grass sway and wind gusts visibly out of phase after alt-tab.
 
-**Phase to address:** B1 introduces the parity test for `ATTACKS`; every later attack (B2/B3) must keep it green. Treat a failing `ATTACKS` parity assertion as release-blocking.
+**Phase to address:** Ambient audio phase (the visibility handling); mobile playtest in the same phase's verification.
 
 ---
 
-### Pitfall 4: Strike resolves vs server-side positions that lag the player's screen → honest-looking dodges still hit
+### Pitfall 4: Day/night fog drift done by *reassigning* fog / toggling fog → full-scene shader recompile hitches
 
 **What goes wrong:**
-The server resolves the hitbox against the **last position it received** for each player. A player who dashed out at the strike frame on their screen may still be, in the server's view, inside the circle — because their movement packet hasn't arrived, or the strike tick fired between their old and new position update. The dodge *looked* clean client-side but the authoritative check says "hit." Under LAN this is small; over maincloud (real RTT) it's the difference between the feature feeling fair and feeling broken.
+`scene.fog = new THREE.Fog(0x8ecae6, 80, 300)` already exists (`createMondstadtWorld.ts:203`) and every built-in material compiled WITH `USE_FOG`. The `USE_FOG` / `FOG_EXP2` defines are baked at compile time, so:
+- Setting `scene.fog = null` (e.g. an "indoors" or debug toggle) or switching `Fog` → `FogExp2` mid-game flips the define and recompiles **every world material** — a multi-hundred-ms hitch on a scene this size.
+- Assigning a *new* `THREE.Fog` object per frame for the color drift allocates per frame and has historically triggered spurious `needsUpdate` churn in three (GH issue #13849 class of bug).
+- Meanwhile the actually-correct operation — mutating `scene.fog.color`, `.near`, `.far` in place — is uniform-only and free.
+
+Same trap one level up: `scene.background` is a `Color` that the overlay pass saves/restores by reference (`createPixelRenderer.ts` pass 3). Day/night must mutate that Color in place, never assign a new one, or the horizon and fog tint desync and you allocate per frame.
+
+One compatibility note that is a non-issue here and shouldn't be "fixed": the grass/terrain materials are `onBeforeCompile`-patched **built-ins** (Lambert), so they already include the fog chunks and respond to fog automatically. Only raw `ShaderMaterial`/`RawShaderMaterial` ignores fog — the repo's RawShaderMaterials are offscreen ping-pong passes (scorch/influence) that never need it. If any in-world custom shader (telegraph drapes) ever reads as "glowing through the fog" at distance, that's this — fix by including `fog_pars_*`/`fog_fragment` chunks + `fog: true`, not by hacking fog math by hand.
 
 **Why it happens:**
-Server-authoritative + client-rendered telegraph inherently means the player reacts to a tell rendered from server state, moves locally, and the server judges using stale inputs. There is no client-side prediction of the *hit* — only of movement. The strike is a single instant, so there's no forgiveness window unless you build one.
+"Change the fog" reads as "make a new fog." The recompile cost is invisible until it lands as a hitch mid-combat exactly when day flips to dusk.
 
 **How to avoid:**
-- Give the strike a small **active window** (`activeMicros` spanning ≥1–2 ticks) rather than a single-instant point check, and resolve "was the player inside at ANY sampled tick of the active window" as a hit — but bias toward the player: a player who is outside for the *later* sample of the window should count as dodged (favor the escape).
-- Add explicit **dodge grace**: treat a player as safe if they are outside the hitbox at the tick the strike resolves OR were moving out fast enough (the server already tracks positions each tick; compare this-tick vs last-tick). Tune the grace to cover typical maincloud one-way latency.
-- Keep the telegraph windup generous enough (≥0.45 s, and the roster's 0.6–0.9 s) that reaction + a movement round-trip both fit inside it; short windups amplify latency unfairness.
-- Validate on **maincloud RTT**, not just LAN — the SPEC's "feel pass" and playtests must include a real-latency client, because LAN hides this entirely.
+Day/night lite = one function mutating in place: `fog.color`, `scene.background`, hemisphere light color/intensity, sun light color/intensity. No object identity changes, no fog type changes, fog stays non-null forever. Precompute the palette as keyframe Colors and `lerpColors` into the live objects with preallocated scratch. Note the cheap win: light color/intensity changes do NOT require a shadow-map rebuild (depth-only), so the existing `shadowMap.autoUpdate = false` parity scheme is untouched.
 
 **Warning signs:**
-Dodges feel fair on LAN, unfair remotely; players stop trusting telegraphs and just tank hits; the strike hit-rate is near 100% regardless of player skill.
+Frame spike at dusk/dawn boundaries; `renderer.info.programs` count growing over a play session; horizon color visibly mismatching fog color.
 
-**Phase to address:** B1 (choose active-window + grace model at the FSM core; single-instant point checks are a trap to avoid from the start). Re-validate the tuning at each attack in B2/B3 and in the final feel pass.
+**Phase to address:** Atmosphere / day-night phase.
 
 ---
 
-### Pitfall 5: Removing goliath contact drain leaves a coverage gap — goliaths deal zero (or, later, spiky-unfair) damage
+### Pitfall 5: Day/night drift vs unlit + baked materials — the world darkens except the things that don't
 
 **What goes wrong:**
-The SPEC deletes the goliath→player drain (`damagePerTick(goliathRow.contactDamage …)` at ~index.ts:3057, "Pass 4b"). If B1 removes the drain but the FSM only implements `leapSlam`, then for every goliath state where `leapSlam` isn't selectable (player too close, on cooldown, wrong archetype) the goliath deals **nothing**. Players learn to hug the goliath where no attack triggers and facetank it for free. Conversely, once all four attacks exist, flat burst damage (130/220/150 etc.) with poor cooldown gating can chain into an unavoidable spike that one-shots — swapping "undodgeable slow bleed" for "dodgeable but lethal if you blink," which is just as unfair.
+Dimming the hemisphere/sun only affects *lit* materials. This scene has `MeshBasicMaterial` in-world (safe-zone ring at full-bright 0x9fe86a, likely other markers/FX) and heavily *baked* brightness: grass root→tip vertex shades (0.72–1.18), per-instance blade colors, voxel prop palettes. At reduced night intensity, Lambert surfaces dim but every Basic material glows at day brightness — the safe ring becomes the brightest object in the region, and unlit world FX float over a dark world. Second-order: fog color must dim WITH the lights, or distant terrain at night fades into a bright daylight-blue wall.
+
+Also — a locked decision, restated because it's the single most tempting "improvement": **do not move the sun.** The texel-snapped shadow basis + player-following shadow camera assumes a fixed sun direction; animating it makes shadow texels swim/acne every frame and forces per-frame shadow rebuilds (currently deliberately half-rate).
 
 **Why it happens:**
-The drain is a *continuous, always-on* damage floor; discrete attacks are *conditional*. Removing the floor before the attack coverage is complete creates dead zones. And the SPEC's own contact drains for enemy→goliath (line 3038) and enemy→player (3044) and goliath→enemy (3014) are **separate** code paths — deleting the wrong one, or all of them, changes PVE balance broadly. The selection fn `(distance, cooldownUntil, available[]) → attackId | null` returning `null` too often = dead zone.
+Unlit materials are invisible in the mental model of "just dim the lights"; nobody audits them until the first night screenshot.
 
 **How to avoid:**
-- Order B1 so the goliath drain removal lands **together with** a selection fn that guarantees *some* attack is available at every engagement distance band (close→swing, mid→leap, far→dash), even if only `leapSlam` is fully built first — stub the others or keep a minimal fallback so there is never a "no attack applicable" hole. Do NOT delete the drain in a commit that only has one attack unless coverage is proven.
-- Only delete the **goliath→player** drain (Pass 4b) this milestone; the SPEC keeps camp-enemy drain and enemy↔goliath drain. Grep the three `damagePerTick` call sites and delete exactly the goliath→player one; leave enemy contact (3044) and goliath-vs-enemy (3014) intact.
-- Gate flat burst with real cooldowns (`cooldownUntil`) and ensure two attacks can't resolve on the same tick against the same player; cap simultaneous strike damage per player per tick. Model worst-case chain (`swing`+`swirl` back-to-back = 120+150) against player max HP in a pure balance test.
-- Add a "no free-facetank" playtest: stand in every distance band and confirm the goliath eventually threatens you.
+- Keep the night floor high (this is "day/night *lite*" — think 100%→~55% intensity, warm→cool hue, not actual darkness). A top-down PVP game must stay readable at night; night-blindness is a gameplay bug, not ambiance.
+- Grep-audit `MeshBasicMaterial` usages in-world before implementing; either exempt them intentionally (emissive things: lanterns, rings can be argued) or multiply them by the day/night factor via a shared uniform.
+- Verify against the *pixelated* render path — the low-res nearest-filter target quantizes subtle color drift into visible banding steps; test the 20-min cycle time-scaled (add a debug time-scale knob from day one).
 
 **Warning signs:**
-A goliath with a player glued to it never attacks; DPS-vs-goliath TTK unchanged after drain removal (means the goliath isn't hitting back); or a full combo deletes a full-HP player with no counterplay.
+Night screenshot where UI-green ring outshines the plaza; players complaining they can't see telegraphs at night; banding in the sky gradient through the pixel filter.
 
-**Phase to address:** B1 (removal + coverage guarantee, same slice). Burst-chain balance owned across B1–B3 as attacks land; final feel pass validates the spike ceiling.
+**Phase to address:** Atmosphere / day-night phase; the "no sun movement" rule should be restated in that phase's plan as a constraint.
 
 ---
 
-### Pitfall 6: Client-rolled crit trusted for the poise interrupt → trivially spoofable stagger / self-buffed damage
+### Pitfall 6: Day/night phase computed in React or with naive bigint/wall-clock math
 
 **What goes wrong:**
-Phase A keeps the crit roll **client-side** (`isCrit` sent as a reducer arg to `attackEnemies`/`attackRay`), consistent with the existing trust model where the client already sends `damage`. Phase B4 then lets `isCrit` drive the **poise interrupt** (crit during windup → cancel the goliath's attack). A modified client can now send `isCrit: true` on every hit and *also* an inflated `damage`, trivially cancelling every goliath windup and trivializing the mechanic — turning "land a real crit to interrupt" into "never get hit."
+Three distinct traps in "phase from server timestamp":
+1. **React pressure.** App re-renders on every server transaction (~16/s). Deriving the cycle phase from a `useTable` row in the component body recomputes continuously and pipes a per-frame value through React → exactly the 144→20fps class of regression this repo already survived. The game loop, not React, must own the phase.
+2. **BigInt precision/alloc.** `Timestamp.microsSinceUnixEpoch` is a bigint (~1.78e15 today — still integer-exact in a double, but only by accident of the current century). The safe pattern is modulo in bigint space FIRST: `Number(micros % CYCLE_MICROS) / Number(CYCLE_MICROS)`, computed ONCE at anchor time — not bigint→Number per frame (bigint ops allocate).
+3. **Clock skew / drift.** Using `Date.now()` for phase gives every LAN player their own sunset (client clocks differ by seconds–minutes). Correct model: capture one anchor pair (server timestamp ↔ `performance.now()`) when a subscribed row carrying a server timestamp arrives, then `phase(t) = anchor + (performance.now() − anchorLocal)`, re-anchoring quietly whenever a fresh server timestamp comes through (reconnects included). Mid-cycle joiners then get the correct phase for free — but snap the lighting to it *before* first render, or ease over ~2s; never lerp from the daylight default (a 30-second sunrise on every page load looks broken).
 
 **Why it happens:**
-The trust model was acceptable when crit only affected a damage number the client already controlled. Elevating that same untrusted bool to a *gameplay-state* trigger (interrupt) raises the stakes: it now controls whether an enemy's attack happens at all, affecting every nearby player's experience, not just the cheater's damage.
+The timestamp lives in table rows delivered through React-adjacent plumbing, so the path of least resistance runs it through App.tsx. And the client currently consumes no world-clock timestamp at all (grep: only `joinedAt`/`createdAt` sorts), so this is new plumbing with no precedent to copy.
 
 **How to avoid:**
-- Decide the trust boundary **explicitly in A** and document it: either (a) accept the existing client-trust model consciously (single-shard co-op, low cheat incentive) and note it, or (b) move the crit roll server-side using `ctx.random` in the `attackEnemies`/`attackRay` reducer, sending only `critRate/critDmg`-derived inputs, so the server owns `isCrit`. Server-side roll is the only cheat-proof option and uses the deterministic RNG the engine already provides.
-- If keeping client-rolled crit for damage but wanting a trustworthy interrupt, gate the *interrupt* on a server-side re-roll or on a server-computed condition, not the raw client bool.
-- Add sanity clamps server-side regardless: reject `damage` outside the plausible range for the attacking character (defense-in-depth for the existing model).
+A tiny `dayNightClock` module owned by `createGame`: takes a server-timestamp anchor via a setter (called from a table callback, NOT a render), exposes `getPhase01()` for the game loop. Pure math (`micros % CYCLE`) extracted to a zero-import helper with vitest coverage (repo testing discipline) — including the "joins at phase 0.97" wraparound case.
 
 **Warning signs:**
-A client can perma-stun goliaths; interrupt rate is ~100% for one player; damage numbers exceed any character's theoretical max.
+FPS dips correlating with world-tick rate after the feature lands; two side-by-side LAN clients showing different sky colors; sunrise animation on every refresh.
 
-**Phase to address:** A decides and documents the trust boundary (it introduces `isCrit`); B4 must not elevate an untrusted bool to a state trigger without that decision. If server-side roll is chosen, it belongs in A.
+**Phase to address:** Atmosphere / day-night phase (the clock helper is its first, testable plan step).
 
 ---
 
-### Pitfall 7: Poise / interrupt phase-boundary edge cases (reset timing, interrupt in the wrong phase, off-by-one)
+### Pitfall 7: Wildlife instancing — culled-out flocks, per-frame upload waste, and accidental shadow/material churn
 
 **What goes wrong:**
-Poise accrues during `windup` and interrupts at `poise >= poiseThreshold`. Edge cases silently break it: (a) a crit that lands on the **same tick** the windup transitions to `strike` — does it interrupt or does the strike already fire? (b) poise not reset when the attack ends/cancels → carries into the next attack and interrupts it instantly ("free perma-stun"). (c) a crit during `strike` or `recovery` incorrectly counted as poise. (d) the interrupt cancels the attack but forgets to set a `cooldownUntil` stagger, so the goliath re-winds-up next tick with no visible stagger. (e) two crits on the same tick from two players double-count or race.
+Four independent failure modes when adding moving InstancedMesh wildlife:
+1. **Vanishing flocks.** InstancedMesh frustum-culls with ONE geometry boundingSphere; with world-space instance matrices the auto bounds are a tiny sphere at the origin, so butterflies vanish when the camera looks away from (0,0,0). The repo already solved this for grass (manual island-sized `boundingSphere`); wildlife must either set a manual sphere covering the wander volume or `frustumCulled = false` (correct for a few hundred quads — the culling test costs more than drawing them).
+2. **Per-frame attribute churn.** Wildlife re-writes `instanceMatrix` every frame. Without `instanceMatrix.setUsage(THREE.DynamicDrawUsage)` the driver treats each upload as a static-buffer respecification. And composing matrices with `new Matrix4/Vector3/Quaternion` per instance per frame violates the no-per-frame-allocs rule at ~200×60 allocations/s — reuse module-level scratch objects (grass setup code is the template).
+3. **Shadow pass tax.** The shadow map redraws the whole scene every other frame. Animated wildlife with `castShadow = true` adds draw calls to that pass for shadows nobody can see on a butterfly. `castShadow = false, receiveShadow = false`, like grass.
+4. **Fireflies as real lights.** `createLightPool` documents the hard rule: three.js recompiles every lit material when the scene's light COUNT changes, so lights are pre-added and never removed — and the pool is size 4, shared with projectile glows. A firefly swarm must be emissive/Basic sprites with a glow texture, NOT PointLights; if dusk lanterns want real light, add dedicated always-in-scene lights (intensity 0 by day) at startup, fixed count forever, `layers.enableAll()` (the pool documents why).
 
 **Why it happens:**
-Poise is per-attack transient state stored on the `unit_attack` row; its lifecycle (set to 0 on windup entry, accrue during windup only, reset on any exit) has several exits (strike, cancel, recovery) that are easy to miss one of. Tick ordering (damage application vs phase advance) determines whether a same-tick crit "sees" windup or strike.
+Each rule exists in the codebase but in a different file; a fresh wildlife module is written from scratch and re-derives none of them.
 
 **How to avoid:**
-- Define one canonical order **per tick, per unit**: (1) advance phase using `now`, (2) apply queued crit poise only if still in `windup` after advancement, (3) check threshold → cancel, (4) else resolve strike if in `strike`. Write it as a pure helper with explicit tests for every boundary tick.
-- Reset `poise = 0` on **every** entry into `windup` (not on exit — entry is the single choke point) so no exit path can leak stale poise.
-- Make crit-during-strike/recovery a no-op for poise by construction (only accrue when `phase === windup`).
-- On interrupt, always set a stagger `cooldownUntil = now + staggerMicros` and emit a distinct state the client can render (stagger animation) so the interrupt is legible.
-- Test the "crit on the exact strike tick" and "second attack after an interrupted first" cases explicitly.
+Name `createGrassField.ts` and `createLightPool.ts` as pattern sources in the wildlife phase plan. Prefer GPU-side motion where possible (wing flap / bob via the shared wind uTime in a patched material, CPU only for wander positions at reduced cadence).
 
 **Warning signs:**
-An interrupted goliath instantly re-attacks; a goliath appears stunned forever; interrupts sometimes work and sometimes don't for no visible reason (same-tick race); poise "remembered" across attacks.
+Butterflies blink out at screen edges or when panning; GPU frame time up with wildlife on-screen count constant; every lit material re-initializing on dusk transition (dev-console shader-compile stalls).
 
-**Phase to address:** B4 (interrupt logic), but the poise **column lifecycle** and reset-on-windup-entry must be established in B1 when the row is designed, so B4 only adds the accrual+threshold.
+**Phase to address:** Wildlife phase.
 
 ---
 
-### Pitfall 8: Float nondeterminism / ordering across the tick corrupts server-authoritative replay
+### Pitfall 8: Wear features written into the decaying influence/scorch channels — permanent things that evaporate, and stamp-queue starvation
 
 **What goes wrong:**
-The FSM computes hitbox membership with trig/`Math.hypot`/`Math.atan2` (cone arcs, lane capsules) and iterates players/units from `iter()`. If damage is summed into a `Map` keyed by hex and the **iteration order** of units differs, or if you compare a float directly for a phase edge, results can differ run-to-run. SpacetimeDB requires reducers to be deterministic; while a single node replays consistently, order-dependent float accumulation and `Map` insertion order are landmines when combined with `ctx.random` (which advances state per call — calling it in a data-dependent order changes every subsequent roll).
+The ground-influence texture's four channels are ALL claimed (RG = bend direction, B = flatten, A = wear) and both maps decay on fixed clocks (bend ≈ 4–5s readable, wear `exp(-t/25)` ≈ gone in a minute, scorch on the same regrow clock). The milestone's wear features collide with this in three ways:
+1. **"Worn footpaths near camps" are permanent** — writing them into the A-wear channel means re-stamping forever against a decay designed for footprints, and any decay retune for the ~2s grass-bend trail changes footpath persistence too. Static wear belongs in a *static* layer: baked vertex colors / a small static texture the terrain+grass shaders sample — not the ping-pong maps.
+2. **The 2s grass-bend trail** wants a different decay than the current 4–5s bend clock; tuning the shared `DECAY_PER_FRAME_AT_60` changes every existing consumer (footstep feel, strike flattening). If the trail needs its own timing it needs its own channel budget — which doesn't exist — so the honest options are "accept the shared clock" or "second influence texture," decided consciously in planning, not discovered mid-implementation.
+3. **`MAX_STAMPS_PER_FRAME = 16` silently drops overflow.** Ambient stampers (dust puffs, regrowth nudges, bird-flush flattening) sharing the queue with combat stamps can starve strike scorch exactly during busy fights. Ambient writers must be rate-limited and yield to combat (or the cap raised with measurement).
+
+Plus the documented contract every new consumer must honor: hold the **uniform object**, never cache `.value` — the ping-pong swaps the texture under you every frame.
 
 **Why it happens:**
-The existing tick already sums damage into `Map`s (`playerDamage`, `enemyDamage`) and relies on `iter()` order. Adding per-unit RNG (attack selection, if randomized) or float thresholds multiplies the surface. `Math.atan2`/`hypot` are deterministic per IEEE-754 but *combining order* isn't associative for floats.
+The influence map looks like a free general-purpose "write stuff on the ground" API; its channel budget and decay semantics are invisible at the call site.
 
 **How to avoid:**
-- If attack selection uses randomness, draw from `ctx.random` in a **stable, sorted** unit order (e.g. sort by `unitId`) so the RNG stream is reproducible; never draw inside a `Map`/`Set` iteration whose order isn't guaranteed.
-- Keep hitbox membership as **boolean geometry** (inside/outside) resolved per unit independently — don't accumulate a shared float that depends on order. Damage per player is a sum of independent contributions; summing order changing the last ULP is tolerable only because HP is integer — round/clamp at apply time so ULP differences vanish.
-- Reuse the tested pure helpers (`distanceBetween`, `stepToward`) and add `pointInCone`/`pointInLane` as pure, unit-tested functions in `combatMath.ts` — no reducer context, fully deterministic, testable.
-- Never introduce `Date.now()`, `Math.random()`, or any import with hidden global state into the module.
+Open the wear phase with a half-page channel-budget note: what's static (bake), what's dynamic (which channel, which clock), what stamps at what rate. Read `createScorchMap.ts` + `groundInfluenceMath.ts` before writing any new stamp caller.
 
 **Warning signs:**
-Rare desync between what one client sees and another; a test that passes sometimes; RNG-driven selection producing different attacks on identical inputs; lint/grep finds `Math.random(` or `Date.now(` in `spacetimedb/src`.
+Footpaths fading when no one walks them; scorch craters not appearing during heavy fights (queue starvation); grass flicker after a swap (cached `.value` somewhere).
 
-**Phase to address:** B1 (geometry helpers + selection RNG discipline). Add a grep gate (no `Math.random`/`Date.now` in module) to CI as part of this milestone.
+**Phase to address:** Props/wear phase.
 
 ---
+
+### Pitfall 9: Camera sway + FOV kick vs the nearest-filtered pixel target — full-screen pixel crawl (and motion sickness)
+
+**What goes wrong:**
+The world renders into a low-res nearest-filtered target; any continuous sub-texel camera motion makes every edge in the frame flicker as geometry crosses texel boundaries — the classic "pixel crawl/shimmer" of 3D pixel art. A persistent idle sway or a speed-coupled FOV lerp turns the *whole screen* into low-grade noise; under perspective projection there is no perfect camera-snap fix (depth-dependent drift — the known result from 3D-pixel-art rendering practice; the 2026 texel-splatting paper exists precisely because snapping can't fully solve perspective). Separately, camera bob/sway/FOV modulation is the top motion-sickness trigger class — Xbox Accessibility Guideline 117 says avoid it or make it disableable, and shipped AAA practice is intensity sliders.
+
+Small extra trap: the same camera drives the native-resolution overlay pass (health bars, damage numbers), so FOV kicks also pump the size of every overlay billboard — usually fine for a 100ms kick, ugly for a sustained FOV-by-speed effect.
+
+**Why it happens:**
+Camera feel is tuned in native (non-pixelated) mode where sway looks buttery; the pixel path quantizes it into shimmer. And ambiance milestones invite "always-on" subtle motion, which is exactly the kind that sickens.
+
+**How to avoid:**
+- Prefer **transient** camera effects (short FOV kick with fast ease-out on burst damage, brief run-lean on direction *change*) over continuous idle sway; put idle "breathing" on the character mesh (already per-entity animation), not the camera.
+- `camera.updateProjectionMatrix()` after every FOV write (cheap; the projection is not part of the frozen-matrix scheme — `resize()` is the template).
+- Tune with `setPixelated(true)`; screenshot-diff a static scene with sway on/off to see crawl objectively.
+- Ship a single "camera motion" setting (off/reduced/full), default modest. This is also why camera feel is correctly scheduled LAST — it is the only feature here that can make players physically ill.
+
+**Warning signs:**
+Static scene "sparkles" while idle; testers reporting eye strain/queasiness; overlay text breathing in size.
+
+**Phase to address:** Camera-feel phase (last), with the toggle as an acceptance criterion.
+
+---
+
+### Pitfall 10: "One coherent wind" built as N private clocks
+
+**What goes wrong:**
+Grass wind today is a local accumulator (`timeUniform.value += deltaSeconds` inside `createGrassField`). The milestone promises flags, banners, tree canopies, and smoke sharing the phase. The naive port gives each system its own `+= delta` accumulator — they start in sync and drift apart the moment any system clamps, pauses, or updates at a different cadence (tab refocus with clamped delta, React-gated init order). "Coherent wind" silently becomes four incoherent winds, and the audio gusts (Pitfall 2) sync to yet a fifth.
+
+**Why it happens:**
+Copy-paste from the grass implementation, which was written when it was the only consumer.
+
+**How to avoid:**
+Extract a `windClock` module owning ONE `{ value }` uniform object + one `advance(delta)` called once per frame from the game loop; every shader (grass, flags, smoke) receives the same object reference (uniforms share by reference — free), and the audio gust envelope reads the same phase. Refactor `createGrassField` to consume it in the same change (no legacy accumulator left behind — repo rule).
+
+**Warning signs:**
+Flags peaking while adjacent grass is at rest; smoke gusting against the field; desync appearing only after alt-tab.
+
+**Phase to address:** Whichever phase ships the second wind consumer — extract the clock *before* adding consumer #2.
 
 ## Technical Debt Patterns
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Single-instant point check for the strike (no active window) | Simplest hitbox code | Latency makes honest dodges register as hits; unfair on maincloud | Never for a dodge-fairness feature — build the active window in B1 |
-| Client-timed strike VFX (flash when local timer expires) instead of `attack_strike` event | No event table plumbing | Flash desyncs from real strike under mirror drift/latency | Never — the event table exists precisely for this; use it |
-| Author windups as human seconds (0.9 s) not tick multiples | Reads nicely in the registry | Realized windup silently longer than the number the client mirrors | Never — snap to `WORLD_TICK_INTERVAL_MICROS` multiples |
-| Keep crit roll client-side AND drive interrupt from it | Reuses existing trust model, ships A faster | Spoofable perma-stun in B4 | Only if the client-trust boundary is consciously documented in A and cheat incentive is judged low |
-| Delete goliath drain before all 4 attacks exist | Unblocks B1 | Damage dead zones / free facetank until B2/B3 land | Only with a proven selection-fn coverage guarantee (no `null` in any band) |
-| Skip extending `serverSync.test.ts` to cover `ATTACKS` | Less test wiring | Silent mirror drift breaks dodge fairness with green tests (INV-5 hole) | Never — parity test is the INV-5 contract |
+| Ambient SFX connect straight to `destination` (skip bus refactor) | Ships wind a day earlier | No ducking, clipping in combat, retrofit later touches every play function | Never — bus is ~30 LOC and must come first |
+| Footpaths stamped into the decaying wear channel | Reuses existing stamp API | Permanent features evaporate; decay retunes ripple across features | Never for permanent wear; fine for transient dust |
+| `frustumCulled = false` on wildlife | Skips bounds bookkeeping | Wildlife always drawn even off-screen | Acceptable at ≲500 instances per species; revisit above |
+| Day/night tested only with the time-scale debug knob | Fast iteration | Slow-drift banding/perf issues invisible at 100× speed | Acceptable during dev; one real-time soak before phase close |
+| Hard-coded ambient volume (no settings UI) | Avoids UI work | Players who hate wind mute the whole game | Acceptable for alpha IF the camera-motion toggle ships (that one is health, not preference) |
+| Chirp/gust variety via bare `Math.random()` (no variation pools) | Simple | Repetition fatigue on a 100%-uptime bed | Acceptable at first; `jitter()` discipline from `audioCore` is the floor |
 
 ## Integration Gotchas
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| `unit_attack` new table on maincloud | Assuming `init`/seed populates it; testing only on a freshly-seeded local DB | Migrate-publish; verify row count climbs on the *migrated* DB after a real engage; FSM lazily creates rows from unit tables |
-| `attack_strike` event table | Reading it like a normal table (`iter()`/`count()` — always empty) | Only `onInsert` fires for event tables; drive one-shot VFX from the insert callback |
-| Additive reducer arg `isCrit` on `attackEnemies`/`attackRay` | Publishing module without regenerating client bindings → "no such reducer"/arg mismatch | `spacetime publish` → `pnpm run spacetime:generate` → `pnpm build`, in that order, per the deploy procedure |
-| `spacetime generate` after schema change | Forgetting it; client sends old signature to new module | Regen bindings every schema/reducer-arg change; it's step 2 of the deploy procedure |
-| Publishing to only one env | Client on maincloud calls a reducer the local-only module has → "no such reducer" | Push module to the env the target client actually connects to; maincloud only at the milestone's prod point, never `--delete-data` |
-| Poise `u32` column added to `unit_attack` | (Table is new, so no default needed) — but adding a column to an *existing* table later needs `.default()` | New table: fine. If poise is later added to `goliath`/`enemy` instead, it needs `.default()` or migrate fails |
+| WebAudio autoplay policy | Starting the bed at module init — silent until gesture, or throws | Start bed inside the existing gesture-unlock path (`createAudioSystem` pattern); bed `start()` idempotent |
+| Safari/iOS audio | Only handling `suspended` | Also handle non-standard `'interrupted'`; `resume()` on visibilitychange + pointerdown recovery |
+| SpacetimeDB timestamp → day/night | Reading the timestamp per render via `useTable` in App.tsx | One anchor captured in a table callback into a game-loop-owned clock module; React never sees the phase |
+| `scene.fog` / `scene.background` | Assigning new objects (or `null`) to animate them | Mutate `.color`/`.near`/`.far` in place; fog identity and presence never change after startup |
+| Influence/scorch maps | Caching `textureUniform.value`; stamping without rate limit | Hold the uniform OBJECT (documented ping-pong contract); ambient stampers yield to combat within `MAX_STAMPS_PER_FRAME` |
+| lightPool | Acquiring pooled lights for lanterns/fireflies (pool=4, shared with projectiles) | Dedicated fixed-count lights added at startup intensity-0, or emissive sprites; NEVER add/remove lights at runtime (light-count change recompiles all lit materials) |
+| Pixel renderer layers | Putting ambiance FX quads on `OVERLAY_LAYER` (bypasses fog AND pixelation) | World-space ambiance stays on layer 0; overlay is only for crisp UI billboards |
+| `onBeforeCompile` materials | New patched variant colliding with the grass program cache | Distinct `customProgramCacheKey` per patched variant (grass sets `'grassField'` — follow it) |
 
 ## Performance Traps
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| One `unit_attack` row per unit + O(units×players) hitbox checks every 150 ms | Tick duration creeps toward the 150 ms budget; ticks coalesce/late (worsening Pitfall 1) | Only run hitbox geometry during the `strike` active window (idle/windup/recovery are cheap state advances); broad-phase by distance band before per-player cone/lane math | Many goliaths + many camp enemies all in `strike` same tick |
-| Iterating all players for every attacking unit | Quadratic growth as concurrent raids scale | Pre-build the player list/map once per tick (code already does `playerByHex`); reuse it; spatially cull to engage range first | High player + high unit count on maincloud |
-| Writing every `unit_attack` row every tick even when unchanged | Excess table writes → subscription churn to all clients each tick | Only `update()` a row when its phase/target actually changes; idle units with no state change get no write | Every unit idle but still being written each tick |
-| Broadcasting `unit_attack` updates to all subscribers | Client bandwidth spikes with unit count | Rely on STDB delta subscriptions; keep the row small (already u32/f32 fields); don't add churny fields (e.g. a per-tick counter) | Large worlds, many spectators |
-| Emitting `attack_strike` per struck player instead of per strike | Event flood, duplicate VFX | One `attack_strike` per strike instant (the SPEC's shape: unit + position + dir), client resolves affected players locally for feedback | Wide AoE hitting many players |
+| Wildlife matrices composed with fresh `Matrix4`/`Vector3` per instance per frame | GC sawtooth, minor-GC hitches | Module-level scratch objects; `DynamicDrawUsage` on instanceMatrix | ~100+ instances at 60fps |
+| Day/night lerp allocating Colors per frame | Same GC sawtooth, subtler | Preallocated keyframe + scratch Colors, `lerpColors` in place | Immediately (runs every frame forever) |
+| Ambient state flowing through React (phase, wildlife counts, audio levels) | FPS degrades as server tick rate × re-render cost | Game-loop-owned modules + refs; React only for the settings toggle | ~16 transactions/s baseline — day one |
+| New always-on `update()`s doing trig over all instances every frame | Flat frame-cost increase even with ambiance "invisible" | Wildlife steering at 10–15Hz with per-frame interpolation; GPU-side sway via shared uTime where possible | Adds up across 5+ ambiance systems |
+| Firefly/lantern real lights | Every lit material's fragment cost scales with light count | Cap total scene lights; sprites for glow | Each added PointLight taxes every lit fragment |
+| Bed audio nodes accumulating across restarts | Audio-thread CPU creep, eventual distortion | Idempotent start + full dispose; live-node debug count during dev | After 2–3 soft restarts |
 
 ## Security Mistakes
 
+Client-only milestone — no new server surface. Two hygiene notes:
+
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Trusting client `isCrit` to drive the poise interrupt | Perma-stun / trivialized goliaths for all nearby players | Server-roll crit with `ctx.random`, or gate the interrupt on a server condition; document the boundary in A |
-| No server clamp on client-sent `damage` (pre-existing model) | Inflated damage + guaranteed interrupts | Clamp `damage` to the attacking character's plausible max server-side (defense-in-depth) |
-| Using `ctx.sender` vs a player-id arg inconsistently for who dealt the crit | Spoofing "someone else" landed the interrupt | Always attribute via `ctx.sender`; never trust an identity passed as an arg |
-| Strike resolves against a client-supplied position | Player claims they were elsewhere to dodge/land | Resolve strike against server-tracked player positions only (already the model — keep it) |
+| Debug knobs (day/night time-scale, wildlife spawn) reachable in prod builds | Cosmetic desync/confusion in LAN play | Gate behind the existing local-only debug convention (`debug_*` reducers precedent) |
+| Client-derived night phase later gating anything gameplay-relevant | Phase is client-computed → spoofable | Keep day/night 100% cosmetic; any future gameplay-relevant time must come from a server reducer |
 
 ## UX Pitfalls
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Telegraph ring low-contrast under the pixel filter | Players can't read the tell → dodge feels random | High-contrast, saturated ring vs the Mondstadt-green ground; test readability *through* the pixel filter at target resolution, not in raw Three.js; consider a bright rim + fill, and the Frost accent (#86e2ff) is the established high-visibility cue |
-| Windup animation not visually distinct from idle/move | No "wind-up" read; hits feel unavoidable | Distinct windup clip per attack in the animation FSM; the tell must be legible in <0.45 s (the shortest windup) |
-| Ring geometry doesn't match the actual hitbox | Players dodge the drawn ring but the real hitbox differs → distrust | Client derives ring radius/cone angle/lane width from the SAME `ATTACKS` params the server uses (parity test covers this) |
-| Strike flash timed off the client's own clock | Flash and damage disagree → feels laggy/broken | Flash on the `attack_strike` event (server truth) |
-| No stagger feedback on interrupt | Interrupt succeeds but looks like nothing happened | Distinct stagger state/animation + brief cooldown so the cancel is visible |
-| Pixel filter snaps sub-pixel ring growth | Ring "pops" between sizes, hard to read timing | Quantize ring growth to readable steps or ensure the filter resolution is high enough that growth reads smoothly |
+| Night too dark for a competitive top-down game | Can't read telegraphs/enemies at night → deaths blamed on the feature | "Lite" floor: intensity never below ~55%, hue shift carries the mood; overlay elements already exempt |
+| Always-on camera sway | Motion sickness (XAG 117 class) | Transient-only effects + camera-motion toggle, default subtle |
+| Ambient bed audible over combat | Combat readability regression — combat SFX are tuned cues | Ducking (Pitfall 1) + low resting gain |
+| Chirp/gust repetition | Fatigue; players mute audio entirely | Randomized 5–15s intervals, `jitter()` on every frequency, ≥3 chirp variants |
+| Lighting pop on join / reconnect | "The game glitched" first impression | Snap phase before first render, or ≤2s ease |
+| Wildlife in combat space | Butterflies over a goliath fight read as visual noise | Suppress/flee wildlife near active combat (they already flush on sprint — extend to combat radius) |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Additive migrate:** Verified on a **migrated** (not freshly-seeded) DB that `unit_attack` rows appear and goliaths actually strike — count > 0 after a real engage.
-- [ ] **Mirror parity:** `serverSync.test.ts` extended to assert every `ATTACKS` duration/geometry field matches client mirror; test fails if either side changes alone.
-- [ ] **Late-tick handling:** FSM resolves a strike whose deadline was passed by a coalesced/late tick instead of skipping it.
-- [ ] **Drain removal scope:** ONLY goliath→player drain deleted; camp-enemy drain and enemy↔goliath drain still intact (grep the three `damagePerTick` sites).
-- [ ] **No damage dead zone:** Selection fn returns a valid attack in every distance band; no free-facetank spot on a goliath.
-- [ ] **Poise reset:** `poise` zeroed on every `windup` entry; interrupt sets a visible stagger cooldown; crit outside windup is a poise no-op.
-- [ ] **Determinism gate:** No `Math.random`/`Date.now` in `spacetimedb/src`; RNG (if used) drawn in stable unit order.
-- [ ] **Maincloud-latency dodge feel:** Dodge fairness validated over real RTT, not just LAN.
-- [ ] **Bindings regenerated:** `spacetime generate` + build run after the `isCrit` arg + new tables; no "no such reducer".
-- [ ] **Pixel-filter readability:** Telegraph tested through the actual pixel filter at target resolution.
+- [ ] **Ambient audio:** works after — page refresh mid-fight, tab blur→refocus, iOS screen lock→unlock, two soft game restarts (no stacking).
+- [ ] **Ducking:** slam over full ambience shows no clipping (watch the compressor's `reduction` param).
+- [ ] **Fog + day/night:** verified in *pixelated* mode (banding), and one real-time full 20-min cycle soak, not just time-scaled.
+- [ ] **Day/night sync:** two LAN clients side-by-side show the same sky within a second; a client joining at night spawns into night.
+- [ ] **Wildlife:** pan camera to world edge and back — nothing blinks out; `renderer.info.render.calls` delta with wildlife on/off is the expected small constant.
+- [ ] **Wear:** footpaths still there after 5 idle minutes (not in the decaying channel); scorch still stamps during a 6-goliath fight (queue not starved).
+- [ ] **Camera feel:** toggle exists and actually zeroes all camera motion; idle static scene shows no pixel sparkle with sway on.
+- [ ] **Frame budget:** existing `scripts/fps_playtest.py` harness run with ALL ambiance enabled simultaneously during a golem-class fight — features are built per-phase but the cost is summed.
+- [ ] **React:** no new `useTable`-derived per-frame values; App re-render count unchanged (repo's existing flood check applies).
 
 ## Recovery Strategies
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Goliaths harmless on migrated DB (empty table / no activation) | LOW | Ship idempotent activation reducer or fix FSM to iterate unit tables; re-publish (migrate, no wipe); verify count > 0 |
-| Mirror drift shipped (unfair dodges) | LOW–MEDIUM | Fix the drifted number on one side; add the `ATTACKS` parity assertion so it can't recur; republish + regen + build |
-| Client `isCrit` spoof enabling perma-stun | MEDIUM | Move crit roll server-side (`ctx.random`) or gate interrupt on server condition; republish module; regen bindings |
-| Burst combo one-shots players | LOW | Retune `damage`/`cooldownMicros` in `ATTACKS` (data-only), cap per-tick per-player strike damage; client-only change if durations mirrored — republish if server values changed |
-| Determinism bug causing desync | HIGH | Reproduce via pure-helper tests; enforce stable ordering + integer HP clamping; hardest to catch post-hoc — prevent in B1 |
-| Damage dead zone (facetank) | LOW | Add a fallback attack / widen selection bands in `UNIT_ATTACKS`; data-driven, republish |
+| Clipping/no-ducking discovered late | MEDIUM | Retrofit bus (~30 LOC) + reroute every play function — the exact refactor skipped; do it before more SFX land |
+| Fog-toggle recompile hitch shipped | LOW | Replace toggle with a "fog.near ≈ camera.far" mutation (effectively off); fog object never null |
+| Footpaths in wear channel | MEDIUM | Re-implement as static bake; delete the stamp-refresh loop (dead-code rule) |
+| Sway shipped, players report sickness | LOW–MEDIUM | Default the toggle to reduced/off in a client-only hotfix build (`pnpm build`, no publish — this milestone's one deployment mercy) |
+| Wildlife perf regression | LOW | Instance-count knob via `deviceProfile` (existing pattern); halve counts on low tier |
+| Bed leak in production | LOW | Client-only fix + rebuild; add live-node debug assert to prevent recurrence |
 
 ## Pitfall-to-Phase Mapping
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| 1 — Tick/phase time math & late ticks | B1 | Pure `phaseFor` tests incl. jumped-interval input; realized windup == authored in playtest |
-| 2 — Empty new table on live DB / activation | B1 (deploy step) | Row count > 0 after engage on a *migrated* DB; goliath strikes in cloud playtest |
-| 3 — Client mirror drift (INV-5) | B1 (extend parity test); held green in B2/B3 | `serverSync.test.ts` asserts `ATTACKS` parity; fails on one-sided edit |
-| 4 — Dodge fairness under latency | B1 (active window + grace); retune per attack | Maincloud-RTT two-client dodge test; skill correlates with dodge success |
-| 5 — Drain removal coverage / burst spike | B1 (removal + coverage), balance across B1–B3 | No facetank spot; worst-case combo modeled vs max HP |
-| 6 — Client-crit trust for interrupt | A (decide/document boundary); B4 respects it | Attempt spoofed `isCrit`; interrupt not trivially forced |
-| 7 — Poise/interrupt edge cases | B1 (column lifecycle) + B4 (accrual/threshold) | Same-tick-strike & post-interrupt-re-attack tests; visible stagger |
-| 8 — Float/ordering determinism | B1 (geometry helpers + RNG order) | No `Math.random`/`Date.now` grep gate; sorted RNG order; pure geometry tests |
-| Performance (many rows / 150 ms) | B1 (only geometry in strike; write-on-change) | Tick duration stays well under 150 ms with many units in strike |
-| Pixel-filter readability | B2/B3 renderers + animation FSM slice | Telegraph legible through pixel filter at target res |
+| 1 — No audio bus / clipping | Ambient audio (first task) | Compressor `reduction` active under slam+wind; no crackle in dense fight |
+| 2 — Bed leaks / stacking | Ambient audio | Double-restart listen test; live-node count stable |
+| 3 — Blur/interrupted handling | Ambient audio | Tab-blur silences bed; iOS lock→unlock recovers audio |
+| 4 — Fog reassign/recompile | Atmosphere/day-night | `renderer.info.programs.length` constant across a full cycle |
+| 5 — Unlit materials at night | Atmosphere/day-night | Night screenshot audit; telegraph readability playtest at night |
+| 6 — Phase clock (React/bigint/skew) | Atmosphere/day-night | Vitest on pure phase helper incl. wraparound; two-client sky match |
+| 7 — Wildlife culling/upload/lights | Wildlife | Edge-pan blink test; draw-call delta; zero runtime light add/removes |
+| 8 — Wear channel misuse / starvation | Props/wear | 5-min footpath persistence; scorch under stamp load |
+| 9 — Camera crawl + sickness | Camera feel (last) | Toggle acceptance criterion; pixelated-mode idle-sparkle check |
+| 10 — Wind clock fragmentation | Wind/atmosphere (before consumer #2) | Flags+grass+smoke visibly in phase after alt-tab |
+| Summed frame budget | Final milestone verification | `fps_playtest.py` with all ambiance on during heavy combat |
 
 ## Sources
 
-- `CLAUDE.md` — SpacetimeDB determinism rules (`ctx.timestamp`/`ctx.random`, no wall clock/random), additive-migrate gotchas ("init only on fresh DB", "can't drop a table with rows", "new column needs default"), deploy/backup procedure, event-table semantics, ownership 403 trap. HIGH.
-- `.planning/PROJECT.md` — INV-5 (client/server mirror sync via `serverSync.test.ts`), additive-schema cross-cutting constraint, deploy procedure, `account`/`account_link` not in backup set. HIGH.
-- `.planning/transcendence/combat-telegraphed-attacks-SPEC.md` — FSM/schema/roster design, build slices, client-trust crit model, open questions incl. pixel-filter readability. HIGH.
-- Codebase: `spacetimedb/src/index.ts` (`worldTick` structure, single `now` sample at 2809, the three `damagePerTick` contact sites 3014/3044/3057, `Map`-summed damage), `spacetimedb/src/combatMath.ts` (pure tick helpers, `tick = WORLD_TICK_INTERVAL_MICROS` convention), `src/game/data/__tests__/serverSync.test.ts` (regex parity harness — currently stat-only, no `ATTACKS`). HIGH.
-- SpacetimeDB engine model — scheduled reducers are best-effort not metronomic; event tables fire only `onInsert`; reducers deterministic per replay. MEDIUM-HIGH (engine general knowledge, corroborated by CLAUDE.md).
+**Codebase (HIGH confidence — direct reads, 2026-07-13):**
+- `src/game/engine/createPixelRenderer.ts` — two-pass pixel pipeline, half-rate shadows, frozen-matrix scheme, overlay-pass background save/restore
+- `src/game/world/createGrassField.ts` — onBeforeCompile Lambert patch, uTime accumulator, manual island boundingSphere, castShadow=false rationale
+- `src/game/systems/createScorchMap.ts` + `groundInfluenceMath.ts` — ping-pong uniform contract, channel budget (RG/B/A all claimed), decay clocks, `MAX_STAMPS_PER_FRAME=16`
+- `src/game/systems/createLightPool.ts` — light-count recompile rule, pool size 4
+- `src/game/audio/createAudioSystem.ts`, `audioCore.ts` — gesture unlock, direct-to-destination routing, per-call noise buffers, exp-ramp-to-zero guard
+- `src/game/world/createMondstadtWorld.ts` — existing `scene.fog` + matching background color; MeshBasicMaterial safe-zone ring
+- `CLAUDE.md` + project memory (identity-hex perf cliff, three.js CPU-overhead traps, combat FPS playtest) — the regression history these pitfalls guard
+
+**Web (MEDIUM confidence — cross-checked via research seam, websearch provider):**
+- three.js fog vs ShaderMaterial + recompile behavior: [three.js forum — shader materials + fog](https://discourse.threejs.org/t/anyone-have-any-luck-getting-shader-materials-to-respond-to-fog/17218), [three GH #13849 fog needsUpdate churn](https://github.com/mrdoob/three.js/issues/13849)
+- AudioContext `interrupted` state: [MDN BaseAudioContext.state](https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/state), [WebKit bug 237878](https://bugs.webkit.org/show_bug.cgi?id=237878), [web-audio-api #2585](https://github.com/WebAudio/web-audio-api/issues/2585)
+- Master bus + compressor for game mixes: [MDN DynamicsCompressorNode](https://developer.mozilla.org/en-US/docs/Web/API/DynamicsCompressorNode)
+- InstancedMesh culling with moving/world-space instances: [three.js forum — frustum culling with InstancedMesh](https://discourse.threejs.org/t/how-to-do-frustum-culling-with-instancedmesh/22633), [disappearing InstancedMesh](https://discourse.threejs.org/t/solved-instancedmesh-dissapeared-because-of-frustum/53651)
+- Pixel crawl / camera snapping in 3D pixel art: [David Holland — 3D Pixel Art Rendering](https://www.davidhol.land/articles/3d-pixel-art-rendering/), [Texel Splatting (arXiv 2603.14587)](https://arxiv.org/abs/2603.14587)
+- Camera motion accessibility: [Xbox Accessibility Guideline 117](https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines/117), [Game Accessibility Guidelines — camera movement](https://gameaccessibilityguidelines.com/avoid-or-provide-option-to-disable-any-difference-between-controller-movement-and-camera-movement/)
 
 ---
-*Pitfalls research for: telegraphed-attack FSM + crit/poise on live SpacetimeDB multiplayer*
-*Researched: 2026-07-08*
+*Pitfalls research for: v0.3.0-alpha Living World — client-only ambiance on an existing Three.js pixel-filter multiplayer game*
+*Researched: 2026-07-13*

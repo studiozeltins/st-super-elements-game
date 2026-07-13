@@ -1,159 +1,164 @@
 # Project Research Summary
 
-**Project:** super-elements (2d-genshin-top-down) — milestone v0.2.0-alpha "Combat Depth"
-**Domain:** Server-authoritative telegraphed dodgeable-attack FSM + per-character crit + poise interrupt + procedural animation state machine (ENEMIES ONLY; built unit-agnostic for heroes later)
-**Researched:** 2026-07-08
+**Project:** v0.3.0-alpha "Living World" — client-only world ambiance for the super-elements game
+**Domain:** Three.js browser-game ambiance polish (audio bed, fog/sky, coherent wind, wildlife, day/night lite, lived-in wear, camera feel) on an existing pixel-filter 3D + SpacetimeDB multiplayer client
+**Researched:** 2026-07-13
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This milestone replaces the enemies' current **undodgeable per-tick contact drain** with **discrete, telegraphed, dodgeable strikes**, plus a **per-character crit system** and a **crit-driven poise/interrupt** mechanic. The genre-standard way to build this (Soulslike readability + MOBA ground telegraphs + Genshin crit stats) maps cleanly onto the engine that already exists: a `windup→strike→recovery` phase machine on a fixed server tick, ground-decal telegraphs that communicate *where* and *when*, and damage resolved **once at the strike frame against LIVE player positions** so moving out of the shape is the dodge. All four researchers converged on the same headline: **add zero new runtime dependencies.** Every primitive already exists as a working prototype in-repo (`worldTick` scheduled combat, `combatMath`/`goliathAI`/`bridges` geometry helpers, `createEffectSystem` ground rings, `createGoliathAnimation` procedural posing). The correct decision is disciplinary: hand-roll on existing seams and actively refuse `xstate`, tween libs, physics engines, ECS libs, and `THREE.AnimationMixer`.
+This milestone is pure client-side polish grafted onto a codebase that already carries hard-won performance rules (frozen world matrices, pooled materials/lights, 2-pass pixel renderer, no per-frame allocs, React table bypass). Research is unanimous on the headline conclusion: **zero new dependencies**. Every feature maps to APIs already installed — three@0.185.1 built-ins (Fog, HemisphereLight, InstancedMesh, `onBeforeCompile`, plus `SimplexNoise`/`ImprovedNoise` shipping inside `three/addons/math/`), the browser Web Audio API via the existing `audioCore` synthesis pattern, and existing project seams (`timeUniform`, `groundInfluence`, `lightPool`, `scorchMap`, camp sites). Several "new features" turn out to already exist and only need tuning: scorch regrowth and the grass-bend trail are decay-constant tunes in `groundInfluenceMath.ts`, and `scene.fog` is already in the scene.
 
-The recommended approach is architectural restraint that respects the codebase's no-monolith rule. `index.ts` (~3280 LOC) gains only two additive table blocks, one `runUnitAttacks(...)` pass call inside `worldTick`, and an `isCrit` arg on two reducers. All branching logic lands in three NEW pure, vitest-able server siblings — an `ATTACKS`/`UNIT_ATTACKS` registry + `selectAttack`, the FSM advance/poise transitions, and circle/cone/lane hitbox math — each ≤300 LOC. The FSM is a `switch(phase)` keyed on `ctx.timestamp` micros (bigint, deterministic), and its new attack pass is inserted between `worldTick`'s position-build pass and the player-damage apply so strike damage lands in the SAME `playerDamage` map — reusing resistance, death, shard-spill, and respawn logic for free. On the client, telegraphs re-derive timing from the server row + a mirrored `ATTACKS` copy (never their own timer), and animation is a procedural `pose(model, t)` machine keyed to the same server phase.
+The expert approach, distilled from Ghost of Tsushima's GDC wind talks and BotW/Genshin ambience patterns, hinges on two integration principles. First, **one shared wind phase** (extracted from the grass field's private `uTime`) that every swaying system AND the audio gust envelope consumes — plus a traveling gust-wave phase offset (`dot(worldPos, windDir)/wavelength`) that turns "synced sway" into visible wind. Second, **fog and day/night are one color pipeline, not two features**: fog color, sky background, hemisphere, and sun tint all blend from a single server-anchored day/night palette, mutated in place (never reassigned — fog type/presence is a compile-time shader define, and swapping it recompiles every material).
 
-The dominant risks are all about **fairness and determinism on a live DB**, not about missing libraries. Five stand out: (1) the new `unit_attack`/`attack_strike` tables start EMPTY on a migrated production DB, so the FSM must lazily create attack state by iterating the *unit* tables — never the empty attack table — and every phase's done-criteria needs a migrated-DB (not fresh-seed) check; (2) `serverSync.test.ts` is stat-only today and MUST be extended to assert `ATTACKS`-duration parity or client/server drift silently breaks dodge fairness (INV-5 hole); (3) scheduled ticks are best-effort, so windups must be authored as exact tick multiples and the FSM must resolve a *passed* strike deadline rather than drop it; (4) dodge fairness needs an active-window + grace model chosen at the first vertical slice and validated on **maincloud RTT** (LAN hides the latency entirely); and (5) an explicit, unresolved **crit-roll trust-boundary decision** (below) that determines whether the poise interrupt can be spoofed into a perma-stun.
+The key risks are all "the naive version silently violates an existing perf rule": ambient audio needs a bus + compressor BEFORE the first looped bed (clipping, no ducking otherwise), wildlife must be emissive instanced quads with manual bounding spheres (never pooled lights, never texture readbacks), permanent footpaths must be static bakes (the wear channel decays in ~1 minute by design), the day/night clock must live in the game loop (never React — the 144→20fps regression class), and camera motion must be transient-only with an accessibility toggle (XAG 117). One factual correction from architecture research: `world_timer` is a **private** table and cannot be subscribed — the day/night clock anchors from SDK event timestamps (or `Date.now()` fallback), with zero server publishes either way.
 
 ## Key Findings
 
 ### Recommended Stack
 
-Zero new runtime dependencies. The milestone is deliberately dependency-free, and the "stack" decision is mostly a *what-NOT-to-add* decision. Stay procedural for animation (NOT `THREE.AnimationMixer` — there are no authored clips; models are code-built `THREE.Group`s posed by `Math.sin`). The one built-in worth adopting uniformly is `THREE.MathUtils` (`lerp`/`clamp`/`smoothstep`/`damp`) for every telegraph fill and animation blend, which removes any reason to reach for a tween lib. If any plan proposes a `pnpm add`, treat it as a red flag. See STACK.md.
+Nothing to install. three@0.185.1 is the latest npm release (verified against the registry 2026-07-13); all needed Web Audio nodes are Baseline in evergreen browsers. Noise for wildlife wander comes from `three/addons/math/SimplexNoise.js` — verified present on disk. The one architectural audio decision: hang a persistent `ambientBus` off the existing gesture-unlocked AudioContext singleton (never a second context) and use `StereoPannerNode` + distance gain, not `PannerNode`/HRTF (top-down camera has no 3D listener orientation).
 
 **Core technologies:**
-- `three@0.185.1` (already pinned, current latest) — client ground telegraphs (`RingGeometry`/`CircleGeometry`/`BufferGeometry`) + procedural attack animation — already the validated renderer; no bump, no add-on needed for flat ground decals.
-- `spacetimedb@2.6.*` (TS module) — server-authoritative `unit_attack` FSM resolved on `worldTick` — the FSM MUST be a deterministic reducer; the scheduled-tick + `ctx.timestamp` + additive-table pattern is already proven by the live goliath sim.
-- `THREE.MathUtils` (bundled, no install) — easing/interpolation for telegraph fill and animation blends — replaces ad-hoc `progress*progress` and any tween-lib temptation.
-- `vitest@3.2.4` (dev) — unit-test the pure FSM/geometry/selection helpers and guard the client/server mirror; extend `serverSync.test.ts` to cover `ATTACKS`.
+- three ^0.185.1 (installed): fog color mutation (free per frame via `refreshFogUniforms`), `Color.lerpColors` day/night palette, `InstancedMesh` + `DynamicDrawUsage` wildlife, addon noise — no upgrade decision exists
+- Web Audio API (browser): looped brown-noise wind bed + `BiquadFilterNode` gusts + oscillator chirps, all zero-asset synthesis following the proven `pullSounds.ts` recipe
+- Existing seams: `audioCore` helpers (`jitter`/`panned`/`clampGain`), grass `timeUniform`, `groundInfluence` CPU stamp sites, `lightPool` conventions, `detectQualityProfile()`, `?no*` bisect flags
 
-**Actively refuse:** `xstate` (a deterministic reducer needs plain `switch(phase)`, not a statechart with schedulers/timers), `@tweenjs/tween.js`/`gsap`, `cannon-es`/`rapier` (SPEC non-goal — strike-instant overlap, not continuous collision), `bitecs`/`miniplex` (STDB tables ARE the entity store), `howler`, and bumping `three`.
+**Explicitly rejected:** simplex-noise/noisejs packages (redundant), Tone.js/howler (asset-playback frameworks for a zero-asset game), three's Audio/PositionalAudio wrappers, GSAP/tween for two scalars, runtime Fog↔FogExp2 swaps, moving the sun (breaks the texel-snapped shadow basis).
 
 ### Expected Features
 
-Genre reference points: **Soulslike** (readability contract — obvious windup, commit/recovery, dodge as the answer), **MOBA** (ground telegraph language — circle/cone/lane with a cast-time fill), **Genshin** (crit stat model — base 5% CR / +50% CDMG, ~1:2 CR:CDMG scaling). See FEATURES.md.
+**Must have (table stakes — the milestone's own premise):**
+- Wind/ambience audio bed with randomized one-shot pool (interval 5–15s, pitch ±10–20%, pan jitter) — fixed-interval chirps become a metronome, the canonical ambience failure
+- Combat ducking: birds stop + bed −6..−12dB, ~1s in / ~3s out, never hard-cut
+- Fog color = sky color from ONE shared day/night-blended source; linear fog with `near` beyond combat readability radius (fog is a horizon device on a top-down camera, not atmosphere)
+- Shared wind phase across grass/flags/canopy/smoke — desynced sway reads worse than no sway
+- Day/night lite: 4 keys (dawn/day/dusk/night), asymmetric timing (~60% day, short dusk/dawn), blue night floor ≥ ~55% intensity, server-anchored phase, lanterns fade in at dusk
+- Footstep dust puffs; "reduce camera motion" toggle (accessibility baseline once ANY camera motion ships)
 
-**Must have (table stakes):**
-- Windup → strike → recovery phases (readable-but-fair windup band ~0.4–1.0 s; absolute min ~0.35 s / ≥2 ticks).
-- Ground telegraph showing shape AND timing (circle/cone/lane, filling over the windup).
-- Damage resolved once at the strike frame vs LIVE positions — the thing that makes attacks dodgeable.
-- Attack selection by range + per-unit cooldown; a viable positional dodge window (no i-frames).
-- Removal of the old goliath→player contact drain (two damage sources double-dip and kill the dodge fantasy).
-- Per-character `critRate`/`critDmg` replacing the global `Math.random()<0.22 → ×1.9`, and `isCrit` forwarded to the server.
+**Should have (differentiators):**
+- Traveling gust wave — Tsushima's core insight at 1% of the cost; the single highest value-per-LOC item
+- Audio bed sidechained to the gust envelope — wind you hear swell as grass bows
+- Startle-flush birds off the player-sprint signal — a world that reacts beats passive decoration
+- Dusk fireflies (emissive quads, ≤1 real light) + scorch regrowth tune + grass-bend trail + worn footpaths on real traffic routes + distant goliath grunts by camp proximity
+- FOV kick on burst damage only (+2–5°, ~60ms in / ~300ms out)
 
-**Should have (competitive differentiators):**
-- Poise/stagger interrupt (crit-during-windup cancels the attack) — the signature mechanic; DEPENDS on crit existing.
-- Attack chaining (`swordSwing` cone → `swordSwirl` 360° circle); locked-landing `leapSlam` vs live-tracked swings (the MIX is the differentiator); gap-closer lane dash (`shieldDash`); per-archetype attack silhouettes; `attack_strike` event VFX/SFX.
-
-**Defer (v1.x / v2+):**
-- Convert camp enemies to the same FSM (zero schema change); knockback/stun on hit; weapon/constellation crit sources.
-- Hero attack FSM + i-frame/parry dodge; tiered poise/hyperarmor/break animations; elemental-reactive telegraphs.
-
-**Anti-features to refuse:** continuous-collision physics; keeping per-tick contact damage alongside strikes; perfect-homing windups; undodgeable "true damage" telegraphs; sub-0.3 s "gotcha" windups; a global/shared crit roll; deep tiered poise meters; hero parry/i-frames this milestone.
+**Defer (post-milestone):**
+- Weather (rain/puddles) — explicitly out of scope; time-of-day gameplay hooks (needs server work); NPC ambient life
 
 ### Architecture Approach
 
-All new logic lands in SIBLING modules; `index.ts` gets only table defs, additive reducer args, and one pass call. The FSM advance is a pure transition function (`advanceAttack(row, now, atk)` — no `ctx`); `worldTick` only does I/O around it. Strike damage feeds the EXISTING `playerDamage` map (do NOT open a second damage/death path). Body commitment (root/leap/charge) is layered as an OVERRIDE on the already-computed `goliathPosition` map before the single apply — which makes the pass ordering load-bearing. The client never counts down independently: telegraph timing is re-derived from `(now - startedAt)/duration` using a mirrored `ATTACKS` copy, and strike VFX fire on the `attack_strike` event (`onInsert` only). See ARCHITECTURE.md.
+Every feature is a sibling factory module (`createWind`, `createDayNightCycle`, `createAmbientAudio`, `createWildlife`, `createCameraFeel`, `createSmokeColumns`, `createServerClock`) wired into `createGame.ts`'s single `frame()` with 1–3 lines each — createGame is already 1,963 LOC and must not grow logic. Pure-helper twins (`windMath.ts`, `dayNightMath.ts`) carry the testable math per project discipline; the wind formula especially needs a single source of truth because it lives in both GLSL (grass vertex stage) and JS (flags/smoke/audio). React sees nothing — ambiance is 100% game-layer. All research seams are verified against live code with file:line citations (see ARCHITECTURE.md).
 
 **Major components:**
-1. `spacetimedb/src/attacks.ts` (NEW) — `ATTACKS[]` + `UNIT_ATTACKS[kind][archetype]` registry + `selectAttack()`; data split from FSM math so tuning touches one file.
-2. `spacetimedb/src/unitAttackFsm.ts` (NEW) — pure `advanceAttack` / `applyPoiseHit`; phase transitions, target locking, poise accrual/cancel.
-3. `spacetimedb/src/attackHitbox.ts` (NEW) — pure `resolveCircle/Cone/Lane` vs live player positions (reuses `distanceBetween`, `isWithinForwardArc`, `pickRayHit` projection).
-4. `runUnitAttacks` pass (small block IN `worldTick`) — the only new code in `index.ts`; sits between Pass 1 and the goliath/player apply, writes into the shared `playerDamage` map, emits `attack_strike`.
-5. `unit_attack` (public) + `attack_strike` (event) tables — keyed `(unitKind, unitId)` so heroes/enemies reuse with zero schema change.
-6. Client: `createAttackTelegraphs.ts` (NEW ground meshes), `EntityAnimation.animateAttack` (added method, not a fork), `data/attacks.ts` (NEW client mirror guarded by `serverSync.test.ts`).
-
-**Reused seams (do not reimplement):** `createEntityRenderer`, `resistances` (`resistedDamage`), hitscan (`pickRayHit`), `goliathAI` (`isWithinForwardArc`), `combatMath` (`distanceBetween`), `createEffectSystem`.
+1. `createWind.ts` + `windMath.ts` — ONE `{value}` uniform object + gust envelope + `sampleWind(x,z)` CPU mirror; grass refactored to consume it (no legacy accumulator left)
+2. `createServerClock.ts` + `createDayNightCycle.ts` — SDK-event-timestamp anchor (`Date.now()` fallback) → phase → keyframed palette mutating fog/background/hemi/sun/lantern handles in place; `createMondstadtWorld` widens its return to expose `ambience` handles
+3. `createAmbientAudio.ts` — sixth audio sibling: bus + compressor first, then looped bed, game-clock-scheduled one-shots, gust-sidechained gain, camp-proximity grunts
+4. `createWildlife.ts` — instanced butterflies/fireflies/flush-birds; consumes CPU motion signal at the wear-stamp call site (`createGame.ts:899`), NEVER GPU readbacks
+5. World assets (flags/lanterns/props/footpaths) — build-time, frozen-matrix compliant; lanterns = fixed-count lights added at startup, intensity-faded (light count never changes at runtime)
+6. `createCameraFeel.ts` — absorbs existing shake state; lean/FOV kick transient-only; idle breathing lives on the CHARACTER model, not the camera
 
 ### Critical Pitfalls
 
-1. **Phase math must key off a single `now` sample + absolute deadlines, and windups must be exact tick multiples.** Scheduled ticks are best-effort (a "0.9 s" windup is really "first tick at/after startedAt+900 000 µs"). Sample `now` once at the top of `worldTick`, compare `now >= startedAt + windupMicros`, and explicitly resolve a strike whose deadline a late/coalesced tick already passed — never drop it. Test a "jumped two intervals" input.
-2. **The new tables start EMPTY on the migrated live DB.** `init` only runs on a fresh DB. The FSM must be row-optional: iterate the *unit* tables each tick and lazily insert the `unit_attack` row by index — never iterate the empty attack table. Bake a "row count > 0 after a real engage on a MIGRATED (not freshly-seeded) DB" check into each phase's done-criteria. Never `--delete-data` maincloud.
-3. **Client `ATTACKS` mirror drift breaks dodge fairness (INV-5 hole).** `serverSync.test.ts` is stat-only today; extend it to assert every `windupMicros/activeMicros/recoveryMicros/cooldownMicros/damage/radius/angle/reach/laneWidth` matches the client copy. Treat a failing parity assertion as release-blocking; keep it green through every later attack.
-4. **Strike-vs-stale-position under latency makes honest dodges still hit.** Build an **active window** (≥1–2 ticks) plus a **dodge grace** biased toward the escaping player at Slice 1 — a single-instant point check is a trap. Validate on maincloud RTT, not LAN.
-5. **Trust boundary (see below) + poise edge cases.** Only delete the goliath→player drain; author real cooldowns so a `swing`+`swirl` chain can't one-shot; reset `poise=0` on every `windup` entry (the single choke point); on interrupt always set a visible stagger cooldown; make crit-outside-windup a poise no-op. Grep-gate: no `Math.random`/`Date.now` in `spacetimedb/src`.
+1. **Ambient bed without a bus** → clipping in dense fights, no ducking knob. Prevention: `masterGain → DynamicsCompressorNode → destination` with `ambientBus`/`sfxBus` as the audio phase's FIRST task; reroute existing SFX in the same change.
+2. **Fog/background reassignment or toggling** → full-scene shader recompile hitch (compile-time defines). Prevention: mutate `.color/.near/.far` in place; fog identity never changes; preallocated scratch Colors.
+3. **Day/night phase through React or naive clock math** → the documented fps-regression class + per-player sunsets. Prevention: game-loop-owned clock module, bigint modulo once at anchor time, snap phase before first render on join.
+4. **Wildlife naive instancing** → flocks vanish (origin bounding sphere), static-buffer respec per frame, light-count recompiles. Prevention: manual bounding sphere or `frustumCulled=false`, `DynamicDrawUsage`, scratch objects, emissive sprites not lights, `castShadow=false`.
+5. **Permanent wear written into decaying channels** → footpaths evaporate in ~1 minute; ambient stampers starve combat scorch (`MAX_STAMPS_PER_FRAME=16`). Prevention: static bake for footpaths; channel-budget note opens the wear phase.
+6. **Persistent WebAudio graph leaks + tab/iOS lifecycle** → stacked beds after restart, permanent silence after iOS interruption. Prevention: idempotent `start()`, full `dispose()`, one looping buffer, `visibilitychange` + `'interrupted'` state handling, game-clock (never `setTimeout`) scheduling.
 
 ## Implications for Roadmap
 
-The SPEC and all four researchers converge on a **forced, dependency-ordered build sequence**. This is not a suggestion to re-derive — it is the ordering constraint. The interrupt CANNOT precede crit.
+Based on research, suggested phase structure (dependency-verified build order from ARCHITECTURE.md):
 
-### Phase A / Slice 0: Crit foundation
-**Rationale:** Independently shippable value (per-character crit visuals) AND the prerequisite signal the poise interrupt consumes. No FSM, no new tables — de-risks the milestone's dependency root first.
-**Delivers:** `critRate`/`critDmg` on `CharacterDefinition` + per-character values; `rollDamage` returns `isCrit`; `isCrit: t.bool()` added to `attackEnemies`/`attackRay` (server records/forwards, no behaviour yet); bindings regenerated; `serverSync.test.ts` extended.
-**Addresses:** Per-character crit; `isCrit` → server plumbing.
-**Avoids:** Pitfall 6 — this is where the crit-trust boundary MUST be decided and documented (below). That decision determines whether Slice 0 touches the server `CHARACTER_STATS` mirror.
+### Phase 1: Wind Core
+**Rationale:** The keystone — flags/canopy/smoke sway, gust-synced audio, butterfly drift, and the traveling gust wave ALL consume the wind module. Extract before any second consumer exists (Pitfall 10: N private clocks).
+**Delivers:** `windMath.ts` (tested) + `createWind.ts`; grass refactored to the shared uniform; camp flags + campfire smoke columns + canopy sway decision; traveling gust wave; `?nowind` flag.
+**Addresses:** Shared wind phase (table stakes), traveling gust wave (top differentiator).
+**Avoids:** Pitfall 10 (clock fragmentation); frozen-matrix violations (windmill-blades pattern or shader sway).
 
-### Phase B1 / Slice 1: FSM + `leapSlam` end-to-end + delete goliath drain
-**Rationale:** The risky vertical slice — schema + pass ordering + subscription + telegraph + animation + drain deletion — proven on ONE attack before multiplying shapes. Full playtest gate.
-**Delivers:** `unit_attack` + `attack_strike` tables; `attacks.ts`/`unitAttackFsm.ts`/`attackHitbox.ts` (circle only); `runUnitAttacks` wired into `worldTick`; DELETE goliath→player contact drain (~`index.ts:3057`) in the SAME commit; client ring telegraph, `animateAttack`, `syncUnitAttacks`/`handleAttackStrike`, App.tsx subscribe, `ATTACKS` parity test.
-**Uses:** `worldTick`, `combatMath`, `createEffectSystem`, `createEntityRenderer`, `resistances`.
-**Avoids:** Pitfalls 1 (phase/late-tick math + `phaseFor` helper), 2 (row-optional FSM + migrated-DB verification), 3 (introduce `ATTACKS` parity test), 4 (choose active-window + grace model here), 5 (drain removal + selection coverage so no facetank dead zone), 7 (establish poise column lifecycle now), 8 (pure geometry + RNG-order determinism gate). Establish the poise column + reset-on-windup-entry here even though accrual ships in Slice 4.
+### Phase 2: Atmosphere — Fog, Sky, Day/Night Lite
+**Rationale:** Fog color and day/night are one color pipeline; shipping fog with a constant color would force an immediate refactor. Fireflies and lanterns depend on this phase's gates.
+**Delivers:** `createServerClock.ts` + bridge timestamp tap, `dayNightMath.ts` + `createDayNightCycle.ts`, ambience handles from `createMondstadtWorld`, fog near/far tune, lantern assets with lights-at-build, debug time-scale knob, `?nodaynight` flag.
+**Uses:** `Color.lerpColors` scratch pattern; SDK EventContext timestamps (verify FIRST — see Research Flags).
+**Avoids:** Pitfalls 4 (recompile), 5 (unlit materials at night — grep-audit `MeshBasicMaterial`; night floor ≥ ~55%; sun direction frozen), 6 (React/bigint/skew).
 
-### Phase B2 / Slice 2: `swordSwing` (cone) → `swordSwirl` (circle) combo
-**Rationale:** Proves attack chaining and a second/third shape on top of a validated loop.
-**Delivers:** two `ATTACKS` entries + `resolveCone` (reuse `isWithinForwardArc`); chain selection (swirl after swing); client cone telegraph + goliath sword-swing clip.
-**Implements:** the chaining differentiator; keeps `ATTACKS` parity + latency tuning green.
+### Phase 3: Ambient Audio Bed
+**Rationale:** Depends on wind (gust sidechain); independent of day/night. Kills the silence — the #1 "dead world" tell.
+**Delivers:** Bus + compressor refactor (FIRST task), looped wind bed, randomized chirp/rustle/grunt one-shot pool, combat ducking, camp-proximity goliath grunts, visibility/iOS lifecycle handling, `?noambientaudio` flag.
+**Implements:** `createAmbientAudio.ts` as the sixth audio sibling on the shared unlocked context.
+**Avoids:** Pitfalls 1 (clipping/no bus), 2 (leaks/stacking — verify with double-restart listen test), 3 (tab blur / `'interrupted'`).
 
-### Phase B3 / Slice 3: `shieldDash` (lane, moving hitbox)
-**Rationale:** The hardest shape (travelling hitbox) — do it last of the shapes.
-**Delivers:** `ATTACKS` entry + `resolveLane` (reuse `pickRayHit` projection, collect ALL within `laneWidth`); `move:'charge'` body commit; client lane telegraph + charge animation.
+### Phase 4: Props + Wear
+**Rationale:** Static build-time work plus decay-constant tuning; no cross-dependencies, and two "features" (scorch regrowth, bend trail) already exist as tunable systems.
+**Delivers:** `createFootpaths.ts` (STATIC bake, not influence stamps), `createPlazaProps.ts`, camp flags placement polish, regrowth/bend-trail constant tuning in `groundInfluenceMath.ts`, dust puffs off the CPU motion signal.
+**Avoids:** Pitfall 8 (wear-channel misuse, stamp-queue starvation — open the phase with a channel-budget note).
 
-### Phase B4 / Slice 4: Crit poise interrupt
-**Rationale:** Depends on BOTH the FSM (a windup to interrupt) and crit (the `isCrit` signal). Must be last.
-**Delivers:** `applyPoiseHit` in `unitAttackFsm.ts` called from `attackEnemies`/`attackRay`; accrue `poise` during windup on crit only; cancel + stagger at `poiseThreshold`; reset on attack end.
-**Avoids:** Pitfall 7 (same-tick strike/interrupt race, post-interrupt re-attack, visible stagger) and Pitfall 6 (must honor the Slice-0 trust decision — do not elevate an untrusted bool to a state trigger without it).
+### Phase 5: Wildlife
+**Rationale:** Latest world system because it consumes Phase 1 (wind drift) and Phase 2 (firefly dusk gate) plus the motion signal.
+**Delivers:** `createWildlife.ts` — instanced butterflies (~64–128), startle-flush birds off the sprint signal + wing one-shot, dusk fireflies (emissive, ≤1 pooled light), combat-radius suppression, counts keyed to `detectQualityProfile()`, `?nowildlife` flag.
+**Avoids:** Pitfall 7 (culling/upload/lights — name `createGrassField.ts` and `createLightPool.ts` as pattern sources in the plan).
+
+### Phase 6: Camera Feel (last)
+**Rationale:** Genuinely independent; PROJECT.md says do last; it is the only feature that can make players physically ill.
+**Delivers:** `createCameraFeel.ts` (absorbs existing shake), run lean, FOV kick on burst-damage tiers only, idle breathing on the character model (`createCharacterModel.animate`), "reduce camera motion" toggle as an acceptance criterion.
+**Avoids:** Pitfall 9 (pixel crawl on the nearest-filtered target — transient effects only; tune in pixelated mode).
 
 ### Phase Ordering Rationale
-- **Crit before interrupt is a hard dependency**, not a preference: the interrupt is defined as "a *crit* landing during windup accrues poise." Slice 0 ships alone but unblocks Slice 4.
-- **One shape proven before many:** Slice 1 carries all the integration risk (schema/ordering/subscription/telegraph/animation/drain-delete); Slices 2–3 only add shapes on a proven spine.
-- **Drain deletion is coupled to coverage:** delete the goliath→player drain in the SAME slice that guarantees the selection fn returns an attack in every distance band — otherwise a facetank dead zone opens.
-- **Pass ordering is load-bearing:** `runUnitAttacks` MUST sit between `worldTick`'s Pass 1 (position build) and the single `playerDamage` apply, landing strike damage in that same map.
+
+- **Wind first** because five later systems consume its phase; extracting after a second consumer exists guarantees drift bugs.
+- **Atmosphere second** because fog+day/night are one color pipeline and gate fireflies/lanterns; audio does NOT depend on it, but wildlife does.
+- **Audio third** (needs wind's gust envelope) and **wear fourth** are order-swappable; both precede wildlife only by convention, wildlife strictly needs phases 1–2.
+- **Camera last** per PROJECT.md and accessibility risk.
+- **Final milestone verification** must run `scripts/fps_playtest.py` with ALL ambiance enabled during a golem-class fight — features are built per-phase but the frame cost is summed. Every phase adds its `?no*` bisect flag.
 
 ### Research Flags
 
-Phases likely needing deeper research/design during planning:
-- **Phase A (Slice 0):** the crit-trust-boundary decision (below) is a genuine design call with a security dimension — flag for requirements, not code-time.
-- **Phase B1 (Slice 1):** the active-window + grace latency model and the pixel-filter telegraph readability tuning are UX/feel judgements not yet exercised in this repo; both need a maincloud-RTT playtest, not just green vitest.
+Phases likely needing deeper research during planning:
+- **None require a full `--research-phase` pass.** The four research files already verified codebase seams to file:line and API claims against installed sources.
+- **Phase 2 (Atmosphere) has one MEDIUM-confidence claim to verify as its FIRST plan task:** whether the installed SpacetimeDB TS SDK's row-callback `EventContext` exposes the reducer event's server timestamp (`world_timer` is private — the milestone framing's stated clock source is wrong). The `Date.now()` fallback inside `createServerClock.ts` keeps the design safe either way; this is a 30-minute spike, not a research phase.
 
-Phases with well-documented in-repo patterns (skip deep research):
-- **Phases B2/B3:** once B1's spine exists, adding a cone/lane shape + a telegraph renderer branch is a mechanical repeat of established patterns (`isWithinForwardArc`, `distanceToSegment`, `createEffectSystem`).
-- **Phase B4:** the interrupt is small once the poise column lifecycle is established in B1; the logic is a pure `applyPoiseHit` with explicit boundary tests.
+Phases with standard patterns (skip research-phase):
+- **Phase 1 (Wind):** extraction of an existing working system; formula already in the repo.
+- **Phase 3 (Audio):** direct extension of the proven `pullSounds`/`audioCore` synthesis pattern; MDN-verified node APIs.
+- **Phases 4–6:** tuning existing systems + well-documented three.js instancing/camera patterns, all with named in-repo pattern sources.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Verified directly against `package.json` and live source; every primitive has a working in-repo prototype; "zero new deps" corroborated across all four files. |
-| Features | HIGH | Established action-game conventions; crit ranges cross-checked against Genshin sources; tuning numbers are explicitly starting points for a feel pass, not authoritative. |
-| Architecture | HIGH | Every integration point cites a verified line in the live `index.ts`/client (not the spec); NEW-vs-MODIFIED ledger and pass-ordering are concrete. |
-| Pitfalls | HIGH/MEDIUM | HIGH on determinism/migrate/mirror-drift (verified vs CLAUDE.md, PROJECT.md, `worldTick`/`combatMath`); MEDIUM on dodge-feel + pixel-filter readability (design/UX judgement). |
+| Stack | HIGH | Every claim verified against the installed three@0.185.1 build on disk or the npm registry directly; zero-dependency conclusion is load-bearing and triple-checked |
+| Features | MEDIUM | Cross-verified web sources (GDC talks, XAG 117, game-audio references); camera-feel numeric magnitudes (lean degrees, FOV kick ms) are informed estimates — tune by playtest |
+| Architecture | HIGH | Every integration seam cites a verified file:line in the live codebase; one milestone-framing error caught and corrected (`world_timer` privacy) |
+| Pitfalls | HIGH | Integration pitfalls grounded in direct code reads + this repo's own regression history; ecosystem claims (iOS `'interrupted'`, fog recompile) MEDIUM web-verified |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **UNRESOLVED — crit-roll trust boundary (decide in requirements/Phase A; do NOT resolve here).** Two options, mutually exclusive, with different downstream cost:
-  - **(a) Keep the client-authored roll** — send `isCrit` as a reducer arg, consistent with today's model where the client already sends `damage`. Faster to ship; Slice 0 does NOT need to touch the server `CHARACTER_STATS` mirror. But a modified client can send `isCrit: true` on every hit and, once B4 lands, perma-stun every goliath windup (spoofable stagger affecting all nearby players).
-  - **(b) Move the roll server-side via `ctx.random`** — the reducer owns `isCrit` from `critRate`/`critDmg` inputs; cheat-proof and the only option that makes the poise interrupt un-spoofable. Requires Slice 0 to mirror crit stats into the server `CHARACTER_STATS` and belongs in Phase A if chosen.
-  This is a Phase-A design call that decides whether Slice 0 touches the server stat mirror and whether B4's interrupt can be spoofed. Requirements must pick (a) or (b) explicitly; add a server-side `damage` sanity clamp as defense-in-depth regardless.
-- **Active-window + grace latency model:** choose the exact grace tuning at Slice 1 and validate over real maincloud RTT (LAN hides the unfairness). Make it a Slice-1 done-criterion with a two-client remote playtest.
-- **Pixel-filter telegraph readability:** high-contrast ring vs Mondstadt-green ground through the actual pixel filter at target resolution (Frost accent #86e2ff is the established high-visibility cue). Verify *through* the filter, not in raw Three.js, during the B1/B2 renderer slices.
-- **Tuning numbers (windups/damage/cooldowns/poise threshold):** opening values only — hand to a playtest feel pass; model the worst-case `swing`+`swirl` chain vs player max HP before shipping the combo.
+- **SDK EventContext timestamp availability** (Phase 2, first task): verify against the installed SpacetimeDB TS SDK; fall back to `Date.now()` (LAN NTP skew ≪ 1s, invisible on a 20-min cycle) if absent.
+- **Camera-feel magnitudes** (Phase 6): lean 2–4°, FOV kick +2–5° / ~60ms-in ~300ms-out are LOW-confidence estimates; the phase plan should budget a playtest-tune loop and gate everything behind the motion toggle.
+- **lightPool budget split** (Phases 2/5): lanterns vs fireflies both want night lights near the plaza; decide up front — lanterns get dedicated fixed lights at build, fireflies are emissive with at most one borrowed pooled light.
+- **Bend-trail decay conflict** (Phase 4): the ~2s trail wants a different clock than the shared 4–5s bend decay; options are "accept shared clock" or "second influence texture" — decide consciously in planning, not mid-implementation.
+- **Real-time cycle soak** (Phase 2 close): banding/perf issues invisible at time-scaled speed; one full 20-min pixelated-mode cycle before phase close.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Repo source (verified line-level): `spacetimedb/src/index.ts` (`worldTick` structure, single `now` sample ~2809, three `damagePerTick` sites 3014/3044/3057, `playerDamage` apply 3207, schema 666), `combatMath.ts`, `goliathAI.ts`, `hitscan.ts`, `bridges.ts`, `resistances.ts`, `createEffectSystem.ts`, `createEntityRenderer.ts`, `createGoliathRenderer.ts`, `createGame.ts`, `App.tsx`, `data/characters.ts`, `data/__tests__/serverSync.test.ts`, `package.json`.
-- `.planning/transcendence/combat-telegraphed-attacks-SPEC.md` — FSM/schema/roster/build slices, physics-engine non-goal, client-trust crit model, open questions (canonical for this milestone).
-- `.planning/PROJECT.md` + `CLAUDE.md` — INV-5 mirror sync, additive-migrate gotchas, deploy/backup procedure, determinism rules, event-table semantics.
-- Genshin crit sources — game8.co CR/CDMG guide, HoYoLAB 1:2 scaling, Genshin Wiki CRIT Hit.
-- three.js — `0.185.1` confirmed current latest (npm/GitHub releases); `THREE.MathUtils` stable in r18x.
+- Installed `node_modules/three` @0.185.1 — fog uniform refresh, `FOG_EXP2` define, addon noise presence, InstancedMesh dynamic path
+- npm registry (registry.npmjs.org/three) — version currency, fetched 2026-07-13
+- Direct codebase reads (file:line cited throughout ARCHITECTURE.md and PITFALLS.md): `createGame.ts`, `createMondstadtWorld.ts`, `createGrassField.ts`, `createGroundInfluence.ts`, `createScorchMap.ts`, `groundInfluenceMath.ts`, `createLightPool.ts`, `createAudioSystem.ts`, `audioCore.ts`, `pullSounds.ts`, `createPixelRenderer.ts`, `useGameTableBridge.ts`, `camps.ts`, `spacetimedb/src/index.ts`
 
 ### Secondary (MEDIUM confidence)
-- Soulslike dodge/windup framing — Parry Everything (Dark Souls dodge roll), Game Rant (unwritten rules of Soulslikes).
-- SpacetimeDB engine model — scheduled reducers are best-effort not metronomic; event tables fire only `onInsert` (engine general knowledge corroborated by CLAUDE.md).
+- GDC Vault — Ghost of Tsushima wind + procedural grass talks (shared-simulation principle)
+- MDN — Web Audio (DynamicsCompressorNode, StereoPannerNode, BaseAudioContext.state), WebKit bug 237878 / web-audio-api#2585 (iOS `'interrupted'`)
+- Xbox Accessibility Guideline 117 — camera motion (authoritative for the toggle requirement)
+- three.js docs/forums — fog-vs-ShaderMaterial, InstancedMesh frustum culling with world-space matrices
+- Game-audio references (Game Audio Learning, Bugnet, A Sound Effect) — ambience layering + randomization patterns
 
 ### Tertiary (LOW confidence)
-- Combat tuning numbers (windups, damage, cooldowns, poise threshold) — starting points for a feel pass; require playtest validation, not authoritative.
+- Camera lean/FOV-kick numeric magnitudes — informed estimates from accessibility/game-feel articles; validate by playtest in Phase 6
 
 ---
-*Research completed: 2026-07-08*
+*Research completed: 2026-07-13*
 *Ready for roadmap: yes*

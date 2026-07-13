@@ -1,29 +1,83 @@
 # Feature Research
 
-**Domain:** Telegraphed dodgeable enemy attacks + per-character crit + poise/interrupt for a top-down action multiplayer game (Soulslike / Genshin / MOBA-telegraph hybrid)
-**Researched:** 2026-07-08
-**Confidence:** HIGH (established, well-documented action-game conventions; crit ranges cross-checked against Genshin sources; tuning numbers are starting points for a feel pass, not authoritative constants)
+**Domain:** World-ambiance polish for a stylized top-down 3D browser game (v0.3.0-alpha "Living World" — client-only)
+**Researched:** 2026-07-13
+**Confidence:** MEDIUM (cross-verified web sources: GDC talks, three.js docs/forums, game-audio references, Xbox Accessibility Guidelines; specific numeric magnitudes for camera feel are informed estimates → LOW where flagged)
+
+Reference games studied: Genshin Impact, Zelda BotW/TotK, Ghost of Tsushima (GDC 2021 wind/grass talks), Tunic, Sable, V Rising (top-down camera comparisons).
 
 ---
 
-## Scope note (read first)
+## How Polished Games Do Each Feature (Expected Behavior)
 
-This milestone (v0.2.0-alpha "Combat Depth") replaces the **undodgeable per-tick contact drain**
-on server-authoritative enemies with **discrete, telegraphed, dodgeable strikes**, and adds a
-**real per-character crit system** plus a **poise/interrupt** mechanic. **Enemies only** —
-heroes keep the current client swing. The SPEC already fixes the architecture (unit-agnostic
-`unit_attack` FSM, `ATTACKS` registry, `windup→strike→recovery`, damage resolved once at the
-strike frame vs LIVE positions). This document sorts the *behavior/feel* features into table
-stakes / differentiators / anti-features with complexity, dependencies, and concrete tuning
-ranges — it does not re-litigate the schema.
+### 1. Ambient audio bed — alive vs annoying
 
-The three genre reference points and what each contributes:
-- **Soulslike** — the readability contract: obvious windup, commit/recovery frames, dodge as the
-  reactive answer, i-frame/positional escape windows, punish-the-recovery loop.
-- **Genshin** — the crit stat model: base 5% CR / 50% CDMG, ~1:2 CR:CDMG scaling, floated crit
-  numbers, and elemental/burst-style ground telegraphs.
-- **MOBA (Dota/LoL)** — the *ground telegraph* language: circle / cone / lane (line) shapes with
-  a cast-time fill that communicates both **where** and **when**, resolved at a discrete cast point.
+What separates "alive" from "annoying" in shipped stylized games:
+
+- **Structure: 2–3 continuous layers + a one-shot pool.** A base bed (filtered wind noise), one texture layer (grass rustle / leaves), and a pool of randomized spot one-shots (bird chirps, distant grunts). More simultaneous loops = mud, not life. The one-shot pool is where "alive" comes from, not the bed.
+- **Randomization is non-negotiable.** Every one-shot needs randomized interval (the planned 5–15s window is exactly the standard pattern), plus per-trigger pitch (±10–20%), volume, and stereo-pan variation. A chirp at a fixed interval or fixed pitch becomes a metronome the player consciously notices within minutes — this is THE failure mode.
+- **The bed itself must never expose a loop seam.** Procedural synthesis (this project's approach) sidesteps the loop-seam problem entirely — a filtered-noise wind bed with a slowly modulated cutoff/amplitude never repeats. This is an advantage over asset-based ambience.
+- **Ducking during combat: YES, and it's two moves, not one.** Polished games (a) *remove* specific elements — songbirds stop when combat starts (also diegetically correct: birds flee fights), and (b) *duck* the remaining bed −6 to −12 dB with a ~0.5–1s fade, restoring over ~2–3s after combat ends. Never hard-cut.
+- **Sidechain to world state.** Wind bed amplitude should follow the same gust envelope as the grass sway (Tsushima's core lesson, see §3); grass-rustle layer keyed to player sprint through grass cells; goliath grunts distance-attenuated by camp proximity. Ambience that *correlates with what you see* reads as alive; uncorrelated ambience reads as a radio playing.
+- **Day/night variation of the bed** (birds by day, crickets/owl at night) is the single cheapest "the world has a schedule" signal and pairs directly with feature 5.
+
+### 2. Distance fog + sky gradient — tuning for top-down cameras
+
+- **Fog color = horizon/sky color, always, from one shared source.** The universal stylized trick: distant geometry dissolves *into* the sky instead of into a grey wall. In three.js this means `scene.fog.color` and the sky/clear color driven from the same variable — which under feature 5 must be the day/night-blended color, not a constant.
+- **Linear `THREE.Fog`, not `FogExp2`, for a top-down camera.** With a high three-quarter camera the visible ground plane is close; exponential fog eats gameplay-radius contrast before it helps the horizon. Set `near` comfortably *beyond* the combat readability radius (telegraphs, enemies, gem drops must stay at ~full contrast), `far` at/just past the world edge so the edge disappears. Fog in top-down games is a *horizon device*, not an atmosphere device.
+- **Sky gradient:** for this camera a full skybox is wasted; a large background gradient (or two-color mix in a cheap sky dome/quad only visible at the horizon) whose bottom color equals the fog color is sufficient and is what top-down games ship.
+- **Known interaction to check:** fog is applied per-material in three.js — custom shaders (the grass field, telegraph drapes) need `fog: true` + fog shader chunks or they will pop against fogged neighbors; conversely, telegraphs may *deliberately* opt out to stay readable.
+
+### 3. Coherent wind — global phase vs spatial gust waves
+
+Ghost of Tsushima (GDC 2021) is the definitive reference: grass, trees, cloth, smoke, and particles all sample **one shared wind simulation**, and that single fact — not the quality of any individual system — is what sells wind. Most games fake wind per-system and it reads as incoherent.
+
+- **Minimum viable coherence = one global wind module** exposing `{direction, baseStrength, time, gustEnvelope(t)}` as shared uniforms; every swaying system (grass `uTime`, flags, canopies, smoke drift, and the audio wind-bed gain) reads from it. This alone captures ~80% of the Tsushima effect.
+- **Global phase alone has a tell:** everything bows *in unison*, which reads as "the world is breathing," not wind. The standard fix is a **traveling gust wave** — phase-offset each element by `dot(worldPos, windDir) / gustWavelength` so gusts visibly *sweep across* the field. This is one extra term in shaders that already have world position; it is the difference between "synced" and "wind."
+- **Per-system character on top of the shared phase:** flags flap at higher frequency than grass sways; smoke gets lateral drift not oscillation; canopies get low-amplitude low-frequency sway. Same phase source, different transfer functions — this is how Tsushima layers "vorticle" detail over the global field, scaled down.
+- **Local disturbances stay separate:** groundInfluence (player disturbance) already handles the footfall-level detail Tsushima models; it layers *on top of* the global wind, it does not replace it.
+
+### 4. Wildlife — how much AI is enough
+
+Survey answer across stylized games and ambience mods: **almost none**. Ambient wildlife is near-zero-AI particles/billboards gated by time-of-day and proximity:
+
+- **Butterflies:** wander noise (2–3 summed sines or cheap value noise) over grass cells, daylight-gated, despawn/respawn near the player rather than simulated persistently. No pathfinding, no goals. Instanced quads with a 2-frame flap is the shipped standard (Stardew, BotW's insects are barely more).
+- **Birds: the flush IS the feature.** A bird idling on the ground is set dressing; a covey **bursting up when the player sprints through grass** is a *reaction to the player* and is disproportionately memorable (BotW's grass birds are the canonical example). Minimum: hidden "bird cells" in grass; on player-velocity trigger within radius → spawn 2–4 instanced quads on a scripted rising arc + wing one-shot, despawn at height. No landing behavior needed — flush-and-gone is enough.
+- **Fireflies:** dusk/night-gated drifting points with individual on/off glow pulse (randomized phase). A handful get real pooled lights (lightPool) near the player; the rest are emissive points. Fireflies + night are a proven pair — they're the reward that makes the dark phase worth having.
+- **The population rule:** wildlife density should be sparse enough that encountering it is an event, not wallpaper. A field with 6 butterflies reads better than 60.
+- **Sound binding:** chirp one-shots (feature 1) should emit *from bird/tree positions* when possible — audio-visual co-location is what makes both systems read as one world (Garden Life deep dive).
+
+### 5. Day/night lite — color scripting without sun movement
+
+Fixed-sun day/night is a well-trodden pattern (isometric/fixed-view games do exactly this):
+
+- **4 key phases: dawn → day → dusk → night**, with keyed colors for sky/fog, hemisphere (sky+ground), and sun tint+intensity per phase. Blend with smoothstep between keys, never linear (linear reads mechanical at transitions).
+- **Asymmetric timing.** Do not split the cycle evenly: for a ~20min cycle, weight ~55–60% day, ~10% dusk, ~20–25% night, ~10% dawn. Dusk/dawn are the *pretty* phases — short enough to feel special; night long enough to matter but not to fatigue.
+- **What NOT to change (critical list):**
+  - **Sun/shadow direction** — locked (fights the texel-snapped shadow basis). Shipped games with fixed cameras do this and nobody notices; players track color, not shadow angle.
+  - **Combat readability floor** — night keeps a blue ambient floor (never below ~40–50% of day exposure, never below the point where telegraph fills and goliath silhouettes lose contrast). "Night is dark blue, not dark" is the standard note (reference darkest-night values are RGB(0,0,10)-style *tints* on top of a readable floor, not literal darkness).
+  - **Gameplay values** — no spawn/damage/visibility mechanics keyed to time in this milestone; day/night is mood-only.
+- **Contrast is what sells night, not darkness:** warm points (plaza lanterns via lightPool, campfires already warm) against the cool blue ambient. Lanterns fading in at dusk is the highest-value single beat of the whole cycle.
+- **Continuity rule:** each phase's end color equals the next phase's start color — the blend must be C0-continuous or players see "the tick."
+- **Sync:** phase = `f(serverTimestamp mod cycleLength)` — deterministic, zero server work, all LAN players agree. The already-subscribed timestamp satisfies this.
+- **Fog dependency:** fog color (feature 2) MUST be a day/night-blended output or night will have a daytime horizon — fog and day/night are one color pipeline, not two features.
+
+### 6. Lived-in props + wear — storytelling minimums
+
+- **Wear encodes history along real traffic lines.** Worn footpaths must run where players/NPCs *actually walk* — camp↔camp, plaza↔bridge. A path in a random place is decoration; a path on the route you already take is storytelling. Implementation: suppress/thin grass placement along path splines + a ground tint/decal strip (grassPlacement already has exclusion machinery).
+- **Prop arrangement > prop count.** Crates near the plaza market edge, a fence with a gap where the path crosses, lanterns along the path — each prop should answer "who put this here and why." Random scatter reads as clutter.
+- **Reactive wear closes loops the game already opened:** scorch marks that *regrow* (scorchMap decay over minutes) turn an existing FX into "the world heals"; the ~2s grass-bend trail (groundInfluence persistence extension) turns movement into presence. These reuse existing systems and are the highest wear-per-effort items.
+- **Dust puffs on footsteps** are a movement-feel item as much as a wear item — small, 2–4 sprite puffs on sprint steps on dirt/path cells, pooled. Standard in every polished top-down game; absence is felt more than presence is noticed.
+
+### 7. Camera micro-feel — polish vs motion sickness
+
+The accessibility literature (Xbox Accessibility Guideline 117) is unambiguous about the nausea triggers: sustained visual motion the body didn't perform — head bob, camera shake, sway, motion blur, auto camera-angle changes. Top-down/third-person is far more tolerant than first-person, but the rules still bind:
+
+- **Animate the CHARACTER, not the camera, for continuous motion.** "Idle breathing sway" must live on the character model (scale/rotation micro-oscillation) — a continuously oscillating *camera* is the classic nausea source even in third person. This matches the milestone's framing (idle sway *on characters*) — keep it there.
+- **Run lean:** tilt the character (or its rig root) 2–4° into run direction with a spring; optionally ≤1° camera roll if any. Beyond ~5° reads cartoonish; camera roll beyond ~1–2° sustained is a sickness vector. *(magnitudes: informed estimates — LOW confidence, tune by playtest)*
+- **FOV kick:** small and brief — +2–5° (or dolly-equivalent for a framed top-down camera), attack in ~50–80ms, spring back over ~200–400ms. Instant-on/slow-off is the shape that reads as impact. Persistent FOV change is the offender, not the kick. *(magnitudes: LOW confidence, tune by playtest)*
+- **Frequency discipline:** FOV kick only on *rare, big* events (burst damage / crit / max-boost fanfare tier) — kicking on every hit habituates and nauseates simultaneously.
+- **Toggle:** one "reduce camera motion" setting that zeroes lean/roll/FOV-kick is the accessibility baseline (XAG 117). Cheap now, painful retrofit.
 
 ---
 
@@ -31,119 +85,113 @@ The three genre reference points and what each contributes:
 
 ### Table Stakes (Users Expect These)
 
-Missing these and the combat feels either unfair (undodgeable) or unreadable (no telegraph).
+Missing these, the "Living World" milestone doesn't deliver its own premise.
 
-| Feature | Why Expected | Complexity | Notes / tuning |
+| Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| **Windup → strike → recovery phases** | The core readability contract of every action game; without it "dodgeable" is meaningless | MEDIUM | FSM already specced. Phases: idle·windup·strike·recovery. Strike = 1 tick (~150 ms) or a short active window (1–2 ticks). |
-| **Readable windup duration** | Player must *see* the attack coming with time to react. Too short = feels unfair; too long = trivial | LOW (tuning) | **Readable-but-fair band: ~0.4–1.0 s.** Fast/close pokes ~0.35–0.5 s (`swordSwing` 0.45 s), committal AOEs 0.8–1.2 s (`leapSlam` 0.9 s), gap-closers ~0.6 s (`shieldDash`). Under ~0.3 s at 150 ms tick = unreactable; over ~1.3 s = boring. |
-| **Ground telegraph that shows shape AND timing** | MOBA/Genshin convention: the marker communicates *where* the hitbox is and *when* it fires (fill/grow animation) | MEDIUM | 3 shapes (circle / cone / lane) cover the roster. Telegraph must fill/pulse over the windup so timing is legible on the pixel filter. Contrast is the risk — see PITFALLS. |
-| **Damage resolved once at the strike frame vs LIVE positions** | This is what makes attacks dodgeable — move out during windup = no hit | MEDIUM | Hitbox tested at strike instant against *current* player positions, NOT positions at cast (except intentionally locked AOEs, below). Flat burst damage, not DPS. |
-| **A viable dodge/escape window** | Player needs an action that beats the attack: distance (dash out of the shape) at minimum | LOW | The dash-out-of-shape model is the baseline and needs no i-frames. Windup length *is* the dodge window. Player dash speed vs telegraph radius must leave escapable margin (leap r≈3.5 must be dashable-out-of in ~0.9 s). |
-| **Attack selection by range + cooldown** | Enemies must pick a *sensible* attack (poke when close, gap-close when far) or behavior reads as random | LOW | One selection fn `(distance, cooldownUntil, available[]) → attackId`. Range bands from SPEC: far >~9 → dash; mid → leap; close → swing. Per-unit `cooldownUntil` gate. |
-| **Per-unit attack cooldown / pacing** | Prevents windup-spam; gives the player breathing room to punish recovery | LOW | `cooldownMicros` per attack. Starting band **~1.5–3.5 s** between attacks (bigger AOEs longer). Recovery ~0.3–0.6 s before cooldown starts. |
-| **Removal of the old contact drain** | Two damage sources (drain + strikes) double-dips and defeats the dodge fantasy | LOW | SPEC deletes goliath `damagePerTick`. Goliaths damage ONLY via strikes this milestone. Camp drain stays until camps convert. |
-| **Per-character critRate / critDmg** | Genshin players expect crit as a real per-character stat, not a global coin flip | LOW | Replaces client `Math.random()<0.22 → ×1.9`. Base floor **5% CR / +50% CDMG** (Genshin convention); per-character spread. See crit ranges below. |
-| **Floated crit damage number (visual)** | Standard feedback that a crit landed | LOW (exists) | `kind:'crit'` float already exists; now driven by the real per-character roll. |
-| **Server awareness of crit (`isCrit`)** | The interrupt can't work if the server never learns a hit crit | LOW | Additive arg on `attackEnemies`/`attackRay`. Prerequisite plumbing for poise. |
+| Wind/ambience audio bed with randomized one-shots | Silence between fights is the #1 "dead world" tell; every reference game has a bed | MEDIUM | audioCore synth (pullSounds pattern); 1 noise bed + one-shot pool with pitch/interval/pan jitter |
+| Combat ducking of ambience | Bed fighting combat SFX/fanfares reads amateur; contrast is expected | LOW | Gain node on the bed bus; birds stop, bed −6..−12dB, ~1s in / ~3s out |
+| Fog color = sky color, single source | Mismatched fog/sky horizon line is instantly visible | LOW | `scene.fog` linear; near beyond combat radius; shared color var with sky + day/night |
+| Shared wind phase across grass/flags/canopy/smoke | Once flags exist, desynced wind is *worse* than no flags | MEDIUM | Extract wind module from createGrassField `uTime`; all systems consume its uniforms |
+| Night keeps combat readable (blue floor) | Players will fight at night; unreadable telegraphs = gameplay regression | LOW | Clamp min ambient; verify telegraph/goliath contrast at darkest key |
+| Day/night phase from server timestamp | LAN players must agree on time of day | LOW | Pure function of subscribed timestamp; zero server change |
+| Plaza lanterns fade in at night | Dark plaza with no warm light breaks the safe-zone feel; warm-vs-cool is what sells night | LOW–MEDIUM | lightPool; fade keyed to dusk phase; budget pooled lights vs fireflies |
+| Footstep dust puffs | Standard movement feedback; absence felt in every polished comparison | LOW | Pooled sprite puffs on sprint steps; reuse existing FX pooling patterns |
+| "Reduce camera motion" toggle | Accessibility baseline (XAG 117) once ANY camera motion ships | LOW | One flag zeroing lean/roll/FOV kick |
 
-### Differentiators (Competitive Advantage)
+### Differentiators (Where This Milestone Actually Shines)
 
-Where this combat becomes *deep* rather than merely fair. Align with the game's "power chase"
-core value — crit and interrupts are levers players can build toward.
-
-| Feature | Value Proposition | Complexity | Notes / tuning |
+| Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Poise / stagger interrupt (crit-during-windup cancels the attack)** | The signature mechanic: a well-timed crit *punishes* a telegraphed attack, turning defense into a proactive skill+build check. Rewards crit investment with tempo, not just damage | MEDIUM–HIGH | **DEPENDS on the crit system existing (Phase A).** Crit damage during windup accrues into `poise`; `poise >= poiseThreshold` → cancel + brief stagger, no strike. Non-crit hits do NOT interrupt. Threshold band: **~1–3 crits worth of a character's damage** (tune so it's achievable but not guaranteed). |
-| **Attack chaining / combos (swing → swirl)** | Enemies feel like they have *intent*; a dodged poke isn't safe if it chains into an AOE. Teaches players to respect recovery | MEDIUM | `swordSwing` (cone, close) chains into `swordSwirl` (360° circle). Chain fires a second windup immediately after the first recovery, shorter cooldown. Keep chains ≤2–3 links so they stay learnable. |
-| **Locked vs live-tracked AOE (leap lands where you WERE)** | Mixing "dodge by moving" (live) with "dodge by pre-committing" (locked landing) creates real decision variety | MEDIUM | `leapSlam` locks its landing at cast (dodge = don't be there when it lands); `swordSwing`/`swirl` resolve vs live pos. This *mix* is what makes reads interesting — a differentiator over "all attacks track you." |
-| **Distinct attack silhouettes per archetype** | Different goliath sizes → different attack lists → readable enemy identity | LOW–MEDIUM | `UNIT_ATTACKS[unitKind][archetype]`. Data-only; a big goliath's list differs from a small one. Free variety once the registry exists. |
-| **Per-attack strike VFX/audio on an event table** | Juicy, discrete feedback at the moment of impact (vs continuous drain's mush) | MEDIUM | `attack_strike` event broadcasts the strike instant for one-shot VFX/SFX. Mirrors existing `skill_cast`/`ranged_attack` pattern. |
-| **Gap-closer with a moving hitbox (lane dash)** | `shieldDash` charges along a lane — a moving capsule hitbox reads differently from a static circle, adds spacing tension | MEDIUM | Lane/capsule (halfWidth ~1.2) resolved along the charge path. Higher complexity because the hitbox travels; do it last (SPEC slice 3). |
-| **Crit-ratio build tension (Genshin 1:2 CR:CDMG)** | Long-term build depth: players optimize CR vs CDMG, feeding the power chase | LOW (data) | Follow the **1:2 CR:CDMG** convention when authoring per-character values so future weapon/constellation crit sources slot in naturally. |
+| Traveling gust wave (spatial phase offset) | The difference between "synced sway" and *wind you can see move across the field* — Tsushima's core insight at 1% of the cost | LOW (on top of wind module) | `dot(worldPos, windDir)/gustWavelength` phase term in each consumer |
+| Audio bed sidechained to gust envelope | Wind you *hear* swell as the grass bows — audio-visual correlation is the strongest "alive" signal available | LOW (on top of both) | Wind-bed gain follows gustEnvelope(t); loose coupling is enough |
+| Startle-flush birds | A world that *reacts* to the player beats any amount of passive decoration; BotW's most-cited ambient moment | MEDIUM | groundInfluence/velocity trigger → scripted arc, 2–4 instanced quads + wing one-shot, no landing AI |
+| Dusk fireflies (mostly emissive, few pooled lights) | Makes night the phase players *want*; pairs with lanterns for warm-night identity | MEDIUM | Time-gated; glow phase randomized per instance; lightPool for nearest handful only |
+| Scorch regrowth | Turns existing combat FX into "the world heals" — wear the players caused | LOW | Decay term in createScorchMap over minutes |
+| Grass-bend trail (~2s) | Presence: you can see where anyone just ran; multiplayer-legible | MEDIUM | Extend groundInfluence persistence/fade; watch texture-update cost |
+| Distant goliath grunts by camp proximity | Diegetic threat radar; ambience doing gameplay-legible work | LOW | Synth grunt one-shots, gain by nearest-camp distance, long random intervals |
+| Worn footpaths on real routes | Wear that encodes actual traffic = environmental storytelling, not decoration | MEDIUM | grassPlacement exclusion along splines + ground tint strip; static, baked at world build |
+| FOV kick on burst damage only | Rare-event kick reads as premium juice; every-hit kick reads as noise | LOW | +2–5°, ~60ms in / ~300ms out, spring; behind motion toggle |
 
 ### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| **Real rigid-body / continuous-collision physics engine** | "Physics feel," knockback that pushes bodies | Massive determinism + perf cost on a 150 ms server tick; desyncs; overkill for the goal | **Hitboxes resolved at the strike instant vs current positions — NO continuous collision.** "Physics feel" = discrete overlap test, not a physics sim. (Explicit SPEC non-goal.) |
-| **Continuous / per-tick contact damage kept alongside strikes** | "Standing in fire should hurt," safety net | Double-dips with strikes, re-introduces the exact undodgeable drain this milestone removes; kills the dodge fantasy | Delete goliath contact drain. Damage comes ONLY from telegraphed strikes. (Camp drain deferred, not blended.) |
-| **Attacks that track the player through the entire windup (perfect homing)** | "Smart" enemies that always connect | Undodgeable in practice → same feel as the old drain; frustrating | Lock the target at a defined moment (leap = at cast) OR resolve vs live pos with a windup long enough to *leave* the shape. Never re-aim on the strike frame. |
-| **Unblockable/undodgeable "true damage" telegraphs** | Difficulty via unavoidable hits | Violates the readability contract; players feel cheated, not challenged | Every attack must have a counterplay (move out, or interrupt via crit-poise). Difficulty comes from *pattern density/speed*, not from removing outs. |
-| **Sub-0.3 s "gotcha" windups** | "Fast, aggressive" enemies | At a 150 ms tick the player literally can't react; reads as random damage | Keep windups ≥ ~0.35 s (≈2+ ticks visible). Make enemies feel fast via *chaining* and short cooldowns, not unreactable single hits. |
-| **Global/shared crit roll (the status quo)** | Simpler, one constant | Not per-character, uses `Math.random`, server never learns crit → blocks poise interrupt | Per-character `critRate`/`critDmg` + `isCrit` sent to server. (This milestone's Phase A.) |
-| **Full client-side crit authority with no server signal** | Client already sends damage; "trust the client" | Interrupt logic lives server-side and needs to know crit happened; silent client-only crit can't drive poise | Keep the *roll* client-side (matches existing trust model) but *forward* `isCrit` to the server. |
-| **Deep poise/stagger meters with tiers, hyperarmor states, break animations** | "Souls-accurate" stagger system | Scope explosion for a first pass; hard to read on a pixel filter; needs animation work heroes don't have yet | Binary interrupt: accrue crit-damage poise during windup, cross threshold → cancel + brief stun. One threshold, one stagger. Expand later. |
-| **Parry / perfect-dodge i-frame timing windows (heroes)** | Souls players want parries/i-frame rolls | Heroes have NO attack FSM this milestone; i-frames need hero-side state + tight netcode. Out of scope | Dodge = **positional** (dash out of the shape). Windup length is the window. Defer true i-frames/parry to a hero-combat milestone. |
-| **Damage falloff / partial hits inside a telegraph** | "Realism," edge-of-blast chip damage | Adds resolution complexity and muddy feedback ("did I dodge or not?") | Binary in/out of shape at strike. Clean yes/no read. |
+| Fixed-interval or fixed-pitch bird chirps | Easiest ambience to add | Becomes a consciously-noticed metronome in minutes — the canonical ambience failure | Randomize interval (5–15s), pitch ±10–20%, pan; stop entirely in combat |
+| Loud continuous wind loop | "More wind = more alive" | Listening fatigue; masks combat SFX; players mute the game | Quiet bed + gust swells synced to visuals; ducking discipline |
+| Dense/exponential fog | "Atmosphere" | Eats telegraph & enemy contrast inside combat radius; top-down cameras have no distance to spend | Linear fog, near > combat radius; fog is a horizon device here |
+| Per-system independent wind | Each system is easier standalone | Desynced sway is *more* wrong-looking than static props (Tsushima's whole point) | One wind module first; every swayer consumes it |
+| Full wind fluid sim / vorticles | "Do it like Tsushima" | Weeks of work for detail invisible at this camera + art style | Global vector + gust envelope + traveling wave + per-system transfer functions |
+| Wildlife with real AI (pathfinding, flocking, persistence) | "Believable animals" | CPU + complexity for behavior nobody inspects; violates frozen-matrix/no-alloc rules | Wander noise, time gating, spawn-near-player, scripted flush arcs |
+| Sun/shadow movement | "Real day/night" | Fights the texel-snapped shadow basis; shadow-crawl artifacts; explicitly excluded | Color/intensity/fog drift only — proven sufficient in fixed-view games |
+| Pitch-black night | "Night should be dark" | Combat unreadability = gameplay regression; players just wait it out | Blue ambient floor + warm lantern/firefly contrast; night = palette, not darkness |
+| Gameplay keyed to time (night spawns/buffs) | Emergent-feeling | Balance scope creep; forces server work in a client-only milestone | Mood-only cycle now; revisit post-milestone |
+| Camera bob / continuous camera sway | "More game feel" | Sustained camera oscillation = the documented motion-sickness trigger, even third-person | Animate the character; camera gets only brief spring events + toggle |
+| Screen shake on every hit + big FOV kicks | Juice | Habituation + nausea; devalues the big moments | Reserve kick/shake for rare high-tier events |
+| Weather (rain, puddles) | Natural extension | Real but expensive (already ruled) | Deferred — explicitly out of scope |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[Per-character crit stats (critRate/critDmg)]   ← Phase A, FOUNDATION
-        └──enables──> [isCrit forwarded to server]
-                          └──requires──> [Poise / crit interrupt]   ← Phase B, needs A
+[Wind module (global phase + gust envelope)]         ← extract from createGrassField uTime
+    ├──feeds──> [Grass sway (existing)]
+    ├──feeds──> [Flags / canopies / smoke sway]
+    └──feeds──> [Ambient audio bed gain (gust swells)]
 
-[unit_attack FSM: windup→strike→recovery]        ← Phase B core
-        ├──requires──> [ATTACKS registry (shape/timing/damage)]
-        ├──requires──> [attack selection fn (range/cooldown)]
-        ├──enables───> [ground telegraph rendering (circle/cone/lane)]
-        ├──enables───> [attack_strike event VFX]
-        └──enables───> [attack chaining (swing→swirl)]
+[Day/night phase fn (server timestamp)]
+    ├──drives──> [Sky/fog/hemisphere/sun color blend]      ← ONE color pipeline with fog
+    ├──gates──>  [Fireflies (dusk/night)]
+    ├──gates──>  [Plaza lanterns fade (lightPool)]
+    └──varies──> [Audio bed content (birds day / crickets night)]
 
-[Remove contact drain] ──conflicts──> [keep per-tick drain]   (mutually exclusive)
+[Fog + sky gradient] ──consumes──> [day/night color pipeline]
+[Fireflies] ──requires──> [lightPool] + [day/night phase]
+[Lanterns]  ──requires──> [lightPool] + [day/night phase]   (shared light budget!)
+[Birds flush] ──requires──> [groundInfluence / player velocity hook] + [audio one-shot pool]
+[Grass-bend trail] ──extends──> [createGroundInfluence]
+[Scorch regrowth]  ──extends──> [createScorchMap]
+[Footpaths] ──extends──> [grassPlacement] (+ terrain tint)
+[Combat ducking] ──requires──> [ambient bed bus] + existing combat-state signal
+[Camera feel] ──independent── (do last; needs motion toggle in settings UI)
 
-[Live-position strike resolution] ──contrast-pairs-with──> [locked-landing leap]
-        (the MIX is the differentiator; both ride the same FSM)
+[Fireflies] ──competes-for-budget──> [Lanterns]  (pooled lights near plaza at night)
 ```
 
 ### Dependency Notes
 
-- **Poise interrupt REQUIRES the crit system first.** The interrupt is defined as "a *crit* landing
-  during windup accrues poise." Without per-character crit + `isCrit` reaching the server, there is
-  nothing to accrue. Phase A (crit) MUST precede Phase B's interrupt slice. This is the single
-  hardest ordering constraint — do not plan the interrupt before crit is live.
-- **Telegraph rendering ENHANCES the FSM but is client-only.** Server owns the FSM; the client reads
-  `attackId/phase/startedAt/targetX/Z` and mirrors `ATTACKS` durations. New *shape* = new renderer;
-  new *attack reusing a shape* = free on the client.
-- **Attack chaining DEPENDS on windup→recovery existing.** A chain is just "on recovery-end, start a
-  second windup" — build the single-attack loop first (SPEC slice 1: leapSlam), then combos (slice 2).
-- **Remove-drain CONFLICTS with keep-drain.** These cannot coexist on goliaths without double-dipping;
-  the milestone deletes the drain. Camp enemies keep drain only because they aren't converted yet.
-- **Locked-landing vs live-tracking are complementary, not conflicting** — both are `move`/resolution
-  flags on the same registry entry; shipping both is what creates decision variety.
+- **The wind module is the keystone:** flags/canopy/smoke sway, gust-synced audio, and the traveling gust wave all consume it. Build it first by extracting the grass field's `uTime` into a shared module (grass keeps rendering identically) — then every new consumer is additive.
+- **Fog and day/night are one color pipeline, not two features.** If fog ships first with a constant color, it must be refactored the moment day/night lands. Ship fog with its color already read from a (initially constant) day/night blend function.
+- **lightPool budget conflict:** fireflies and lanterns are both night-gated pooled-light consumers near the plaza. Decide the split up front (e.g., lanterns get guaranteed slots, fireflies use leftovers with emissive-only fallback).
+- **Camera feel is genuinely independent** — no shared systems — which is why "do last" is correct; it also needs the settings toggle, a UI touch.
 
 ---
 
 ## MVP Definition
 
-### Launch With (v1 — this milestone)
+### Launch With (v0.3.0 core)
 
-- [ ] **Per-character critRate/critDmg** replacing the global roll — foundation for everything crit.
-- [ ] **`isCrit` forwarded to server** — plumbing the interrupt needs.
-- [ ] **`unit_attack` FSM** (windup→strike→recovery) on the world tick — the core.
-- [ ] **`ATTACKS` registry + selection fn** (range/cooldown) — data-driven, unit-agnostic.
-- [ ] **`leapSlam` end-to-end** (server circle hitbox + client ring telegraph) — proves the loop.
-- [ ] **Remove goliath contact drain** — goliaths damage only via strikes.
-- [ ] **Damage resolved at strike vs live positions** — the dodgeable contract.
-- [ ] **`swordSwing → swordSwirl` combo** (cone + circle) — proves chaining.
-- [ ] **`shieldDash` lane** (moving hitbox) — proves the third shape.
-- [ ] **Poise / crit interrupt** wired to `isCrit` — the differentiator (LAST, needs crit live).
+- [ ] Wind module + flags/canopy/smoke consumers + traveling gust wave — keystone; everything visual hangs off it
+- [ ] Fog + sky gradient reading from the day/night color function — biggest visual win per LOC
+- [ ] Day/night lite (4-key blend, asymmetric timing, blue night floor, lantern fade) — the milestone's identity feature
+- [ ] Ambient audio bed (wind bed + randomized chirps + rustle + combat ducking, gust-sidechained) — kills the silence
+- [ ] Footstep dust puffs — table stakes, trivial
 
-### Add After Validation (v1.x)
+### Add After Core Works (v0.3.x within milestone)
 
-- [ ] **Convert camp enemies** to the same FSM (zero schema change) — trigger: goliath feel is dialed in.
-- [ ] **Knockback / brief stun on player hit** — trigger: strikes feel weightless without it (open question in SPEC).
-- [ ] **Weapon/constellation crit contributions** — trigger: base per-character crit validated.
-- [ ] **Per-archetype attack lists** (small vs big goliath silhouettes) — trigger: roster expands.
+- [ ] Butterflies + fireflies — once day/night gating exists they're mostly instancing work
+- [ ] Startle-flush birds — after the audio one-shot pool + groundInfluence hook exist
+- [ ] Scorch regrowth + grass-bend trail — extensions of existing systems, low risk
+- [ ] Worn footpaths + plaza props — static content, no runtime dependencies
+- [ ] Distant goliath grunts — after the bed's bus/ducking architecture is proven
+- [ ] Camera feel (lean, idle character sway, FOV kick) + motion toggle — last, per plan
 
-### Future Consideration (v2+)
+### Future Consideration (post-milestone)
 
-- [ ] **Hero attack FSM + i-frame/parry dodge** — deferred; heroes stay on the client swing this milestone.
-- [ ] **Tiered poise / hyperarmor / break animations** — needs animation depth; binary interrupt first.
-- [ ] **Elemental-reactive telegraphs** — ties into the deferred elemental resistance system.
+- [ ] Weather (rain, puddles, wet surfaces) — explicitly deferred; expensive
+- [ ] Time-of-day gameplay hooks (night spawns, firefly catching) — needs server work + balance
+- [ ] NPC ambient life (villagers, patrols) — different scope class entirely
 
 ---
 
@@ -151,103 +199,47 @@ core value — crit and interrupts are levers players can build toward.
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Per-character crit (critRate/critDmg) | HIGH | LOW | P1 |
-| `isCrit` → server | MEDIUM | LOW | P1 |
-| windup→strike→recovery FSM | HIGH | MEDIUM | P1 |
-| ATTACKS registry + selection fn | HIGH | MEDIUM | P1 |
-| Ground telegraph (circle/cone/lane) | HIGH | MEDIUM | P1 |
-| Live-position strike resolution | HIGH | MEDIUM | P1 |
-| Remove contact drain | HIGH | LOW | P1 |
-| Poise / crit interrupt | HIGH | MEDIUM–HIGH | P1 (last — depends on crit) |
-| Attack chaining (swing→swirl) | MEDIUM | MEDIUM | P2 |
-| Locked-landing leap AOE | MEDIUM | LOW | P1 (part of leapSlam) |
-| Moving lane hitbox (shieldDash) | MEDIUM | MEDIUM | P2 |
-| attack_strike VFX/SFX | MEDIUM | MEDIUM | P2 |
-| Knockback/stun on hit | MEDIUM | MEDIUM | P3 |
-| Camp-enemy conversion | MEDIUM | LOW | P3 (next milestone) |
-| Hero i-frame/parry dodge | HIGH | HIGH | P3 (future milestone) |
-
----
-
-## Concrete Tuning Ranges (starting points for the feel pass)
-
-These are **opening values**, not locked constants — hand them to a playtest tuning pass. Tick is
-~150 ms, so round windows to tick multiples.
-
-**Telegraph / attack timing**
-
-| Param | Band | Rationale |
-|---|---|---|
-| Fast poke windup (`swordSwing`) | 0.35–0.5 s | Close-range, reactable but tight; SPEC 0.45 s |
-| Gap-closer windup (`shieldDash`) | 0.5–0.7 s | Must be seen at range; SPEC 0.6 s |
-| Committal AOE windup (`leapSlam`) | 0.8–1.2 s | Big payoff, big tell; SPEC 0.9 s |
-| Chain follow-up windup (`swordSwirl`) | 0.4–0.6 s | Faster than a fresh attack (already committed); SPEC 0.5 s |
-| Strike active window | 1–2 ticks (0.15–0.3 s) | One-shot resolution; short |
-| Recovery | 0.3–0.6 s | The punish window |
-| Cooldown between attacks | 1.5–3.5 s | Bigger AOEs longer; gives dodge/punish rhythm |
-| Absolute min windup | ~0.35 s (≥2 ticks) | Below this = unreactable on a 150 ms tick |
-
-**Telegraph shapes (from SPEC, sane starting radii)**
-
-| Attack | Shape | Size | Resolution |
-|---|---|---|---|
-| `swordSwing` | cone | ±60°, reach ~3.0 | live positions |
-| `swordSwirl` | circle | r ≈ 3.2 (360°) | live positions |
-| `leapSlam` | circle | r ≈ 3.5 | **locked** landing at cast |
-| `shieldDash` | lane/capsule | halfWidth ~1.2 along charge | live along path |
-
-**Damage (flat burst, dodgeable — not DPS)**
-
-| Attack | Dmg band |
-|---|---|
-| `swordSwing` | ~100–140 (SPEC 120) |
-| `swordSwirl` | ~130–170 (SPEC 150) |
-| `leapSlam` | ~180–260 (SPEC 220) — biggest tell, biggest hit |
-| `shieldDash` | ~110–150 (SPEC 130) |
-
-**Crit (Genshin-style)**
-
-| Param | Band | Note |
-|---|---|---|
-| Base CRIT Rate | 5% floor, characters ~5–35% | Genshin base 5%; per-character spread |
-| Base CRIT DMG | +50% floor, ~+50–120% | Genshin base 50% (×1.5) |
-| CR : CDMG authoring ratio | ~1:2 | Genshin optimal-scaling convention; keeps future crit sources balanced |
-| Existing global (to replace) | 22% / ×1.9 | Current `Math.random()<0.22 → ×1.9` — a reasonable *average* to distribute across characters |
-
-**Poise / interrupt**
-
-| Param | Band | Note |
-|---|---|---|
-| Poise threshold | ~1–3 character-crits worth of damage | Achievable with crit investment, not guaranteed; tune per attack (big AOEs harder to interrupt) |
-| Stagger on interrupt | 0.5–1.0 s stun / cooldown bump | Brief reward window; not a full lockdown |
-| Poise reset | on attack end (per windup) | Non-crit hits never contribute |
-| Interrupt trigger | crit only | Non-crit hits do not accrue poise |
+| Wind module + coherent sway + gust wave | HIGH | MEDIUM | P1 |
+| Fog + sky gradient (day/night-fed color) | HIGH | LOW | P1 |
+| Day/night lite + lantern fade | HIGH | MEDIUM | P1 |
+| Ambient audio bed + ducking | HIGH | MEDIUM | P1 |
+| Dust puffs | MEDIUM | LOW | P1 |
+| Fireflies | HIGH | MEDIUM | P2 |
+| Startle-flush birds | HIGH | MEDIUM | P2 |
+| Butterflies | MEDIUM | LOW | P2 |
+| Scorch regrowth | MEDIUM | LOW | P2 |
+| Grass-bend trail | MEDIUM | MEDIUM | P2 |
+| Footpaths + plaza props | MEDIUM | MEDIUM | P2 |
+| Goliath grunt proximity layer | MEDIUM | LOW | P2 |
+| Camera feel + motion toggle | MEDIUM | LOW–MEDIUM | P3 (do last) |
 
 ---
 
 ## Competitor Feature Analysis
 
-| Feature | Soulslike (Dark Souls/Elden Ring) | MOBA (Dota/LoL) | Genshin | Our Approach |
-|---------|-----------------------------------|-----------------|---------|--------------|
-| Telegraph | Animation windup (no ground marker) | Ground shape (circle/cone/line) with cast fill | Ground marker + windup anim | Ground shape + windup fill (MOBA-legible on top-down) + enemy anim |
-| Dodge | i-frame roll OR spacing | Move out of shape before cast point | Dash/sprint out; some i-frames | **Positional** (dash out); windup = window; no i-frames this milestone |
-| Hit resolution | Active-frame hitbox vs live pos | Discrete at cast point | At skill resolution | Once at strike frame vs live pos (+ locked leap) |
-| Interrupt | Poise/stance break, stagger | Stuns/silences | Elemental reactions, some stagger | Crit-during-windup → poise → cancel + stagger |
-| Crit | Critical/backstab multipliers | Crit chance items | Per-char CR/CDMG, 1:2 scaling | Per-character CR/CDMG (Genshin model), forwarded to server |
-| Physics | Ragdoll/knockback (cosmetic-ish) | No rigid-body; scripted displacement | Scripted knockback | **No physics sim** — discrete overlap test only |
+| Feature | Genshin / BotW | Ghost of Tsushima | Tunic / Sable / V Rising (top-down/stylized) | Our Approach |
+|---------|----------------|-------------------|-----------------------------------------------|--------------|
+| Ambient audio | Sparse musical beds + heavily randomized nature one-shots; birds silence in combat | Wind audio tied to the wind gameplay system | Tunic: minimal, tone-first; V Rising: biome beds + night variants | Procedural synth bed (no assets), gust-sidechained, one-shot pool, combat duck |
+| Wind | BotW: visible grass waves + cloth | ONE simulation feeds grass/trees/cloth/particles (GDC 2021) | Mostly per-asset sway (and it shows) | Shared wind module + traveling gust wave — Tsushima's principle, minimum machinery |
+| Fog/sky | Full atmospheric scattering | Atmospheric + wind-blown particulates | Simple depth fog matched to palette | Linear `scene.fog` = sky/horizon color from day/night blend |
+| Wildlife | BotW: flush birds/crickets, catchable critters | Birds as literal guides; foxes | Sable: beetles/birds as set dressing; V Rising: prey animals | Zero-AI instanced quads: wander butterflies, scripted flush birds, gated fireflies |
+| Day/night | Full sun cycle + time-gated content | Full cycle | V Rising: night = core mechanic; Tunic: mostly static | Color/intensity/fog drift only, fixed sun, server-synced ~20min, mood-only |
+| Wear/lived-in | Hand-placed wear everywhere | Trails players follow through fields | Tunic: overgrown-ruin identity | Footpaths on real routes, scorch regrowth, bend trails — wear tied to actual traffic |
+| Camera feel | Subtle FOV/impact framing on bursts | Cinematic camera, minimal bob | Mostly static cameras + shake on impact | Character-side lean/sway, rare FOV kick, XAG-117 toggle |
 
 ---
 
 ## Sources
 
-- [Genshin CRIT Rate & CRIT DMG guide — game8.co](https://game8.co/games/Genshin-Impact/archives/318629) — base 5% CR / 50% CDMG, benchmarks (HIGH)
-- [Why 1:2 CR:CDMG is optimal — HoYoLAB](https://www.hoyolab.com/article/1380428) — the 1:2 scaling convention (HIGH)
-- [CRIT Hit — Genshin Impact Wiki (Fandom)](https://genshin-impact.fandom.com/wiki/CRIT_Hit) — crit formula/base values (HIGH)
-- [The Dark Souls Dodge Roll: Immediacy in Player Action — Parry Everything](https://parryeverything.com/2021/07/30/the-dark-souls-dodge-roll-immediacy-in-player-action/) — dodge as reactive answer to telegraphed windups (MEDIUM)
-- [The Unwritten Rules of Soulslikes Explained — Game Rant](https://gamerant.com/soulslikes-unwritten-rules-explained-builds-parrying-dodging-weapons-enemy-movement/) — windup/i-frame/recovery framing, pattern learning (MEDIUM)
-- Project SPEC: `.planning/transcendence/combat-telegraphed-attacks-SPEC.md` — roster, timings, schema (HIGH, canonical for this milestone)
-- Project context: `.planning/PROJECT.md` — milestone scope, invariants (HIGH)
+- Game Audio Learning — [How To Make Ambiences For Games](https://www.gameaudiolearning.com/knowledgebase/how-to-make-ambiences-for-games); Bugnet — [How to Design Ambient Sound Layers](https://bugnet.io/blog/how-to-design-ambient-sound-layers); Splice — [Audio soundscape for video games](https://splice.com/blog/audio-soundscape-for-video-games/); A Sound Effect — [Immersion + reducing repetition](https://www.asoundeffect.com/game-audio-immersion/) — MEDIUM (cross-verified)
+- GDC Vault — [Blowing from the West: Simulating Wind in Ghost of Tsushima](https://gdcvault.com/play/1027124/Blowing-from-the-West-Simulating), [Procedural Grass in Ghost of Tsushima](https://gdcvault.com/play/1027033/Advanced-Graphics-Summit-Procedural-Grass); Game Developer — [Using vorticles to simulate wind](https://www.gamedeveloper.com/design/using-vorticles-to-simulate-wind-in-i-ghost-of-tsushima-i-) — MEDIUM–HIGH (primary conference material)
+- three.js — [Fog docs](https://threejs.org/docs/pages/Fog.html), [Fog manual](https://threejs.org/manual/en/fog.html); forum threads [52018](https://discourse.threejs.org/t/matching-fog-color-with-the-sky-shader/52018), [32789](https://discourse.threejs.org/t/the-best-way-to-match-fog-color-with-sky-shader-example/32789); [Three.js Fog Hacks (Belkhale)](https://snayss.medium.com/three-js-fog-hacks-fc0b42f63386) — MEDIUM
+- Wildlife patterns — [Steam Workshop: Butterflies & Fireflies](https://steamcommunity.com/sharedfiles/filedetails/?id=1710344555); [Ambient Birds (BitQuest)](https://bitqueststudio.itch.io/ambient-birds); [Giant Bomb: Ambient Wildlife concept](https://www.giantbomb.com/ambient-wildlife/3015-4660/games/); Game Developer — [Garden Life sound design deep dive](https://www.gamedeveloper.com/audio/deep-dive-sound-design-garden-life) — MEDIUM
+- Day/night — [Sea Otter Games: Setting a mood with a Day/Night cycle](https://seaotter.games/blog/setting-a-mood-with-a-day-night-cycle); [sine.space wiki: Day/night cycles](https://wiki.sine.space/index.php?title=Day/night_cycles) — MEDIUM
+- Environmental storytelling — [Toxigon: How games tell stories without saying a word](https://toxigon.com/using-environmental-storytelling-in-games); [Beyond Extent: Storytelling and Details in Props](https://www.beyondextent.com/articles/storytelling-and-details-in-props); [Mulholland: Environmental Storytelling](https://medium.com/@johnmulholland/game-design-environmental-storytelling-3574aff0ff2b) — MEDIUM
+- Camera/motion sickness — [Xbox Accessibility Guideline 117](https://learn.microsoft.com/en-us/gaming/accessibility/xbox-accessibility-guidelines/117); [Bugnet: Camera FOV & motion sickness](https://bugnet.io/blog/how-to-fix-camera-fov-causing-motion-sickness); [Switchblade: settings that reduce motion sickness](https://www.switchbladegaming.com/game-settings/reduce-motion-sickness-gaming/) — MEDIUM (XAG is authoritative); specific lean/FOV magnitudes are informed estimates — LOW
+- Codebase grounding: `src/game/audio/audioCore.ts`, `src/game/world/createGrassField.ts` (uTime), `src/game/systems/createScorchMap.ts`, `createLightPool.ts`, `createGroundInfluence.ts`, `src/game/world/grassPlacement.ts`, `assets/createCampfire.ts`, `createCanopyTree.ts`, `createPlazaStructures.ts` — HIGH (verified in repo)
 
 ---
-*Feature research for: telegraphed dodgeable enemy attacks + crit + poise (v0.2.0-alpha Combat Depth)*
-*Researched: 2026-07-08*
+*Feature research for: v0.3.0-alpha Living World ambiance polish*
+*Researched: 2026-07-13*
