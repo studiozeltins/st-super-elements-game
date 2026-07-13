@@ -21,6 +21,8 @@ import {
   resolveObstacleCollisions,
   type CollisionBody,
 } from './physics/resolveCollisions';
+import { clampRangeToWorld, pointHitsWorld } from './physics/projectileBlockers';
+import { getTerrainHeight } from './world/terrain';
 import { createCharacterModel, createNameSprite, type CharacterModel } from './entities/createCharacterModel';
 import { createBoostOrbit } from './entities/createBoostOrbit';
 import { createInputSystem } from './systems/createInputSystem';
@@ -316,7 +318,17 @@ export function createGame(
   const effectSystem = createEffectSystem(
     scene,
     (x, z, radius, strength, dirX, dirZ) => groundInfluence.stamp(x, z, radius, strength, dirX, dirZ),
-    lightPool
+    lightPool,
+    {
+      // Projectiles die against rising terrain and solid props (rocks, tents,
+      // trees) instead of flying through them.
+      blockedAt: (x, y, z) => pointHitsWorld(x, y, z, world.getObstacles(), getTerrainHeight),
+      onImpact(x, _y, z) {
+        // weaponAudio is created a few lines below — impacts only fire at
+        // runtime, long after init.
+        weaponAudio.playProjectileImpact(hitAudioGain(x, z), hitAudioPan(x, z));
+      },
+    }
   );
   const debrisSystem = fxEnabled
     ? createDebrisSystem(scene, (x, z) => world.getGroundHeight(x, z))
@@ -694,7 +706,18 @@ export function createGame(
       // the ray reaches using authoritative positions, so a shot lands the same at
       // any range. The projectile below is purely visual for enemy damage.
       const projectileTravel = PROJECTILE_LIFETIME_SECONDS * weapon.projectileSpeed;
-      const rangedRange = Math.min(PVP_MAX_HIT_RANGE, projectileTravel);
+      // Clamp the hitscan to the first slope/rock/tent in the way — the ray must
+      // agree with the visual projectile, which now splashes on world contact.
+      const rangedRange = clampRangeToWorld(
+        playerPosition.x,
+        playerPosition.y + 1.2,
+        playerPosition.z,
+        direction.x,
+        direction.z,
+        Math.min(PVP_MAX_HIT_RANGE, projectileTravel),
+        world.getObstacles(),
+        getTerrainHeight
+      );
       network.sendAttackRay(
         playerPosition.x,
         playerPosition.z,

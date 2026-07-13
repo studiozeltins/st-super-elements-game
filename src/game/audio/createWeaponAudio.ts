@@ -15,6 +15,8 @@ export interface WeaponAudio {
   playBowShot(gain?: number, pan?: number): void;
   /** Soft magical "fwoom" for a book/arcane bolt. gain/pan place a remote caster. */
   playArcaneBolt(gain?: number, pan?: number): void;
+  /** Projectile smacking the world (slope/rock/tent): wet splat + dirt thock + bright fizz. gain/pan place the impact. */
+  playProjectileImpact(gain?: number, pan?: number): void;
   /** Rising tension swell across an attack windup (telegraph charge). Auto-ends at durationSeconds; returns a cancel fn that fades it out fast (call when the windup is interrupted). Multiple concurrent risers allowed (they're per-unit). */
   playWindupRiser(durationSeconds: number, gain?: number, pan?: number): () => void;
   /** Slime hop launch: wet two-phase squish — compress down, then spring up. gain/pan place the hopping slime. */
@@ -48,6 +50,24 @@ const ARCANE_SECONDS = 0.2;
 const ARCANE_PEAK = 0.15;
 const ARCANE_SHIMMER_HZ = 1600;
 const ARCANE_SHIMMER_PEAK = 0.05;
+
+// Projectile world impact: three layers make the "satisfying splash" —
+// a wet mid splat (bandpass noise falling 900→350Hz), a low dirt thock
+// (sine 190→75Hz) for weight, and a tiny bright fizz on top so the element
+// energy reads as bursting, not just dirt. Gated like swings: arrow rain on a
+// cliff face merges instead of crackling.
+const IMPACT_GATE_SECONDS = 0.08;
+const IMPACT_SPLAT_START_HZ = 900;
+const IMPACT_SPLAT_END_HZ = 350;
+const IMPACT_SPLAT_SECONDS = 0.14;
+const IMPACT_SPLAT_PEAK = 0.42;
+const IMPACT_THOCK_START_HZ = 190;
+const IMPACT_THOCK_END_HZ = 75;
+const IMPACT_THOCK_SECONDS = 0.12;
+const IMPACT_THOCK_PEAK = 0.3;
+const IMPACT_FIZZ_HIGHPASS_HZ = 2800;
+const IMPACT_FIZZ_SECONDS = 0.05;
+const IMPACT_FIZZ_PEAK = 0.12;
 
 // Slime leap: a two-phase bandpass squish — the body compressing (250→120Hz)
 // then springing off the ground (150→400Hz). Quiet: it fires per hop across a
@@ -213,6 +233,62 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     shimmer.stop(now + ARCANE_SECONDS + 0.02);
   }
 
+  function playProjectileImpact(gainFactor = 1, pan = 0) {
+    const context = ready();
+    if (!context) return;
+    const level = clampGain(gainFactor);
+    if (level === 0) return;
+    const now = context.currentTime;
+    if (!gateOpen('projectileImpact', IMPACT_GATE_SECONDS, now)) return;
+    const out = panned(context, pan, context.destination);
+    const rate = jitter(0.12);
+
+    // Wet mid splat: the body of the impact.
+    const splat = createNoiseSource(context, IMPACT_SPLAT_SECONDS);
+    const splatBand = context.createBiquadFilter();
+    splatBand.type = 'bandpass';
+    splatBand.Q.value = 1.1;
+    splatBand.frequency.setValueAtTime(IMPACT_SPLAT_START_HZ * rate, now);
+    splatBand.frequency.exponentialRampToValueAtTime(
+      IMPACT_SPLAT_END_HZ * rate,
+      now + IMPACT_SPLAT_SECONDS
+    );
+    const splatGain = context.createGain();
+    splatGain.gain.setValueAtTime(IMPACT_SPLAT_PEAK * level, now);
+    splatGain.gain.exponentialRampToValueAtTime(0.0001, now + IMPACT_SPLAT_SECONDS);
+    splat.connect(splatBand).connect(splatGain).connect(out);
+    splat.start(now);
+    splat.stop(now + IMPACT_SPLAT_SECONDS);
+
+    // Low dirt thock: weight under the splat.
+    const thock = context.createOscillator();
+    thock.type = 'sine';
+    thock.frequency.setValueAtTime(IMPACT_THOCK_START_HZ * rate, now);
+    thock.frequency.exponentialRampToValueAtTime(
+      IMPACT_THOCK_END_HZ * rate,
+      now + IMPACT_THOCK_SECONDS
+    );
+    const thockGain = context.createGain();
+    thockGain.gain.setValueAtTime(0.0001, now);
+    thockGain.gain.exponentialRampToValueAtTime(IMPACT_THOCK_PEAK * level, now + 0.008);
+    thockGain.gain.exponentialRampToValueAtTime(0.0001, now + IMPACT_THOCK_SECONDS + 0.04);
+    thock.connect(thockGain).connect(out);
+    thock.start(now);
+    thock.stop(now + IMPACT_THOCK_SECONDS + 0.06);
+
+    // Bright fizz cap: the element energy bursting on the surface.
+    const fizz = createNoiseSource(context, IMPACT_FIZZ_SECONDS);
+    const fizzHigh = context.createBiquadFilter();
+    fizzHigh.type = 'highpass';
+    fizzHigh.frequency.value = IMPACT_FIZZ_HIGHPASS_HZ;
+    const fizzGain = context.createGain();
+    fizzGain.gain.setValueAtTime(IMPACT_FIZZ_PEAK * level, now);
+    fizzGain.gain.exponentialRampToValueAtTime(0.0001, now + IMPACT_FIZZ_SECONDS);
+    fizz.connect(fizzHigh).connect(fizzGain).connect(out);
+    fizz.start(now);
+    fizz.stop(now + IMPACT_FIZZ_SECONDS);
+  }
+
   function playSlimeLeap(gainFactor = 1, pan = 0) {
     const context = ready();
     if (!context) return;
@@ -369,6 +445,7 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     playSpearThrust,
     playBowShot,
     playArcaneBolt,
+    playProjectileImpact,
     playWindupRiser,
     playSlimeLeap,
     playSlimeSquash,

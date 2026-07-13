@@ -70,7 +70,13 @@ export function createEffectSystem(
   /** Ground-influence stamp — flying projectiles part the grass beneath them. */
   stampGround?: (x: number, z: number, radius: number, strength: number, dirX?: number, dirZ?: number) => void,
   /** Pooled point lights — projectiles glow and light the world around them. */
-  lightPool?: LightPool
+  lightPool?: LightPool,
+  /** World solidity for projectiles: slopes/rocks/tents stop them with a splash. */
+  projectileWorld?: {
+    blockedAt(x: number, y: number, z: number): boolean;
+    /** Fired once per world impact — the game layer plays the impact SFX here. */
+    onImpact(x: number, y: number, z: number, element: ElementId): void;
+  }
 ): EffectSystem {
   const activeEffects: ActiveEffect[] = [];
 
@@ -253,7 +259,26 @@ export function createEffectSystem(
       object: projectile,
       update(deltaSeconds) {
         ageSeconds += deltaSeconds;
+        const beforeX = projectile.position.x;
+        const beforeY = projectile.position.y;
+        const beforeZ = projectile.position.z;
         projectile.position.addScaledVector(velocity, deltaSeconds);
+        // World solidity: a rising slope, rock, tree, or tent stops the shot.
+        if (
+          projectileWorld?.blockedAt(
+            projectile.position.x,
+            projectile.position.y,
+            projectile.position.z
+          )
+        ) {
+          // Splash at the last clear spot so the burst sits ON the surface,
+          // not buried inside it.
+          projectile.position.set(beforeX, beforeY, beforeZ);
+          spawnImpactSplash(projectile.position, elementColor);
+          projectileWorld.onImpact(beforeX, beforeY, beforeZ, options.element);
+          if (pooledLight) lightPool?.release(pooledLight);
+          return false;
+        }
         projectile.rotation.y += deltaSeconds * 10;
         stampGround?.(projectile.position.x, projectile.position.z, 0.5, 0.35, velocity.x, velocity.z);
         pooledLight?.light.position.copy(projectile.position).setY(projectile.position.y + 0.4);
@@ -270,6 +295,13 @@ export function createEffectSystem(
         return alive;
       },
     });
+  }
+
+  /** World-impact splash: burst spray + a fast ground ring + lingering motes. */
+  function spawnImpactSplash(position: THREE.Vector3, color: number) {
+    spawnBurst(position, color, 22);
+    spawnExpandingRing(position.x, position.y, position.z, 1.6, color, 0.3);
+    spawnSparkle(position, color, 4);
   }
 
   // Shared ground-ring visual: expands from the point out to radius, fading out.
