@@ -57,6 +57,42 @@ function idleAttackRow(unitKind: number, unitId: bigint) {
   };
 }
 
+// Camp-enemy side of the attack FSM: goliaths raid with their REAL skills, not
+// only the per-tick contact drain. Bundled so runUnitAttacks' signature stays
+// readable; the maps are the same ones worldTick's pass-3/apply loops consume.
+export interface EnemyCombatContext {
+  enemies: readonly any[];
+  enemyPosition: Map<bigint, { x: number; z: number }>;
+  /** Accumulated goliath→enemy damage, applied by the enemy apply loop. */
+  enemyDamage: Map<bigint, number>;
+  /** Struck members hard-aggro onto the raider (same rule as the tick strike). */
+  enemyHardAggroGoliath: Map<bigint, bigint>;
+  /** GOLIATH_VS_ENEMY_DAMAGE_MULTIPLIER — strikes hit camps as hard as the drain. */
+  damageMultiplier: number;
+  /** Attack-opening range vs camp members (GOLIATH_ENGAGE_RANGE). */
+  engageRange: number;
+}
+
+/** Shared shape test: is (x, z) inside this strike's locked hitbox? */
+function strikeHits(x: number, z: number, row: any, spec: AttackSpec): boolean {
+  if (spec.shape === 'lane') {
+    return resolveLane(x, z, row.castX, row.castZ, row.landingX, row.landingZ, row.radius);
+  }
+  if (spec.shape === 'cone') {
+    return resolveCone(
+      x,
+      z,
+      row.castX,
+      row.castZ,
+      row.landingX - row.castX,
+      row.landingZ - row.castZ,
+      row.radius,
+      spec.coneMinDot ?? 0.5
+    );
+  }
+  return resolveCircleHit(x, z, row.landingX, row.landingZ, row.radius);
+}
+
 // The single damage-resolution moment (D4-02 zero-storage grace, D4-03 bystanders
 // included): EVERY online player is tested against the locked hitbox at their
 // LIVE row position — a victim who left within the grace window reads outside and
@@ -81,7 +117,8 @@ function resolveStrike(
   spec: AttackSpec,
   heading: { x: number; z: number },
   playerByHex: Map<string, any>,
-  playerDamage: Map<string, number>
+  playerDamage: Map<string, number>,
+  enemyCombat: EnemyCombatContext
 ): void {
   const isCone = spec.shape === 'cone';
   const isLane = spec.shape === 'lane';
@@ -96,29 +133,7 @@ function resolveStrike(
   for (const [hex, snapshot] of playerByHex) {
     const victim = ctx.db.player.identity.find(snapshot.identity);
     if (!victim || isInsideSafeZone(victim.positionX, victim.positionZ)) continue;
-    const hit = isLane
-      ? resolveLane(
-          victim.positionX,
-          victim.positionZ,
-          row.castX,
-          row.castZ,
-          row.landingX,
-          row.landingZ,
-          row.radius
-        )
-      : isCone
-        ? resolveCone(
-            victim.positionX,
-            victim.positionZ,
-            row.castX,
-            row.castZ,
-            row.landingX - row.castX,
-            row.landingZ - row.castZ,
-            row.radius,
-            spec.coneMinDot ?? 0.5
-          )
-        : resolveCircleHit(victim.positionX, victim.positionZ, row.landingX, row.landingZ, row.radius);
-    if (!hit) continue;
+    if (!strikeHits(victim.positionX, victim.positionZ, row, spec)) continue;
     playerDamage.set(hex, (playerDamage.get(hex) ?? 0) + goliathRow.contactDamage * spec.damageMultiplier);
     // D6-05: a lane victim is shoved perpendicular OUT of the charge path — the
     // knockback center is the PER-VICTIM closest point on the cast->landing
@@ -151,6 +166,26 @@ function resolveStrike(
       stunnedUntilMicros: newStun > victim.stunnedUntilMicros ? newStun : victim.stunnedUntilMicros,
     });
   }
+
+  // Camp members caught in the SAME locked hitbox take the strike too — a raid
+  // is fought with real attacks, not just the per-tick contact drain. Damage
+  // accumulates in the shared enemyDamage map (the enemy apply loop owns death,
+  // loot spill, and respawn); a struck member hard-aggros onto the raider, the
+  // same "damaged by" rule as the tick strike. No knockback/stun — enemies
+  // carry no stun state.
+  for (const enemyRow of enemyCombat.enemies) {
+    if (!enemyRow.alive) continue;
+    const position =
+      enemyCombat.enemyPosition.get(enemyRow.enemyId) ??
+      { x: enemyRow.positionX, z: enemyRow.positionZ };
+    if (!strikeHits(position.x, position.z, row, spec)) continue;
+    const dealt = goliathRow.contactDamage * spec.damageMultiplier * enemyCombat.damageMultiplier;
+    enemyCombat.enemyDamage.set(
+      enemyRow.enemyId,
+      (enemyCombat.enemyDamage.get(enemyRow.enemyId) ?? 0) + dealt
+    );
+    enemyCombat.enemyHardAggroGoliath.set(enemyRow.enemyId, row.unitId);
+  }
 }
 
 // Runs the attack FSM for every live goliath inside one worldTick. Mutates the
@@ -165,7 +200,8 @@ export function runUnitAttacks(
   goliathPosition: Map<bigint, { x: number; z: number }>,
   goliathHeading: Map<bigint, { x: number; z: number }>,
   playerByHex: Map<string, any>,
-  playerDamage: Map<string, number>
+  playerDamage: Map<string, number>,
+  enemyCombat: EnemyCombatContext
 ): void {
   const attackTable = ctx.db.unitAttack;
 
@@ -186,17 +222,35 @@ export function runUnitAttacks(
     if (!row) row = attackTable.insert(idleAttackRow(UNIT_KIND_GOLIATH, goliathRow.goliathId));
 
     if (row.state === ATTACK_STATE_IDLE) {
-      // Only a LIVE aggro target that is online and out in the open opens an
-      // attack; selectAttack returning null means the normal chase continues
-      // untouched (D4-13).
+      const from = goliathPosition.get(goliathRow.goliathId) ?? { x: goliathRow.positionX, z: goliathRow.positionZ };
+      // Aim priority: a LIVE player aggro target that is online and out in the
+      // open (D4-13); otherwise the nearest living camp member in engage range —
+      // raids are fought with the same skills, not only the contact drain.
       const target =
         !aggroExpired(goliathRow.aggroExpiresAtMicros, now) && goliathRow.aggroPlayer
           ? playerByHex.get(goliathRow.aggroPlayer.toHexString())
           : undefined;
-      if (!target || isInsideSafeZone(target.positionX, target.positionZ)) continue;
-      const from = goliathPosition.get(goliathRow.goliathId) ?? { x: goliathRow.positionX, z: goliathRow.positionZ };
+      let aim: { x: number; z: number } | null =
+        target && !isInsideSafeZone(target.positionX, target.positionZ)
+          ? { x: target.positionX, z: target.positionZ }
+          : null;
+      if (!aim) {
+        let bestDistance = enemyCombat.engageRange;
+        for (const enemyRow of enemyCombat.enemies) {
+          if (!enemyRow.alive) continue;
+          const position =
+            enemyCombat.enemyPosition.get(enemyRow.enemyId) ??
+            { x: enemyRow.positionX, z: enemyRow.positionZ };
+          const distance = distanceBetween(from.x, from.z, position.x, position.z);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            aim = { x: position.x, z: position.z };
+          }
+        }
+      }
+      if (!aim) continue;
       const attackId = selectAttack(
-        distanceBetween(from.x, from.z, target.positionX, target.positionZ),
+        distanceBetween(from.x, from.z, aim.x, aim.z),
         now,
         row.cooldownUntilMicros,
         row.basicCooldownUntilMicros, // D5-08: basics gate on their OWN cooldown
@@ -213,17 +267,11 @@ export function runUnitAttacks(
       // half-width for free. This branch only selects arguments — all arithmetic
       // lives in the pure helpers (glue header contract).
       const selected = ATTACKS[attackId];
-      let aimX = target.positionX;
-      let aimZ = target.positionZ;
+      let aimX = aim.x;
+      let aimZ = aim.z;
       if (selected.shape === 'lane' && selected.laneLengthBySize) {
         const clampedIndex = Math.min(Math.max(goliathRow.sizeIndex, 0), selected.laneLengthBySize.length - 1);
-        const laneEnd = computeLaneEnd(
-          from.x,
-          from.z,
-          target.positionX,
-          target.positionZ,
-          selected.laneLengthBySize[clampedIndex]
-        );
+        const laneEnd = computeLaneEnd(from.x, from.z, aim.x, aim.z, selected.laneLengthBySize[clampedIndex]);
         aimX = clampToWorld(laneEnd.x);
         aimZ = clampToWorld(laneEnd.z);
       }
@@ -284,7 +332,7 @@ export function runUnitAttacks(
     }
     if (plan.resolveStrike && struck) {
       const heading = goliathHeading.get(goliathRow.goliathId) ?? { x: goliathRow.headingX, z: goliathRow.headingZ };
-      resolveStrike(ctx, now, tick, goliathRow, struck, spec, heading, playerByHex, playerDamage);
+      resolveStrike(ctx, now, tick, goliathRow, struck, spec, heading, playerByHex, playerDamage, enemyCombat);
     }
     attackTable.id.update(plan.row);
   }

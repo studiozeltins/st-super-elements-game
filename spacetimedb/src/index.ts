@@ -3246,22 +3246,34 @@ export const worldTick = spacetimedb.reducer(
     // patrol their camp ring. Landing damage lands in the shared maps above.
     const enemyPosition = moveEnemies(ctx, now, tick, enemies, goliaths, goliathPosition, playerByHex, playerDamage, goliathDamage);
 
+    // Goliath→enemy damage + hard-aggro maps are shared by the attack FSM
+    // (skill strikes) and pass 3 (contact drain) — one apply loop consumes both.
+    const enemyDamage = new Map<bigint, number>();
+    const enemyHardAggroGoliath = new Map<bigint, bigint>();
+
     // Attack FSM pass (FSM-01): windup → strike → recovery for every live
     // goliath. Runs AFTER the position-build passes — it overrides entries in
     // goliathPosition/goliathHeading (root during windup, leap at strike) that
     // the goliath apply loop persists — and BEFORE every damage consumer, so
     // slam damage lands in playerDamage ahead of the single apply (ATK-05:
     // strikes are now the ONLY goliath→player damage source; the old per-tick
-    // contact drain is deleted).
-    runUnitAttacks(ctx, now, tick, goliaths, goliathPosition, goliathHeading, playerByHex, playerDamage);
+    // contact drain is deleted). With no player aggro the FSM aims the same
+    // skills at the nearest living camp member, and every strike also damages
+    // the members caught in its hitbox (raids fought with real attacks).
+    runUnitAttacks(ctx, now, tick, goliaths, goliathPosition, goliathHeading, playerByHex, playerDamage, {
+      enemies,
+      enemyPosition,
+      enemyDamage,
+      enemyHardAggroGoliath,
+      damageMultiplier: GOLIATH_VS_ENEMY_DAMAGE_MULTIPLIER,
+      engageRange: GOLIATH_ENGAGE_RANGE,
+    });
 
     // Pass 3 — goliaths raid the camp. Proximity RALLIES every nearby member to
     // defend (soft aggro); the STRIKE lands on all members in splash range for the
     // largest raider, else on its nearest member. A member that actually takes a
     // hit gets a HARD aggro flip (a real "damaged by" event that can steal it from
     // a player), whereas a mere rally never steals a member mid-fight with a player.
-    const enemyDamage = new Map<bigint, number>();
-    const enemyHardAggroGoliath = new Map<bigint, bigint>();
     const enemyRallyGoliath = new Map<bigint, bigint>();
     for (const goliathRow of goliaths) {
       const from = goliathPosition.get(goliathRow.goliathId)!;
