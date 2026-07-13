@@ -537,7 +537,10 @@ export function CharacterScreen({
                             <button
                               className="transcend__btn transcend__btn--yes"
                               onClick={() => {
-                                playTranscendBoost(nextTranscendLevel);
+                                playTranscendBoost(
+                                  nextTranscendLevel,
+                                  nextTranscendLevel >= MAX_TRANSCEND_LEVEL,
+                                );
                                 onTranscend(characterId);
                                 setConfirmingTranscendId(null);
                               }}
