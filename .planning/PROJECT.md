@@ -10,6 +10,34 @@ churn** — the installed C0–C6 constellation base is a protected floor.
 **One-liner:** A power chase where scarce shards buy real, permanent-floor power, PVP makes
 that power worth stealing, and a co-op raid faucet lets any ganked player recover.
 
+## Current Milestone: v0.3.0-alpha Living World
+
+**Goal:** Make the world between fights feel alive — layered procedural ambient audio, distance
+fog + sky depth, one coherent wind phase across everything that sways, wildlife, day/night color
+drift, lived-in wear, and camera micro-feel. All client-only (zero server publish; the day/night
+phase derives from the already-subscribed server timestamp).
+
+**Target features:**
+- Ambient audio bed — procedural via audioCore (filtered wind + gusts loosely synced to grass
+  sway, random bird chirps every 5–15s, grass rustle when running through fields, distant goliath
+  grunts scaled by camp proximity). No assets — same synth approach as `pullSounds.ts`.
+- Distance fog + sky gradient — `scene.fog` tinted to the hemisphere sky color; softens horizon,
+  hides world edge.
+- Coherent wind — grass `uTime` sway phase shared with camp flags/banners, tree canopies, and
+  campfire smoke columns (instanced quads, sine drift).
+- Wildlife — butterflies over grass (instanced quads, wander noise), birds that flush when the
+  player sprints through grass (groundInfluence hook), fireflies at dusk (lightPool).
+- Day/night lite — NO sun movement (fights the texel-snapped shadow basis); slow drift of
+  hemisphere/sun color + intensity + fog color over ~20min cycle, phase from server timestamp so
+  all LAN players see the same time; plaza lanterns fade in at night via lightPool.
+- Lived-in props + wear — worn footpaths near camps, plaza crates/fences/lanterns, grass regrows
+  over scorch (decay), footstep dust puffs, lingering ~2s grass-bend trail behind the player.
+- Camera feel — tiny run-direction lean, idle breathing sway on characters, slight FOV kick on
+  burst damage. Do last (micro-polish).
+
+**Constraints:** all instanced/pooled, no per-frame allocs, frozen-matrix world rules respected.
+Weather (rain, puddles) explicitly deferred — real but expensive.
+
 ## Current State
 
 **Shipped: v0.2.0-alpha Combat Depth (2026-07-13)** — goliath combat is now fully dodgeable
@@ -42,15 +70,14 @@ roles → invite-only parties. Merged to `master`, tagged `v0.1.0-alpha`.
 
 ## Next Milestone Goals
 
-Candidates (decide at `/gsd-new-milestone`):
+Candidates for after v0.3.0-alpha:
 
 - **Raid recovery loop** — the raid boss shard faucet + role enforcement (closes INV-4, the
   biggest open invariant; specs preserved).
 - **Crit poise interrupt** — the deferred Phase 7 slice (small, all deps shipped).
-- **World ambiance / polish** — the voxel-ambiance branch experiment (ambient audio bed, fog,
-  coherent wind, wildlife, day/night lite) if feel > systems is the next priority.
 - Backlog: camp-enemy FSM conversion (XCMB-01), miss/evasion decision, boost-orbit v2,
   transcend scaling expansion, CIEŅA star restyle.
+- Weather (rain, puddles) — deferred from v0.3.0-alpha scoping (real but expensive).
 
 ## Target Runtime
 
@@ -211,4 +238,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-13 after v0.2.0-alpha Combat Depth milestone close*
+*Last updated: 2026-07-13 — milestone v0.3.0-alpha Living World started*
