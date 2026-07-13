@@ -34,6 +34,7 @@ import { createWeaponAudio } from './audio/createWeaponAudio';
 import { createPickupAudio } from './audio/createPickupAudio';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createDebrisSystem } from './systems/createDebrisSystem';
+import { createSmokeColumns } from './systems/createSmokeColumns';
 import { createLightPool } from './systems/createLightPool';
 import { createAttackViewClock } from './systems/createAttackViewClock';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
@@ -294,8 +295,8 @@ export function createGame(
   const scene = new THREE.Scene();
   const pixelRenderer = createPixelRenderer(canvas);
   // Perf bisect kill-switches: append ?nograss / ?nobend / ?noshadow / ?nofx
-  // / ?nowind to the URL to disable one ambiance system and find a frame-cost
-  // culprit.
+  // / ?nowind / ?nosmoke to the URL to disable one ambiance system and find a
+  // frame-cost culprit.
   const perfFlags = new URLSearchParams(window.location.search);
   if (perfFlags.has('noshadow')) pixelRenderer.renderer.shadowMap.enabled = false;
   // Ground influence map: everything that moves stamps into it, grass bends out.
@@ -308,6 +309,7 @@ export function createGame(
   // Shared wind clock — the ONE wind time source; frame() advances it.
   // ?nowind zeroes the strength uniform (no recompile), base sway keeps running.
   const windEnabled = !perfFlags.has('nowind');
+  const smokeEnabled = !perfFlags.has('nosmoke');
   const wind = createWind(windEnabled);
   const world = createMondstadtWorld(scene, {
     grass: {
@@ -350,6 +352,11 @@ export function createGame(
   );
   const debrisSystem = fxEnabled
     ? createDebrisSystem(scene, (x, z) => world.getGroundHeight(x, z))
+    : undefined;
+  // ?nosmoke skips construction entirely — zero objects, zero draw calls
+  // (smoke is this phase's only new draw-call source; the clean FPS bisect).
+  const smokeColumns = smokeEnabled
+    ? createSmokeColumns(scene, wind, (x, z) => world.getGroundHeight(x, z))
     : undefined;
   const damageNumbers = createDamageNumbers(scene);
   // Enemies and goliaths are now server-authoritative: these renderers only draw
@@ -1334,6 +1341,8 @@ export function createGame(
     });
     effectSystem.update(deltaSeconds);
     debrisSystem?.update(deltaSeconds);
+    // After wind.update above — puffs must read this frame's wind phase.
+    smokeColumns?.update(deltaSeconds, playerPosition.x, playerPosition.z);
     // Enemies/goliaths are drawn straight from the server tables and interpolated;
     // the server tick owns their combat and damages players (reflected through
     // syncMyServerRow), so there is no local contact-damage path here anymore.
