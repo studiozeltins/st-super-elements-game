@@ -27,6 +27,7 @@ import { CAMPFIRE_LIGHT_NAME } from './assets/createCampfire';
 import { createFountain, createHouse, createWindmill } from './createPlazaStructures';
 import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
+import type { WindUniforms } from '../systems/createWind';
 
 export interface MondstadtWorld {
   group: THREE.Group;
@@ -193,6 +194,8 @@ export interface MondstadtWorldOptions {
   };
   /** Strike-impact scorch map — browns the terrain and dries the grass. */
   scorch: ScorchMapUniforms;
+  /** Shared wind clock uniforms — the game loop advances them, grass reads them. */
+  wind: WindUniforms;
 }
 
 export function createMondstadtWorld(
@@ -351,7 +354,11 @@ export function createMondstadtWorld(
   createPlaza(group);
   group.add(createFountain());
   obstacles.push({ x: 0, y: 0, z: 0, radius: 3.0 }); // fountain basin, plaza is flat at y=0
-  const grassField = createGrassField({ ...options.grass, scorch: options.scorch });
+  const grassField = createGrassField({
+    ...options.grass,
+    scorch: options.scorch,
+    wind: options.wind,
+  });
   group.add(grassField.group);
   buildBridges();
   buildPillarStairs();
@@ -444,7 +451,6 @@ export function createMondstadtWorld(
       // The frozen world subtree skips auto matrix updates; push the blades'
       // rotation through by hand.
       blades.updateMatrixWorld(true);
-      grassField.update(deltaSeconds);
       flickerSeconds += deltaSeconds;
       campfireLights.forEach((light, index) => {
         light.intensity = 2.5 + Math.sin(flickerSeconds * 9 + index * 2.1) * 0.35;

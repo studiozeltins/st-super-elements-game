@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
+import type { WindUniforms } from '../systems/createWind';
+import { GUST, SWAY, gustGlsl, swayGlsl } from '../systems/windMath';
 import { ISLANDS } from './terrain';
 import { generateGrassBlades } from './grassPlacement';
 
@@ -15,7 +17,6 @@ import { generateGrassBlades } from './grassPlacement';
  */
 export interface GrassField {
   group: THREE.Group;
-  update(deltaSeconds: number): void;
   dispose(): void;
 }
 
@@ -60,7 +61,7 @@ function createBladeGeometry(): THREE.BufferGeometry {
 function createGrassMaterial(
   influence: GroundInfluenceUniforms,
   scorch: ScorchMapUniforms,
-  timeUniform: { value: number }
+  wind: WindUniforms
 ): THREE.MeshLambertMaterial {
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   material.onBeforeCompile = shader => {
@@ -92,7 +93,11 @@ function createGrassMaterial(
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.30, 0.16), min(vScorch * 1.5, 0.85));
         `
       );
-    shader.uniforms.uTime = timeUniform;
+    // Wind uniforms wired by OBJECT reference (the shared-clock contract):
+    // createWind mutates .value in place every frame; never copy the value.
+    shader.uniforms.uTime = wind.timeUniform;
+    shader.uniforms.uWindDir = wind.directionUniform;
+    shader.uniforms.uWindStrength = wind.strengthUniform;
     shader.uniforms.uInfluenceMap = influence.textureUniform;
     shader.uniforms.uInfluenceBounds = influence.boundsUniform;
     shader.uniforms.uScorchMap = scorch.textureUniform;
@@ -103,6 +108,8 @@ function createGrassMaterial(
         /* glsl */ `
         #include <common>
         uniform float uTime;
+        uniform vec2 uWindDir;
+        uniform float uWindStrength;
         uniform sampler2D uInfluenceMap;
         uniform vec4 uInfluenceBounds;
         uniform sampler2D uScorchMap;
@@ -116,10 +123,15 @@ function createGrassMaterial(
         vec3 transformed = vec3(position);
         vec4 bladeOrigin = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
         float heightFactor = position.y * ${(1 / BLADE_HEIGHT).toFixed(4)};
-        // Wind: two-octave sway, phase from world position so gusts roll across the field.
-        float sway = sin(uTime * 1.7 + bladeOrigin.x * 0.35 + bladeOrigin.z * 0.25)
-                   + 0.4 * sin(uTime * 3.3 + bladeOrigin.z * 0.7);
-        transformed.xz += vec2(0.85, 0.55) * sway * 0.09 * heightFactor;
+        // Wind: two-octave base sway (constants single-sourced from windMath),
+        // phase from world position. The gust factor is a retarded-time envelope
+        // traveling along uWindDir; it rests at 0, so between gusts the
+        // displacement is arithmetically identical to the base formula, and
+        // uWindStrength = 0 (?nowind) kills gusts without any recompile.
+        float sway = ${swayGlsl('uTime', 'bladeOrigin.x', 'bladeOrigin.z')};
+        float gust = ${gustGlsl('uTime', 'dot(bladeOrigin.xz, uWindDir)')};
+        transformed.xz += vec2(${SWAY.ampX.toFixed(4)}, ${SWAY.ampZ.toFixed(4)}) * sway * ${SWAY.scale.toFixed(4)} * heightFactor
+                        * (1.0 + uWindStrength * ${GUST.gain.toFixed(4)} * gust);
         // Ground influence: bend tips along the recorded push, squash by flatten.
         // A = accumulated wear (trampled trails / strike destruction): squashes
         // the whole blade toward the sod and regrows as the channel decays.
@@ -142,10 +154,11 @@ export function createGrassField(options: {
   bladeCount: number;
   influence: GroundInfluenceUniforms;
   scorch: ScorchMapUniforms;
+  /** Shared wind clock + gust uniforms — the game loop advances them. */
+  wind: WindUniforms;
 }): GrassField {
   const group = new THREE.Group();
-  const timeUniform = { value: 0 };
-  const material = createGrassMaterial(options.influence, options.scorch, timeUniform);
+  const material = createGrassMaterial(options.influence, options.scorch, options.wind);
   const islandChunks = generateGrassBlades(options.bladeCount);
 
   const transform = new THREE.Matrix4();
@@ -181,9 +194,6 @@ export function createGrassField(options: {
 
   return {
     group,
-    update(deltaSeconds) {
-      timeUniform.value += deltaSeconds;
-    },
     dispose() {
       for (const child of group.children) {
         if (child instanceof THREE.InstancedMesh) child.geometry.dispose();

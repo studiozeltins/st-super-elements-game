@@ -15,6 +15,7 @@ import { createPixelRenderer } from './engine/createPixelRenderer';
 import { detectQualityProfile } from './engine/deviceProfile';
 import { createGroundInfluence } from './systems/createGroundInfluence';
 import { createScorchMap, SCORCH_PER_STRIKE } from './systems/createScorchMap';
+import { createWind } from './systems/createWind';
 import { createMondstadtWorld, isInsideSafeZone } from './world/createMondstadtWorld';
 import {
   resolveBodyCollisions,
@@ -293,7 +294,8 @@ export function createGame(
   const scene = new THREE.Scene();
   const pixelRenderer = createPixelRenderer(canvas);
   // Perf bisect kill-switches: append ?nograss / ?nobend / ?noshadow / ?nofx
-  // to the URL to disable one ambiance system and find a frame-cost culprit.
+  // / ?nowind to the URL to disable one ambiance system and find a frame-cost
+  // culprit.
   const perfFlags = new URLSearchParams(window.location.search);
   if (perfFlags.has('noshadow')) pixelRenderer.renderer.shadowMap.enabled = false;
   // Ground influence map: everything that moves stamps into it, grass bends out.
@@ -303,12 +305,17 @@ export function createGame(
   // write it, so walking tramples grass without ever browning the ground.
   const scorchMap = createScorchMap(quality.influenceResolution);
   const influenceEnabled = !perfFlags.has('nobend');
+  // Shared wind clock — the ONE wind time source; frame() advances it.
+  // ?nowind zeroes the strength uniform (no recompile), base sway keeps running.
+  const windEnabled = !perfFlags.has('nowind');
+  const wind = createWind(windEnabled);
   const world = createMondstadtWorld(scene, {
     grass: {
       bladeCount: perfFlags.has('nograss') ? 0 : quality.grassBladeCount,
       influence: groundInfluence,
     },
     scorch: scorchMap,
+    wind,
   });
   // The overlay pass only draws sprites — skip walking the whole static world.
   pixelRenderer.setOverlayCullTarget(world.group);
@@ -1306,6 +1313,9 @@ export function createGame(
     const deltaSeconds = Math.min(0.05, (frameTime - lastFrameTime) / 1000 || 0.016);
     lastFrameTime = frameTime;
     elapsedSeconds += deltaSeconds;
+    // Advance the shared wind clock FIRST — every consumer (grass now, canopy/
+    // flags/smoke later) reads this frame's phase. The ONLY clock advance.
+    wind.update(deltaSeconds);
 
     // Combo drops if the next hit does not land inside the (shrinking) window.
     if (combo > 0 && elapsedSeconds - lastComboHitAt > comboWindowSeconds(combo)) {
