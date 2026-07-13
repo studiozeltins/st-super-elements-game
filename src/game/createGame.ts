@@ -30,7 +30,6 @@ import { createWeaponAudio } from './audio/createWeaponAudio';
 import { createPickupAudio } from './audio/createPickupAudio';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createDebrisSystem } from './systems/createDebrisSystem';
-import { createScorchSystem } from './systems/createScorchSystem';
 import { createLightPool } from './systems/createLightPool';
 import { createAttackViewClock } from './systems/createAttackViewClock';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
@@ -316,9 +315,6 @@ export function createGame(
   );
   const debrisSystem = fxEnabled
     ? createDebrisSystem(scene, (x, z) => world.getGroundHeight(x, z))
-    : undefined;
-  const scorchSystem = fxEnabled
-    ? createScorchSystem(scene, (x, z) => world.getGroundHeight(x, z))
     : undefined;
   const damageNumbers = createDamageNumbers(scene);
   // Enemies and goliaths are now server-authoritative: these renderers only draw
@@ -772,7 +768,7 @@ export function createGame(
     playerPosition.z = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.z));
   }
 
-  /** Ground-touching skills (nova, dash) char the ground and kick up cubes. */
+  /** Ground-touching skills (nova, dash) scar the ground and kick up cubes. */
   function spawnSkillGroundMarks(
     skill: SkillDefinition,
     element: ElementId,
@@ -782,7 +778,8 @@ export function createGame(
   ) {
     if (skill.kind !== 'nova' && skill.kind !== 'dash') return;
     const color = ELEMENTS[element].color;
-    scorchSystem?.addScorch(x, z, skill.radius * 0.8, color);
+    // Wear 1 = the ground itself browns and dents (terrain shader), grass dies.
+    groundInfluence.stamp(x, z, skill.radius * 0.8, 1, 0, 0, 1);
     debrisSystem?.spawn(new THREE.Vector3(x, world.getGroundHeight(x, z), z), color, debrisCount);
   }
 
@@ -1286,7 +1283,6 @@ export function createGame(
     });
     effectSystem.update(deltaSeconds);
     debrisSystem?.update(deltaSeconds);
-    scorchSystem?.update(deltaSeconds);
     // Enemies/goliaths are drawn straight from the server tables and interpolated;
     // the server tick owns their combat and damages players (reflected through
     // syncMyServerRow), so there is no local contact-damage path here anymore.
@@ -1440,7 +1436,6 @@ export function createGame(
       scene.remove(boostOrbit.group);
       boostOrbit.dispose();
       debrisSystem?.dispose();
-      scorchSystem?.dispose();
       lightPool?.dispose();
       gemGeometry.dispose();
       shardGeometry.dispose();
@@ -1744,18 +1739,12 @@ export function createGame(
         radius: strike.radius,
         atMs: performance.now(),
       };
-      // Persistent ground marks land BEFORE the juice distance gate — a scorch
-      // is world state you can walk up to later, not proximity juice. The
-      // swing's cone (and dash's lane) misread as circles, so those skip it.
       const strikeJuiceColor = ATTACK_RENDER[strike.attackId]?.juiceColor ?? ELEMENTS.geo.color;
-      if (strike.attackId === 'slimeSlam' || strike.attackId === 'spikySlam') {
-        scorchSystem?.addScorch(strike.landingX, strike.landingZ, strike.radius * 0.6, SLIME_SLAM_COLOR);
-      } else if (strike.attackId !== 'swordSwing' && strike.attackId !== 'shieldDash') {
-        scorchSystem?.addScorch(strike.landingX, strike.landingZ, strike.radius * 0.9, strikeJuiceColor);
-      }
-      // Every landed unit attack DESTROYS the grass under it (wear 1 → blades
-      // squash to the sod, regrowing over ~a minute). Cone/lane strikes misread
-      // as circles, so they burn a smaller core instead of the full radius.
+      // Every landed unit attack DESTROYS the ground under it: wear 1 browns
+      // and dents the terrain (shader bands — the persistent mark you can walk
+      // up to later) and squashes the grass, regrowing over ~a minute.
+      // Overlapping strikes accumulate into a darker, deeper union. Cone/lane
+      // strikes misread as circles, so they burn a smaller core.
       const wearRadius =
         strike.attackId === 'swordSwing' || strike.attackId === 'shieldDash'
           ? strike.radius * 0.55

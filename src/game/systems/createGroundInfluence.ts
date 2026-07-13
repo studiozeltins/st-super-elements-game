@@ -175,7 +175,7 @@ export function createGroundInfluence(resolution: number): GroundInfluence {
 
   // Stamps: one instanced unit quad, positioned directly in clip space.
   // Custom blending lerps RGB toward the stamp by src alpha while leaving the
-  // destination alpha (reserved scorch channel) untouched.
+  // destination alpha (the wear channel — written by the pass below) untouched.
   const stampMaterial = new THREE.RawShaderMaterial({
     vertexShader: STAMP_VERTEX,
     fragmentShader: STAMP_FRAGMENT,

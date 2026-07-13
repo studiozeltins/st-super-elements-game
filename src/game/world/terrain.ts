@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { hashGridPoint } from './rng';
 import { WORLD_BOUND } from '../data/constants';
+import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
 
 const TERRAIN_SEED = 20260703;
 const NOISE_FREQUENCY = 0.03;
@@ -150,7 +151,64 @@ export function terrainColorAt(x: number, z: number, height: number): THREE.Colo
   return grassColor;
 }
 
-export function createTerrainMesh(): THREE.Mesh {
+/**
+ * Patches the terrain material to read the influence map's WEAR channel:
+ * worn ground QUANTIZES into flat scorched-earth brown bands (no gradients —
+ * the pixel-art contract) and the vertices press DOWN in matching steps, so a
+ * strike leaves a real dent. Wear accumulates where strikes overlap (darker,
+ * deeper) and decays on the regrow clock, so the ground heals by itself.
+ */
+function patchTerrainWithWear(
+  material: THREE.MeshLambertMaterial,
+  influence: GroundInfluenceUniforms
+) {
+  material.onBeforeCompile = shader => {
+    shader.uniforms.uInfluenceMap = influence.textureUniform;
+    shader.uniforms.uInfluenceBounds = influence.boundsUniform;
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        uniform sampler2D uInfluenceMap;
+        uniform vec4 uInfluenceBounds;
+        varying float vWearBand;
+        `
+      )
+      .replace(
+        '#include <begin_vertex>',
+        /* glsl */ `
+        vec3 transformed = vec3(position);
+        // Geometry is baked into world XZ (plane rotated, terrain at origin).
+        vec2 wearUv = (position.xz - uInfluenceBounds.xy) * uInfluenceBounds.zw;
+        float wear = texture2D(uInfluenceMap, wearUv).a;
+        // Quantize to 3 hard steps: band 0 untouched, 1 scuffed, 2 cratered.
+        vWearBand = wear < 0.3 ? 0.0 : wear < 0.7 ? 1.0 : 2.0;
+        transformed.y -= vWearBand * 0.12; // stepped dent, deeper where hit more
+        `
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        varying float vWearBand;
+        `
+      )
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `
+        #include <color_fragment>
+        // Flat scorched-earth bands — solid colors, never a gradient.
+        if (vWearBand > 1.5) diffuseColor.rgb = vec3(0.24, 0.16, 0.09);
+        else if (vWearBand > 0.5) diffuseColor.rgb = vec3(0.45, 0.33, 0.19);
+        `
+      );
+  };
+  material.customProgramCacheKey = () => 'terrainWear';
+}
+
+export function createTerrainMesh(influence: GroundInfluenceUniforms | null): THREE.Mesh {
   const geometry = new THREE.PlaneGeometry(
     TERRAIN_SIZE,
     TERRAIN_SIZE,
@@ -175,6 +233,7 @@ export function createTerrainMesh(): THREE.Mesh {
   // No computeVertexNormals: flatShading derives face normals in the shader.
 
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  if (influence) patchTerrainWithWear(material, influence);
   const terrainMesh = new THREE.Mesh(geometry, material);
   terrainMesh.receiveShadow = true;
   return terrainMesh;
