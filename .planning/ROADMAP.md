@@ -48,7 +48,14 @@ enabled — per-phase costs sum.
   2. Gusts visibly TRAVEL across the field as a moving wave (spatial phase offset), not the whole world bowing in unison
   3. Each consumer keeps its own character on the shared phase — flags flap faster, smoke drifts laterally as it rises, canopies sway low-amplitude/low-frequency
   4. Grass rendering looks unchanged after the `uTime` extraction, and a `?nowind` flag kills all sway for bisecting
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — windMath pure helper, test-first (gust envelope, traveling front, wander) [Wave 1]
+- [ ] 08-02-PLAN.md — createWind module + grass extraction onto shared clock + ?nowind [Wave 2]
+- [ ] 08-03-PLAN.md — canopy shader sway (pooled materials) + new camp flag assets [Wave 3]
+- [ ] 08-04-PLAN.md — campfire smoke columns (instanced voxel puffs) + ?nosmoke [Wave 3]
+- [ ] 08-05-PLAN.md — full gate + human playtest checkpoint (grass unchanged, gust travel, character) [Wave 4]
 
 ### Phase 9: Atmosphere & Day/Night
 **Goal**: The world has horizon depth and a shared time-of-day palette that never hurts combat readability
@@ -115,7 +122,7 @@ enabled — per-phase costs sum.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Wind Core | 0/TBD | Not started | - |
+| 8. Wind Core | 0/5 | Planned | - |
 | 9. Atmosphere & Day/Night | 0/TBD | Not started | - |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
