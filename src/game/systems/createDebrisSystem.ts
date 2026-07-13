@@ -7,12 +7,21 @@ import { acquireDebrisSlot, debrisScale, stepDebris, type DebrisParticle } from 
  * the walkable ground, spin, and shrink away.
  */
 export interface DebrisSystem {
-  spawn(position: THREE.Vector3, color: number, count?: number, speed?: number): void;
+  /** Omit direction = full radial ring. With direction = a splash cone around it (projectile back-splash). */
+  spawn(
+    position: THREE.Vector3,
+    color: number,
+    count?: number,
+    speed?: number,
+    direction?: { x: number; z: number }
+  ): void;
   update(deltaSeconds: number): void;
   dispose(): void;
 }
 
 const MAX_DEBRIS = 96;
+/** Directional splashes spray inside this cone (radians) around the given direction. */
+const SPLASH_CONE = 1.7;
 
 export function createDebrisSystem(
   scene: THREE.Scene,
@@ -58,12 +67,16 @@ export function createDebrisSystem(
   const scaleVector = new THREE.Vector3();
 
   return {
-    spawn(position, color, count = 10, speed = 5.5) {
+    spawn(position, color, count = 10, speed = 5.5, direction) {
+      const coneCenter = direction ? Math.atan2(direction.z, direction.x) : null;
       // Non-deterministic Math.random is fine here — purely cosmetic, local-only.
       for (let spawned = 0; spawned < Math.min(count, MAX_DEBRIS); spawned += 1) {
         const slot = acquireDebrisSlot(pool);
         const particle = pool[slot];
-        const angle = Math.random() * Math.PI * 2;
+        const angle =
+          coneCenter === null
+            ? Math.random() * Math.PI * 2
+            : coneCenter + (Math.random() - 0.5) * SPLASH_CONE;
         const lateral = speed * (0.4 + Math.random() * 0.6);
         particle.x = position.x;
         particle.y = position.y + 0.3;

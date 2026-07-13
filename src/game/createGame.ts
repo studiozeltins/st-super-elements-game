@@ -315,6 +315,8 @@ export function createGame(
   // Light pool must exist before the effect system (projectiles borrow lights).
   const fxEnabled = !perfFlags.has('nofx');
   const lightPool = fxEnabled ? createLightPool(scene) : undefined;
+  // Reused for projectile-impact debris spawns — impacts are frequent in combat.
+  const impactDebrisScratch = new THREE.Vector3();
   const effectSystem = createEffectSystem(
     scene,
     (x, z, radius, strength, dirX, dirZ) => groundInfluence.stamp(x, z, radius, strength, dirX, dirZ),
@@ -323,10 +325,19 @@ export function createGame(
       // Projectiles die against rising terrain and solid props (rocks, tents,
       // trees) instead of flying through them.
       blockedAt: (x, y, z) => pointHitsWorld(x, y, z, world.getObstacles(), getTerrainHeight),
-      onImpact(x, _y, z) {
-        // weaponAudio is created a few lines below — impacts only fire at
-        // runtime, long after init.
+      onImpact(x, y, z, element, directionX, directionZ) {
+        // weaponAudio/debrisSystem are created a few lines below — impacts
+        // only fire at runtime, long after init.
         weaponAudio.playProjectileImpact(hitAudioGain(x, z), hitAudioPan(x, z));
+        // Pixel-art splash: element-colored voxel cubes spraying BACK off the
+        // surface (cone opposite the flight direction), bouncing on the ground.
+        debrisSystem?.spawn(
+          impactDebrisScratch.set(x, y - 0.3, z),
+          ELEMENTS[element].color,
+          12,
+          4.5,
+          { x: -directionX, z: -directionZ }
+        );
       },
     }
   );

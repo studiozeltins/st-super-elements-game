@@ -74,8 +74,18 @@ export function createEffectSystem(
   /** World solidity for projectiles: slopes/rocks/tents stop them with a splash. */
   projectileWorld?: {
     blockedAt(x: number, y: number, z: number): boolean;
-    /** Fired once per world impact — the game layer plays the impact SFX here. */
-    onImpact(x: number, y: number, z: number, element: ElementId): void;
+    /**
+     * Fired once per world impact with the (normalized) flight direction —
+     * the game layer plays the impact SFX and sprays voxel debris here.
+     */
+    onImpact(
+      x: number,
+      y: number,
+      z: number,
+      element: ElementId,
+      directionX: number,
+      directionZ: number
+    ): void;
   }
 ): EffectSystem {
   const activeEffects: ActiveEffect[] = [];
@@ -274,8 +284,19 @@ export function createEffectSystem(
           // Splash at the last clear spot so the burst sits ON the surface,
           // not buried inside it.
           projectile.position.set(beforeX, beforeY, beforeZ);
-          spawnImpactSplash(projectile.position, elementColor);
-          projectileWorld.onImpact(beforeX, beforeY, beforeZ, options.element);
+          const directionX = velocity.x / options.speed;
+          const directionZ = velocity.z / options.speed;
+          spawnImpactSpear(projectile.position, directionX, directionZ, elementColor);
+          spawnBurst(projectile.position, elementColor, 10);
+          spawnSparkle(projectile.position, elementColor, 4);
+          projectileWorld.onImpact(
+            beforeX,
+            beforeY,
+            beforeZ,
+            options.element,
+            directionX,
+            directionZ
+          );
           if (pooledLight) lightPool?.release(pooledLight);
           return false;
         }
@@ -297,11 +318,59 @@ export function createEffectSystem(
     });
   }
 
-  /** World-impact splash: burst spray + a fast ground ring + lingering motes. */
-  function spawnImpactSplash(position: THREE.Vector3, color: number) {
-    spawnBurst(position, color, 22);
-    spawnExpandingRing(position.x, position.y, position.z, 1.6, color, 0.3);
-    spawnSparkle(position, color, 4);
+  // Impact spear: the shot "sticks" in the surface — an elongated shard along
+  // the flight direction, tilted down, quivering for a beat, then shrinking
+  // away. Reads as a spear planted in the ground/rock, not a flat ring.
+  const IMPACT_SPEAR_DOWN_TILT = 0.55; // radians below the flight line
+  const IMPACT_SPEAR_LENGTH_SCALE = 3.2; // octahedron y-stretch (≈1.4 world units)
+  const IMPACT_SPEAR_HOLD_SECONDS = 0.22;
+  const IMPACT_SPEAR_FADE_SECONDS = 0.28;
+  const SPEAR_UP = new THREE.Vector3(0, 1, 0);
+
+  function spawnImpactSpear(
+    position: THREE.Vector3,
+    directionX: number,
+    directionZ: number,
+    color: number
+  ) {
+    const shard = new THREE.Mesh(
+      projectileGeometry,
+      acquireMaterial(`projectile:${color}`, () => new THREE.MeshBasicMaterial({ color }))
+    );
+    // Shaft axis: flight direction pitched down — "stabbed into the surface".
+    const shaftAxis = new THREE.Vector3(
+      directionX,
+      -Math.tan(IMPACT_SPEAR_DOWN_TILT),
+      directionZ
+    ).normalize();
+    const baseQuaternion = new THREE.Quaternion().setFromUnitVectors(SPEAR_UP, shaftAxis);
+    shard.quaternion.copy(baseQuaternion);
+    shard.scale.set(0.55, IMPACT_SPEAR_LENGTH_SCALE, 0.55);
+    // Tip at the impact point, tail sticking back out toward the shooter.
+    const halfLength = 0.22 * IMPACT_SPEAR_LENGTH_SCALE;
+    shard.position.copy(position).addScaledVector(shaftAxis, -halfLength * 0.6);
+
+    const wobbleQuaternion = new THREE.Quaternion();
+    const wobbleAxis = new THREE.Vector3(-directionZ, 0, directionX).normalize();
+    const totalSeconds = IMPACT_SPEAR_HOLD_SECONDS + IMPACT_SPEAR_FADE_SECONDS;
+    let ageSeconds = 0;
+    addEffect({
+      object: shard,
+      update(deltaSeconds) {
+        ageSeconds += deltaSeconds;
+        // Impact quiver: a fast, decaying rock around the sideways axis.
+        const quiver = Math.sin(ageSeconds * 45) * 0.14 * Math.max(0, 1 - ageSeconds * 4);
+        shard.quaternion
+          .copy(baseQuaternion)
+          .premultiply(wobbleQuaternion.setFromAxisAngle(wobbleAxis, quiver));
+        const fade = Math.min(
+          1,
+          Math.max(0, (totalSeconds - ageSeconds) / IMPACT_SPEAR_FADE_SECONDS)
+        );
+        shard.scale.set(0.55 * fade, IMPACT_SPEAR_LENGTH_SCALE * fade, 0.55 * fade);
+        return ageSeconds < totalSeconds;
+      },
+    });
   }
 
   // Shared ground-ring visual: expands from the point out to radius, fading out.
