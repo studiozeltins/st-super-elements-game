@@ -62,6 +62,19 @@ export function sphereVoxelCells(radius: number, voxelSize: number, yScale = 1):
   );
 }
 
+/** Axis-aligned box shell centered on the origin. */
+export function boxVoxelCells(
+  width: number,
+  height: number,
+  depth: number,
+  voxelSize: number
+): VoxelCell[] {
+  const inside = (x: number, y: number, z: number) =>
+    Math.abs(x) <= width / 2 && Math.abs(y) <= height / 2 && Math.abs(z) <= depth / 2;
+  const radius = Math.max(width, depth) / 2;
+  return shellCells(inside, { minY: -height / 2, maxY: height / 2, radius }, voxelSize);
+}
+
 /** Upright cone shell: base (radius) at y=0, apex at y=height. */
 export function coneVoxelCells(baseRadius: number, height: number, voxelSize: number): VoxelCell[] {
   const inside = (x: number, y: number, z: number) => {

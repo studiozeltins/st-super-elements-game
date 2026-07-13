@@ -76,6 +76,9 @@ function resolveArchetype(sizeIndex: number): GoliathArchetype {
 
 function createGoliathAnimation(model: EnemyModel): EntityAnimation {
   const baseBodyY = model.body.position.y;
+  // The swirl spins this pivot (every visual part) — spinning model.body alone
+  // twirled the torso while the head/arms/legs stood still.
+  const spinPivot = model.rig ?? model.body;
   const leftLeg = model.group.getObjectByName('leftLeg') ?? null;
   const rightLeg = model.group.getObjectByName('rightLeg') ?? null;
   const leftArm = model.group.getObjectByName('leftArm') ?? null;
@@ -127,6 +130,7 @@ function createGoliathAnimation(model: EnemyModel): EntityAnimation {
   function resetAttackPose() {
     model.body.rotation.x = 0;
     model.body.rotation.y = 0;
+    spinPivot.rotation.y = 0;
     if (leftArm) {
       leftArm.rotation.x = 0;
       leftArm.rotation.z = 0;
@@ -180,7 +184,7 @@ function createGoliathAnimation(model: EnemyModel): EntityAnimation {
       // the body loads into a crouch. Spins model.body, NEVER the outer group
       // — the entity renderer owns group rotation via lookAt.
       const wind = view.phaseProgress * view.phaseProgress;
-      model.body.rotation.y = -SWIRL_COIL * wind;
+      spinPivot.rotation.y = -SWIRL_COIL * wind;
       setArmFlare(SWIRL_ARM_FLARE * wind);
       applyCrouch(SWIRL_CROUCH * wind);
       return;
@@ -188,7 +192,7 @@ function createGoliathAnimation(model: EnemyModel): EntityAnimation {
     if (view.phase === 'strike') {
       // The coil releases FAST across the one-tick strike (to SWIRL_STRIKE_YAW);
       // the spin then carries into recovery so the full 360° stays readable.
-      model.body.rotation.y = THREE.MathUtils.lerp(
+      spinPivot.rotation.y = THREE.MathUtils.lerp(
         -SWIRL_COIL,
         SWIRL_STRIKE_YAW,
         view.phaseProgress
@@ -201,7 +205,7 @@ function createGoliathAnimation(model: EnemyModel): EntityAnimation {
     // then the heavy eased settle — the chain's long punish window reads as
     // exhaustion (arms drop, body sags back up from a squash).
     const spin = Math.min(1, view.phaseProgress / SWIRL_SPIN_TAIL);
-    model.body.rotation.y = THREE.MathUtils.lerp(SWIRL_STRIKE_YAW, Math.PI * 2, spin);
+    spinPivot.rotation.y = THREE.MathUtils.lerp(SWIRL_STRIKE_YAW, Math.PI * 2, spin);
     const settle = 1 - (1 - view.phaseProgress) * (1 - view.phaseProgress);
     setArmFlare(SWIRL_ARM_FLARE * (1 - settle));
     applyCrouch(SWIRL_SETTLE_SQUASH * (1 - settle));
