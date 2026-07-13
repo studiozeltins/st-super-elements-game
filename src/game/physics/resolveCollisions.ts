@@ -14,12 +14,20 @@ export interface ObstacleCircle {
   y: number;
   z: number;
   radius: number;
+  /**
+   * Solid span above the base. Omitted = OBSTACLE_HEIGHT_GATE. Tall rocks set
+   * their real height so projectiles can't fly over-through them; climbable
+   * boulders set their top so a jumper clears the side near the summit.
+   */
+  height?: number;
 }
 
 /** Bodies more than this far apart vertically ignore each other (cliff levels). */
 const VERTICAL_OVERLAP_GATE = 1.6;
 /** Obstacles are solid this far up from their base (bridge decks pass above). */
 const OBSTACLE_HEIGHT_GATE = 3;
+/** A body this close under an obstacle's top passes — landing on a climbable top. */
+const OBSTACLE_TOP_CLEARANCE = 0.5;
 
 /**
  * Pairwise separation: overlapping bodies push each other apart along the
@@ -61,7 +69,11 @@ export function resolveObstacleCollisions(
   obstacles: readonly ObstacleCircle[]
 ) {
   for (const obstacle of obstacles) {
-    if (Math.abs(body.position.y - obstacle.y) > OBSTACLE_HEIGHT_GATE) continue;
+    // Far below the base (under a bridge / down a cliff) — not this wall.
+    if (obstacle.y - body.position.y > OBSTACLE_HEIGHT_GATE) continue;
+    // At or above the solid top — jumping onto a climbable boulder.
+    const solidTop = obstacle.y + (obstacle.height ?? OBSTACLE_HEIGHT_GATE);
+    if (body.position.y > solidTop - OBSTACLE_TOP_CLEARANCE) continue;
     const deltaX = body.position.x - obstacle.x;
     const deltaZ = body.position.z - obstacle.z;
     const distance = Math.hypot(deltaX, deltaZ);

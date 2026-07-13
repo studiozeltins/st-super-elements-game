@@ -212,6 +212,15 @@ export function createMondstadtWorld(
     asset.group.position.set(x, groundY, z);
     group.add(asset.group);
     if (collisionRadius) obstacles.push({ x, y: groundY, z, radius: collisionRadius });
+    for (const solid of asset.obstacles ?? []) {
+      obstacles.push({
+        x: x + solid.x,
+        y: groundY,
+        z: z + solid.z,
+        radius: solid.radius,
+        height: solid.height,
+      });
+    }
     for (const platform of asset.platforms ?? []) {
       platforms.push({
         x: x + platform.x,
@@ -369,9 +378,10 @@ export function createMondstadtWorld(
   });
 
   const scatterRules: AssetScatterRule[] = [
-    // Boulders stay obstacle-free: they are climbable platforms.
+    // Boulders and spires declare their own per-piece footprints (asset.obstacles):
+    // boulders block their base but stay jump-climbable; spires block full height.
     { create: createBoulder, count: 26, minRadius: SAFE_ZONE_RADIUS + 8, maxSlope: 0.9 },
-    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2, collisionRadius: 1.5 },
+    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2 },
     { create: createCanopyTree, count: 8, minRadius: 30, maxSlope: 0.45, collisionRadius: 0.7 },
     {
       create: createPalmTree,

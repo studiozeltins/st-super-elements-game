@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { AssetPlatform, SeededRandom, WorldAsset } from './types';
+import type { AssetObstacle, AssetPlatform, SeededRandom, WorldAsset } from './types';
 import { randomBetween, randomIntBetween } from './assetHelpers';
 import { buildVoxelCluster, sphereVoxelCells, voxelClusterTopY, voxelSizeFor } from './voxelHelpers';
 
@@ -8,6 +8,12 @@ const SLATE_MID = 0x5a6678;
 const SLATE_LIGHT = 0x8a94a4;
 
 const BOULDER_Y_SCALE = 0.7;
+/**
+ * A boulder's side wall is solid at most this high — a jump (apex ≈ 2.4)
+ * always clears it near the top, so boulders stay climbable while walking
+ * straight through the base is no longer possible.
+ */
+const BOULDER_MAX_WALL_HEIGHT = 2.2;
 
 export function createBoulder(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
@@ -17,6 +23,7 @@ export function createBoulder(random: SeededRandom): WorldAsset {
   let stackTopHeight = 0;
   let radius = baseRadius;
   const platforms: AssetPlatform[] = [];
+  const obstacles: AssetObstacle[] = [];
   for (let index = 0; index < chunkCount; index += 1) {
     const isTopChunk = index === chunkCount - 1;
     const shades = isTopChunk ? [SLATE_LIGHT, SLATE_MID] : [SLATE_DARK, SLATE_MID, SLATE_LIGHT];
@@ -44,8 +51,18 @@ export function createBoulder(random: SeededRandom): WorldAsset {
       radius: radius * 0.8,
       topHeight: stackTopHeight,
     });
+    // The base chunk is a solid wall up to (near) its own top: walking into a
+    // boulder no longer clips inside it, but a jump still lands on the platform.
+    if (index === 0) {
+      obstacles.push({
+        x: chunk.position.x,
+        z: chunk.position.z,
+        radius: radius * 0.8,
+        height: Math.min(stackTopHeight, BOULDER_MAX_WALL_HEIGHT),
+      });
+    }
     radius *= randomBetween(random, 0.6, 0.8);
   }
 
-  return { group, platforms };
+  return { group, platforms, obstacles };
 }

@@ -10,6 +10,15 @@ export interface AssetPlatform {
   topHeight: number;
 }
 
+/** One solid circle, in asset-local coordinates (offset from the anchor). */
+export interface AssetObstacle {
+  x: number;
+  z: number;
+  radius: number;
+  /** Solid span above the ground — see ObstacleCircle.height. */
+  height?: number;
+}
+
 export interface WorldAsset {
   group: THREE.Group;
   /**
@@ -18,4 +27,10 @@ export interface WorldAsset {
    * otherwise landing on a lower chunk falls straight through to the terrain.
    */
   platforms?: AssetPlatform[];
+  /**
+   * Solid footprints matching where the asset ACTUALLY stands. A rock-spire
+   * cluster spreads spires off-anchor — one center circle left walk-through
+   * gaps, so assets with sprawl declare a circle per solid piece.
+   */
+  obstacles?: AssetObstacle[];
 }
