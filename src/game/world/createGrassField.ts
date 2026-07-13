@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
+import type { ScorchMapUniforms } from '../systems/createScorchMap';
 import { ISLANDS } from './terrain';
 import { generateGrassBlades } from './grassPlacement';
 
@@ -58,6 +59,7 @@ function createBladeGeometry(): THREE.BufferGeometry {
 
 function createGrassMaterial(
   influence: GroundInfluenceUniforms,
+  scorch: ScorchMapUniforms,
   timeUniform: { value: number }
 ): THREE.MeshLambertMaterial {
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
@@ -73,9 +75,28 @@ function createGrassMaterial(
       vec3 nonPerturbedNormal = normal;
       `
     );
+    // Blades over scorched soil dry out to brown instead of staying green on
+    // a burnt patch — tint tracks the scorch map, so it heals back with it.
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        varying float vScorch;
+        `
+      )
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `
+        #include <color_fragment>
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.30, 0.16), min(vScorch * 1.5, 0.85));
+        `
+      );
     shader.uniforms.uTime = timeUniform;
     shader.uniforms.uInfluenceMap = influence.textureUniform;
     shader.uniforms.uInfluenceBounds = influence.boundsUniform;
+    shader.uniforms.uScorchMap = scorch.textureUniform;
+    shader.uniforms.uScorchBounds = scorch.boundsUniform;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -84,6 +105,9 @@ function createGrassMaterial(
         uniform float uTime;
         uniform sampler2D uInfluenceMap;
         uniform vec4 uInfluenceBounds;
+        uniform sampler2D uScorchMap;
+        uniform vec4 uScorchBounds;
+        varying float vScorch;
         `
       )
       .replace(
@@ -104,6 +128,8 @@ function createGrassMaterial(
         vec2 bendDirection = influence.rg * 2.0 - 1.0;
         transformed.xz += bendDirection * influence.b * heightFactor * 0.55;
         transformed.y *= (1.0 - influence.b * 0.9 * heightFactor) * (1.0 - influence.a * 0.92);
+        vec2 scorchUv = (bladeOrigin.xz - uScorchBounds.xy) * uScorchBounds.zw;
+        vScorch = texture2D(uScorchMap, scorchUv).r;
         `
       );
   };
@@ -115,10 +141,11 @@ function createGrassMaterial(
 export function createGrassField(options: {
   bladeCount: number;
   influence: GroundInfluenceUniforms;
+  scorch: ScorchMapUniforms;
 }): GrassField {
   const group = new THREE.Group();
   const timeUniform = { value: 0 };
-  const material = createGrassMaterial(options.influence, timeUniform);
+  const material = createGrassMaterial(options.influence, options.scorch, timeUniform);
   const islandChunks = generateGrassBlades(options.bladeCount);
 
   const transform = new THREE.Matrix4();

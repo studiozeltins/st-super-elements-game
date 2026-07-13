@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { hashGridPoint } from './rng';
 import { WORLD_BOUND } from '../data/constants';
-import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
+import type { ScorchMapUniforms } from '../systems/createScorchMap';
 
 const TERRAIN_SEED = 20260703;
 const NOISE_FREQUENCY = 0.03;
@@ -152,27 +152,38 @@ export function terrainColorAt(x: number, z: number, height: number): THREE.Colo
 }
 
 /**
- * Patches the terrain material to read the influence map's WEAR channel:
- * worn ground QUANTIZES into flat scorched-earth brown bands (no gradients —
- * the pixel-art contract) and the vertices press DOWN in matching steps, so a
- * strike leaves a real dent. Wear accumulates where strikes overlap (darker,
- * deeper) and decays on the regrow clock, so the ground heals by itself.
+ * Patches the terrain material to read the SCORCH map (strike impacts only —
+ * walking never writes it, so footpaths stay green). The fragment stage
+ * samples per world-space CELL so the patch is built from visible square
+ * pixels: 5 brown shades = 5 stacked strikes, hash-jittered thresholds tear
+ * the band edges so overlapping craters merge raggedly instead of as clean
+ * circles. Vertices press DOWN in matching steps (a real dent), and the map
+ * decays on the regrow clock, so the ground heals by itself.
  */
-function patchTerrainWithWear(
+const SCORCH_CELLS_PER_UNIT = 3.0;
+/** Band k needs scorch > 0.07 + k*0.2 — one SCORCH_PER_STRIKE per band. */
+const SCORCH_BAND_GLSL = /* glsl */ `
+  float scorchBand(float scorch) {
+    return scorch < 0.07 ? -1.0 : min(4.0, floor((scorch - 0.07) * 5.0));
+  }
+`;
+
+function patchTerrainWithScorch(
   material: THREE.MeshLambertMaterial,
-  influence: GroundInfluenceUniforms
+  scorch: ScorchMapUniforms
 ) {
   material.onBeforeCompile = shader => {
-    shader.uniforms.uInfluenceMap = influence.textureUniform;
-    shader.uniforms.uInfluenceBounds = influence.boundsUniform;
+    shader.uniforms.uScorchMap = scorch.textureUniform;
+    shader.uniforms.uScorchBounds = scorch.boundsUniform;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
         /* glsl */ `
         #include <common>
-        uniform sampler2D uInfluenceMap;
-        uniform vec4 uInfluenceBounds;
-        varying float vWearBand;
+        uniform sampler2D uScorchMap;
+        uniform vec4 uScorchBounds;
+        varying vec2 vScorchWorld;
+        ${SCORCH_BAND_GLSL}
         `
       )
       .replace(
@@ -180,11 +191,10 @@ function patchTerrainWithWear(
         /* glsl */ `
         vec3 transformed = vec3(position);
         // Geometry is baked into world XZ (plane rotated, terrain at origin).
-        vec2 wearUv = (position.xz - uInfluenceBounds.xy) * uInfluenceBounds.zw;
-        float wear = texture2D(uInfluenceMap, wearUv).a;
-        // Quantize to 3 hard steps: band 0 untouched, 1 scuffed, 2 cratered.
-        vWearBand = wear < 0.3 ? 0.0 : wear < 0.7 ? 1.0 : 2.0;
-        transformed.y -= vWearBand * 0.12; // stepped dent, deeper where hit more
+        vScorchWorld = position.xz;
+        vec2 scorchUv = (position.xz - uScorchBounds.xy) * uScorchBounds.zw;
+        float dentBand = scorchBand(texture2D(uScorchMap, scorchUv).r);
+        transformed.y -= (dentBand + 1.0) * 0.05; // stepped dent, deeper per stack
         `
       );
     shader.fragmentShader = shader.fragmentShader
@@ -192,23 +202,44 @@ function patchTerrainWithWear(
         '#include <common>',
         /* glsl */ `
         #include <common>
-        varying float vWearBand;
+        uniform sampler2D uScorchMap;
+        uniform vec4 uScorchBounds;
+        varying vec2 vScorchWorld;
+        ${SCORCH_BAND_GLSL}
+        float scorchHash(vec2 cell, vec2 basis) {
+          return fract(sin(dot(cell, basis)) * 43758.5453);
+        }
         `
       )
       .replace(
         '#include <color_fragment>',
         /* glsl */ `
         #include <color_fragment>
-        // Flat scorched-earth bands — solid colors, never a gradient.
-        if (vWearBand > 1.5) diffuseColor.rgb = vec3(0.24, 0.16, 0.09);
-        else if (vWearBand > 0.5) diffuseColor.rgb = vec3(0.45, 0.33, 0.19);
+        {
+          // One sample per world-space cell = square pixel-art dirt clods.
+          vec2 cell = floor(vScorchWorld * ${SCORCH_CELLS_PER_UNIT.toFixed(1)});
+          vec2 cellUv = ((cell + 0.5) / ${SCORCH_CELLS_PER_UNIT.toFixed(1)}
+            - uScorchBounds.xy) * uScorchBounds.zw;
+          float scorch = texture2D(uScorchMap, cellUv).r
+            + (scorchHash(cell, vec2(127.1, 311.7)) - 0.5) * 0.13;
+          float band = scorchBand(scorch);
+          if (band >= 0.0) {
+            vec3 shade = band < 0.5 ? vec3(0.52, 0.40, 0.24)
+              : band < 1.5 ? vec3(0.44, 0.32, 0.18)
+              : band < 2.5 ? vec3(0.35, 0.25, 0.14)
+              : band < 3.5 ? vec3(0.27, 0.18, 0.10)
+              : vec3(0.19, 0.12, 0.07);
+            // Per-cell brightness speckle: dirt texture, still flat per pixel.
+            diffuseColor.rgb = shade * (0.9 + scorchHash(cell, vec2(269.5, 183.3)) * 0.2);
+          }
+        }
         `
       );
   };
-  material.customProgramCacheKey = () => 'terrainWear';
+  material.customProgramCacheKey = () => 'terrainScorch';
 }
 
-export function createTerrainMesh(influence: GroundInfluenceUniforms | null): THREE.Mesh {
+export function createTerrainMesh(scorch: ScorchMapUniforms | null): THREE.Mesh {
   const geometry = new THREE.PlaneGeometry(
     TERRAIN_SIZE,
     TERRAIN_SIZE,
@@ -233,7 +264,7 @@ export function createTerrainMesh(influence: GroundInfluenceUniforms | null): TH
   // No computeVertexNormals: flatShading derives face normals in the shader.
 
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  if (influence) patchTerrainWithWear(material, influence);
+  if (scorch) patchTerrainWithScorch(material, scorch);
   const terrainMesh = new THREE.Mesh(geometry, material);
   terrainMesh.receiveShadow = true;
   return terrainMesh;

@@ -14,6 +14,7 @@ import {
 import { createPixelRenderer } from './engine/createPixelRenderer';
 import { detectQualityProfile } from './engine/deviceProfile';
 import { createGroundInfluence } from './systems/createGroundInfluence';
+import { createScorchMap, SCORCH_PER_STRIKE } from './systems/createScorchMap';
 import { createMondstadtWorld, isInsideSafeZone } from './world/createMondstadtWorld';
 import {
   resolveBodyCollisions,
@@ -296,12 +297,16 @@ export function createGame(
   // Ground influence map: everything that moves stamps into it, grass bends out.
   const quality = detectQualityProfile();
   const groundInfluence = createGroundInfluence(quality.influenceResolution);
+  // Scorch is a separate map from influence wear on purpose: only strikes
+  // write it, so walking tramples grass without ever browning the ground.
+  const scorchMap = createScorchMap(quality.influenceResolution);
   const influenceEnabled = !perfFlags.has('nobend');
   const world = createMondstadtWorld(scene, {
     grass: {
       bladeCount: perfFlags.has('nograss') ? 0 : quality.grassBladeCount,
       influence: groundInfluence,
     },
+    scorch: scorchMap,
   });
   // The overlay pass only draws sprites — skip walking the whole static world.
   pixelRenderer.setOverlayCullTarget(world.group);
@@ -778,8 +783,10 @@ export function createGame(
   ) {
     if (skill.kind !== 'nova' && skill.kind !== 'dash') return;
     const color = ELEMENTS[element].color;
-    // Wear 1 = the ground itself browns and dents (terrain shader), grass dies.
+    // Wear 1 squashes the grass; the scorch stamp is what browns/dents the
+    // terrain (one band per stack, five stacks to full char).
     groundInfluence.stamp(x, z, skill.radius * 0.8, 1, 0, 0, 1);
+    scorchMap.stamp(x, z, skill.radius * 0.8, SCORCH_PER_STRIKE);
     debrisSystem?.spawn(new THREE.Vector3(x, world.getGroundHeight(x, z), z), color, debrisCount);
   }
 
@@ -1313,7 +1320,10 @@ export function createGame(
 
     // All stampers above have queued this frame's marks; bake them into the
     // influence map before the world render samples it.
-    if (influenceEnabled) groundInfluence.update(pixelRenderer.renderer, deltaSeconds);
+    if (influenceEnabled) {
+      groundInfluence.update(pixelRenderer.renderer, deltaSeconds);
+      scorchMap.update(pixelRenderer.renderer, deltaSeconds);
+    }
     pixelRenderer.render(scene);
   }
 
@@ -1443,6 +1453,7 @@ export function createGame(
       dropMaterials.clear();
       world.dispose();
       groundInfluence.dispose();
+      scorchMap.dispose();
       pixelRenderer.dispose();
     },
     setOnSelectPlayer(handler) {
@@ -1740,16 +1751,18 @@ export function createGame(
         atMs: performance.now(),
       };
       const strikeJuiceColor = ATTACK_RENDER[strike.attackId]?.juiceColor ?? ELEMENTS.geo.color;
-      // Every landed unit attack DESTROYS the ground under it: wear 1 browns
-      // and dents the terrain (shader bands — the persistent mark you can walk
-      // up to later) and squashes the grass, regrowing over ~a minute.
-      // Overlapping strikes accumulate into a darker, deeper union. Cone/lane
-      // strikes misread as circles, so they burn a smaller core.
+      // Every landed unit attack DESTROYS the ground under it: wear 1 squashes
+      // the grass, the scorch stamp browns and dents the terrain (one pixel-art
+      // band per stack, five stacks to full char — the persistent mark you can
+      // walk up to later), both regrowing over ~a minute. Overlapping strikes
+      // accumulate into a darker, deeper union. Cone/lane strikes misread as
+      // circles, so they burn a smaller core.
       const wearRadius =
         strike.attackId === 'swordSwing' || strike.attackId === 'shieldDash'
           ? strike.radius * 0.55
           : strike.radius;
       groundInfluence.stamp(strike.landingX, strike.landingZ, wearRadius, 1, 0, 0, 1);
+      scorchMap.stamp(strike.landingX, strike.landingZ, wearRadius, SCORCH_PER_STRIKE);
       // Distance gate + linear falloff (lastStrike above stays unconditional —
       // stun attribution must survive even for a strike this gate mutes): a
       // strike beyond STRIKE_JUICE_RANGE plays NOTHING here; inside it, shake

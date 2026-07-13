@@ -26,6 +26,7 @@ import { createGrassField } from './createGrassField';
 import { CAMPFIRE_LIGHT_NAME } from './assets/createCampfire';
 import { createFountain, createHouse, createWindmill } from './createPlazaStructures';
 import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
+import type { ScorchMapUniforms } from '../systems/createScorchMap';
 
 export interface MondstadtWorld {
   group: THREE.Group;
@@ -190,6 +191,8 @@ export interface MondstadtWorldOptions {
     bladeCount: number;
     influence: GroundInfluenceUniforms;
   };
+  /** Strike-impact scorch map — browns the terrain and dries the grass. */
+  scorch: ScorchMapUniforms;
 }
 
 export function createMondstadtWorld(
@@ -335,11 +338,11 @@ export function createMondstadtWorld(
   }
 
   const sunLight = createLighting(group);
-  group.add(createTerrainMesh(options.grass.influence));
+  group.add(createTerrainMesh(options.scorch));
   createPlaza(group);
   group.add(createFountain());
   obstacles.push({ x: 0, y: 0, z: 0, radius: 3.0 }); // fountain basin, plaza is flat at y=0
-  const grassField = createGrassField(options.grass);
+  const grassField = createGrassField({ ...options.grass, scorch: options.scorch });
   group.add(grassField.group);
   buildBridges();
   buildPillarStairs();
