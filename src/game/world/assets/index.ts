@@ -4,7 +4,6 @@ export { createRockSpire } from './createRockSpire';
 export { createCanopyTree } from './createCanopyTree';
 export { createPalmTree } from './createPalmTree';
 export { createBush } from './createBush';
-export { createGrassTuft } from './createGrassTuft';
 export { createFlower } from './createFlower';
 export { createMushroom } from './createMushroom';
 export { createTeepee } from './createTeepee';

@@ -18,6 +18,8 @@ interface SettingsScreenProps {
   showPing: boolean;
   onToggleFps(next: boolean): void;
   onTogglePing(next: boolean): void;
+  pixelFilter: boolean;
+  onTogglePixelFilter(next: boolean): void;
   hudTheme: string;
   onHudThemeChange(next: string): void;
   onLogout(): void;
@@ -34,6 +36,8 @@ export function SettingsScreen({
   showPing,
   onToggleFps,
   onTogglePing,
+  pixelFilter,
+  onTogglePixelFilter,
   hudTheme,
   onHudThemeChange,
   onLogout,
@@ -89,6 +93,7 @@ export function SettingsScreen({
       <p className="settings__section">ATTĒLOŠANA</p>
       <Toggle label="Rādīt FPS" checked={showFps} onChange={onToggleFps} />
       <Toggle label="Rādīt ping" checked={showPing} onChange={onTogglePing} />
+      <Toggle label="Pikseļu filtrs" checked={pixelFilter} onChange={onTogglePixelFilter} />
       {fullscreenSupported && (
         <Button variant="ghost" block onClick={toggleFullscreen}>
           ⛶ Pilnekrāns

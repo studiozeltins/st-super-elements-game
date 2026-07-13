@@ -1,28 +1,30 @@
-import type { ReactNode } from 'react';
 import { ELEMENTS } from '../game/data/elements';
 import { ROLE_META, type CharacterDefinition } from '../game/data/characters';
 import { ConstellationRing } from './ConstellationRing';
+import { CharacterBadges } from './CharacterChip';
 
 // The one reusable character-identity block: an optional constellation ring beside
-// element · name · title · star rarity, with an optional tag row (combat role +
-// transcend/Būsts level). Every place that shows a character's identity uses this
-// so the layout + fonts stay consistent. Sizing comes from the container (add
-// `cident--lg` for the big form). The parent must set `--element-color`.
+// element · name · title · star rarity, always followed by the shared [C][B][L]
+// progress badges (plus an optional combat-role chip). Every place that shows a
+// character's identity uses this so the layout + fonts stay consistent. Sizing
+// comes from the container (add `cident--lg` for the big form). The parent must
+// set `--element-color`.
 export function CharacterIdentity({
   character,
   className = '',
   /** Show the combat-role chip (dps/healer/support/tank). Off in compact slots. */
   showRole = false,
-  /** Installed transcend levels; shows a "C6 · Bn" chip when > 0. */
+  /** Installed transcend levels — the B badge value ([B0] when none). */
   transcendLevel = 0,
   /** Render the constellation ring to the left of the text. */
   showRing = false,
-  /** Ring data (unlocked ceiling + currently-active stars). */
+  /** Unlocked constellation ceiling — the C badge value ([C0] when none) + ring. */
   unlocked = 0,
+  /** Currently-active stars (ring only). */
   activated = 0,
-  /** Click the purple "Bn" chip → dedicated Būsts tab/page. */
+  /** Click the purple "Bn" badge → dedicated Būsts tab/page. */
   onBoostClick,
-  /** Click the gold "C6" chip → dedicated constellation tab/page. */
+  /** Click the gold "Cn" badge → dedicated constellation tab/page. */
   onConClick,
 }: {
   character: CharacterDefinition;
@@ -37,7 +39,6 @@ export function CharacterIdentity({
 }) {
   const element = ELEMENTS[character.element];
   const role = ROLE_META[character.role];
-  const hasTags = (showRole && role) || transcendLevel > 0;
   return (
     <div className={`cident ${className}`}>
       {showRing && (
@@ -57,61 +58,25 @@ export function CharacterIdentity({
         <span className={`cident__stars rarity-${character.stars}`}>
           {'✦'.repeat(character.stars)}
         </span>
-        {hasTags && (
-          <div className="cident__tags">
-            {showRole && role && (
-              <span
-                className="cident__role"
-                style={{ color: `var(${role.token})` }}
-                aria-label={`Loma: ${role.aria}`}
-              >
-                {role.label}
-              </span>
-            )}
-            {transcendLevel > 0 && (
-              <>
-                <Chip className="cident__boost cident__boost--c6" onClick={onConClick} label="C6 — atvērt cieņu">
-                  C6
-                </Chip>
-                <Chip
-                  className="cident__boost cident__boost--b"
-                  onClick={onBoostClick}
-                  label={`Būsts B${transcendLevel} — atvērt`}
-                >
-                  B{transcendLevel}
-                </Chip>
-              </>
-            )}
-          </div>
-        )}
+        <div className="cident__tags">
+          {showRole && role && (
+            <span
+              className="cident__role"
+              style={{ color: `var(${role.token})` }}
+              aria-label={`Loma: ${role.aria}`}
+            >
+              {role.label}
+            </span>
+          )}
+          <CharacterBadges
+            constellation={unlocked}
+            transcend={transcendLevel}
+            level={1}
+            onConstellationClick={onConClick}
+            onTranscendClick={onBoostClick}
+          />
+        </div>
       </div>
     </div>
-  );
-}
-
-// A tag chip that becomes a button when it has a click handler (opens a tab/page),
-// otherwise a plain span. Keeps the boost chips clickable only where it makes sense.
-function Chip({
-  className,
-  onClick,
-  label,
-  children,
-}: {
-  className: string;
-  onClick?: () => void;
-  label: string;
-  children: ReactNode;
-}) {
-  if (onClick) {
-    return (
-      <button type="button" className={`${className} cident__boost--btn`} onClick={onClick} aria-label={label}>
-        {children}
-      </button>
-    );
-  }
-  return (
-    <span className={className} aria-label={label}>
-      {children}
-    </span>
   );
 }

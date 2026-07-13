@@ -13,4 +13,6 @@ import {
 export default __t.row({
   target: __t.identity(),
   amount: __t.u32(),
+  attacker: __t.identity(),
+  isCrit: __t.bool().name("is_crit"),
 });

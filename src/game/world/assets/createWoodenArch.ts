@@ -12,10 +12,7 @@ export function createWoodenArch(random: SeededRandom): WorldAsset {
 
   const postMaterial = lambert(POST_COLOR);
   for (const postSide of [-1, 1]) {
-    const post = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.14, 0.18, archHeight, 6),
-      postMaterial
-    );
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.3, archHeight, 0.3), postMaterial);
     post.position.set(postSide * archHalfWidth, archHeight / 2, 0);
     post.rotation.z = -postSide * randomBetween(random, 0.02, 0.06);
     post.castShadow = true;

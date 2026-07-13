@@ -7,7 +7,6 @@ import {
   createCampfire,
   createCanopyTree,
   createFlower,
-  createGrassTuft,
   createMushroom,
   createPalmTree,
   createRockSpire,
@@ -28,7 +27,6 @@ const FACTORIES: Record<string, { create: AssetFactory; climbable: boolean }> = 
   createCanopyTree: { create: createCanopyTree, climbable: false },
   createPalmTree: { create: createPalmTree, climbable: false },
   createBush: { create: createBush, climbable: false },
-  createGrassTuft: { create: createGrassTuft, climbable: false },
   createFlower: { create: createFlower, climbable: false },
   createMushroom: { create: createMushroom, climbable: false },
   createTeepee: { create: createTeepee, climbable: false },
@@ -59,16 +57,24 @@ describe.each(FACTORY_ENTRIES)('%s', (_name, create, climbable) => {
   });
 
   if (climbable) {
-    it('exposes a standable platform (positive radius and top height)', () => {
+    it('exposes a standable platform per stacked level (positive radius/top)', () => {
       const asset = create(createSeededRandom(1));
-      expect(asset.platformRadius).toBeGreaterThan(0);
-      expect(asset.platformTopHeight).toBeGreaterThan(0);
+      expect(asset.platforms!.length).toBeGreaterThan(0);
+      for (const platform of asset.platforms!) {
+        expect(platform.radius).toBeGreaterThan(0);
+        expect(platform.topHeight).toBeGreaterThan(0);
+      }
+      // Stacked chunks must each be standable — tops strictly rise.
+      for (let index = 1; index < asset.platforms!.length; index += 1) {
+        expect(asset.platforms![index].topHeight).toBeGreaterThan(
+          asset.platforms![index - 1].topHeight
+        );
+      }
     });
   } else {
-    it('is not climbable: platform fields stay undefined', () => {
+    it('is not climbable: platforms stay undefined', () => {
       const asset = create(createSeededRandom(1));
-      expect(asset.platformRadius).toBeUndefined();
-      expect(asset.platformTopHeight).toBeUndefined();
+      expect(asset.platforms).toBeUndefined();
     });
   }
 });

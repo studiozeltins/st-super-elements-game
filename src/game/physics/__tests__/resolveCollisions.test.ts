@@ -65,4 +65,23 @@ describe('resolveObstacleCollisions', () => {
     expect(walkerOnDeck.position.x).toBe(0.4);
     expect(walkerOnDeck.position.z).toBe(0);
   });
+
+  it('blocks a tall obstacle at any height inside its span', () => {
+    const jumper = body(0.4, 0, 0.45, 1, 4);
+    resolveObstacleCollisions(jumper, [{ x: 0, y: 0, z: 0, radius: 0.7, height: 8 }]);
+    expect(Math.hypot(jumper.position.x, jumper.position.z)).toBeCloseTo(1.15, 5);
+  });
+
+  it('lets a jumper near a climbable top pass (landing on a boulder)', () => {
+    const jumper = body(0.4, 0, 0.45, 1, 1.9);
+    resolveObstacleCollisions(jumper, [{ x: 0, y: 0, z: 0, radius: 0.7, height: 2.2 }]);
+    expect(jumper.position.x).toBe(0.4);
+    expect(jumper.position.z).toBe(0);
+  });
+
+  it('still blocks a walker at the base of a climbable boulder', () => {
+    const walker = body(0.4, 0, 0.45, 1, 0);
+    resolveObstacleCollisions(walker, [{ x: 0, y: 0, z: 0, radius: 0.7, height: 2.2 }]);
+    expect(Math.hypot(walker.position.x, walker.position.z)).toBeCloseTo(1.15, 5);
+  });
 });

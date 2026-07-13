@@ -1,0 +1,66 @@
+/* Manga-SFX action burst. Deliberately NOT Frost — one-shot comic juice text.
+   Face, tilt, and screen position are randomized per popup (inline vars set by
+   SfxPopup); per-word fill comes from inline span colors. The heavy ink
+   outline/shadow stays shared so every face reads as the same burst family. */
+
+.sfx-popup {
+  position: fixed;
+  left: var(--sfx-x, 50%);
+  top: var(--sfx-y, 34%);
+  z-index: 40;
+  pointer-events: none;
+  white-space: nowrap;
+  font-family: var(--sfx-font, 'Bangers'), 'Chakra Petch', sans-serif;
+  font-size: calc(4.2rem * var(--sfx-scale, 1));
+  letter-spacing: 0.06em;
+  color: #ffe14d; /* fallback — real fills live on the per-word spans */
+  -webkit-text-stroke: 3px var(--sfx-outline, #1a1230);
+  text-shadow:
+    0 0 2px var(--sfx-outline, #1a1230),
+    4px 5px 0 var(--sfx-outline, #1a1230),
+    0 0 26px var(--sfx-glow, rgba(134, 226, 255, 0.55));
+  animation: sfx-pop var(--sfx-seconds, 1s) cubic-bezier(0.2, 0.9, 0.3, 1.2) forwards;
+}
+
+/* Entry variants — a different side each popup. Tilt is per-popup random
+   (--sfx-tilt inline); the variant only picks the fly-in offset. */
+.sfx-popup--v0 {
+  --sfx-from: -140%;
+}
+.sfx-popup--v1 {
+  --sfx-from: 60%;
+}
+.sfx-popup--v2 {
+  --sfx-from: -50%;
+}
+
+@keyframes sfx-pop {
+  0% {
+    opacity: 0;
+    transform: translate(var(--sfx-from, -50%), -60%) rotate(var(--sfx-tilt, 0deg)) scale(0.2);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--sfx-tilt, 0deg)) scale(1.25);
+  }
+  18% {
+    transform: translate(-50%, -50%) rotate(var(--sfx-tilt, 0deg)) scale(0.96);
+  }
+  24% {
+    transform: translate(-49%, -51%) rotate(calc(var(--sfx-tilt, 0deg) + 1.5deg)) scale(1.04);
+  }
+  30% {
+    transform: translate(-51%, -49%) rotate(calc(var(--sfx-tilt, 0deg) - 1.5deg)) scale(1);
+  }
+  36% {
+    transform: translate(-50%, -50%) rotate(var(--sfx-tilt, 0deg)) scale(1.01);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--sfx-tilt, 0deg)) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -54%) rotate(var(--sfx-tilt, 0deg)) scale(1.08);
+  }
+}

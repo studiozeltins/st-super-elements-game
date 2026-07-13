@@ -1,8 +1,12 @@
 import * as THREE from 'three';
 import type { SeededRandom, WorldAsset } from './types';
-import { lambert, pickRandom, randomBetween, randomIntBetween } from './assetHelpers';
+import { randomBetween, randomIntBetween } from './assetHelpers';
+import { buildVoxelCluster, sphereVoxelCells } from './voxelHelpers';
 
 const BUSH_GREENS = [0x58a24f, 0x4f9147, 0x67b35a] as const;
+
+const BUSH_Y_SCALE = 0.65;
+const BUSH_VOXEL_SIZE = 0.35;
 
 export function createBush(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
@@ -10,11 +14,12 @@ export function createBush(random: SeededRandom): WorldAsset {
 
   for (let index = 0; index < clumpCount; index += 1) {
     const radius = randomBetween(random, 0.45, 0.8);
-    const clump = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(radius, 0),
-      lambert(pickRandom(random, BUSH_GREENS))
+    const clump = buildVoxelCluster(
+      sphereVoxelCells(radius, BUSH_VOXEL_SIZE, BUSH_Y_SCALE),
+      BUSH_VOXEL_SIZE,
+      BUSH_GREENS,
+      random
     );
-    clump.scale.y = 0.65;
     clump.position.set(
       randomBetween(random, -0.5, 0.5),
       radius * 0.55,

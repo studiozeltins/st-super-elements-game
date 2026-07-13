@@ -1738,9 +1738,37 @@ button {
 }
 
 .pull-btn--ten {
+  position: relative;
+  overflow: hidden;
   color: var(--ink);
   background: var(--gold);
   border-color: var(--gold);
+  /* Hidden hold-gesture (max-pull) — long-tap must never pop selection/callout. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+/* HOLD ×10 → max-pull: a charge bar sweeps the button while the press is armed;
+   reaching the right edge = the max-pull fires. Releasing early = normal ×10. */
+.pull-btn--charging::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform-origin: left;
+  background: color-mix(in srgb, var(--accent) 55%, #ffffff 20%);
+  mix-blend-mode: screen;
+  animation: pull-charge 0.6s linear forwards;
+  pointer-events: none;
+}
+@keyframes pull-charge {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
 }
 
 .pull-btn:hover:not(:disabled) {
@@ -1843,17 +1871,6 @@ button {
   top: 10px;
   right: 12px;
   color: var(--muted);
-}
-
-.inv-card__con {
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  font: 700 10px var(--font-display);
-  letter-spacing: 0.06em;
-  color: var(--gold);
-  border: 1px solid currentColor;
-  padding: 1px 5px;
 }
 
 /* Inline constellation dots + active bonus, shown on team cards. */
@@ -2119,6 +2136,99 @@ button {
   100% {
     opacity: 0;
     transform: translateY(-28px) scale(1);
+  }
+}
+
+/* ── Max-pull aggregated reveal (>10 results) ──────────────────────────────
+   Characters keep full cards (their C-badge pops through each gained level);
+   weapons collapse into compact ×N rows so 100 pulls fit one screen. */
+.pull-reveal--big {
+  justify-content: flex-start;
+  gap: 20px;
+  padding: 36px 30px;
+  overflow-y: auto;
+}
+.bigpull-total {
+  font: 700 13px var(--font-display);
+  letter-spacing: 0.24em;
+  color: var(--muted);
+}
+.bigpull-chars {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  max-width: 900px;
+}
+.bigpull-char {
+  width: 148px;
+  animation: reveal-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.reveal-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  min-height: 15px;
+}
+/* Re-mounts on every constellation step (key=C level) so the pop replays. */
+.bigpull-char__constellation {
+  color: var(--accent);
+  animation: constellation-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes constellation-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  45% {
+    transform: scale(1.55);
+    text-shadow: 0 0 16px currentColor;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.bigpull-weapons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, max-content));
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 880px;
+}
+.bigpull-weapon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  animation: reveal-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.bigpull-weapon__rarity {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+.bigpull-weapon__name {
+  flex: 1;
+  font: 600 12px var(--font-body);
+}
+.bigpull-weapon__count {
+  font: 700 13px var(--font-display);
+  color: var(--rarity-color);
+}
+
+@media (max-width: 720px) {
+  .pull-reveal--big {
+    padding: 24px 14px;
+  }
+  .bigpull-char {
+    width: 124px;
+  }
+  .bigpull-weapons {
+    grid-template-columns: 1fr 1fr;
   }
 }
 
@@ -2822,7 +2932,10 @@ button {
   display: none;
 }
 
-.roster-chip {
+/* ── Unified character chip (character-screen roster + team select) ────────
+   Rarity colors the left border + accents (5★ gold, 4★ blue); the element
+   color stays on the ring's letter disc only. */
+.cchip {
   position: relative;
   flex: 0 0 auto;
   display: flex;
@@ -2831,50 +2944,109 @@ button {
   padding: 3px 12px 3px 6px;
   scroll-snap-align: start;
   border: 1px solid var(--line);
-  border-left: 3px solid var(--element-color);
+  border-left: 3px solid var(--rarity, var(--line));
   background: var(--panel);
-  opacity: 0.62;
   transition: opacity 0.15s, transform 0.15s, box-shadow 0.15s;
+  touch-action: pan-x;
+  user-select: none;
 }
 
-.roster-chip--on {
-  opacity: 1;
+.cchip.rarity-5 {
+  --rarity: var(--gold);
+}
+
+.cchip.rarity-4 {
+  --rarity: #5aa9ff;
+}
+
+/* Character-screen roster dims everything but the viewed character. */
+.cscreen__roster .cchip:not(.cchip--on) {
+  opacity: 0.62;
+}
+
+.cchip--on {
   transform: translateY(-1px);
-  box-shadow: 0 0 0 1px var(--element-color);
+  box-shadow: 0 0 0 1px var(--rarity, var(--line));
 }
 
-.roster-chip--locked {
-  filter: grayscale(0.7);
+.cchip--dragging {
+  opacity: 0.35;
 }
 
-.roster-chip__ring {
+.cchip__ring {
   display: block;
   width: 30px;
   height: 30px;
   flex-shrink: 0;
+  pointer-events: none;
 }
 
-.roster-chip__text {
+.cchip__text {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+  pointer-events: none;
 }
 
-.roster-chip__name {
+.cchip__name {
   /* Character names always use the display font (matches cident/csheet names). */
   font: 700 11px var(--font-display);
   white-space: nowrap;
+  text-align: left;
 }
 
-.roster-chip__level {
-  font: 700 8px var(--font-display);
-  letter-spacing: 0.08em;
-  color: var(--muted);
-}
-
-.roster-chip__active {
+.cchip__active {
   font-size: 9px;
   color: var(--accent);
+}
+
+/* ── [C5][B3][L1] mini-cards — shared progress badges on every character card:
+   C constellation (gold), B transcend boost (purple), L level (cyan). */
+.cbadges {
+  display: flex;
+  gap: 3px;
+}
+
+.cbadge {
+  font: 700 8px var(--font-display);
+  letter-spacing: 0.06em;
+  padding: 1px 4px;
+  border: 1px solid currentColor;
+}
+
+.cbadge--c {
+  color: var(--gold);
+}
+
+.cbadge--b {
+  color: var(--shard);
+}
+
+.cbadge--l {
+  color: var(--accent);
+}
+
+/* Clickable badge (jumps to the cieņa/būsts tab where wired). */
+.cbadge--btn {
+  cursor: pointer;
+  transition: transform 0.12s, filter 0.12s;
+}
+
+.cbadge--btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.2);
+}
+
+/* Collection cards park the badge row bottom-right (where C{n} used to sit). */
+.inv-card .cbadges {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+}
+
+.inv-card .cbadge {
+  font-size: 9px;
+  padding: 2px 5px;
 }
 
 /* Desktop drag-to-scroll affordance on horizontal lists. */
@@ -3187,40 +3359,27 @@ button {
   font-size: 30px;
 }
 
-/* Transcend status tag — purple (--shard) chip. */
-/* Shared identity tag row (combat role + Būsts level) — used by every cident. */
+/* Shared identity tag row (combat role + [C][B][L] badges) — every cident. */
 .cident__tags {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-top: 8px;
 }
 
-.cident__role,
-.cident__boost {
+.cident__role {
   padding: 4px 9px;
   font: 700 10px var(--font-display);
   letter-spacing: 0.12em;
   border: 1px solid currentColor;
 }
 
-/* Two separate Būsts chips: gold "C6" (→ cieņa) + purple "Bn" (→ būsts). */
-.cident__boost--c6 {
-  color: var(--gold);
-}
-
-.cident__boost--b {
-  color: var(--shard);
-}
-
-.cident__boost--btn {
-  cursor: pointer;
-  transition: transform 0.12s, filter 0.12s;
-}
-
-.cident__boost--btn:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.2);
+/* Identity blocks get the roomier badge size (chips keep the 8px default). */
+.cident .cbadge {
+  font-size: 10px;
+  padding: 3px 7px;
+  letter-spacing: 0.12em;
 }
 
 /* Role badge — sibling of .cchar__transcend-tag.
@@ -4182,64 +4341,6 @@ button {
   touch-action: none;
 }
 
-.team-chip {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 3px 12px 3px 5px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--rarity, var(--line));
-  background: var(--panel);
-  box-shadow: inset 0 0 0 1px transparent;
-  transition: transform 0.12s, box-shadow 0.12s, opacity 0.12s;
-  touch-action: pan-x;
-  user-select: none;
-}
-
-.team-chip.rarity-5 {
-  --rarity: var(--gold);
-}
-
-.team-chip.rarity-4 {
-  --rarity: #5aa9ff;
-}
-
-.team-chip--in {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity) 60%, transparent);
-}
-
-.team-chip--dragging {
-  opacity: 0.35;
-}
-
-.team-chip__ring {
-  display: block;
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  pointer-events: none;
-}
-
-.team-chip__text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  pointer-events: none;
-}
-
-.team-chip__name {
-  /* Character names always use the display font (matches cident/csheet names). */
-  font: 700 11px var(--font-display);
-  white-space: nowrap;
-}
-
-.team-chip__level {
-  font: 700 8px var(--font-display);
-  letter-spacing: 0.08em;
-  color: var(--rarity, var(--muted));
-}
-
 .team-hint {
   font: 700 10px var(--font-display);
   letter-spacing: 0.08em;
@@ -5117,8 +5218,7 @@ button {
    on desktop. Rings/icons/layout px are intentionally NOT scaled here.
    ============================================================ */
 .csheet__stat-label,
-.roster-chip__level,
-.team-chip__level {
+.cbadge {
   font-size: calc(8px * var(--ui-scale));
 }
 .stat-cell__label,
@@ -5126,14 +5226,13 @@ button {
   font-size: calc(9px * var(--ui-scale));
 }
 .cident__role,
-.cident__boost,
+.cident .cbadge,
 .csheet__pill {
   font-size: calc(10px * var(--ui-scale));
 }
 .csheet__section,
 .ctab__section,
-.roster-chip__name,
-.team-chip__name {
+.cchip__name {
   font-size: calc(11px * var(--ui-scale));
 }
 .ctab__soon,

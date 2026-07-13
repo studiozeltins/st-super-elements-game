@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { tables, type DbConnection } from './module_bindings';
 import type { Player } from './module_bindings/types';
@@ -14,6 +14,15 @@ import { PartySheet } from './ui/PartySheet';
 import { PartyToast } from './ui/PartyToast';
 import { PartyFrames } from './ui/PartyFrames';
 import { Hud } from './ui/Hud';
+import {
+  SfxPopup,
+  createComicPopup,
+  type ComicPopupOptions,
+  type SfxPopupState,
+} from './ui/SfxPopup';
+import { PickupFeed, usePickupFeed } from './ui/PickupFeed';
+import { useGameTableBridge } from './hooks/useGameTableBridge';
+import { DeathOverlay } from './ui/DeathOverlay';
 import { SettingsScreen } from './ui/SettingsScreen';
 import { StatsOverlay } from './ui/StatsOverlay';
 import { GachaScreen, type GachaTab, type PityInfo, type PullView } from './ui/GachaScreen';
@@ -21,6 +30,9 @@ import { CharacterScreen } from './ui/CharacterScreen';
 import { DEFAULT_HUD_THEME, isHudTheme } from './styles/hud/themes';
 
 const PARTY_SIZE = 4;
+
+/** Min gap between CRIT! popups — an occasional treat, not a DPS meter. */
+const CRIT_POPUP_THROTTLE_MS = 20000;
 
 const INITIAL_HUD_STATE: HudState = {
   attackCooldownFraction: 0,
@@ -49,6 +61,13 @@ export default function App() {
   const gameRef = useRef<Game | null>(null);
   const partyRef = useRef<string[]>([]);
   const [hudState, setHudState] = useState<HudState>(INITIAL_HUD_STATE);
+  // Comic callouts (STUNNED!/CRIT! today; any new word is one call away):
+  // keyed remount per popup; face/tilt/position/entry randomize per burst.
+  const [sfxPopup, setSfxPopup] = useState<SfxPopupState | null>(null);
+  const callSfxPopup = useCallback((text: string, options?: ComicPopupOptions) => {
+    setSfxPopup(createComicPopup(text, options));
+  }, []);
+  const lastCritPopupAtRef = useRef(-Infinity);
   const [isGachaOpen, setIsGachaOpen] = useState(false);
   const [gachaTab, setGachaTab] = useState<GachaTab>('banners');
   // The owned-only character detail/management modal (distinct from the VAROŅI
@@ -57,6 +76,10 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showFps, setShowFps] = useState(() => localStorage.getItem('settings.showFps') === '1');
   const [showPing, setShowPing] = useState(() => localStorage.getItem('settings.showPing') === '1');
+  // Chunky-pixel render path; absent key = enabled (the game's default look).
+  const [pixelFilter, setPixelFilter] = useState(
+    () => localStorage.getItem('settings.pixelFilter') !== '0'
+  );
   // Which gameplay-HUD skin is active. Drives `data-hud-theme` on the .app root;
   // the CSS in src/styles/hud/ reskins the HUD accordingly. Persisted per device.
   const [hudTheme, setHudTheme] = useState(() => {
@@ -90,6 +113,10 @@ export default function App() {
     null
   );
   const [shardToast, setShardToast] = useState<{ text: string; key: number } | null>(null);
+  // Genshin-style pickup feed (confirmed ground pickups + shard-theft losses)
+  // and the death fade-to-black; both driven by game-layer callbacks below.
+  const { rows: pickupRows, push: pushPickup } = usePickupFeed();
+  const [isDead, setIsDead] = useState(false);
 
   // Resolve this device to its account's canonical identity BEFORE building the
   // subscription. The party_invite filter keys off the canonical recipient, and
@@ -113,25 +140,35 @@ export default function App() {
         // Only this device's own link row — learns our canonical identity.
         tables.accountLink.where(row => row.identity.eq(identity)),
         tables.player,
-        tables.ownedCharacter,
-        tables.characterActivation,
-        tables.skillCast,
-        tables.bannerPity,
-        tables.weaponItem,
-        tables.pullResult,
-        tables.pvpHit,
-        tables.rangedAttack,
-        tables.healEvent,
+        // skillCast / pullResult / rangedAttack / healEvent are EVENT tables:
+        // their useTable hooks below open the ONLY subscription. Listing them
+        // here too would deliver every event row twice (double VFX/numbers) —
+        // same invariant as pvpHit/enemyHit.
         tables.gemDrop,
         tables.shardDrop,
         tables.enemy,
         tables.goliath,
+        // unit_attack is a normal CACHED table (rows persist through the FSM
+        // cycle), so it takes the manual subscription + plain useTable below.
+        tables.unitAttack,
         tables.party,
         tables.partyMember,
-        // Only invites addressed to ME (canonical recipient) — a player must never
-        // receive invites meant for others (T-05-05, Information Disclosure).
+        // Owner-scoped tables are filtered SERVER-SIDE to my canonical identity.
+        // weapon_item alone holds thousands of rows across all accounts (one per
+        // gacha pull); subscribing to the full table made every App render scan
+        // and hex-compare all of them (~60k identity serializations/s = the
+        // 144→40fps regression). The matching useTable hooks below carry the
+        // same filter, so the client cache only ever holds MY rows.
         ...(myCanonicalIdentity
-          ? [tables.partyInvite.where(row => row.recipientIdentity.eq(myCanonicalIdentity))]
+          ? [
+              tables.ownedCharacter.where(row => row.owner.eq(myCanonicalIdentity)),
+              tables.characterActivation.where(row => row.owner.eq(myCanonicalIdentity)),
+              tables.bannerPity.where(row => row.owner.eq(myCanonicalIdentity)),
+              tables.weaponItem.where(row => row.owner.eq(myCanonicalIdentity)),
+              // Only invites addressed to ME (canonical recipient) — a player must
+              // never receive invites meant for others (T-05-05, Information Disclosure).
+              tables.partyInvite.where(row => row.recipientIdentity.eq(myCanonicalIdentity)),
+            ]
           : []),
       ]);
     return () => {
@@ -147,14 +184,38 @@ export default function App() {
   }, [connection, isActive, identity, myIdentityHex]);
 
   const [players] = useTable(tables.player);
-  const [ownedCharacterRows] = useTable(tables.ownedCharacter);
-  const [activationRows] = useTable(tables.characterActivation);
-  const [bannerPityRows] = useTable(tables.bannerPity);
-  const [weaponItemRows] = useTable(tables.weaponItem);
-  const [gemDropRows] = useTable(tables.gemDrop);
-  const [shardDropRows] = useTable(tables.shardDrop);
-  const [enemyRows] = useTable(tables.enemy);
-  const [goliathRows] = useTable(tables.goliath);
+  // Owner-scoped hooks mirror the manual subscription's server-side filter —
+  // disabled until the canonical identity resolves so no hook ever subscribes
+  // to (and caches) every account's rows. See the subscribe list above.
+  const haveCanonical = myCanonicalIdentity !== null;
+  const [ownedCharacterRows] = useTable(
+    haveCanonical
+      ? tables.ownedCharacter.where(row => row.owner.eq(myCanonicalIdentity))
+      : tables.ownedCharacter,
+    { enabled: haveCanonical }
+  );
+  const [activationRows] = useTable(
+    haveCanonical
+      ? tables.characterActivation.where(row => row.owner.eq(myCanonicalIdentity))
+      : tables.characterActivation,
+    { enabled: haveCanonical }
+  );
+  const [bannerPityRows] = useTable(
+    haveCanonical
+      ? tables.bannerPity.where(row => row.owner.eq(myCanonicalIdentity))
+      : tables.bannerPity,
+    { enabled: haveCanonical }
+  );
+  const [weaponItemRows] = useTable(
+    haveCanonical
+      ? tables.weaponItem.where(row => row.owner.eq(myCanonicalIdentity))
+      : tables.weaponItem,
+    { enabled: haveCanonical }
+  );
+  // enemy/goliath/unit_attack/gem_drop/shard_drop bypass React entirely — they
+  // flow from connection callbacks straight into the game layer (the useTable
+  // versions re-rendered the whole App on every world tick = combat fps cliff).
+  const gameTables = useGameTableBridge(connection, gameRef);
   const [parties] = useTable(tables.party);
   const [partyMembers] = useTable(tables.partyMember);
   const [myInvites] = useTable(tables.partyInvite);
@@ -178,9 +239,6 @@ export default function App() {
   useTable(tables.pullResult, {
     onInsert: row => {
       if (row.owner.toHexString() !== myIdentityRef.current) return;
-      // The table is delivered through two subscriptions, so each row can fire
-      // onInsert twice; slot is unique per request, so dedupe on it.
-      if (pullBufferRef.current.some(view => view.slot === row.slot)) return;
       pullBufferRef.current.push({
         slot: row.slot,
         kind: row.kind,
@@ -197,21 +255,80 @@ export default function App() {
       }, 120);
     },
   });
-  // Another player hit me → purple number over my character.
+  // Server-authoritative PVP hit → truthful {amount, isCrit, attacker} for all
+  // three viewer roles (D3-05, D2-02). EVENT table: its useTable is the ONLY
+  // subscription — it must not also sit in the manual list above (double
+  // delivery = double numbers).
   useTable(tables.pvpHit, {
     onInsert: row => {
       const targetHex = row.target.toHexString();
       if (targetHex === myIdentityRef.current) {
-        // Mark the PVP context so a coinciding shard DOWN reads as a theft, not a
-        // PVE drop (the shard only actually leaves on a fatal hit; a non-fatal hit
-        // simply produces no shard diff, so no false toast fires).
+        // Victim: mark the PVP context so a coinciding shard DOWN reads as a
+        // theft, not a PVE drop (the shard only actually leaves on a fatal hit;
+        // a non-fatal hit simply produces no shard diff, so no false toast fires).
         lastPvpHitOnMeAtRef.current = performance.now();
-        gameRef.current?.spawnSelfNumber(row.amount, 'pvp');
-      } else {
-        // Someone else got hit — show their health bar (I'm the attacker/bystander).
-        gameRef.current?.flashRemoteHealth(targetHex);
+        gameRef.current?.spawnSelfNumber(row.amount, row.isCrit ? 'pvpCrit' : 'pvp');
+        return;
+      }
+      // Someone else got hit — show their health bar (I'm the attacker/bystander).
+      gameRef.current?.flashRemoteHealth(targetHex);
+      if (row.attacker.toHexString() === myIdentityRef.current) {
+        // D3-05: own non-crit already drawn locally in applyPvpDamage — suppress;
+        // upgrade to the big crit number at the victim's live position on crit.
+        if (row.isCrit) gameRef.current?.spawnPlayerNumber(targetHex, row.amount, 'crit', true);
+        return;
+      }
+      // Spectator: full shared visibility (D2-02).
+      gameRef.current?.spawnPlayerNumber(
+        targetHex,
+        row.amount,
+        row.isCrit ? 'crit' : 'normal',
+        false
+      );
+    },
+  });
+  // Server-authoritative enemy/goliath hit → the {amount, isCrit, position} truth
+  // (Plan 02). EVERY hit — my own and other players' — floats its number at the
+  // ENEMY's exact position, colored by the server's isCrit (never a client crit
+  // roll). Rendering own hits from the same event (not a player-anchored local
+  // prediction) is what puts the crit ON the enemy that took it; LAN latency
+  // makes the tiny delay imperceptible.
+  //
+  // enemy_hit is an EVENT table, so it must NOT also appear in the manual
+  // subscription list above — useTable already opens its own subscription, and a
+  // second overlapping subscription would deliver each event row twice, firing
+  // this onInsert twice (two numbers ~0.16u apart). One subscription = one number.
+  useTable(tables.enemyHit, {
+    onInsert: hit => {
+      const isMine = hit.attacker.toHexString() === myIdentityRef.current;
+      gameRef.current?.spawnWorldNumber(
+        hit.positionX,
+        hit.positionZ,
+        hit.amount,
+        hit.isCrit ? 'crit' : 'normal',
+        isMine
+      );
+      // MY crit lands a comic CRIT! — throttled so sustained DPS doesn't
+      // wallpaper the screen with popups.
+      if (
+        isMine &&
+        hit.isCrit &&
+        performance.now() - lastCritPopupAtRef.current >= CRIT_POPUP_THROTTLE_MS
+      ) {
+        lastCritPopupAtRef.current = performance.now();
+        callSfxPopup('CRIT!', { seconds: 0.9, intensity: 0.7 });
       }
     },
+  });
+  // A unit attack landed (leapSlam impact) → the one-shot strike juice: impact
+  // burst + telegraph rim flash + small camera shake + slam SFX (ANIM-04).
+  //
+  // attack_strike is an EVENT table, so it must NOT also appear in the manual
+  // subscription list above — useTable already opens its own subscription, and a
+  // second overlapping subscription would deliver each event row twice, firing
+  // this onInsert twice (double shake/SFX per slam). One subscription = one slam.
+  useTable(tables.attackStrike, {
+    onInsert: strike => gameRef.current?.handleAttackStrike(strike),
   });
   // A healer restored one of my characters → green +number.
   useTable(tables.healEvent, {
@@ -221,101 +338,134 @@ export default function App() {
     },
   });
 
-  const myPlayer: Player | undefined = players.find(
-    row => row.identity.toHexString() === myIdentityHex
+  const myPlayer: Player | undefined = useMemo(
+    () => players.find(row => row.identity.toHexString() === myIdentityHex),
+    [players, myIdentityHex]
   );
-  const myCharacterIds = ownedCharacterRows
-    .filter(row => row.owner.toHexString() === myIdentityHex)
-    .sort((rowA, rowB) => (rowA.id < rowB.id ? -1 : 1))
-    .map(row => row.characterId);
+  // useTable snapshots are reference-stable until THEIR table changes, so these
+  // memos skip the identity hex-compares on the ~16/s unrelated transactions
+  // (enemy movement, position echoes). Re-filtering thousands of weapon_item
+  // rows on every render was the 144→40fps regression.
+  const myCharacterIds = useMemo(
+    () =>
+      ownedCharacterRows
+        .filter(row => row.owner.toHexString() === myIdentityHex)
+        .sort((rowA, rowB) => (rowA.id < rowB.id ? -1 : 1))
+        .map(row => row.characterId),
+    [ownedCharacterRows, myIdentityHex]
+  );
   // Prefer the player's chosen party order; fall back to the first owned characters.
   const chosenParty = (myPlayer?.partyOrder ?? []).filter(id => myCharacterIds.includes(id));
   const partyCharacterIds =
     chosenParty.length > 0 ? chosenParty.slice(0, PARTY_SIZE) : myCharacterIds.slice(0, PARTY_SIZE);
   partyRef.current = partyCharacterIds;
 
-  const partyHealthById: Record<string, number> = {};
-  for (const row of ownedCharacterRows) {
-    if (row.owner.toHexString() !== myIdentityHex) continue;
-    const maxHealth = CHARACTERS[row.characterId]?.maxHealth ?? MAX_HEALTH;
-    partyHealthById[row.characterId] = maxHealth > 0 ? row.currentHealth / maxHealth : 1;
-  }
-
-  const constellationById: Record<string, number> = {};
-  const transcendById: Record<string, number> = {};
-  for (const row of ownedCharacterRows) {
-    if (row.owner.toHexString() !== myIdentityHex) continue;
-    constellationById[row.characterId] = row.constellation;
-    transcendById[row.characterId] = row.transcendLevel;
-  }
+  const { partyHealthById, constellationById, transcendById } = useMemo(() => {
+    const health: Record<string, number> = {};
+    const constellation: Record<string, number> = {};
+    const transcend: Record<string, number> = {};
+    for (const row of ownedCharacterRows) {
+      if (row.owner.toHexString() !== myIdentityHex) continue;
+      const maxHealth = CHARACTERS[row.characterId]?.maxHealth ?? MAX_HEALTH;
+      health[row.characterId] = maxHealth > 0 ? row.currentHealth / maxHealth : 1;
+      constellation[row.characterId] = row.constellation;
+      transcend[row.characterId] = row.transcendLevel;
+    }
+    return { partyHealthById: health, constellationById: constellation, transcendById: transcend };
+  }, [ownedCharacterRows, myIdentityHex]);
 
   // Manually-activated stars per character. No row = full constellation is active
   // (matches the server fallback), so untouched characters behave as before.
-  const activatedById: Record<string, number> = {};
-  for (const row of activationRows) {
-    if (row.owner.toHexString() !== myIdentityHex) continue;
-    activatedById[row.characterId] = row.activatedConstellation;
-  }
+  const activatedById = useMemo(() => {
+    const activated: Record<string, number> = {};
+    for (const row of activationRows) {
+      if (row.owner.toHexString() !== myIdentityHex) continue;
+      activated[row.characterId] = row.activatedConstellation;
+    }
+    return activated;
+  }, [activationRows, myIdentityHex]);
   const effectiveConstellation = (characterId: string) =>
     activatedById[characterId] ?? constellationById[characterId] ?? 0;
 
-  const pityByBanner: Record<string, PityInfo> = {};
-  for (const row of bannerPityRows) {
-    if (row.owner.toHexString() !== myIdentityHex) continue;
-    pityByBanner[row.bannerId] = {
-      pullsSinceFiveStar: row.pullsSinceFiveStar,
-      guaranteedFeatured: row.guaranteedFeatured,
-      totalPulls: row.totalPulls,
-    };
-  }
+  const pityByBanner = useMemo(() => {
+    const pity: Record<string, PityInfo> = {};
+    for (const row of bannerPityRows) {
+      if (row.owner.toHexString() !== myIdentityHex) continue;
+      pity[row.bannerId] = {
+        pullsSinceFiveStar: row.pullsSinceFiveStar,
+        guaranteedFeatured: row.guaranteedFeatured,
+        totalPulls: row.totalPulls,
+      };
+    }
+    return pity;
+  }, [bannerPityRows, myIdentityHex]);
 
-  const myWeaponItems = weaponItemRows
-    .filter(row => row.owner.toHexString() === myIdentityHex)
-    .map(row => ({ weaponId: row.weaponId, rarity: row.rarity }));
+  const myWeaponItems = useMemo(
+    () =>
+      weaponItemRows
+        .filter(row => row.owner.toHexString() === myIdentityHex)
+        .map(row => ({ weaponId: row.weaponId, rarity: row.rarity, count: row.count })),
+    [weaponItemRows, myIdentityHex]
+  );
 
   // ---- Player-party (Bars) derivations — all identity comparisons key off the
-  // canonical myIdentityHex, since party_member.identity is the canonical id. ----
-  const myMembership = partyMembers.find(
-    member => member.identity.toHexString() === myIdentityHex
-  );
-  const myPartyId = myMembership?.partyId ?? null;
-  const myRoster =
-    myPartyId !== null ? partyMembers.filter(member => member.partyId === myPartyId) : [];
+  // canonical myIdentityHex, since party_member.identity is the canonical id.
+  // Memoized on their source snapshots: identity hex-compares are BSATN
+  // serializations, and App re-renders on every server transaction. ----
+  const { myPartyId, myRoster, partyAllyKey } = useMemo(() => {
+    const membership = partyMembers.find(
+      member => member.identity.toHexString() === myIdentityHex
+    );
+    const partyId = membership?.partyId ?? null;
+    const roster =
+      partyId !== null ? partyMembers.filter(member => member.partyId === partyId) : [];
+    return {
+      myPartyId: partyId,
+      myRoster: roster,
+      // Stable key of my party's identities → pushed to the game so PVP skips allies.
+      partyAllyKey: roster
+        .map(member => member.identity.toHexString())
+        .sort()
+        .join(','),
+    };
+  }, [partyMembers, myIdentityHex]);
   const myPartyCount = myRoster.length;
   const isInParty = myPartyId !== null;
-  // Stable key of my party's identities → pushed to the game so PVP skips allies.
-  const partyAllyKey = myRoster
-    .map(member => member.identity.toHexString())
-    .sort()
-    .join(',');
   const isPartyFull = myPartyCount >= RAID_PARTY_SIZE;
-  const myPartyLeaderHex =
-    myPartyId !== null
-      ? parties.find(party => party.id === myPartyId)?.leaderIdentity.toHexString() ?? null
-      : null;
+  const myPartyLeaderHex = useMemo(
+    () =>
+      myPartyId !== null
+        ? parties.find(party => party.id === myPartyId)?.leaderIdentity.toHexString() ?? null
+        : null,
+    [parties, myPartyId]
+  );
   const iAmLeader = myPartyLeaderHex !== null && myPartyLeaderHex === myIdentityHex;
   // All my party members on one page (leader first, then oldest-joined) for the
   // party-management sheet. Player row supplies name / character / online / health.
-  const partyMemberViews = [...myRoster]
-    .sort((a, b) => {
-      const aLeader = a.identity.toHexString() === myPartyLeaderHex;
-      const bLeader = b.identity.toHexString() === myPartyLeaderHex;
-      if (aLeader !== bLeader) return aLeader ? -1 : 1;
-      return a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1;
-    })
-    .map(member => {
-      const hex = member.identity.toHexString();
-      const player = players.find(p => p.identity.toHexString() === hex);
-      return {
-        hex,
-        name: player?.name ?? 'Spēlētājs',
-        activeCharacterId: player?.activeCharacterId ?? '',
-        online: player?.online ?? false,
-        currentHealth: player?.currentHealth ?? 0,
-        isLeader: hex === myPartyLeaderHex,
-        isSelf: hex === myIdentityHex,
-      };
-    });
+  const partyMemberViews = useMemo(
+    () =>
+      [...myRoster]
+        .sort((a, b) => {
+          const aLeader = a.identity.toHexString() === myPartyLeaderHex;
+          const bLeader = b.identity.toHexString() === myPartyLeaderHex;
+          if (aLeader !== bLeader) return aLeader ? -1 : 1;
+          return a.joinedAt.microsSinceUnixEpoch < b.joinedAt.microsSinceUnixEpoch ? -1 : 1;
+        })
+        .map(member => {
+          const hex = member.identity.toHexString();
+          const player = players.find(p => p.identity.toHexString() === hex);
+          return {
+            hex,
+            name: player?.name ?? 'Spēlētājs',
+            activeCharacterId: player?.activeCharacterId ?? '',
+            online: player?.online ?? false,
+            currentHealth: player?.currentHealth ?? 0,
+            isLeader: hex === myPartyLeaderHex,
+            isSelf: hex === myIdentityHex,
+          };
+        }),
+    [myRoster, myPartyLeaderHex, players, myIdentityHex]
+  );
 
   // The tapped target for the slide-out sheet, re-derived from the live player rows.
   const sheetTarget = sheetTargetHex
@@ -330,11 +480,15 @@ export default function App() {
   // Invites addressed to me (the subscription already filters to my canonical id;
   // the extra guard keeps the derivation correct against any cache overlap), newest
   // first so the freshest invite tops the toast stack.
-  const myPendingInvites = myInvites
-    .filter(invite => invite.recipientIdentity.toHexString() === myIdentityHex)
-    .sort((a, b) =>
-      a.createdAt.microsSinceUnixEpoch < b.createdAt.microsSinceUnixEpoch ? 1 : -1
-    );
+  const myPendingInvites = useMemo(
+    () =>
+      myInvites
+        .filter(invite => invite.recipientIdentity.toHexString() === myIdentityHex)
+        .sort((a, b) =>
+          a.createdAt.microsSinceUnixEpoch < b.createdAt.microsSinceUnixEpoch ? 1 : -1
+        ),
+    [myInvites, myIdentityHex]
+  );
 
   // Resolve each pending invite to a display view (kind + other player's name +
   // ready-to-render Latvian message). kind is DISPLAY only: 'request' = the joiner
@@ -344,7 +498,7 @@ export default function App() {
   // The flow drives both the toast copy and which action buttons render (onClick is
   // attached at render time, where the reducer callbacks are in scope).
   type InviteFlow = 'accept' | 'merge' | 'poach_forward' | 'forward' | 'promote';
-  const invitesWithNames = myPendingInvites.map(invite => {
+  const invitesWithNames = useMemo(() => myPendingInvites.map(invite => {
     const kind = invite.kind as 'invite' | 'request' | 'promote';
     const partyLeaderHex = parties
       .find(party => party.id === invite.partyId)
@@ -380,7 +534,7 @@ export default function App() {
                 ? `${name} lūdz pievienoties tavam baram`
                 : `${name} aicina tevi savā barā`;
     return { id: invite.id, kind, name, message, flow };
-  });
+  }), [myPendingInvites, parties, players, isInParty, iAmLeader, myIdentityHex]);
 
   // Live toasts = pending invites not yet toast-dismissed. The Settings missed list
   // shows ALL of invitesWithNames (including dismissed/expired ones).
@@ -413,6 +567,10 @@ export default function App() {
 
   const selectCharacter = useCallback(
     (characterId: string) => {
+      // Stunned = server-owned combat window (HIT-01): the reducer rejects the
+      // switch, so don't optimistically swap the local model either (it would
+      // desync until the next row echo). Covers 1-4 keys AND HUD portrait taps.
+      if (gameRef.current?.isStunned()) return;
       connection?.reducers.setActiveCharacter({ characterId });
       gameRef.current?.setActiveCharacter(characterId);
     },
@@ -605,15 +763,15 @@ export default function App() {
           connection.reducers.updatePosition({ positionX, positionY, positionZ, rotationY }),
         sendCastSkill: (skillId, originX, originZ, directionX, directionZ) =>
           connection.reducers.castSkill({ skillId, originX, originZ, directionX, directionZ }),
-        sendAttackPlayer: (target, damage) =>
-          connection.reducers.attackPlayer({ targetIdentity: target.identity, damage }),
+        sendAttackPlayer: (target, isSkill, comboCount) =>
+          connection.reducers.attackPlayer({ targetIdentity: target.identity, isSkill, comboCount }),
         sendTakeDamage: damage => connection.reducers.takeDamage({ damage }),
         sendHeal: amount => connection.reducers.healInSafeZone({ amount }),
         sendHealParty: comboCount => connection.reducers.healParty({ comboCount }),
-        sendAttackEnemies: (centerX, centerZ, radius, damage, comboCount) =>
-          connection.reducers.attackEnemies({ centerX, centerZ, radius, damage, comboCount }),
-        sendAttackRay: (originX, originZ, directionX, directionZ, range, hitRadius, damage, comboCount) =>
-          connection.reducers.attackRay({ originX, originZ, dirX: directionX, dirZ: directionZ, range, hitRadius, damage, comboCount }),
+        sendAttackEnemies: (centerX, centerZ, radius, isSkill, comboCount) =>
+          connection.reducers.attackEnemies({ centerX, centerZ, radius, isSkill, comboCount }),
+        sendAttackRay: (originX, originZ, directionX, directionZ, range, hitRadius, isSkill, comboCount) =>
+          connection.reducers.attackRay({ originX, originZ, dirX: directionX, dirZ: directionZ, range, hitRadius, isSkill, comboCount }),
         sendCollectGem: dropId => connection.reducers.collectGem({ dropId }),
         sendCollectShard: dropId => {
           // A pickup is the only shard GAIN the client itself initiates — record it
@@ -624,22 +782,32 @@ export default function App() {
         },
         sendFallToDeath: () => connection.reducers.fallToDeath({}),
       },
-      setHudState
+      setHudState,
+      (durationSeconds, intensity) =>
+        callSfxPopup('STUNNED!', { seconds: durationSeconds, intensity })
     );
     game.onPartySlotRequested = slotIndex => {
       const characterId = partyRef.current[slotIndex];
       if (characterId) selectCharacter(characterId);
     };
+    // MY confirmed ground-drop pickups → feed rows (sound plays in the game layer).
+    game.onPickup = pushPickup;
+    game.onDeathChange = setIsDead;
     // Tap/click a remote player's floating nameplate → open their slide-out sheet.
     game.setOnSelectPlayer(hex => setSheetTargetHex(hex));
+    // The [pixelFilter] effect only fires on toggle changes; new games read the
+    // persisted value directly so a reconnect keeps the chosen render path.
+    game.setPixelFilter(localStorage.getItem('settings.pixelFilter') !== '0');
     game.start();
     gameRef.current = game;
+    // Seed the world state that arrived before this game instance existed.
+    gameTables.syncAll(game);
 
     return () => {
       game.dispose();
       gameRef.current = null;
     };
-  }, [connection, hasJoined, selectCharacter]);
+  }, [connection, hasJoined, selectCharacter, pushPickup, callSfxPopup, gameTables]);
 
   useEffect(() => {
     gameRef.current?.syncRemotePlayers(players, myIdentityHex);
@@ -647,24 +815,8 @@ export default function App() {
   }, [players, myPlayer, myIdentityHex]);
 
   useEffect(() => {
-    gameRef.current?.syncGemDrops(gemDropRows);
-  }, [gemDropRows]);
-
-  useEffect(() => {
-    gameRef.current?.syncShardDrops(shardDropRows);
-  }, [shardDropRows]);
-
-  useEffect(() => {
     gameRef.current?.setPartyAllies(partyAllyKey ? partyAllyKey.split(',') : []);
   }, [partyAllyKey]);
-
-  useEffect(() => {
-    gameRef.current?.syncEnemies(enemyRows);
-  }, [enemyRows]);
-
-  useEffect(() => {
-    gameRef.current?.syncGoliaths(goliathRows);
-  }, [goliathRows]);
 
   // Shard counter flash + movement toast, driven by the reactive transcendShards diff.
   useEffect(() => {
@@ -691,6 +843,11 @@ export default function App() {
         text: wasPvpKill ? 'Zvaigžņu šķemba nozagta!' : 'Zvaigžņu šķemba nokrita',
         key: now,
       });
+      // Theft: descending "stolen" sting + a red minus row in the pickup feed.
+      if (wasPvpKill) {
+        gameRef.current?.playShardLossSound();
+        pushPickup('shardLoss', prev - shards);
+      }
     }
   }, [myPlayer?.transcendShards]);
 
@@ -729,6 +886,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('settings.hudTheme', hudTheme);
   }, [hudTheme]);
+  useEffect(() => {
+    localStorage.setItem('settings.pixelFilter', pixelFilter ? '1' : '0');
+    gameRef.current?.setPixelFilter(pixelFilter);
+  }, [pixelFilter]);
 
   // ESC opens settings (closes the gacha screen first if it's open). The Radix
   // dialog handles ESC-to-close itself, so here we only need the open path.
@@ -797,6 +958,9 @@ export default function App() {
           ))}
         </div>
       )}
+      <SfxPopup state={sfxPopup} />
+      <PickupFeed rows={pickupRows} />
+      <DeathOverlay dead={isDead} />
       <Hud
         playerName={myPlayer?.name ?? ''}
         health={myPlayer?.currentHealth ?? MAX_HEALTH}
@@ -869,6 +1033,7 @@ export default function App() {
           constellationById={constellationById}
           transcendById={transcendById}
           activatedById={activatedById}
+          partyCharacterIds={partyCharacterIds}
           onView={setCharacterPageId}
           onSetConstellation={setConstellation}
           onTranscend={transcendCharacter}
@@ -887,6 +1052,8 @@ export default function App() {
         showPing={showPing}
         onToggleFps={setShowFps}
         onTogglePing={setShowPing}
+        pixelFilter={pixelFilter}
+        onTogglePixelFilter={setPixelFilter}
         hudTheme={hudTheme}
         onHudThemeChange={setHudTheme}
         missedInvites={invitesWithNames.map(invite => ({

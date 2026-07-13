@@ -30,6 +30,16 @@ export const AccountLink = __t.object("AccountLink", {
 });
 export type AccountLink = __Infer<typeof AccountLink>;
 
+export const AttackStrike = __t.object("AttackStrike", {
+  unitKind: __t.u32(),
+  unitId: __t.u64(),
+  attackId: __t.string(),
+  landingX: __t.f32(),
+  landingZ: __t.f32(),
+  radius: __t.f32(),
+});
+export type AttackStrike = __Infer<typeof AttackStrike>;
+
 export const BannerPity = __t.object("BannerPity", {
   id: __t.u64(),
   owner: __t.identity(),
@@ -69,8 +79,24 @@ export const Enemy = __t.object("Enemy", {
   aggroExpiresAtMicros: __t.u64(),
   alive: __t.bool(),
   respawnAtMicros: __t.u64(),
+  hopStartedAtMicros: __t.u64(),
+  hopDurationMicros: __t.u64(),
+  hopTargetX: __t.f32(),
+  hopTargetZ: __t.f32(),
+  patrolTargetX: __t.f32(),
+  patrolTargetZ: __t.f32(),
+  restUntilMicros: __t.u64(),
 });
 export type Enemy = __Infer<typeof Enemy>;
+
+export const EnemyHit = __t.object("EnemyHit", {
+  attacker: __t.identity(),
+  positionX: __t.f32(),
+  positionZ: __t.f32(),
+  amount: __t.u32(),
+  isCrit: __t.bool(),
+});
+export type EnemyHit = __Infer<typeof EnemyHit>;
 
 export const GemDrop = __t.object("GemDrop", {
   id: __t.u64(),
@@ -163,6 +189,9 @@ export const Player = __t.object("Player", {
   gemsFromKills: __t.u32(),
   gemsCollected: __t.u32(),
   transcendShards: __t.u32(),
+  skillReadyAtMicros: __t.u64(),
+  skillWindowEndsAtMicros: __t.u64(),
+  stunnedUntilMicros: __t.u64(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -188,6 +217,8 @@ export type Puppet = __Infer<typeof Puppet>;
 export const PvpHit = __t.object("PvpHit", {
   target: __t.identity(),
   amount: __t.u32(),
+  attacker: __t.identity(),
+  isCrit: __t.bool(),
 });
 export type PvpHit = __Infer<typeof PvpHit>;
 
@@ -246,6 +277,7 @@ export const RestoreWeaponItemRow = __t.object("RestoreWeaponItemRow", {
   owner: __t.identity(),
   weaponId: __t.string(),
   rarity: __t.u32(),
+  count: __t.u32(),
 });
 export type RestoreWeaponItemRow = __Infer<typeof RestoreWeaponItemRow>;
 
@@ -270,12 +302,34 @@ export const SkillCast = __t.object("SkillCast", {
 });
 export type SkillCast = __Infer<typeof SkillCast>;
 
+export const UnitAttack = __t.object("UnitAttack", {
+  id: __t.u64(),
+  unitKind: __t.u32(),
+  unitId: __t.u64(),
+  state: __t.u32(),
+  attackId: __t.string(),
+  startedAtMicros: __t.u64(),
+  strikeAtMicros: __t.u64(),
+  recoveryEndsAtMicros: __t.u64(),
+  cooldownUntilMicros: __t.u64(),
+  landingX: __t.f32(),
+  landingZ: __t.f32(),
+  radius: __t.f32(),
+  castX: __t.f32(),
+  castZ: __t.f32(),
+  strikeResolved: __t.bool(),
+  poise: __t.u32(),
+  basicCooldownUntilMicros: __t.u64(),
+});
+export type UnitAttack = __Infer<typeof UnitAttack>;
+
 export const WeaponItem = __t.object("WeaponItem", {
   id: __t.u64(),
   owner: __t.identity(),
   weaponId: __t.string(),
   rarity: __t.u32(),
   acquiredAt: __t.timestamp(),
+  count: __t.u32(),
 });
 export type WeaponItem = __Infer<typeof WeaponItem>;
 

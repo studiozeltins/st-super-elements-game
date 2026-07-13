@@ -187,6 +187,10 @@ export function createCharacterModel(character: CharacterDefinition): CharacterM
       transparent: true,
       opacity: 0.5,
       side: THREE.DoubleSide,
+      // Depth-tested so the ring never overlays character sprites (self or
+      // others). The ring is small and rides the flat ground the character
+      // stands on, so terrain burial isn't a concern here.
+      depthWrite: false,
     })
   );
   aura.rotation.x = -Math.PI / 2;

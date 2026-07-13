@@ -7,6 +7,7 @@ export type DamageKind =
   | 'taken'
   | 'takenCrit'
   | 'pvp'
+  | 'pvpCrit'
   | 'heal';
 
 export interface DamageKindStyle {
@@ -18,12 +19,13 @@ export interface DamageKindStyle {
 export const DAMAGE_KIND_STYLES: Record<DamageKind, DamageKindStyle> = {
   normal: { cssColor: '#f4f1e8', fontScale: 1 },
   skill: { cssColor: '#7ec8ff', fontScale: 1.2 },
-  crit: { cssColor: '#ffcc33', fontScale: 1.85 },
+  crit: { cssColor: '#ff2bd6', fontScale: 1.85 },
   reaction: { cssColor: '#ff8bd0', fontScale: 1.4 },
   // Damage the local player receives: red from enemies (bigger on crit),
   // purple from other players. Heals show green with a + prefix.
   taken: { cssColor: '#ff5c3c', fontScale: 1 },
   takenCrit: { cssColor: '#ff5c3c', fontScale: 1.7 },
   pvp: { cssColor: '#c07dff', fontScale: 1.15 },
+  pvpCrit: { cssColor: '#c07dff', fontScale: 1.7 },
   heal: { cssColor: '#7ec843', fontScale: 1 },
 };

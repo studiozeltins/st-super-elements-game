@@ -44,6 +44,7 @@ import AttackRayReducer from "./attack_ray_reducer";
 import CastSkillReducer from "./cast_skill_reducer";
 import CollectGemReducer from "./collect_gem_reducer";
 import CollectShardReducer from "./collect_shard_reducer";
+import ConsolidateWeaponItemsReducer from "./consolidate_weapon_items_reducer";
 import DebugBotsAcceptReducer from "./debug_bots_accept_reducer";
 import DebugClearBotsReducer from "./debug_clear_bots_reducer";
 import DebugInviteReducer from "./debug_invite_reducer";
@@ -85,9 +86,11 @@ import UpdatePositionReducer from "./update_position_reducer";
 
 // Import all table schema definitions
 import AccountLinkRow from "./account_link_table";
+import AttackStrikeRow from "./attack_strike_table";
 import BannerPityRow from "./banner_pity_table";
 import CharacterActivationRow from "./character_activation_table";
 import EnemyRow from "./enemy_table";
+import EnemyHitRow from "./enemy_hit_table";
 import GemDropRow from "./gem_drop_table";
 import GoliathRow from "./goliath_table";
 import HealEventRow from "./heal_event_table";
@@ -102,6 +105,7 @@ import PvpHitRow from "./pvp_hit_table";
 import RangedAttackRow from "./ranged_attack_table";
 import ShardDropRow from "./shard_drop_table";
 import SkillCastRow from "./skill_cast_table";
+import UnitAttackRow from "./unit_attack_table";
 import WeaponItemRow from "./weapon_item_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -119,6 +123,14 @@ const tablesSchema = __schema({
       { name: 'account_link_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
   }, AccountLinkRow),
+  attackStrike: __table({
+    name: 'attack_strike',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, AttackStrikeRow),
   bannerPity: __table({
     name: 'banner_pity',
     indexes: [
@@ -163,6 +175,14 @@ const tablesSchema = __schema({
       { name: 'enemy_enemy_id_key', constraint: 'unique', columns: ['enemyId'] },
     ],
   }, EnemyRow),
+  enemyHit: __table({
+    name: 'enemy_hit',
+    indexes: [
+    ],
+    constraints: [
+    ],
+    event: true,
+  }, EnemyHitRow),
   gemDrop: __table({
     name: 'gem_drop',
     indexes: [
@@ -321,6 +341,21 @@ const tablesSchema = __schema({
     ],
     event: true,
   }, SkillCastRow),
+  unitAttack: __table({
+    name: 'unit_attack',
+    indexes: [
+      { accessor: 'id', name: 'unit_attack_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+      { accessor: 'by_unit', name: 'unit_attack_unit_kind_unit_id_idx_btree', algorithm: 'btree', columns: [
+        'unitKind',
+        'unitId',
+      ] },
+    ],
+    constraints: [
+      { name: 'unit_attack_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, UnitAttackRow),
   weaponItem: __table({
     name: 'weapon_item',
     indexes: [
@@ -329,6 +364,10 @@ const tablesSchema = __schema({
       ] },
       { accessor: 'owner', name: 'weapon_item_owner_idx_btree', algorithm: 'btree', columns: [
         'owner',
+      ] },
+      { accessor: 'by_owner_weapon', name: 'weapon_item_owner_weapon_id_idx_btree', algorithm: 'btree', columns: [
+        'owner',
+        'weaponId',
       ] },
     ],
     constraints: [
@@ -349,6 +388,7 @@ const reducersSchema = __reducers(
   __reducerSchema("cast_skill", CastSkillReducer),
   __reducerSchema("collect_gem", CollectGemReducer),
   __reducerSchema("collect_shard", CollectShardReducer),
+  __reducerSchema("consolidate_weapon_items", ConsolidateWeaponItemsReducer),
   __reducerSchema("debug_bots_accept", DebugBotsAcceptReducer),
   __reducerSchema("debug_clear_bots", DebugClearBotsReducer),
   __reducerSchema("debug_invite", DebugInviteReducer),

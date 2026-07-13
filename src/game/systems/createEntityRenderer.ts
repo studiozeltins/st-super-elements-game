@@ -7,19 +7,51 @@ export type GetGroundHeight = (x: number, z: number, maxSurfaceY?: number) => nu
 /** Floats the amount a row's health just fell — the number is server-driven. */
 export type HealthDropReporter = (worldPosition: THREE.Vector3, amount: number) => void;
 
+/**
+ * One unit's live attack, as the client sees it: the phase comes straight from
+ * the unit_attack row state and the progress is re-derived from the ROW's micros
+ * (arrival-anchored, same model as the telegraph) — never a client-local timer.
+ */
+export interface AttackAnimationView {
+  attackId: string;
+  phase: 'windup' | 'strike' | 'recovery';
+  /** 0..1 within the current phase, client-derived from the row's micros. */
+  phaseProgress: number;
+  /** Where the unit was rooted when it cast (the leap's launch point). */
+  castX: number;
+  castZ: number;
+  /** The LOCKED landing the strike resolves at — immutable once cast. */
+  landingX: number;
+  landingZ: number;
+}
+
 /** Per-entity locomotion + death animation, closed over its own model and parts. */
-export interface EntityAnimation {
+export interface EntityAnimation<Row = unknown> {
   /** One alive frame: limb swing / body bob for the given motion state. */
   animateMovement(elapsedSeconds: number, isMoving: boolean): void;
   /** Death pose for progress 0 (just died) → 1 (fully toppled and hidden). */
   animateDeath(progress: number): void;
+  /**
+   * OPTIONAL per-frame pose derived from the entity's OWN latest table row
+   * (e.g. the slime hop arc riding the row's hop micros), applied right after
+   * animateMovement each alive frame. Kinds whose rows carry no pose data
+   * simply omit it.
+   */
+  animateFromRow?(row: Row): void;
+  /**
+   * OPTIONAL per-phase attack pose (ANIM-03), applied AFTER animateMovement each
+   * frame while the unit has a live attack view. Kinds without attacks (camp
+   * enemies today) simply omit it and compile unchanged; implementers must leave
+   * the rig neutral when no view arrives (restore inside animateMovement/Death).
+   */
+  animateAttack?(view: AttackAnimationView): void;
 }
 
-export interface SpawnedEntity {
+export interface SpawnedEntity<Row = unknown> {
   model: EnemyModel;
   collisionRadius: number;
   collisionMass: number;
-  animation: EntityAnimation;
+  animation: EntityAnimation<Row>;
 }
 
 /**
@@ -39,7 +71,7 @@ export interface EntityKindAdapter<Row> {
   readIsAlive(row: Row): boolean;
   /** Client-computed base stipend shown in the gem pill (server owns payout). */
   displayBaseGems(row: Row): number;
-  spawn(row: Row): SpawnedEntity;
+  spawn(row: Row): SpawnedEntity<Row>;
   /** One-shot effect when an entity watched alive dies (e.g. a death burst). */
   onKilled?(worldPosition: THREE.Vector3): void;
 }
@@ -53,9 +85,27 @@ export interface EntityRendererOptions<Row> {
 export interface EntityRenderer<Row> {
   /** Reconciles the live set against the latest table rows (insert/update/remove). */
   syncRows(rows: readonly Row[]): void;
+  /**
+   * Replaces the live attack views wholesale (keyed by the same id string
+   * syncRows keys entities by). Entities with a view get animateAttack each
+   * update; during windup they face the locked landing instead of their target.
+   */
+  setAttackViews(views: Map<string, AttackAnimationView>): void;
   /** Interpolates each model toward its server target and animates it. */
   update(deltaSeconds: number, getGroundHeight: GetGroundHeight): void;
-  getAlivePositions(): THREE.Vector3[];
+  /**
+   * Visits each live entity's AUTHORITATIVE aim target: the server position
+   * (targetX/Z) with the display height. Zero-allocation on purpose — hit
+   * checks and target searches run per projectile per frame, and the previous
+   * array-of-fresh-Vector3s shape was steady combat GC pressure.
+   */
+  forEachAliveTarget(visit: (x: number, y: number, z: number) => void): void;
+  /**
+   * Visits each live entity at its DISPLAY (lerped mesh) position — for effects
+   * that must track what the eye sees (footstep audio), unlike forEachAliveTarget's
+   * authoritative aim targets. The Vector3 is the live mesh position: read, don't keep.
+   */
+  forEachAliveUnit(visit: (key: string, worldPosition: THREE.Vector3, row: Row) => void): void;
   /** Appends live pushable bodies (position refs) into the shared, reused array. */
   collectCollisionBodies(target: CollisionBody[]): void;
   dispose(): void;
@@ -76,10 +126,12 @@ const MOTION_EPSILON = 0.02;
  */
 const OVERLAY_VISIBLE_SECONDS = 4;
 
-interface RenderedEntity {
+interface RenderedEntity<Row> {
   model: EnemyModel;
-  animation: EntityAnimation;
+  animation: EntityAnimation<Row>;
   collisionBody: CollisionBody;
+  /** Latest synced table row — exposed through forEachAliveUnit for kind lookups. */
+  row: Row;
   displayBaseGems: number;
   targetX: number;
   targetZ: number;
@@ -97,10 +149,12 @@ export function createEntityRenderer<Row>(
   options: EntityRendererOptions<Row>
 ): EntityRenderer<Row> {
   const { scene, adapter, onHealthDrop } = options;
-  const entities = new Map<string, RenderedEntity>();
+  const entities = new Map<string, RenderedEntity<Row>>();
+  // Live attack views keyed by entity id string; replaced wholesale each refresh.
+  let attackViews: Map<string, AttackAnimationView> = new Map();
   let elapsedSeconds = 0;
 
-  function insert(row: Row): RenderedEntity {
+  function insert(row: Row): RenderedEntity<Row> {
     const spawned = adapter.spawn(row);
     scene.add(spawned.model.group);
     const targetX = adapter.readPositionX(row);
@@ -116,6 +170,7 @@ export function createEntityRenderer<Row>(
         radius: spawned.collisionRadius,
         mass: spawned.collisionMass,
       },
+      row,
       displayBaseGems: adapter.displayBaseGems(row),
       targetX,
       targetZ,
@@ -131,7 +186,7 @@ export function createEntityRenderer<Row>(
     };
   }
 
-  function revive(entity: RenderedEntity) {
+  function revive(entity: RenderedEntity<Row>) {
     entity.deathStartedAt = null;
     entity.lastDamagedAt = -Infinity; // a full-health revived enemy shows no bar
     const group = entity.model.group;
@@ -140,14 +195,14 @@ export function createEntityRenderer<Row>(
     group.position.set(entity.targetX, group.position.y, entity.targetZ);
   }
 
-  function kill(entity: RenderedEntity) {
+  function kill(entity: RenderedEntity<Row>) {
     entity.deathStartedAt = elapsedSeconds;
     if (!adapter.onKilled) return;
     const position = entity.model.group.position;
     adapter.onKilled(position.clone().setY(position.y + 0.8));
   }
 
-  function remove(key: string, entity: RenderedEntity) {
+  function remove(key: string, entity: RenderedEntity<Row>) {
     disposeEnemyModel(entity.model);
     scene.remove(entity.model.group);
     entities.delete(key);
@@ -163,6 +218,7 @@ export function createEntityRenderer<Row>(
         entities.set(key, insert(row));
         continue;
       }
+      existing.row = row;
       existing.targetX = adapter.readPositionX(row);
       existing.targetZ = adapter.readPositionZ(row);
       existing.maxHealth = adapter.readMaxHealth(row);
@@ -189,7 +245,7 @@ export function createEntityRenderer<Row>(
     }
   }
 
-  function refreshOverlay(entity: RenderedEntity) {
+  function refreshOverlay(entity: RenderedEntity<Row>) {
     // Hidden until hit, then shown for a short window after the last hit.
     const recentlyHit = elapsedSeconds - entity.lastDamagedAt < OVERLAY_VISIBLE_SECONDS;
     entity.model.overlay.sprite.visible = entity.alive && recentlyHit;
@@ -202,7 +258,7 @@ export function createEntityRenderer<Row>(
     });
   }
 
-  function deathProgress(entity: RenderedEntity): number {
+  function deathProgress(entity: RenderedEntity<Row>): number {
     if (entity.deathStartedAt === null) return 1;
     return Math.min(1, (elapsedSeconds - entity.deathStartedAt) / adapter.deathDurationSeconds);
   }
@@ -210,7 +266,7 @@ export function createEntityRenderer<Row>(
   function update(deltaSeconds: number, getGroundHeight: GetGroundHeight) {
     elapsedSeconds += deltaSeconds;
     const lerpFactor = Math.min(1, deltaSeconds * LERP_RATE);
-    for (const entity of entities.values()) {
+    for (const [key, entity] of entities) {
       refreshOverlay(entity);
       if (!entity.alive) {
         entity.animation.animateDeath(deathProgress(entity));
@@ -229,26 +285,40 @@ export function createEntityRenderer<Row>(
       }
       group.position.y = getGroundHeight(group.position.x, group.position.z);
       const isMoving = horizontalGap > MOTION_EPSILON;
-      if (isMoving) group.lookAt(entity.targetX, group.position.y, entity.targetZ);
+      const view = attackViews.get(key);
+      // A winding-up unit is rooted at its cast point: instead of lerp-chasing a
+      // movement target, the crouch faces the LOCKED landing it will leap to
+      // (D4-12 — the aim read). Strike/recovery keep the normal travel facing.
+      if (view?.phase === 'windup') {
+        group.lookAt(view.landingX, group.position.y, view.landingZ);
+      } else if (isMoving) {
+        group.lookAt(entity.targetX, group.position.y, entity.targetZ);
+      }
       entity.animation.animateMovement(elapsedSeconds, isMoving);
+      entity.animation.animateFromRow?.(entity.row);
+      if (view) entity.animation.animateAttack?.(view);
     }
   }
 
   return {
     syncRows,
+    setAttackViews(views) {
+      attackViews = views;
+    },
     update,
-    getAlivePositions() {
-      // Return the AUTHORITATIVE server position (targetX/Z), not the lerped
+    forEachAliveTarget(visit) {
+      // Visit the AUTHORITATIVE server position (targetX/Z), not the lerped
       // display mesh, so the player's aim and client hit-detection agree with the
       // server's damage check. The mesh lags a moving enemy, which made shots
       // land visually but miss server-side ("hitting them but no damage").
-      const positions: THREE.Vector3[] = [];
       for (const entity of entities.values()) {
-        if (entity.alive) {
-          positions.push(new THREE.Vector3(entity.targetX, entity.model.group.position.y, entity.targetZ));
-        }
+        if (entity.alive) visit(entity.targetX, entity.model.group.position.y, entity.targetZ);
       }
-      return positions;
+    },
+    forEachAliveUnit(visit) {
+      for (const [key, entity] of entities) {
+        if (entity.alive) visit(key, entity.model.group.position, entity.row);
+      }
     },
     collectCollisionBodies(target) {
       for (const entity of entities.values()) {

@@ -12,7 +12,6 @@ import {
   createCampfire,
   createCanopyTree,
   createFlower,
-  createGrassTuft,
   createMushroom,
   createPalmTree,
   createRockSpire,
@@ -23,6 +22,11 @@ import {
   type SeededRandom,
   type WorldAsset,
 } from './assets';
+import { createGrassField } from './createGrassField';
+import { CAMPFIRE_LIGHT_NAME } from './assets/createCampfire';
+import { createFountain, createHouse, createWindmill } from './createPlazaStructures';
+import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
+import type { ScorchMapUniforms } from '../systems/createScorchMap';
 
 export interface MondstadtWorld {
   group: THREE.Group;
@@ -35,6 +39,11 @@ export interface MondstadtWorld {
   getGroundHeight(x: number, z: number, maxSurfaceY?: number): number;
   /** Solid trunks/walls entities cannot pass through (trees, spires, houses…). */
   getObstacles(): readonly ObstacleCircle[];
+  /**
+   * Re-centers the sun's shadow camera on the player (texel-snapped so shadow
+   * edges don't crawl while walking). Call once per frame.
+   */
+  setShadowFocus(x: number, z: number): void;
   dispose(): void;
 }
 
@@ -47,25 +56,82 @@ interface Platform {
 
 const WORLD_DECOR_SEED = 0xa11ce;
 
+// getGroundHeight is HOT (per entity, per debris particle, and per telegraph
+// vertex each drape). Scanning all ~100 platforms with hypot per call was a
+// large share of combat frame CPU — so platforms are bucketed once into a
+// coarse XZ grid and each query touches only its own cell's bucket.
+const PLATFORM_CELL_SIZE = 8;
+// Offset keeps cell coordinates positive so one number can key the Map.
+const PLATFORM_CELL_OFFSET = 512;
+
+function platformCellKey(cellX: number, cellZ: number): number {
+  return (cellX + PLATFORM_CELL_OFFSET) * (PLATFORM_CELL_OFFSET * 2) + (cellZ + PLATFORM_CELL_OFFSET);
+}
+
+/** Buckets each platform into every grid cell its circle overlaps. */
+function buildPlatformGrid(platforms: readonly Platform[]): Map<number, Platform[]> {
+  const grid = new Map<number, Platform[]>();
+  for (const platform of platforms) {
+    const minCellX = Math.floor((platform.x - platform.radius) / PLATFORM_CELL_SIZE);
+    const maxCellX = Math.floor((platform.x + platform.radius) / PLATFORM_CELL_SIZE);
+    const minCellZ = Math.floor((platform.z - platform.radius) / PLATFORM_CELL_SIZE);
+    const maxCellZ = Math.floor((platform.z + platform.radius) / PLATFORM_CELL_SIZE);
+    for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+      for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ++) {
+        const key = platformCellKey(cellX, cellZ);
+        const bucket = grid.get(key);
+        if (bucket) bucket.push(platform);
+        else grid.set(key, [platform]);
+      }
+    }
+  }
+  return grid;
+}
+
 export function isInsideSafeZone(positionX: number, positionZ: number): boolean {
   return Math.hypot(positionX, positionZ) <= SAFE_ZONE_RADIUS;
 }
 
-function createLighting(group: THREE.Group) {
+// The sun's constant direction offset from the shadow focus point.
+const SUN_OFFSET = new THREE.Vector3(30, 50, 20);
+// Half-extent of the player-following shadow camera. A world-spanning camera
+// (±140) gave ~0.27u per shadow texel — the "blocky enemy shadows". Following
+// the player at ±45 is 3x the texel density from the same 1024 map.
+const SHADOW_FOCUS_SPAN = 45;
+const SHADOW_MAP_SIZE = 1024;
+
+// Fixed light-space basis for texel snapping (the sun never moves relative to
+// the focus): moving the shadow camera in world-sized steps that are NOT whole
+// shadow texels makes every shadow edge crawl ("shimmer") as the player walks.
+const sunDirection = SUN_OFFSET.clone().negate().normalize();
+const sunRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), sunDirection).normalize();
+const sunUp = new THREE.Vector3().crossVectors(sunDirection, sunRight).normalize();
+const shadowFocusScratch = new THREE.Vector3();
+
+function createLighting(group: THREE.Group): THREE.DirectionalLight {
   const skyLight = new THREE.HemisphereLight(0xbfe3ff, 0x4a7a3a, 0.9);
+  // EVERY light must be visible to EVERY camera layer (world pass + overlay
+  // pass). If a pass culls lights, the renderer's lights-state hash flips each
+  // frame and three re-initializes every lit material per pass — a massive
+  // getParameters/getProgramCacheKey CPU storm.
+  skyLight.layers.enableAll();
   group.add(skyLight);
 
   const sunLight = new THREE.DirectionalLight(0xfff2d8, 1.4);
-  sunLight.position.set(30, 50, 20);
+  sunLight.layers.enableAll();
+  sunLight.position.copy(SUN_OFFSET);
   sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(2048, 2048);
-  const shadowSpan = WORLD_BOUND + 10;
-  sunLight.shadow.camera.left = -shadowSpan;
-  sunLight.shadow.camera.right = shadowSpan;
-  sunLight.shadow.camera.top = shadowSpan;
-  sunLight.shadow.camera.bottom = -shadowSpan;
+  sunLight.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+  sunLight.shadow.camera.left = -SHADOW_FOCUS_SPAN;
+  sunLight.shadow.camera.right = SHADOW_FOCUS_SPAN;
+  sunLight.shadow.camera.top = SHADOW_FOCUS_SPAN;
+  sunLight.shadow.camera.bottom = -SHADOW_FOCUS_SPAN;
   sunLight.shadow.camera.far = 400;
-  group.add(sunLight);
+  // Softer read: shadows darken instead of blacking out (the "harsh" note).
+  sunLight.shadow.intensity = 0.72;
+  sunLight.shadow.bias = -0.0005;
+  group.add(sunLight, sunLight.target);
+  return sunLight;
 }
 
 function createPlaza(group: THREE.Group) {
@@ -85,128 +151,6 @@ function createPlaza(group: THREE.Group) {
   safeZoneRing.rotation.x = -Math.PI / 2;
   safeZoneRing.position.y = 0.05;
   group.add(safeZoneRing);
-}
-
-function createHouse(random: SeededRandom, angleRadians: number, distanceFromCenter: number) {
-  const house = new THREE.Group();
-  const wallColors = [0xe8dcc0, 0xdccfb4, 0xf0e6d0];
-  const roofColors = [0xb0452f, 0x3d7a78, 0x8a5a3a];
-  const wallColor = wallColors[Math.floor(random() * wallColors.length)];
-  const roofColor = roofColors[Math.floor(random() * roofColors.length)];
-
-  const walls = new THREE.Mesh(
-    new THREE.BoxGeometry(4, 3.4, 4),
-    new THREE.MeshLambertMaterial({ color: wallColor })
-  );
-  walls.position.y = 1.7;
-  walls.castShadow = true;
-  house.add(walls);
-
-  const roof = new THREE.Mesh(
-    new THREE.ConeGeometry(3.4, 2.4, 4),
-    new THREE.MeshLambertMaterial({ color: roofColor })
-  );
-  roof.position.y = 4.6;
-  roof.rotation.y = Math.PI / 4;
-  roof.castShadow = true;
-  house.add(roof);
-
-  house.position.set(
-    Math.cos(angleRadians) * distanceFromCenter,
-    0,
-    Math.sin(angleRadians) * distanceFromCenter
-  );
-  house.lookAt(0, 0, 0);
-  return house;
-}
-
-function createWindmill(): { group: THREE.Group; blades: THREE.Group } {
-  const windmill = new THREE.Group();
-  const tower = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.4, 2, 10, 8),
-    new THREE.MeshLambertMaterial({ color: 0xd8cfc0 })
-  );
-  tower.position.y = 5;
-  tower.castShadow = true;
-  windmill.add(tower);
-
-  const blades = new THREE.Group();
-  const bladeMaterial = new THREE.MeshLambertMaterial({ color: 0xf5efe0 });
-  for (let bladeIndex = 0; bladeIndex < 4; bladeIndex++) {
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5.4, 0.12), bladeMaterial);
-    blade.position.y = 2.7;
-    const bladeArm = new THREE.Group();
-    bladeArm.add(blade);
-    bladeArm.rotation.z = (bladeIndex * Math.PI) / 2;
-    blades.add(bladeArm);
-  }
-  blades.position.set(0, 9, 2.1);
-  windmill.add(blades);
-
-  windmill.position.set(0, 0, -10);
-  return { group: windmill, blades };
-}
-
-function createFountain(): THREE.Group {
-  const fountain = new THREE.Group();
-  const basin = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.6, 2.9, 0.8, 12),
-    new THREE.MeshLambertMaterial({ color: 0x9a9284 })
-  );
-  basin.position.y = 0.4;
-  basin.castShadow = true;
-  fountain.add(basin);
-
-  const water = new THREE.Mesh(
-    new THREE.CircleGeometry(2.3, 12),
-    new THREE.MeshBasicMaterial({ color: 0x3aa0ff })
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = 0.82;
-  fountain.add(water);
-  return fountain;
-}
-
-function createInstancedGroundCover(group: THREE.Group, random: SeededRandom) {
-  const placeOnTerrain = (
-    geometry: THREE.BufferGeometry,
-    material: THREE.Material,
-    count: number,
-    minRadius: number,
-    yOffset: number
-  ) => {
-    const landPositions = Array.from({ length: count }, () =>
-      findRandomLandPosition(random, minRadius)
-    ).filter((position): position is { x: number; z: number } => position !== null);
-    const instancedMesh = new THREE.InstancedMesh(geometry, material, landPositions.length);
-    const dummy = new THREE.Object3D();
-    landPositions.forEach((landPosition, instanceIndex) => {
-      dummy.position.set(
-        landPosition.x,
-        getTerrainHeight(landPosition.x, landPosition.z) + yOffset,
-        landPosition.z
-      );
-      dummy.rotation.set(0, random() * Math.PI, 0);
-      dummy.updateMatrix();
-      instancedMesh.setMatrixAt(instanceIndex, dummy.matrix);
-    });
-    group.add(instancedMesh);
-  };
-
-  placeOnTerrain(
-    new THREE.BoxGeometry(0.22, 0.5, 0.22),
-    new THREE.MeshLambertMaterial({ color: 0xfff0a8 }),
-    50,
-    SAFE_ZONE_RADIUS + 1,
-    0.25
-  );
-  placeOnTerrain(
-    new THREE.BoxGeometry(0.1, 0.55, 0.1),
-    new THREE.MeshLambertMaterial({ color: 0x86c86a }),
-    70,
-    SAFE_ZONE_RADIUS + 1,
-    0.27
-  );
 }
 
 interface AssetScatterRule {
@@ -242,7 +186,19 @@ const BRIDGE_WALK_RADIUS = 1.85;
 const PILLAR_STAIR_CLUSTER_COUNT = 5;
 const PILLAR_STEP_HEIGHT = 1.5;
 
-export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
+export interface MondstadtWorldOptions {
+  grass: {
+    bladeCount: number;
+    influence: GroundInfluenceUniforms;
+  };
+  /** Strike-impact scorch map — browns the terrain and dries the grass. */
+  scorch: ScorchMapUniforms;
+}
+
+export function createMondstadtWorld(
+  scene: THREE.Scene,
+  options: MondstadtWorldOptions
+): MondstadtWorld {
   scene.background = new THREE.Color(0x8ecae6);
   scene.fog = new THREE.Fog(0x8ecae6, 80, 300);
 
@@ -256,12 +212,21 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     asset.group.position.set(x, groundY, z);
     group.add(asset.group);
     if (collisionRadius) obstacles.push({ x, y: groundY, z, radius: collisionRadius });
-    if (asset.platformRadius && asset.platformTopHeight) {
+    for (const solid of asset.obstacles ?? []) {
+      obstacles.push({
+        x: x + solid.x,
+        y: groundY,
+        z: z + solid.z,
+        radius: solid.radius,
+        height: solid.height,
+      });
+    }
+    for (const platform of asset.platforms ?? []) {
       platforms.push({
-        x,
-        z,
-        radius: asset.platformRadius,
-        topY: groundY + asset.platformTopHeight,
+        x: x + platform.x,
+        z: z + platform.z,
+        radius: platform.radius,
+        topY: groundY + platform.topHeight,
       });
     }
   }
@@ -333,7 +298,7 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
       plankMatrices
     );
     addInstancedMatrices(
-      new THREE.CylinderGeometry(0.09, 0.09, 1.1, 5),
+      new THREE.BoxGeometry(0.16, 1.1, 0.16),
       new THREE.MeshLambertMaterial({ color: 0x6b4a2f }),
       postMatrices
     );
@@ -372,19 +337,22 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
       }
     }
 
+    // A plain cuboid pillar: reads voxel natively and tolerates per-pillar
+    // y-stretch (voxel cells would deform under the non-uniform scale).
     addInstancedMatrices(
-      new THREE.CylinderGeometry(1.15, 1.35, 1, 7),
+      new THREE.BoxGeometry(2.2, 1, 2.2),
       new THREE.MeshLambertMaterial({ color: 0x5a6678 }),
       pillarMatrices
     );
   }
 
-  createLighting(group);
-  group.add(createTerrainMesh());
+  const sunLight = createLighting(group);
+  group.add(createTerrainMesh(options.scorch));
   createPlaza(group);
   group.add(createFountain());
   obstacles.push({ x: 0, y: 0, z: 0, radius: 3.0 }); // fountain basin, plaza is flat at y=0
-  createInstancedGroundCover(group, random);
+  const grassField = createGrassField({ ...options.grass, scorch: options.scorch });
+  group.add(grassField.group);
   buildBridges();
   buildPillarStairs();
 
@@ -410,9 +378,10 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
   });
 
   const scatterRules: AssetScatterRule[] = [
-    // Boulders stay obstacle-free: they are climbable platforms.
+    // Boulders and spires declare their own per-piece footprints (asset.obstacles):
+    // boulders block their base but stay jump-climbable; spires block full height.
     { create: createBoulder, count: 26, minRadius: SAFE_ZONE_RADIUS + 8, maxSlope: 0.9 },
-    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2, collisionRadius: 1.5 },
+    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2 },
     { create: createCanopyTree, count: 8, minRadius: 30, maxSlope: 0.45, collisionRadius: 0.7 },
     {
       create: createPalmTree,
@@ -424,7 +393,6 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     { create: createBush, count: 24, minRadius: SAFE_ZONE_RADIUS + 2, maxSlope: 0.6 },
     { create: createMushroom, count: 12, minRadius: SAFE_ZONE_RADIUS + 4, maxSlope: 0.6 },
     { create: createFlower, count: 16, minRadius: SAFE_ZONE_RADIUS + 1, maxSlope: 0.5 },
-    { create: createGrassTuft, count: 20, minRadius: SAFE_ZONE_RADIUS + 1, maxSlope: 0.5 },
   ];
   for (const rule of scatterRules) scatterAssets(rule);
 
@@ -452,16 +420,47 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
 
   scene.add(group);
 
+  // The world is static: compute every matrix ONCE and freeze the subtree.
+  // Recomputing thousands of prop matrices on every render pass was ~11% of
+  // combat frame CPU. The windmill blades are the only mover — world.update
+  // refreshes just their branch each frame.
+  group.updateMatrixWorld(true);
+  group.matrixWorldAutoUpdate = false;
+
+  // All platforms are placed by now — freeze them into the query grid.
+  const platformGrid = buildPlatformGrid(platforms);
+
+  // Campfire flames flicker — collect the named lights once, wobble per frame.
+  const campfireLights: THREE.PointLight[] = [];
+  group.traverse(node => {
+    if (node.name === CAMPFIRE_LIGHT_NAME) campfireLights.push(node as THREE.PointLight);
+  });
+  let flickerSeconds = 0;
+
   return {
     group,
     update(deltaSeconds) {
       blades.rotation.z += deltaSeconds * 0.6;
+      // The frozen world subtree skips auto matrix updates; push the blades'
+      // rotation through by hand.
+      blades.updateMatrixWorld(true);
+      grassField.update(deltaSeconds);
+      flickerSeconds += deltaSeconds;
+      campfireLights.forEach((light, index) => {
+        light.intensity = 2.5 + Math.sin(flickerSeconds * 9 + index * 2.1) * 0.35;
+      });
     },
     getGroundHeight(x, z, maxSurfaceY = Infinity) {
       let groundHeight = getTerrainHeight(x, z);
-      for (const platform of platforms) {
+      const bucket = platformGrid.get(
+        platformCellKey(Math.floor(x / PLATFORM_CELL_SIZE), Math.floor(z / PLATFORM_CELL_SIZE))
+      );
+      if (!bucket) return groundHeight;
+      for (const platform of bucket) {
         if (platform.topY <= groundHeight || platform.topY > maxSurfaceY) continue;
-        if (Math.hypot(platform.x - x, platform.z - z) <= platform.radius) {
+        const deltaX = platform.x - x;
+        const deltaZ = platform.z - z;
+        if (deltaX * deltaX + deltaZ * deltaZ <= platform.radius * platform.radius) {
           groundHeight = platform.topY;
         }
       }
@@ -470,7 +469,24 @@ export function createMondstadtWorld(scene: THREE.Scene): MondstadtWorld {
     getObstacles() {
       return obstacles;
     },
+    setShadowFocus(x, z) {
+      // Snap the focus to whole shadow texels IN LIGHT SPACE (the sun basis is
+      // fixed, so this is a plain 2D grid snap on the light's right/up axes).
+      const texelSize = (SHADOW_FOCUS_SPAN * 2) / SHADOW_MAP_SIZE;
+      shadowFocusScratch.set(x, 0, z);
+      const rightCoord = shadowFocusScratch.dot(sunRight);
+      const upCoord = shadowFocusScratch.dot(sunUp);
+      shadowFocusScratch
+        .addScaledVector(sunRight, Math.round(rightCoord / texelSize) * texelSize - rightCoord)
+        .addScaledVector(sunUp, Math.round(upCoord / texelSize) * texelSize - upCoord);
+      sunLight.target.position.copy(shadowFocusScratch);
+      sunLight.position.copy(shadowFocusScratch).add(SUN_OFFSET);
+      // The world subtree is matrix-frozen — push the light's move through by hand.
+      sunLight.updateMatrixWorld(true);
+      sunLight.target.updateMatrixWorld(true);
+    },
     dispose() {
+      grassField.dispose();
       scene.remove(group);
       disposeObject(group);
     },

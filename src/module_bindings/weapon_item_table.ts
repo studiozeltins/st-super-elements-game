@@ -16,4 +16,5 @@ export default __t.row({
   weaponId: __t.string().name("weapon_id"),
   rarity: __t.u32(),
   acquiredAt: __t.timestamp().name("acquired_at"),
+  count: __t.u32(),
 });

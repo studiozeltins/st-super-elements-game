@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CHARACTERS, healSpecFor, type CharacterDefinition } from './data/characters';
+import { CHARACTERS, healSpecFor, type CharacterDefinition, type SkillDefinition } from './data/characters';
 import { WEAPONS } from './data/weapons';
 import { ELEMENTS, type ElementId } from './data/elements';
 import {
@@ -12,18 +12,32 @@ import {
   WORLD_BOUND,
 } from './data/constants';
 import { createPixelRenderer } from './engine/createPixelRenderer';
+import { detectQualityProfile } from './engine/deviceProfile';
+import { createGroundInfluence } from './systems/createGroundInfluence';
+import { createScorchMap, SCORCH_PER_STRIKE } from './systems/createScorchMap';
 import { createMondstadtWorld, isInsideSafeZone } from './world/createMondstadtWorld';
 import {
   resolveBodyCollisions,
   resolveObstacleCollisions,
   type CollisionBody,
 } from './physics/resolveCollisions';
+import { clampRangeToWorld, pointHitsWorld } from './physics/projectileBlockers';
+import { getTerrainHeight } from './world/terrain';
 import { createCharacterModel, createNameSprite, type CharacterModel } from './entities/createCharacterModel';
 import { createBoostOrbit } from './entities/createBoostOrbit';
 import { createInputSystem } from './systems/createInputSystem';
+import { createAudioSystem } from './audio/createAudioSystem';
+import { createCombatAudio } from './audio/createCombatAudio';
+import { createMovementAudio, type FootstepKind } from './audio/createMovementAudio';
+import { createWeaponAudio } from './audio/createWeaponAudio';
+import { createPickupAudio } from './audio/createPickupAudio';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
+import { createDebrisSystem } from './systems/createDebrisSystem';
+import { createLightPool } from './systems/createLightPool';
+import { createAttackViewClock } from './systems/createAttackViewClock';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
 import { createGoliathRenderer } from './systems/createGoliathRenderer';
+import { createTelegraphSystem } from './systems/createTelegraphSystem';
 import { createDamageNumbers } from './systems/createDamageNumbers';
 import {
   comboWindowSeconds,
@@ -37,7 +51,10 @@ import type { DamageKind } from './combat/damageKind';
 import { transcendDamageMultiplier } from './combat/transcendScaling';
 import { attackHitsEntity } from './combat/hitTest';
 import { gemVisual } from './data/gemDrops';
+import { ATTACK_RENDER } from './data/attacks';
+import { SLIME_SLAM_RADIUS, isSlimeArchetype } from './data/slimeHop';
 import type {
+  AttackStrike,
   Enemy,
   GemDrop,
   Goliath,
@@ -45,6 +62,7 @@ import type {
   RangedAttack,
   ShardDrop,
   SkillCast,
+  UnitAttack,
 } from '../module_bindings/types';
 
 export interface HudState {
@@ -71,7 +89,12 @@ export interface GameNetworkActions {
     directionX: number,
     directionZ: number
   ): void;
-  sendAttackPlayer(target: Player, damage: number): void;
+  /**
+   * The local player landed a PVP hit. The server owns the damage number and
+   * the crit roll — this reports the INTENT (skill-vs-basic + combo) only; a
+   * modified client can no longer author its own PVP damage.
+   */
+  sendAttackPlayer(target: Player, isSkill: boolean, comboCount: number): void;
   sendTakeDamage(damage: number): void;
   sendHeal(amount: number): void;
   /** Trigger a healer character's party heal (combo only matters for combo-mode). */
@@ -85,7 +108,7 @@ export interface GameNetworkActions {
     centerX: number,
     centerZ: number,
     radius: number,
-    damage: number,
+    isSkill: boolean,
     comboCount: number
   ): void;
   /**
@@ -101,7 +124,7 @@ export interface GameNetworkActions {
     directionZ: number,
     range: number,
     hitRadius: number,
-    damage: number,
+    isSkill: boolean,
     comboCount: number
   ): void;
   sendCollectGem(dropId: bigint): void;
@@ -113,6 +136,8 @@ export interface GameNetworkActions {
 export interface Game {
   start(): void;
   dispose(): void;
+  /** Switches between the chunky-pixel render path and native resolution. */
+  setPixelFilter(enabled: boolean): void;
   setActiveCharacter(characterId: string): void;
   /** Active character's constellation level, scaling its damage. */
   setActiveConstellation(constellation: number): void;
@@ -124,8 +149,18 @@ export interface Game {
   handleRemotePlayerAttack(attack: RangedAttack): void;
   /** Floats a number over the local player — PVP damage taken, or heals. */
   spawnSelfNumber(amount: number, kind: DamageKind): void;
+  /** Floats a server-driven `enemy_hit` number at the enemy's world position (any attacker). `isMine` = full-volume hit/crit SFX; others' hits play distance-attenuated. */
+  spawnWorldNumber(
+    positionX: number,
+    positionZ: number,
+    amount: number,
+    kind: DamageKind,
+    isMine: boolean
+  ): void;
   /** Shows a remote player's health bar for a few seconds (they were hit). */
   flashRemoteHealth(identityHex: string): void;
+  /** Floats a server-driven `pvp_hit` number at a remote player's live position. `isMine` = my landed hit (full-volume SFX); spectated hits play distance-attenuated. */
+  spawnPlayerNumber(identityHex: string, amount: number, kind: DamageKind, isMine: boolean): void;
   /** Syncs the gem drops lying in the world (walk over to collect). */
   syncGemDrops(drops: readonly GemDrop[]): void;
   /** Syncs the rare transcend-shard drops lying in the world (purple, walk over to collect). */
@@ -134,6 +169,10 @@ export interface Game {
   syncEnemies(rows: readonly Enemy[]): void;
   /** Reconciles the rendered goliath raiders against the server `goliath` table. */
   syncGoliaths(rows: readonly Goliath[]): void;
+  /** Feeds `unit_attack` FSM rows to the ground-telegraph system (windup countdown). */
+  syncUnitAttacks(rows: readonly UnitAttack[]): void;
+  /** One `attack_strike` event: impact burst + rim flash + camera shake + SFX (ANIM-04), distance-attenuated from the local player. */
+  handleAttackStrike(strike: AttackStrike): void;
   setTouchMove(x: number, z: number): void;
   pressTouchButton(button: 'attack' | 'skill' | 'jump'): void;
   releaseTouchButton(button: 'attack'): void;
@@ -142,7 +181,19 @@ export interface Game {
   /** Set the identity hexes of my party (Bars) so PVP skips friendly fire. */
   setPartyAllies(identityHexes: readonly string[]): void;
   setInputEnabled(enabled: boolean): void;
+  /**
+   * True while the local stun window is open (HIT-01). Character switching is
+   * gated on it (App.selectCharacter) so the UI never optimistically swaps a
+   * model the server-side stun gate will refuse.
+   */
+  isStunned(): boolean;
   onPartySlotRequested: ((slotIndex: number) => void) | null;
+  /** Fired when MY pickup of a ground drop is confirmed (the requested drop despawned). */
+  onPickup: ((kind: 'gem' | 'shard', amount: number) => void) | null;
+  /** Fired when my death state flips: true at the death moment, false when the respawned row arrives. */
+  onDeathChange: ((dead: boolean) => void) | null;
+  /** Descending "shard stolen" sting — the UI's theft toast path triggers this. */
+  playShardLossSound(): void;
 }
 
 interface HealthBar {
@@ -158,7 +209,12 @@ interface RemotePlayerView {
   row: Player;
   targetPosition: THREE.Vector3;
   targetRotationY: number;
-  lastPvpHitAt: number;
+  // Two timestamps, deliberately separate: the send-rate gate must only ever be
+  // re-armed by OUR OWN outgoing attackPlayer — if it shared a field with the
+  // display flash, every broadcast pvp_hit on this victim (rival attackers, our
+  // own event echo) would re-arm our 0.3s lockout and swallow our swings.
+  lastPvpSentAt: number; // local send-rate gate (applyPvpDamage only)
+  lastPvpHitShownAt: number; // health-bar flash display (any pvp_hit broadcast)
   healthBar: HealthBar;
 }
 
@@ -210,6 +266,12 @@ const POSITION_EPSILON = 0.01;
 const ROTATION_EPSILON = 0.02;
 const SERVER_TELEPORT_THRESHOLD = 20;
 const RESPAWN_HEALTH_JUMP = 100;
+/**
+ * Synthesized dead-window length. Death + respawn arrive in ONE server row
+ * (see the isDeadLocally note), so the UI's `dead` state is held this long
+ * locally — long enough to cover the ~1s death knell.
+ */
+const DEATH_STATE_SECONDS = 1.2;
 /** Ignore tiny health dips (regen jitter) so they don't spam damage numbers. */
 const TAKEN_DAMAGE_FLOOR = 3;
 /** A single drop this large reads as a heavy hit and floats a bigger crit number. */
@@ -224,24 +286,114 @@ const MOVEMENT_LIMIT = WORLD_BOUND + 5; // matches server clamp
 export function createGame(
   canvas: HTMLCanvasElement,
   network: GameNetworkActions,
-  onHudChange: (hud: HudState) => void
+  onHudChange: (hud: HudState) => void,
+  /** Fired once when MY stun window opens: duration + 0..1 proximity to the slam center. */
+  onStunned?: (durationSeconds: number, intensity: number) => void
 ): Game {
   const scene = new THREE.Scene();
   const pixelRenderer = createPixelRenderer(canvas);
-  const world = createMondstadtWorld(scene);
-  const effectSystem = createEffectSystem(scene);
+  // Perf bisect kill-switches: append ?nograss / ?nobend / ?noshadow / ?nofx
+  // to the URL to disable one ambiance system and find a frame-cost culprit.
+  const perfFlags = new URLSearchParams(window.location.search);
+  if (perfFlags.has('noshadow')) pixelRenderer.renderer.shadowMap.enabled = false;
+  // Ground influence map: everything that moves stamps into it, grass bends out.
+  const quality = detectQualityProfile();
+  const groundInfluence = createGroundInfluence(quality.influenceResolution);
+  // Scorch is a separate map from influence wear on purpose: only strikes
+  // write it, so walking tramples grass without ever browning the ground.
+  const scorchMap = createScorchMap(quality.influenceResolution);
+  const influenceEnabled = !perfFlags.has('nobend');
+  const world = createMondstadtWorld(scene, {
+    grass: {
+      bladeCount: perfFlags.has('nograss') ? 0 : quality.grassBladeCount,
+      influence: groundInfluence,
+    },
+    scorch: scorchMap,
+  });
+  // The overlay pass only draws sprites — skip walking the whole static world.
+  pixelRenderer.setOverlayCullTarget(world.group);
+  // Light pool must exist before the effect system (projectiles borrow lights).
+  const fxEnabled = !perfFlags.has('nofx');
+  const lightPool = fxEnabled ? createLightPool(scene) : undefined;
+  // Reused for projectile-impact debris spawns — impacts are frequent in combat.
+  const impactDebrisScratch = new THREE.Vector3();
+  const effectSystem = createEffectSystem(
+    scene,
+    (x, z, radius, strength, dirX, dirZ) => groundInfluence.stamp(x, z, radius, strength, dirX, dirZ),
+    lightPool,
+    {
+      // Projectiles die against rising terrain and solid props (rocks, tents,
+      // trees) instead of flying through them.
+      blockedAt: (x, y, z) => pointHitsWorld(x, y, z, world.getObstacles(), getTerrainHeight),
+      onImpact(x, y, z, element, directionX, directionZ) {
+        // weaponAudio/debrisSystem are created a few lines below — impacts
+        // only fire at runtime, long after init.
+        weaponAudio.playProjectileImpact(hitAudioGain(x, z), hitAudioPan(x, z));
+        // Pixel-art splash: element-colored voxel cubes spraying BACK off the
+        // surface (cone opposite the flight direction), bouncing on the ground.
+        debrisSystem?.spawn(
+          impactDebrisScratch.set(x, y - 0.3, z),
+          ELEMENTS[element].color,
+          12,
+          4.5,
+          { x: -directionX, z: -directionZ }
+        );
+      },
+    }
+  );
+  const debrisSystem = fxEnabled
+    ? createDebrisSystem(scene, (x, z) => world.getGroundHeight(x, z))
+    : undefined;
   const damageNumbers = createDamageNumbers(scene);
   // Enemies and goliaths are now server-authoritative: these renderers only draw
   // the `enemy`/`goliath` table rows and interpolate them. Damage/HP/economy all
-  // live on the server, reached through network.sendAttackEnemies. Floating
-  // numbers come from the accurate server-driven health drop in syncRows.
-  const enemyRenderer = createEnemyRenderer(scene, effectSystem, (position, amount) =>
-    damageNumbers.spawn(position, amount, 'normal')
+  // live on the server, reached through network.sendAttackEnemies. The floating
+  // NUMBERS are no longer driven by the server HP-delta (that double-drew) — every
+  // hit's number now comes from the server `enemy_hit` event at the enemy's exact
+  // position (App.tsx → spawnWorldNumber), so own AND other players' hits land ON
+  // the enemy. The renderers still flash the health bar on any HP drop
+  // (lastDamagedAt, set independently of this callback).
+  // Slime hops thump the grass flat where they land (render-side, all clients)
+  // and leave a lingering crushed patch (wear) so you can read where they hopped.
+  const enemyRenderer = createEnemyRenderer(scene, effectSystem, (x, z) =>
+    groundInfluence.stamp(x, z, SLIME_SLAM_RADIUS * 0.8, 1, 0, 0, 0.55)
   );
-  const goliathRenderer = createGoliathRenderer(scene, (position, amount) =>
-    damageNumbers.spawn(position, amount, 'normal')
-  );
+  const goliathRenderer = createGoliathRenderer(scene);
+  // Ground telegraphs for server unit_attack windups (D4-14): discs sit on the
+  // terrain at the LOCKED landing so the dodge read matches the server hitbox.
+  const telegraphSystem = createTelegraphSystem(scene, (x, z) => world.getGroundHeight(x, z));
   const inputSystem = createInputSystem(canvas);
+  // Hand-rolled WebAudio slam SFX (D4-15) — zero assets, zero dependencies.
+  const audioSystem = createAudioSystem();
+  // Combat feedback SFX (hits/crits/hurt/stun/heal) on the same unlocked context.
+  const combatAudio = createCombatAudio(audioSystem.getContext);
+  // Per-weapon swing/shot flavors + the goliath windup riser.
+  const weaponAudio = createWeaponAudio(audioSystem.getContext);
+  // Footstep ambience for every visible walker (distance-driven stride cadence).
+  const movementAudio = createMovementAudio(audioSystem.getContext);
+  // Pickup chimes (gem streak ladder, shard gain/loss) + the death knell.
+  const pickupAudio = createPickupAudio(audioSystem.getContext);
+  // Same linear falloff shape the strike juice uses — a far fight is a faint
+  // tick, my own hit is full volume.
+  function hitAudioGain(x: number, z: number): number {
+    const distance = Math.hypot(x - playerPosition.x, z - playerPosition.z);
+    return Math.max(0, 1 - distance / STRIKE_JUICE_RANGE);
+  }
+  // Stereo position of a world sound: its screen-space X relative to me (the
+  // fixed-yaw camera means one constant basis). Full pan at ±AUDIO_PAN_RANGE,
+  // scaled to ±0.8 so nothing ever sits 100% in one ear.
+  const AUDIO_PAN_RANGE = 16; // world units
+  function hitAudioPan(x: number, z: number): number {
+    const screenX =
+      (x - playerPosition.x) * Math.cos(CAMERA_YAW) - (z - playerPosition.z) * Math.sin(CAMERA_YAW);
+    return THREE.MathUtils.clamp(screenX / AUDIO_PAN_RANGE, -1, 1) * 0.8;
+  }
+
+  // Server-clock anchored unit-attack views + the shared alive gate (ANIM-01),
+  // carved into its own system module (createAttackViewClock): goliath and
+  // unit_attack rows go in, per-frame AttackAnimationViews come out — this file
+  // only wires them to the goliath renderer and the telegraph system.
+  const attackViewClock = createAttackViewClock();
 
   let activeCharacter: CharacterDefinition = CHARACTERS.zibo;
   let playerModel = createCharacterModel(activeCharacter);
@@ -310,10 +462,11 @@ export function createGame(
     {
       mesh: THREE.Mesh;
       rawId: bigint;
+      // Row amount kept locally so a confirmed pickup (row already despawned)
+      // can still report what was collected.
+      amount: number;
       age: number;
       baseY: number;
-      sparkle: boolean;
-      sparkleAt: number;
     }
   >();
   const requestedGemPickups = new Set<string>();
@@ -325,6 +478,7 @@ export function createGame(
     {
       mesh: THREE.Mesh;
       rawId: bigint;
+      amount: number;
       age: number;
       baseY: number;
       sparkleAt: number;
@@ -352,6 +506,32 @@ export function createGame(
   let lastSentRotationY = Infinity;
   let fallPeakY = 0;
   let hasReportedVoidDeath = false;
+  // Death signal (INVESTIGATED 2026-07-12): the server NEVER syncs
+  // currentHealth 0 — every kill path (attackPlayer, takeDamage, worldTick,
+  // fallToDeath) calls respawnPlayerAtSpawn, which writes full HP + spawn
+  // position in the SAME transaction as the killing blow. The only combat-death
+  // observable is therefore the respawn row itself: a same-character health
+  // UP-jump > RESPAWN_HEALTH_JUMP (syncMyServerRow's wasRespawned), from which
+  // a short dead window is synthesized so onDeathChange gets a real
+  // true→false flip. Void falls are client-initiated (sendFallToDeath) and
+  // stay dead until the respawn row confirms (voidRespawnConfirmed).
+  let isDeadLocally = false;
+  let deadClearAtSeconds = Infinity;
+
+  function enterDeathState(clearAfterSeconds: number) {
+    if (isDeadLocally) return;
+    isDeadLocally = true;
+    deadClearAtSeconds = elapsedSeconds + clearAfterSeconds;
+    pickupAudio.playDeath();
+    game.onDeathChange?.(true);
+  }
+
+  function clearDeathState() {
+    if (!isDeadLocally) return;
+    isDeadLocally = false;
+    deadClearAtSeconds = Infinity;
+    game.onDeathChange?.(false);
+  }
 
   /** True if any rendered enemy/goliath sits inside the swing (drives combo + facing). */
   // Uses the SAME geometry the server's attackEnemies reducer damages with
@@ -363,33 +543,41 @@ export function createGame(
     center: { x: number; y: number; z: number },
     radius: number
   ): boolean {
-    const positions = [...enemyRenderer.getAlivePositions(), ...goliathRenderer.getAlivePositions()];
-    return positions.some(position => attackHitsEntity(position.x, position.z, center.x, center.z, radius));
+    // Runs per projectile per frame — iterate in place, no position arrays.
+    let hit = false;
+    const check = (x: number, _y: number, z: number) => {
+      if (!hit && attackHitsEntity(x, z, center.x, center.z, radius)) hit = true;
+    };
+    enemyRenderer.forEachAliveTarget(check);
+    goliathRenderer.forEachAliveTarget(check);
+    return hit;
   }
 
   function dealDamage(
     center: { x: number; y: number; z: number },
     radius: number,
     damage: number,
-    _element: ElementId,
-    kind: DamageKind
+    kind: DamageKind,
+    isSkill: boolean
   ): boolean {
-    // The server owns enemy/goliath HP and payouts — report the swing and let it
-    // apply authoritative damage. Local hit detection only drives combo + facing.
-    network.sendAttackEnemies(center.x, center.z, radius, Math.round(damage), combo);
+    // The server owns enemy/goliath HP, crit, AND the damage number now — report the
+    // INTENT (skill-vs-basic + combo), never a client-authored number. Local hit
+    // detection only drives combo + facing; PvP still sends its own local number.
+    network.sendAttackEnemies(center.x, center.z, radius, isSkill, combo);
     const hitEntity = anyEntityWithinRadius(center, radius);
-    const hitPlayer = applyPvpDamage(center, radius, damage, kind);
+    const hitPlayer = applyPvpDamage(center, radius, damage, kind, isSkill);
     return hitEntity || hitPlayer;
   }
 
   // Only regular attacks build the combo (once per landed attack, even across
   // several targets); skills spend the combo scaling but do not add to it.
-  const applyAttackDamage: DamageApplier = (center, radius, damage, element, kind) => {
-    const hit = dealDamage(center, radius, damage, element, kind);
+  const applyAttackDamage: DamageApplier = (center, radius, damage, _element, kind) => {
+    const hit = dealDamage(center, radius, damage, kind, false);
     if (hit) registerComboHit();
     return hit;
   };
-  const applySkillDamage: DamageApplier = dealDamage;
+  const applySkillDamage: DamageApplier = (center, radius, damage, _element, kind) =>
+    dealDamage(center, radius, damage, kind, true);
 
   // Ranged (bow) projectiles are now purely visual for enemy damage — the server
   // hitscan (sendAttackRay, fired once at launch) owns enemy/goliath HP. This
@@ -397,7 +585,7 @@ export function createGame(
   // reaches a target) and ranged PvP, WITHOUT re-sending enemy damage per frame.
   const applyRangedProjectileHit: DamageApplier = (center, radius, damage, _element, kind) => {
     const hitEntity = anyEntityWithinRadius(center, radius);
-    const hitPlayer = applyPvpDamage(center, radius, damage, kind);
+    const hitPlayer = applyPvpDamage(center, radius, damage, kind, false);
     const hit = hitEntity || hitPlayer;
     if (hit) registerComboHit();
     return hit;
@@ -412,7 +600,8 @@ export function createGame(
     center: { x: number; y: number; z: number },
     radius: number,
     damage: number,
-    kind: DamageKind
+    kind: DamageKind,
+    isSkill: boolean
   ): boolean {
     if (isInsideSafeZone(playerPosition.x, playerPosition.z)) return false;
     let hitSomeone = false;
@@ -421,15 +610,21 @@ export function createGame(
       if (partyAllyHexes.has(remoteHex)) continue;
       const remotePosition = remotePlayer.model.group.position;
       if (isInsideSafeZone(remotePosition.x, remotePosition.z)) continue;
-      if (elapsedSeconds < remotePlayer.lastPvpHitAt + PVP_HIT_COOLDOWN_SECONDS) continue;
+      if (elapsedSeconds < remotePlayer.lastPvpSentAt + PVP_HIT_COOLDOWN_SECONDS) continue;
       if (playerPosition.distanceTo(remotePosition) > PVP_MAX_HIT_RANGE) continue;
       if (Math.abs(remotePosition.y + 1 - center.y) > VERTICAL_HIT_GATE) continue;
       const distance = Math.hypot(remotePosition.x - center.x, remotePosition.z - center.z);
       if (distance > radius + 0.8) continue;
-      remotePlayer.lastPvpHitAt = elapsedSeconds;
+      remotePlayer.lastPvpSentAt = elapsedSeconds;
+      remotePlayer.lastPvpHitShownAt = elapsedSeconds;
       hitSomeone = true;
-      network.sendAttackPlayer(remotePlayer.row, Math.round(damage));
+      network.sendAttackPlayer(remotePlayer.row, isSkill, combo);
       effectSystem.spawnBurst(remotePosition.clone().setY(1.2), 0xff4a4a, 14);
+      // Instant local display number (D3-05) — the server pvp_hit event is the
+      // truth; our own non-crit echo is suppressed in the App.tsx callback.
+      // Instant hit tick to match; a server-confirmed crit upgrades it with the
+      // crit pop via spawnPlayerNumber.
+      combatAudio.playEnemyHit(1, hitAudioPan(remotePosition.x, remotePosition.z));
       damageNumbers.spawn(remotePosition.clone().setY(remotePosition.y + 1), damage, kind);
     }
     return hitSomeone;
@@ -461,32 +656,32 @@ export function createGame(
     return true;
   }
 
+  // Reused across calls — the returned position is read immediately by facing
+  // logic, never kept. Keeps nearest-target scans allocation-free.
+  const nearestEnemyScratch = new THREE.Vector3();
+
   function findNearestEnemyPosition(maxRange: number): THREE.Vector3 | null {
-    let nearestPosition: THREE.Vector3 | null = null;
     let nearestDistance = maxRange;
-    const targetPositions = [...enemyRenderer.getAlivePositions(), ...goliathRenderer.getAlivePositions()];
-    for (const candidate of targetPositions) {
-      const distance = playerPosition.distanceTo(candidate);
+    let found = false;
+    const consider = (x: number, y: number, z: number) => {
+      const distance = Math.hypot(
+        x - playerPosition.x,
+        y - playerPosition.y,
+        z - playerPosition.z
+      );
       if (distance < nearestDistance) {
         nearestDistance = distance;
-        nearestPosition = candidate;
+        nearestEnemyScratch.set(x, y, z);
+        found = true;
       }
-    }
-    return nearestPosition;
+    };
+    enemyRenderer.forEachAliveTarget(consider);
+    goliathRenderer.forEachAliveTarget(consider);
+    return found ? nearestEnemyScratch : null;
   }
 
-  const CRIT_CHANCE = 0.22;
-  const CRIT_MULTIPLIER = 1.9;
   let activeConstellation = 0;
   let activeTranscend = 0;
-
-  /** Client-only visual crit roll (no shared state, so plain randomness is fine). */
-  function rollDamage(baseDamage: number): { amount: number; kind: DamageKind } {
-    if (Math.random() < CRIT_CHANCE) {
-      return { amount: baseDamage * CRIT_MULTIPLIER, kind: 'crit' };
-    }
-    return { amount: baseDamage, kind: 'normal' };
-  }
 
   function performAttack() {
     // The caller already paced this by the input cooldown; the combo itself
@@ -501,22 +696,39 @@ export function createGame(
     const direction = facingDirection();
     const elementColor = ELEMENTS[activeCharacter.element].color;
     // Regular attacks get only a small combo boost — the payoff is the skill.
-    const baseDamage =
+    // Crit is now decided SERVER-side (CRIT-02); this local number is a display-only
+    // 'normal' hit that keeps the projectile/melee feel until Plan 03 floats the
+    // authoritative enemy_hit number.
+    const amount =
       weapon.damage *
       regularAttackMultiplier(combo) *
       transcendDamageMultiplier(activeConstellation, activeTranscend);
-    const { amount, kind } = rollDamage(baseDamage);
+    const kind: DamageKind = 'normal';
 
     if (profile.isFlourish) {
       effectSystem.spawnBurst(playerPosition.clone().setY(playerPosition.y + 1), elementColor, 30);
     }
 
     if (weapon.isRanged) {
+      // Release flavor at launch — the landed hit (enemy_hit) carries the impact.
+      if (activeCharacter.weapon === 'bow') weaponAudio.playBowShot();
+      else weaponAudio.playArcaneBolt();
       // Fire ONE server hitscan at launch: the server picks the first enemy/goliath
       // the ray reaches using authoritative positions, so a shot lands the same at
       // any range. The projectile below is purely visual for enemy damage.
       const projectileTravel = PROJECTILE_LIFETIME_SECONDS * weapon.projectileSpeed;
-      const rangedRange = Math.min(PVP_MAX_HIT_RANGE, projectileTravel);
+      // Clamp the hitscan to the first slope/rock/tent in the way — the ray must
+      // agree with the visual projectile, which now splashes on world contact.
+      const rangedRange = clampRangeToWorld(
+        playerPosition.x,
+        playerPosition.y + 1.2,
+        playerPosition.z,
+        direction.x,
+        direction.z,
+        Math.min(PVP_MAX_HIT_RANGE, projectileTravel),
+        world.getObstacles(),
+        getTerrainHeight
+      );
       network.sendAttackRay(
         playerPosition.x,
         playerPosition.z,
@@ -524,7 +736,7 @@ export function createGame(
         direction.z,
         rangedRange,
         RANGED_HIT_RADIUS,
-        Math.round(amount),
+        false,
         combo
       );
       effectSystem.spawnProjectile({
@@ -539,6 +751,10 @@ export function createGame(
       });
       return;
     }
+
+    // Melee air cut per weapon class — the landed hit carries the impact sound.
+    if (activeCharacter.weapon === 'spear') weaponAudio.playSpearThrust();
+    else weaponAudio.playSwordSwing();
 
     const hitCenter = {
       x: playerPosition.x + direction.x * weapon.range * 0.6,
@@ -577,6 +793,7 @@ export function createGame(
         transcendDamageMultiplier(activeConstellation, activeTranscend),
       followPosition: () => playerPosition,
     });
+    spawnSkillGroundMarks(skill, activeCharacter.element, playerPosition.x, playerPosition.z, 8);
     network.sendCastSkill(skill.id, playerPosition.x, playerPosition.z, direction.x, direction.z);
 
     // Active healers (e.g. Marina, Lapa) heal the whole owned party on cast.
@@ -588,6 +805,23 @@ export function createGame(
   function clampPlayerToWorld() {
     playerPosition.x = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.x));
     playerPosition.z = Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, playerPosition.z));
+  }
+
+  /** Ground-touching skills (nova, dash) scar the ground and kick up cubes. */
+  function spawnSkillGroundMarks(
+    skill: SkillDefinition,
+    element: ElementId,
+    x: number,
+    z: number,
+    debrisCount: number
+  ) {
+    if (skill.kind !== 'nova' && skill.kind !== 'dash') return;
+    const color = ELEMENTS[element].color;
+    // Wear 1 squashes the grass; the scorch stamp is what browns/dents the
+    // terrain (one band per stack, five stacks to full char).
+    groundInfluence.stamp(x, z, skill.radius * 0.8, 1, 0, 0, 1);
+    scorchMap.stamp(x, z, skill.radius * 0.8, SCORCH_PER_STRIKE);
+    debrisSystem?.spawn(new THREE.Vector3(x, world.getGroundHeight(x, z), z), color, debrisCount);
   }
 
   function reachableGroundHeight(x: number, z: number): number {
@@ -619,9 +853,37 @@ export function createGame(
     effectSystem.spawnBurst(playerPosition.clone().setY(playerPosition.y + 0.5), 0xd8b48a, 16);
   }
 
+  // HIT-01 client half (D4-10): a RAISED stunnedUntilMicros on my own server row
+  // opens this render-side stun window — input freezes and x/z lerp toward the
+  // authoritative row, so the knockback displacement the server wrote is what
+  // the victim sees. 1050ms = ATTACKS.leapSlam.stunTicks (7) × the 150ms world
+  // tick. The real control stays server-side: updatePosition writes are rejected
+  // while now < stunnedUntilMicros (Plan 02); this is only the felt half.
+  // Fallback stun render window when the causing strike is unknown (stale
+  // lastStrike, e.g. future PVP stuns): the original leapSlam-tuned constant.
+  // A KNOWN cause uses its own ATTACK_RENDER.stunSeconds instead (D4-09/D5-12)
+  // — the swing tags 0.6s, the swirl 0 (knockback only). The old fixed 1050ms
+  // over-froze every swing victim by 450ms (eating the SC2 escape race) and
+  // fired a ghost freeze+popup on stun-free swirl knockbacks (05-05 fix).
+  const DEFAULT_STUN_RENDER_MS = 1050;
+  const STUN_LERP_RATE = 12;
+  let stunActiveUntilPerfMs = 0;
+  let lastStunnedUntilMicros = 0n;
+  // The row KEEPS its last stunnedUntilMicros forever, so the first sync after a
+  // page load must baseline against it silently — comparing to the initial 0n
+  // fired a ghost STUNNED popup on every refresh.
+  let hasBaselinedStun = false;
+  const stunServerPosition = new THREE.Vector3();
+  // Last slam this client saw — lets the stun popup scale with how close to the
+  // impact center I was. The strike event and my stunned row update ride the same
+  // worldTick transaction, so a fresh (<600ms) strike is MY stun's cause.
+  let lastStrike: { attackId: string; x: number; z: number; radius: number; atMs: number } | null =
+    null;
+
   function updateLocalPlayer(deltaSeconds: number) {
+    const isStunned = performance.now() < stunActiveUntilPerfMs;
     const moveVector = inputSystem.getMoveVector();
-    const isMoving = Math.hypot(moveVector.x, moveVector.z) > 0.05;
+    const isMoving = !isStunned && Math.hypot(moveVector.x, moveVector.z) > 0.05;
     if (isMoving) {
       // Rotate screen-space input by the camera yaw so "up" moves away from the camera.
       const worldMoveX =
@@ -632,9 +894,30 @@ export function createGame(
       const stepZ = worldMoveZ * activeCharacter.moveSpeed * deltaSeconds;
       if (!tryMove(stepX, stepZ) && !tryMove(stepX, 0)) tryMove(0, stepZ);
       playerRotationY = Math.atan2(worldMoveX, worldMoveZ);
+      if (isGrounded()) {
+        // Small per-frame wear: repeated passes tread a lasting footpath.
+        groundInfluence.stamp(
+          playerPosition.x,
+          playerPosition.z,
+          0.8,
+          1,
+          worldMoveX,
+          worldMoveZ,
+          0.03
+        );
+      }
     }
 
-    if (inputSystem.consumeJump() && isGrounded()) {
+    // Stunned: adopt the server's knockback — lerp x/z toward the authoritative
+    // row. y stays locally owned (gravity below), so a knockback past an edge
+    // still falls and dies through the existing VOID_KILL_DEPTH path (D4-11).
+    if (isStunned) {
+      const pull = Math.min(1, deltaSeconds * STUN_LERP_RATE);
+      playerPosition.x += (stunServerPosition.x - playerPosition.x) * pull;
+      playerPosition.z += (stunServerPosition.z - playerPosition.z) * pull;
+    }
+
+    if (!isStunned && inputSystem.consumeJump() && isGrounded()) {
       playerVelocityY = JUMP_VELOCITY;
     }
     playerVelocityY -= GRAVITY * deltaSeconds;
@@ -642,6 +925,10 @@ export function createGame(
     fallPeakY = Math.max(fallPeakY, playerPosition.y);
     const groundBelow = reachableGroundHeight(playerPosition.x, playerPosition.z);
     if (playerPosition.y <= groundBelow) {
+      // A real landing (not resting contact) thumps the grass flat around it.
+      if (playerVelocityY < -4) {
+        groundInfluence.stamp(playerPosition.x, playerPosition.z, 1.2, 1, 0, 0, 0.3);
+      }
       playerPosition.y = groundBelow;
       playerVelocityY = 0;
       applyFallDamage(groundBelow);
@@ -650,14 +937,20 @@ export function createGame(
     if (playerPosition.y < VOID_KILL_DEPTH && !hasReportedVoidDeath) {
       hasReportedVoidDeath = true;
       network.sendFallToDeath();
+      // Void death is client-initiated: dead until the respawn row confirms.
+      enterDeathState(Infinity);
     }
 
     // Only drain one queued click per input-cooldown so rapid clicks buffer
     // instead of being eaten within a single frame.
-    if (elapsedSeconds - lastSwingAt >= COMBO_INPUT_COOLDOWN_SECONDS && inputSystem.consumeAttackClick()) {
+    if (
+      !isStunned &&
+      elapsedSeconds - lastSwingAt >= COMBO_INPUT_COOLDOWN_SECONDS &&
+      inputSystem.consumeAttackClick()
+    ) {
       performAttack();
     }
-    if (inputSystem.consumeSkill()) performSkill();
+    if (!isStunned && inputSystem.consumeSkill()) performSkill();
     const requestedSlot = inputSystem.consumePartySlot();
     if (requestedSlot !== null) game.onPartySlotRequested?.(requestedSlot);
 
@@ -681,21 +974,32 @@ export function createGame(
     network.sendPosition(playerPosition.x, playerPosition.y, playerPosition.z, playerRotationY);
   }
 
+  // Gems/shards drop constantly while farming: their materials and geometry
+  // are created ONCE per denomination and shared — a fresh material per drop
+  // made three re-resolve shader parameters mid-fight, over and over.
+  const gemGeometry = new THREE.OctahedronGeometry(GEM_RADIUS);
+  const shardGeometry = new THREE.OctahedronGeometry(SHARD_RADIUS);
+  const dropMaterials = new Map<string, THREE.MeshLambertMaterial>();
+  function dropMaterial(color: number, emissiveIntensity: number): THREE.MeshLambertMaterial {
+    const key = `${color}:${emissiveIntensity}`;
+    let material = dropMaterials.get(key);
+    if (!material) {
+      material = new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity });
+      dropMaterials.set(key, material);
+    }
+    return material;
+  }
+
   function createGemMesh(drop: GemDrop): { mesh: THREE.Mesh; baseY: number } {
     // All gems are the same small size; only the color reads the denomination.
     // No halo and a low emissive keep the glow subtle.
     const visual = gemVisual(drop.amount);
-    const material = new THREE.MeshLambertMaterial({
-      color: visual.color,
-      emissive: visual.color,
-      emissiveIntensity: GEM_EMISSIVE_INTENSITY,
-    });
-    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(GEM_RADIUS), material);
+    const mesh = new THREE.Mesh(gemGeometry, dropMaterial(visual.color, GEM_EMISSIVE_INTENSITY));
     const baseY = world.getGroundHeight(drop.positionX, drop.positionZ) + 0.9;
     mesh.position.set(drop.positionX, baseY, drop.positionZ);
     scene.add(mesh);
-    // Small sparkle on landing (color-matched for the rarer tiers).
-    effectSystem.spawnBurst(mesh.position.clone(), visual.sparkle ? visual.color : 0xffe08a, 10);
+    // Small one-shot burst on landing so a fresh drop catches the eye.
+    effectSystem.spawnBurst(mesh.position.clone(), 0xffe08a, 10);
     return { mesh, baseY };
   }
 
@@ -704,13 +1008,6 @@ export function createGame(
       gem.age += deltaSeconds;
       gem.mesh.rotation.y += deltaSeconds * 2.4;
       gem.mesh.position.y = gem.baseY + Math.sin(elapsedSeconds * 3) * 0.12;
-
-      // Rarer tiers emit a gentle, slow-burn pixel sparkle on a throttle.
-      if (gem.sparkle && elapsedSeconds >= gem.sparkleAt) {
-        gem.sparkleAt = elapsedSeconds + GEM_SPARKLE_INTERVAL;
-        const material = gem.mesh.material as THREE.MeshLambertMaterial;
-        effectSystem.spawnSparkle(gem.mesh.position.clone(), material.color.getHex(), 4);
-      }
 
       if (gem.age < GEM_PICKUP_DELAY) continue;
 
@@ -738,12 +1035,10 @@ export function createGame(
     // A rarer purple relative of the gem: same crystalline octahedron, scaled 1.4x
     // with a brighter self-glow so a scarce shard is immediately distinguishable
     // from a gold gem. Always "rare tier" — always sparkling.
-    const material = new THREE.MeshLambertMaterial({
-      color: SHARD_COLOR,
-      emissive: SHARD_COLOR,
-      emissiveIntensity: SHARD_EMISSIVE_INTENSITY,
-    });
-    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(SHARD_RADIUS), material);
+    const mesh = new THREE.Mesh(
+      shardGeometry,
+      dropMaterial(SHARD_COLOR, SHARD_EMISSIVE_INTENSITY)
+    );
     // Raise slightly above the gem baseline so the larger mesh clears the ground.
     const baseY = world.getGroundHeight(drop.positionX, drop.positionZ) + 1.0;
     mesh.position.set(drop.positionX, baseY, drop.positionZ);
@@ -811,7 +1106,7 @@ export function createGame(
       remotePlayer.model.animate(elapsedSeconds, deltaSeconds, isMoving);
 
       // Show a health bar for 5s after this player was last hit in PVP.
-      const showBar = elapsedSeconds - remotePlayer.lastPvpHitAt < 5;
+      const showBar = elapsedSeconds - remotePlayer.lastPvpHitShownAt < 5;
       remotePlayer.healthBar.sprite.visible = showBar;
       if (showBar) {
         const maxHealth = CHARACTERS[remotePlayer.characterId]?.maxHealth ?? MAX_HEALTH;
@@ -820,8 +1115,134 @@ export function createGame(
     }
   }
 
+  // Gait per camp-enemy archetype; windWisp is absent on purpose — it floats.
+  // Slimes are absent too: they move ONLY by hopping now, so their locomotion
+  // sound is the per-hop playSlimeLeap (syncSlimeLeaps), not a stride cadence.
+  const FOOTSTEP_KIND_BY_ARCHETYPE: Partial<Record<string, FootstepKind>> = {
+    stoneGolem: 'golem',
+  };
+  /** Own steps stay audible but never dominate the mix. */
+  const OWN_STEP_GAIN = 0.5;
+
+  // Tracks each walker's previous display position so grass trails push along
+  // the real motion direction. Only actually-moving walkers stamp.
+  const walkerTrails = new Map<string, { x: number; z: number }>();
+  function stampWalkerTrail(
+    key: string,
+    x: number,
+    z: number,
+    radius: number,
+    strength: number,
+    wearPerFrame: number
+  ) {
+    const last = walkerTrails.get(key);
+    if (last) {
+      const deltaX = x - last.x;
+      const deltaZ = z - last.z;
+      if (Math.hypot(deltaX, deltaZ) > 0.02) {
+        groundInfluence.stamp(x, z, radius, strength, deltaX, deltaZ, wearPerFrame);
+      }
+    }
+    if (walkerTrails.size > 512) walkerTrails.clear(); // dead-key backstop
+    walkerTrails.set(key, { x, z });
+  }
+
+  // Feeds every visible walker's DISPLAY position (the lerped mesh — what the
+  // eye sees) to the movement audio each frame; stride cadence, distance culling,
+  // and spam limits all live inside createMovementAudio.
+  function updateFootsteps() {
+    enemyRenderer.forEachAliveUnit((key, position, row) => {
+      stampWalkerTrail(`enemy:${key}`, position.x, position.z, 0.5, 0.7, 0.02);
+      const kind = FOOTSTEP_KIND_BY_ARCHETYPE[row.archetypeId];
+      if (!kind) return;
+      movementAudio.updateUnit(
+        `enemy:${key}`,
+        kind,
+        position.x,
+        position.z,
+        hitAudioGain(position.x, position.z),
+        hitAudioPan(position.x, position.z)
+      );
+    });
+    goliathRenderer.forEachAliveUnit((key, position) => {
+      // Goliaths tear a wide trail through the grass that lingers behind them.
+      stampWalkerTrail(`goliath:${key}`, position.x, position.z, 1.3, 1, 0.06);
+      movementAudio.updateUnit(
+        `goliath:${key}`,
+        'goliath',
+        position.x,
+        position.z,
+        hitAudioGain(position.x, position.z),
+        hitAudioPan(position.x, position.z)
+      );
+    });
+    for (const [identityHex, view] of remotePlayers) {
+      const position = view.model.group.position;
+      stampWalkerTrail(`player:${identityHex}`, position.x, position.z, 0.6, 0.7, 0.03);
+      movementAudio.updateUnit(
+        identityHex,
+        'player',
+        position.x,
+        position.z,
+        hitAudioGain(position.x, position.z),
+        hitAudioPan(position.x, position.z)
+      );
+    }
+    // Airborne frames feed nothing: the prune-and-reinsert cycle restarts the
+    // stride on landing, so a jump's horizontal drift never clicks out steps.
+    if (isGrounded()) {
+      movementAudio.updateUnit('me', 'player', playerPosition.x, playerPosition.z, OWN_STEP_GAIN, 0);
+    }
+    movementAudio.endFrame();
+  }
+
+  // Slam camera shake (D4-15): taste-tunable. A strike sets shakeMagnitude; each
+  // frame adds a random offset (render-only cosmetic randomness — the determinism
+  // rule binds spacetimedb/src, not the renderer) and decays the magnitude
+  // exponentially over ~0.45s. Bumped after 04-07 playtest: 0.2/12 read as nothing.
+  const SHAKE_START_MAGNITUDE = 0.45; // world units
+  const SHAKE_DECAY_RATE = 7; // e^-3 ≈ 5% left after ~0.43s
+  const SHAKE_FLOOR = 0.005; // below this the shake snaps off
+  // Per-attack juice seeds (ANIM-04): swing lightest, swirl medium, slam full.
+  // Handler-local by design — feel numbers, not client/server parity material.
+  const SWING_BURST_PARTICLES = 10;
+  const SWING_SHAKE_MAGNITUDE = 0.15;
+  const SWIRL_BURST_PARTICLES = 18;
+  const SWIRL_SHAKE_MAGNITUDE = 0.3;
+  // Slime slam landing seeds: a wet splat, the LIGHTEST tier — small green
+  // burst, shake only when it lands practically on top of me, and none of the
+  // goliath package (no shockwave, no telegraph flash — slimes telegraph nothing).
+  const SLIME_SLAM_COLOR = 0x7ec843;
+  const SLIME_SLAM_BURST_PARTICLES = 12;
+  const SLIME_SLAM_SHAKE_MAGNITUDE = 0.12;
+  const SLIME_SLAM_SHAKE_RANGE = 8; // world units — "very close" only
+  /** Kicked-up dirt cubes for slams/dashes — earth tone regardless of element. */
+  const EARTH_DEBRIS_COLOR = 0x8a7a5a;
+  // shieldDash tier seeds (06-02) — lighter than the slam, heavier than the swing.
+  const DASH_BURST_PARTICLES = 14;
+  const DASH_SHAKE_MAGNITUDE = 0.2;
+  /** Dust-wake bursts spaced along the cast→landing lane (bounded, event-scoped). */
+  const DASH_WAKE_POINTS = 4;
+  /** Particles per wake puff — small so the landing burst stays the accent. */
+  const DASH_WAKE_PARTICLES = 5;
+  // Strike juice is LOCAL feedback: shake reads as "I was hit / something
+  // landed nearby", so a strike farther than this from the local player plays
+  // no juice at all, and within it both shake and SFX scale down linearly.
+  // Without the gate, three goliaths chaining basics across the archipelago
+  // shook and thundered on every client on the map.
+  const STRIKE_JUICE_RANGE = 40; // world units
+  let shakeMagnitude = 0;
+  const desiredPosition = new THREE.Vector3();
+
   function updateCamera(deltaSeconds: number) {
-    const desiredPosition = playerPosition.clone().add(CAMERA_OFFSET);
+    desiredPosition.copy(playerPosition).add(CAMERA_OFFSET);
+    if (shakeMagnitude > 0) {
+      desiredPosition.x += (Math.random() - 0.5) * 2 * shakeMagnitude;
+      desiredPosition.y += (Math.random() - 0.5) * 2 * shakeMagnitude;
+      desiredPosition.z += (Math.random() - 0.5) * 2 * shakeMagnitude;
+      shakeMagnitude *= Math.exp(-SHAKE_DECAY_RATE * deltaSeconds);
+      if (shakeMagnitude < SHAKE_FLOOR) shakeMagnitude = 0;
+    }
     pixelRenderer.camera.position.lerp(desiredPosition, Math.min(1, deltaSeconds * 6));
     pixelRenderer.camera.lookAt(playerPosition.x, playerPosition.y + 1, playerPosition.z);
   }
@@ -890,6 +1311,9 @@ export function createGame(
     if (combo > 0 && elapsedSeconds - lastComboHitAt > comboWindowSeconds(combo)) {
       combo = 0;
     }
+    // The synthesized dead window closes on its timer (Infinity while alive
+    // and for void falls, which clear on the confirmed respawn row instead).
+    if (elapsedSeconds >= deadClearAtSeconds) clearDeathState();
 
     updateLocalPlayer(deltaSeconds);
     boostOrbit.update({
@@ -899,17 +1323,25 @@ export function createGame(
       deltaSeconds,
     });
     effectSystem.update(deltaSeconds);
+    debrisSystem?.update(deltaSeconds);
     // Enemies/goliaths are drawn straight from the server tables and interpolated;
     // the server tick owns their combat and damages players (reflected through
     // syncMyServerRow), so there is no local contact-damage path here anymore.
     enemyRenderer.update(deltaSeconds, world.getGroundHeight);
+    // Re-derive each goliath's attack phase/progress from its row micros and
+    // push the views BEFORE the renderer animates this frame's poses.
+    goliathRenderer.setAttackViews(attackViewClock.refreshViews());
     goliathRenderer.update(deltaSeconds, world.getGroundHeight);
+    telegraphSystem.update(deltaSeconds);
     updateGemDrops(deltaSeconds);
     updateShardDrops(deltaSeconds);
     resolveAllCollisions();
     damageNumbers.update(deltaSeconds);
     world.update(deltaSeconds);
+    // Shadow camera follows the player (texel-snapped) — see setShadowFocus.
+    world.setShadowFocus(playerPosition.x, playerPosition.z);
     updateRemotePlayerViews(deltaSeconds);
+    updateFootsteps();
     updateCamera(deltaSeconds);
     syncPositionToServer(deltaSeconds);
     healInSafeZone(deltaSeconds);
@@ -920,6 +1352,12 @@ export function createGame(
       pushHudState();
     }
 
+    // All stampers above have queued this frame's marks; bake them into the
+    // influence map before the world render samples it.
+    if (influenceEnabled) {
+      groundInfluence.update(pixelRenderer.renderer, deltaSeconds);
+      scorchMap.update(pixelRenderer.renderer, deltaSeconds);
+    }
     pixelRenderer.render(scene);
   }
 
@@ -931,8 +1369,93 @@ export function createGame(
     remotePlayers.delete(identityHex);
   }
 
+  // One riser per CAST (startedAtMicros in the key makes a re-cast a fresh
+  // riser): WINDUP starts it at the cast point, faded by distance. A cast whose
+  // row vanished or left windup/strike (death, interrupt) cancels; a riser that
+  // ran to its natural strike self-stops, so the late cancel is a safe no-op.
+  const ATTACK_STATE_WINDUP = 1;
+  const ATTACK_STATE_STRIKE = 2;
+  const activeRisers = new Map<string, () => void>();
+  function syncWindupRisers(rows: readonly UnitAttack[]) {
+    const live = new Set<string>();
+    for (const row of rows) {
+      if (row.state !== ATTACK_STATE_WINDUP && row.state !== ATTACK_STATE_STRIKE) continue;
+      const key = `${row.unitKind}:${row.unitId}:${row.startedAtMicros}`;
+      live.add(key);
+      if (row.state !== ATTACK_STATE_WINDUP || activeRisers.has(key)) continue;
+      const durationSeconds = Number(row.strikeAtMicros - row.startedAtMicros) / 1e6;
+      activeRisers.set(
+        key,
+        weaponAudio.playWindupRiser(
+          durationSeconds,
+          hitAudioGain(row.castX, row.castZ),
+          hitAudioPan(row.castX, row.castZ)
+        )
+      );
+    }
+    for (const [key, cancel] of activeRisers) {
+      if (live.has(key)) continue;
+      cancel();
+      activeRisers.delete(key);
+    }
+  }
+
+  // One wet leap per hop START: the enemy row's hopStartedAtMicros changing
+  // (with a live duration) IS the launch. First sighting of each slime
+  // baselines silently so a page load never choruses every mid-hop slime.
+  const slimeHopStartsSeen = new Map<string, bigint>();
+  function syncSlimeLeaps(rows: readonly Enemy[]) {
+    const seen = new Set<string>();
+    for (const row of rows) {
+      if (!isSlimeArchetype(row.archetypeId) || !row.alive) continue;
+      const key = row.enemyId.toString();
+      seen.add(key);
+      const previous = slimeHopStartsSeen.get(key);
+      if (previous === row.hopStartedAtMicros) continue;
+      slimeHopStartsSeen.set(key, row.hopStartedAtMicros);
+      if (previous === undefined || row.hopDurationMicros === 0n) continue;
+      weaponAudio.playSlimeLeap(
+        hitAudioGain(row.positionX, row.positionZ),
+        hitAudioPan(row.positionX, row.positionZ)
+      );
+    }
+    for (const key of slimeHopStartsSeen.keys()) {
+      if (!seen.has(key)) slimeHopStartsSeen.delete(key);
+    }
+  }
+
+  // One airy whoosh per goliath leap TRAVEL: fired the first time a leapSlam
+  // row is seen in STRIKE (the row teleports to the landing there and the mesh
+  // lunge begins). Keyed by unit+cast so a re-cast is a fresh whoosh; keys are
+  // pruned when their row leaves (new cast or removal).
+  const firedLeapWhooshKeys = new Set<string>();
+  // Real travel length: the mesh lerp (rate 10) reaches the ~0.97 landed gate
+  // ≈0.35s after the strike snap; the arc's recovery tail stretches the felt
+  // airtime slightly past that.
+  const LEAP_TRAVEL_SECONDS = 0.5;
+  function syncLeapWhooshes(rows: readonly UnitAttack[]) {
+    const live = new Set<string>();
+    for (const row of rows) {
+      if (row.attackId !== 'leapSlam') continue;
+      const key = `${row.unitKind}:${row.unitId}:${row.startedAtMicros}`;
+      live.add(key);
+      if (row.state !== ATTACK_STATE_STRIKE || firedLeapWhooshKeys.has(key)) continue;
+      firedLeapWhooshKeys.add(key);
+      audioSystem.playLeapWhoosh(
+        LEAP_TRAVEL_SECONDS,
+        hitAudioGain(row.castX, row.castZ),
+        hitAudioPan(row.castX, row.castZ)
+      );
+    }
+    for (const key of firedLeapWhooshKeys) {
+      if (!live.has(key)) firedLeapWhooshKeys.delete(key);
+    }
+  }
+
   const game: Game = {
     onPartySlotRequested: null,
+    onPickup: null,
+    onDeathChange: null,
     start() {
       lastFrameTime = performance.now();
       animationFrameHandle = requestAnimationFrame(frame);
@@ -945,16 +1468,33 @@ export function createGame(
       damageNumbers.dispose();
       enemyRenderer.dispose();
       goliathRenderer.dispose();
+      telegraphSystem.dispose();
+      combatAudio.dispose();
+      weaponAudio.dispose();
+      movementAudio.dispose();
+      pickupAudio.dispose();
+      audioSystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
       playerModel.dispose();
       scene.remove(boostOrbit.group);
       boostOrbit.dispose();
+      debrisSystem?.dispose();
+      lightPool?.dispose();
+      gemGeometry.dispose();
+      shardGeometry.dispose();
+      for (const material of dropMaterials.values()) material.dispose();
+      dropMaterials.clear();
       world.dispose();
+      groundInfluence.dispose();
+      scorchMap.dispose();
       pixelRenderer.dispose();
     },
     setOnSelectPlayer(handler) {
       onSelectPlayer = handler;
+    },
+    setPixelFilter(enabled) {
+      pixelRenderer.setPixelated(enabled);
     },
     setPartyAllies(identityHexes) {
       partyAllyHexes = new Set(identityHexes);
@@ -1003,7 +1543,8 @@ export function createGame(
             row,
             targetPosition: new THREE.Vector3(row.positionX, row.positionY, row.positionZ),
             targetRotationY: row.rotationY,
-            lastPvpHitAt: 0,
+            lastPvpSentAt: 0,
+            lastPvpHitShownAt: 0,
             healthBar,
           });
           continue;
@@ -1028,14 +1569,18 @@ export function createGame(
       }
     },
     syncMyServerRow(row) {
-      // A big health jump only happens on death respawn (heals are +60/s).
-      const wasRespawned = row.currentHealth > myServerHealth + RESPAWN_HEALTH_JUMP;
+      // Health up-jump alone is NOT a death signal: active healers restore 20%
+      // of max HP in one event (Marina/Nereida — 280 on a 1400 tank), which
+      // cleared RESPAWN_HEALTH_JUMP and fired a false DEAD! screen mid-fight
+      // (playtest 2026-07-12). A real respawn also TELEPORTS to spawn, so the
+      // death read requires the up-jump AND the position snap together.
+      const healthUpJump = row.currentHealth > myServerHealth + RESPAWN_HEALTH_JUMP;
       // Contact damage from worldTick only reaches us via this synced HP drop, so
-      // float a "taken" number for it. Skip respawns (up-jump) and character
+      // float a "taken" number for it. Skip up-jumps (respawn/heal) and character
       // switches (different HP pool = false drop), and net out PvP already shown.
       const sameCharacter = row.activeCharacterId === lastSyncedCharacterId;
       const drop = myServerHealth - row.currentHealth;
-      if (!wasRespawned && sameCharacter && drop > 0) {
+      if (!healthUpJump && sameCharacter && drop > 0) {
         const enemyDamage = drop - pvpDamageSinceSync;
         if (enemyDamage >= TAKEN_DAMAGE_FLOOR) {
           game.spawnSelfNumber(
@@ -1048,11 +1593,59 @@ export function createGame(
       lastSyncedCharacterId = row.activeCharacterId;
       myServerHealth = row.currentHealth;
       const serverPosition = new THREE.Vector3(row.positionX, row.positionY, row.positionZ);
+      // HIT-01: a RAISED stunnedUntilMicros means a fresh knockback landed on me
+      // — open the render stun window; the freshest server row is the lerp
+      // target updateLocalPlayer pulls toward while the window is active.
+      if (!hasBaselinedStun) {
+        hasBaselinedStun = true;
+      } else if (row.stunnedUntilMicros > lastStunnedUntilMicros) {
+        // The strike event and my stunned row update ride the same worldTick
+        // transaction, so a fresh (<600ms) strike is MY stun's cause — its
+        // per-attack stunSeconds (ATTACK_RENDER mirror, parity-locked) sets the
+        // freeze + popup DURATION; proximity to its center sets the intensity.
+        // Stale/absent strike info (e.g. PVP-added stuns later) falls back to
+        // the leapSlam-tuned default and mid intensity.
+        const fresh = lastStrike && performance.now() - lastStrike.atMs < 600;
+        const stunSeconds = fresh
+          ? (ATTACK_RENDER[lastStrike!.attackId]?.stunSeconds ?? DEFAULT_STUN_RENDER_MS / 1000)
+          : DEFAULT_STUN_RENDER_MS / 1000;
+        // A zero-stun hit (swirl knockback, D5-12) must not freeze inputs or
+        // fire a ghost STUNNED! popup — the punish window belongs to the player.
+        if (stunSeconds > 0) {
+          stunActiveUntilPerfMs = performance.now() + stunSeconds * 1000;
+          const intensity = fresh
+            ? THREE.MathUtils.clamp(
+                1 -
+                  Math.hypot(playerPosition.x - lastStrike!.x, playerPosition.z - lastStrike!.z) /
+                    Math.max(0.001, lastStrike!.radius),
+                0.25,
+                1
+              )
+            : 0.5;
+          // Pop + wobble that winds down across the freeze, recovery blip at the end.
+          combatAudio.playStun(stunSeconds, intensity);
+          onStunned?.(stunSeconds, intensity);
+        }
+      }
+      lastStunnedUntilMicros = row.stunnedUntilMicros;
+      stunServerPosition.copy(serverPosition);
       const isFarFromServer =
         playerPosition.distanceTo(serverPosition) > SERVER_TELEPORT_THRESHOLD;
       const voidRespawnConfirmed =
         hasReportedVoidDeath && serverPosition.y >= 0 && playerPosition.y < 0;
-      if (wasRespawned || isFarFromServer || voidRespawnConfirmed) {
+      // Combat death = up-jump + spawn teleport in one row (death + respawn
+      // ride one transaction — see the isDeadLocally note). Heals up-jump
+      // without moving you; teleports without an up-jump are lag snaps. A void
+      // fall is already dead locally, so its respawn row only clears the
+      // state. The sameCharacter gate keeps a switch to a bigger HP pool from
+      // reading as a death.
+      const wasRespawned = healthUpJump && isFarFromServer;
+      if (isDeadLocally) {
+        if (wasRespawned || voidRespawnConfirmed) clearDeathState();
+      } else if (wasRespawned && sameCharacter) {
+        enterDeathState(DEATH_STATE_SECONDS);
+      }
+      if (isFarFromServer || voidRespawnConfirmed) {
         playerPosition.copy(serverPosition);
         playerVelocityY = 0;
         fallPeakY = serverPosition.y;
@@ -1062,12 +1655,39 @@ export function createGame(
     },
     spawnSelfNumber(amount, kind) {
       // Account PvP damage so the synced HP drop isn't re-floated as a "taken" number.
-      if (kind === 'pvp') pvpDamageSinceSync += amount;
+      if (kind === 'pvp' || kind === 'pvpCrit') pvpDamageSinceSync += amount;
+      // Every self number has a feel: damage = low body thud (crit adds the
+      // alarm snap), heals = the soft chime.
+      if (kind === 'heal') combatAudio.playHeal();
+      else combatAudio.playPlayerHurt(kind === 'takenCrit' || kind === 'pvpCrit');
       damageNumbers.spawn(playerPosition.clone().setY(playerPosition.y + 1.4), amount, kind);
     },
+    spawnWorldNumber(positionX, positionZ, amount, kind, isMine) {
+      // My hits play full volume; other players' fights tick faintly by distance,
+      // panned to where they sit on screen.
+      const gain = isMine ? 1 : hitAudioGain(positionX, positionZ);
+      const pan = hitAudioPan(positionX, positionZ);
+      if (kind === 'crit') combatAudio.playEnemyCrit(gain, pan);
+      else combatAudio.playEnemyHit(gain, pan);
+      damageNumbers.spawn(new THREE.Vector3(positionX, 1.2, positionZ), amount, kind);
+    },
     flashRemoteHealth(identityHex) {
+      // Display only — must NOT touch lastPvpSentAt: this fires for every
+      // broadcast pvp_hit (rival attackers, our own echo) and would otherwise
+      // re-arm our local send-rate gate on the shared victim.
       const view = remotePlayers.get(identityHex);
-      if (view) view.lastPvpHitAt = elapsedSeconds;
+      if (view) view.lastPvpHitShownAt = elapsedSeconds;
+    },
+    spawnPlayerNumber(identityHex, amount, kind, isMine) {
+      const view = remotePlayers.get(identityHex);
+      if (!view) return; // victim despawned — drop silently
+      const p = view.model.group.position;
+      // My landed PVP crit pops full volume; spectated hits tick by distance.
+      const gain = isMine ? 1 : hitAudioGain(p.x, p.z);
+      const pan = hitAudioPan(p.x, p.z);
+      if (kind === 'crit' || kind === 'pvpCrit') combatAudio.playEnemyCrit(gain, pan);
+      else combatAudio.playEnemyHit(gain, pan);
+      damageNumbers.spawn(p.clone().setY(p.y + 1), amount, kind);
     },
     syncGemDrops(drops) {
       const seen = new Set<string>();
@@ -1079,22 +1699,22 @@ export function createGame(
           gemDrops.set(key, {
             mesh,
             rawId: drop.id,
+            amount: drop.amount,
             age: 0,
             baseY,
-            sparkle: gemVisual(drop.amount).sparkle,
-            sparkleAt: 0,
           });
         }
       }
       for (const [key, gem] of gemDrops) {
         if (seen.has(key)) continue;
+        // A despawned drop I had requested = MY confirmed pickup. Any other
+        // despawn (someone else grabbed it, expiry) vanishes silently.
+        if (requestedGemPickups.has(key)) {
+          pickupAudio.playGemPickup(gem.amount);
+          game.onPickup?.('gem', gem.amount);
+        }
+        // Geometry + material are shared across all drops — remove only.
         scene.remove(gem.mesh);
-        gem.mesh.traverse(object => {
-          if (object instanceof THREE.Mesh) {
-            object.geometry.dispose();
-            (object.material as THREE.Material).dispose();
-          }
-        });
         gemDrops.delete(key);
         requestedGemPickups.delete(key);
       }
@@ -1106,27 +1726,163 @@ export function createGame(
         seen.add(key);
         if (!shardDrops.has(key)) {
           const { mesh, baseY } = createShardMesh(drop);
-          shardDrops.set(key, { mesh, rawId: drop.id, age: 0, baseY, sparkleAt: 0 });
+          shardDrops.set(key, {
+            mesh,
+            rawId: drop.id,
+            amount: drop.amount,
+            age: 0,
+            baseY,
+            sparkleAt: 0,
+          });
         }
       }
       for (const [key, shard] of shardDrops) {
         if (seen.has(key)) continue;
+        // Same confirmation read as gems: my requested shard despawning = mine.
+        if (requestedShardPickups.has(key)) {
+          pickupAudio.playShardGain();
+          game.onPickup?.('shard', shard.amount);
+        }
+        // Geometry + material are shared across all drops — remove only.
         scene.remove(shard.mesh);
-        shard.mesh.traverse(object => {
-          if (object instanceof THREE.Mesh) {
-            object.geometry.dispose();
-            (object.material as THREE.Material).dispose();
-          }
-        });
         shardDrops.delete(key);
         requestedShardPickups.delete(key);
       }
     },
     syncEnemies(rows) {
       enemyRenderer.syncRows(rows);
+      syncSlimeLeaps(rows);
     },
     syncGoliaths(rows) {
       goliathRenderer.syncRows(rows);
+      attackViewClock.syncGoliaths(rows);
+      // Re-gate telegraphs on the fresh alive flags (a death mid-windup must
+      // drop the disc immediately, before the attack row itself updates).
+      telegraphSystem.syncAttacks(attackViewClock.getAttackRows(), attackViewClock.isUnitAlive);
+    },
+    syncUnitAttacks(rows) {
+      // Stored in the view clock so the frame loop can re-derive attack views
+      // and syncGoliaths can re-gate telegraphs between row updates.
+      attackViewClock.syncAttackRows(rows);
+      telegraphSystem.syncAttacks(rows, attackViewClock.isUnitAlive);
+      syncWindupRisers(rows);
+      syncLeapWhooshes(rows);
+    },
+    handleAttackStrike(strike) {
+      // Per-attack strike juice tiers (ANIM-04) — every component fires exactly
+      // ONCE per event (the App.tsx useTable hook is this event table's ONLY
+      // subscription). All juice draws from the EVENT's own coords + radius, so
+      // it lands even when the telegraph ring is already torn down (the rim
+      // flash raced the row's windup→recovery jump and often never showed —
+      // 04-07 playtest).
+      const groundY = world.getGroundHeight(strike.landingX, strike.landingZ);
+      const landing = new THREE.Vector3(strike.landingX, groundY + 0.05, strike.landingZ);
+      lastStrike = {
+        attackId: strike.attackId,
+        x: strike.landingX,
+        z: strike.landingZ,
+        radius: strike.radius,
+        atMs: performance.now(),
+      };
+      const strikeJuiceColor = ATTACK_RENDER[strike.attackId]?.juiceColor ?? ELEMENTS.geo.color;
+      // Every landed unit attack DESTROYS the ground under it: wear 1 squashes
+      // the grass, the scorch stamp browns and dents the terrain (one pixel-art
+      // band per stack, five stacks to full char — the persistent mark you can
+      // walk up to later), both regrowing over ~a minute. Overlapping strikes
+      // accumulate into a darker, deeper union. Cone/lane strikes misread as
+      // circles, so they burn a smaller core.
+      const wearRadius =
+        strike.attackId === 'swordSwing' || strike.attackId === 'shieldDash'
+          ? strike.radius * 0.55
+          : strike.radius;
+      groundInfluence.stamp(strike.landingX, strike.landingZ, wearRadius, 1, 0, 0, 1);
+      scorchMap.stamp(strike.landingX, strike.landingZ, wearRadius, SCORCH_PER_STRIKE);
+      // Distance gate + linear falloff (lastStrike above stays unconditional —
+      // stun attribution must survive even for a strike this gate mutes): a
+      // strike beyond STRIKE_JUICE_RANGE plays NOTHING here; inside it, shake
+      // and SFX scale by proximity so a far fight registers as a distant thud,
+      // not a full-strength "I was hit" jolt. Shake joins via max() so a faint
+      // far strike can never cut short an ongoing stronger shake.
+      const strikeDistance = Math.hypot(
+        strike.landingX - playerPosition.x,
+        strike.landingZ - playerPosition.z
+      );
+      if (strikeDistance >= STRIKE_JUICE_RANGE) return;
+      const juiceFalloff = 1 - strikeDistance / STRIKE_JUICE_RANGE;
+      // Stereo-place the strike where it lands on screen (3D read of the fight).
+      const strikePan = hitAudioPan(strike.landingX, strike.landingZ);
+      // Juice tint comes from the ATTACK_RENDER element palette hint (05-05
+      // round 2 — telegraphs stay Frost cyan; only the strike burst/shockwave
+      // is element-colored). Unknown attackIds fall back to geo like the slam.
+      const juiceColor = strikeJuiceColor;
+      if (strike.attackId === 'slimeSlam' || strike.attackId === 'spikySlam') {
+        // Slime landing that hit someone: wet squash + a small green splash.
+        // MUST bail before the default tier — the goliath slam package (deep
+        // boom + shockwave + rim flash) on a slime hop reads absurd.
+        effectSystem.spawnBurst(landing, SLIME_SLAM_COLOR, SLIME_SLAM_BURST_PARTICLES);
+        debrisSystem?.spawn(landing, SLIME_SLAM_COLOR, 6);
+        if (strikeDistance < SLIME_SLAM_SHAKE_RANGE) {
+          shakeMagnitude = Math.max(shakeMagnitude, SLIME_SLAM_SHAKE_MAGNITUDE * juiceFalloff);
+        }
+        weaponAudio.playSlimeSquash(juiceFalloff, strikePan);
+        return;
+      }
+      if (strike.attackId === 'swordSwing') {
+        // Lightest tier: small burst, light shake, whoosh — and NO shockwave
+        // (a circular shockwave misreads the swing's cone).
+        effectSystem.spawnBurst(landing, juiceColor, SWING_BURST_PARTICLES);
+        telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
+        shakeMagnitude = Math.max(shakeMagnitude, SWING_SHAKE_MAGNITUDE * juiceFalloff);
+        audioSystem.playSwing(juiceFalloff, strikePan);
+        return;
+      }
+      if (strike.attackId === 'swordSwirl') {
+        // Medium tier: the swirl IS a circle, so the radius shockwave reads true.
+        effectSystem.spawnBurst(landing, juiceColor, SWIRL_BURST_PARTICLES);
+        effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
+        telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
+        shakeMagnitude = Math.max(shakeMagnitude, SWIRL_SHAKE_MAGNITUDE * juiceFalloff);
+        audioSystem.playSwirl(juiceFalloff, strikePan);
+        return;
+      }
+      if (strike.attackId === 'shieldDash') {
+        // Charge tier: landing burst + a dust wake along the lane, light shake,
+        // shield clang — and NO shockwave (a circular wave misreads the lane,
+        // the same logic as the swing's cone above).
+        effectSystem.spawnBurst(landing, juiceColor, DASH_BURST_PARTICLES);
+        // Dust wake along the charge path: the cast point is NOT on the strike
+        // event — read it off the dash's unit_attack row (still carrying the
+        // lane geometry through recovery; dash has no chainsInto so no swap
+        // hazard). If the row lookup misses (cache-ordering, RESEARCH A1),
+        // degrade to the landing burst alone — never throw.
+        const dashRow = attackViewClock
+          .getAttackRows()
+          .find(row => row.unitKind === strike.unitKind && row.unitId === strike.unitId);
+        if (dashRow) {
+          for (let point = 1; point <= DASH_WAKE_POINTS; point++) {
+            const along = point / (DASH_WAKE_POINTS + 1);
+            const wakeX = dashRow.castX + (strike.landingX - dashRow.castX) * along;
+            const wakeZ = dashRow.castZ + (strike.landingZ - dashRow.castZ) * along;
+            effectSystem.spawnBurst(
+              new THREE.Vector3(wakeX, world.getGroundHeight(wakeX, wakeZ) + 0.05, wakeZ),
+              juiceColor,
+              DASH_WAKE_PARTICLES
+            );
+          }
+        }
+        telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
+        shakeMagnitude = Math.max(shakeMagnitude, DASH_SHAKE_MAGNITUDE * juiceFalloff);
+        debrisSystem?.spawn(landing, EARTH_DEBRIS_COLOR, 10);
+        audioSystem.playDash(juiceFalloff, strikePan);
+        return;
+      }
+      // Default (leapSlam + any unknown attackId): the D4-15 full package.
+      effectSystem.spawnBurst(landing, juiceColor, 26);
+      effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
+      debrisSystem?.spawn(landing, EARTH_DEBRIS_COLOR, Math.round(14 * juiceFalloff) + 6);
+      telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
+      shakeMagnitude = Math.max(shakeMagnitude, SHAKE_START_MAGNITUDE * juiceFalloff);
+      audioSystem.playSlam(juiceFalloff, strikePan);
     },
     handleRemoteSkillCast(cast) {
       const character = CHARACTERS[cast.characterId];
@@ -1146,6 +1902,7 @@ export function createGame(
         applyDamage: null,
         followPosition: casterView ? () => casterView.model.group.position : undefined,
       });
+      spawnSkillGroundMarks(character.skill, character.element, cast.originX, cast.originZ, 6);
     },
     handleRemotePlayerAttack(attack) {
       // Purely visual: render another player's bow/book shot flying from where it
@@ -1154,6 +1911,19 @@ export function createGame(
       if (!character) return;
       const weapon = WEAPONS[character.weapon];
       if (!weapon.isRanged) return;
+      // The shooter's release, faint by distance and panned to where they stand
+      // on screen (gain 0 beyond earshot = the play call skips itself).
+      if (character.weapon === 'bow') {
+        weaponAudio.playBowShot(
+          hitAudioGain(attack.originX, attack.originZ),
+          hitAudioPan(attack.originX, attack.originZ)
+        );
+      } else {
+        weaponAudio.playArcaneBolt(
+          hitAudioGain(attack.originX, attack.originZ),
+          hitAudioPan(attack.originX, attack.originZ)
+        );
+      }
       effectSystem.spawnProjectile({
         origin: new THREE.Vector3(
           attack.originX,
@@ -1180,6 +1950,12 @@ export function createGame(
     },
     setInputEnabled(enabled) {
       inputSystem.setEnabled(enabled);
+    },
+    isStunned() {
+      return performance.now() < stunActiveUntilPerfMs;
+    },
+    playShardLossSound() {
+      pickupAudio.playShardLoss();
     },
   };
 

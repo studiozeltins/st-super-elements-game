@@ -30,4 +30,11 @@ export default __t.row({
   aggroExpiresAtMicros: __t.u64().name("aggro_expires_at_micros"),
   alive: __t.bool(),
   respawnAtMicros: __t.u64().name("respawn_at_micros"),
+  hopStartedAtMicros: __t.u64().name("hop_started_at_micros"),
+  hopDurationMicros: __t.u64().name("hop_duration_micros"),
+  hopTargetX: __t.f32().name("hop_target_x"),
+  hopTargetZ: __t.f32().name("hop_target_z"),
+  patrolTargetX: __t.f32().name("patrol_target_x"),
+  patrolTargetZ: __t.f32().name("patrol_target_z"),
+  restUntilMicros: __t.u64().name("rest_until_micros"),
 });

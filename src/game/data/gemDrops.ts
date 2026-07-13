@@ -14,26 +14,24 @@ export const BOSS_GEM_MULTIPLIER = 3;
 
 /**
  * How a single ground gem looks, chosen by its value. Every gem is the same
- * (smallest) size; only the color tells denominations apart, and the rarer
- * non-gold tiers get a slow-burn pixel sparkle.
+ * (smallest) size; only the color tells denominations apart (no sparkle/glow
+ * on any tier — playtest 2026-07-12).
  */
 export interface GemVisual {
   /** Core + emissive color. */
   color: number;
-  /** Rarer tiers emit a gentle, slow pixel sparkle. */
-  sparkle: boolean;
 }
 
-// One color per denomination tier: gold family for the common tiers, shifting to
-// cyan then magenta for the rare ones (which also sparkle).
+// One color per denomination tier: gold family for the common tiers, shifting
+// to cyan then magenta for the rare ones.
 const GEM_VISUALS: Record<number, GemVisual> = {
-  1: { color: 0xbfa24a, sparkle: false },
-  5: { color: 0xd8b24e, sparkle: false },
-  10: { color: 0xf2c14e, sparkle: false },
-  20: { color: 0xffd15c, sparkle: false },
-  50: { color: 0xffe08a, sparkle: false },
-  100: { color: 0x9fe8ff, sparkle: true },
-  500: { color: 0xff8af0, sparkle: true },
+  1: { color: 0xbfa24a },
+  5: { color: 0xd8b24e },
+  10: { color: 0xf2c14e },
+  20: { color: 0xffd15c },
+  50: { color: 0xffe08a },
+  100: { color: 0x9fe8ff },
+  500: { color: 0xff8af0 },
 };
 
 /** The largest denomination not exceeding the amount (amounts always ≥ 1). */

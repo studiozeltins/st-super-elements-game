@@ -631,6 +631,28 @@ Keep files short, readable, and single-purpose. **Target ≤ 300 LOC of function
 
 ---
 
+# Client Performance Rules (learned 2026-07-10, 144→20fps regression)
+
+`Identity.toHexString()` / `.isEqual()` are NOT cheap reads — each call does a full BSATN
+serialization (buffer alloc + u256 write + hex map/join). The 20fps regression was 62,000
+of these per second from React re-render churn. Rules:
+
+1. **Never identity-compare per-row-per-render.** Any `rows.filter/find(r => r.owner.toHexString() === …)`
+   in a component body MUST be wrapped in `useMemo` keyed on `[rows, myIdentityHex]`.
+   `useTable` snapshots are reference-stable until their own table changes, so the memo works.
+2. **Owner-scoped tables subscribe server-filtered.** `tables.x.where(r => r.owner.eq(myCanonicalIdentity))`
+   (gated on the canonical identity resolving) — never subscribe the whole table when the UI
+   only ever shows the caller's rows. Applies to both the manual subscription list AND the
+   matching `useTable` query.
+3. **App re-renders on EVERY server transaction** (~16/s with the world tick + position echoes).
+   Anything in the App body runs at that rate — derivations over table rows must be memoized.
+4. **Unbounded-growth tables are frame-cost time bombs** (`weapon_item` = row per gacha pull,
+   3,711 rows). When adding an append-only table, plan aggregation or cleanup up front.
+5. Quick flood check (DevTools console): patch `Uint8Array.prototype.reverse` with a counter —
+   >2k calls/s means an identity-serialization hot loop; sampled `new Error().stack` names it.
+
+---
+
 # This Project: Environments & Deployment (super-elements)
 
 ## The two environments

@@ -12,5 +12,6 @@ import {
 
 export default {
   targetIdentity: __t.identity(),
-  damage: __t.u32(),
+  isSkill: __t.bool(),
+  comboCount: __t.u32(),
 };

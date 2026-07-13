@@ -4,6 +4,13 @@ import { createRoot } from 'react-dom/client';
 // Both families ship the latin-ext subset, so Latvian diacritics (ā ē ī ū č ģ ķ ļ
 // ņ š ž) render in the same font as the rest of the text.
 import '@fontsource-variable/handjet/wght.css';
+// The comic-callout faces (STUNNED!/CRIT!/DEAD! popups draw one at random per
+// burst — COMIC_FONTS in SfxPopup.tsx). All self-hosted: no CDN, CSP/LAN-safe.
+import '@fontsource/bangers/400.css';
+import '@fontsource/luckiest-guy/400.css';
+import '@fontsource/bungee/400.css';
+import '@fontsource/creepster/400.css';
+import '@fontsource/titan-one/400.css';
 import '@fontsource/chakra-petch/400.css';
 import '@fontsource/chakra-petch/600.css';
 import '@fontsource/chakra-petch/700.css';
@@ -12,9 +19,19 @@ import './index.css';
 // index.css so its `[data-hud-theme] .hud` rules layer over the base HUD.
 import './styles/hud/index.css';
 import App from './App.tsx';
+import { COMIC_FONTS } from './ui/SfxPopup.tsx';
+import { setElementFavicon } from './ui/setElementFavicon.ts';
 import { SpacetimeDBProvider } from 'spacetimedb/react';
 import { DbConnection } from './module_bindings/index.ts';
 import { MODULE_NAME, SPACETIMEDB_URI } from './config.ts';
+
+// Warm the comic faces at boot — browsers only fetch a font at first USE, so a
+// popup's randomly drawn face would otherwise render in the fallback and blink
+// when the real font arrives mid-animation.
+for (const family of COMIC_FONTS) document.fonts?.load(`400 1rem '${family}'`);
+
+// Tab icon: the gem octahedron in a random element color, re-rolled per load.
+setElementFavicon();
 
 const TOKEN_KEY = `${SPACETIMEDB_URI}/${MODULE_NAME}/auth_token`;
 

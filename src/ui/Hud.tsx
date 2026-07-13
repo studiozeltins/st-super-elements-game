@@ -4,6 +4,8 @@ import { ELEMENTS } from '../game/data/elements';
 import { MAX_HEALTH } from '../game/data/constants';
 import type { HudState } from '../game/createGame';
 import { VirtualJoystick } from './VirtualJoystick';
+import { useAnimatedNumber } from './useAnimatedNumber';
+import './hudGems.css';
 
 // A glyph per skill kind so each character box shows its special ability at a glance.
 const SKILL_GLYPH: Record<string, string> = {
@@ -105,6 +107,10 @@ export function Hud({
   onTouchButton,
   onTouchButtonRelease,
 }: HudProps) {
+  // Gem counter rolls toward the server value instead of snapping (Task: HUD
+  // roll-up); the HUD shows no shard counter, so gems are the only tween.
+  const { value: gemsDisplay, rolling: gemsRolling } = useAnimatedNumber(gems);
+
   const activeCharacter = CHARACTERS[activeCharacterId];
   const activeElement = activeCharacter ? ELEMENTS[activeCharacter.element] : null;
   const maxHealth = activeCharacter?.maxHealth ?? MAX_HEALTH;
@@ -179,7 +185,9 @@ export function Hud({
       )}
 
       <div className="hud__top-right">
-        <span className="hud__gems">✦ {gems}</span>
+        <span className={`hud__gems${gemsRolling ? ' hud__gems--rolling' : ''}`}>
+          ✦ {gemsDisplay}
+        </span>
         <div className="hud__quick">
           <button
             className="hud__quick-btn"

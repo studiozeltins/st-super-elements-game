@@ -6,12 +6,14 @@ import { WEAPONS } from '../game/data/weapons';
 import { BANNERS, WEAPONS_BY_ID, fiveStarChanceForNextPull, HARD_PITY } from '../game/data/gacha';
 import { GACHA_PULL_COST } from '../game/data/constants';
 import { CharacterPreview } from './CharacterPreview';
+import { CharacterChip, CharacterBadges } from './CharacterChip';
 import { PullAnimation } from './PullAnimation';
 import { CharacterInfoSheet } from './CharacterInfoSheet';
 import { ConstellationRing } from './ConstellationRing';
 import { CharacterIdentity } from './CharacterIdentity';
 import { useTeamDrag } from './useTeamDrag';
 import { useDragScroll } from './useDragScroll';
+import { useLongPress } from './useLongPress';
 import { MAIN_MENU } from './menu';
 
 const PARTY_SIZE = 4;
@@ -35,6 +37,8 @@ export interface PullView {
 interface WeaponRow {
   weaponId: string;
   rarity: number;
+  /** Copies owned — the server stacks duplicates into one row. */
+  count: number;
 }
 
 interface GachaScreenProps {
@@ -157,11 +161,14 @@ export function GachaScreen({
   const shownGems = pullSnapshot?.gems ?? gems;
   const shownShards = pullSnapshot?.shards ?? transcendShards;
 
+  // Hidden power-user gesture: HOLD the ×10 button → one max-pull (count 0 =
+  // server spends the whole wallet in a single atomic transaction).
+  const maxPull = useLongPress(() => startPull(banner.id, 0));
+
   const weaponInventory = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const item of weaponItems) counts.set(item.weaponId, (counts.get(item.weaponId) ?? 0) + 1);
-    return [...counts.entries()]
-      .map(([id, count]) => ({ entry: WEAPONS_BY_ID[id], count }))
+    // One row per (owner, weapon) stack now — the count comes from the server.
+    return weaponItems
+      .map(item => ({ entry: WEAPONS_BY_ID[item.weaponId], count: item.count }))
       .filter(row => row.entry)
       .sort((a, b) => b.entry.rarity - a.entry.rarity || a.entry.displayName.localeCompare(b.entry.displayName));
   }, [weaponItems]);
@@ -208,33 +215,24 @@ export function GachaScreen({
             ref={teamScroll.ref as React.RefObject<HTMLElement>}
             {...teamScroll.handlers}
           >
-            {CHARACTER_LIST.filter(character => ownedCharacterIds.has(character.id)).map(character => {
-              const element = ELEMENTS[character.element];
-              const inParty = partyCharacterIds.includes(character.id);
-              return (
-                <button
-                  key={character.id}
-                  className={`team-chip rarity-${character.stars} ${inParty ? 'team-chip--in' : ''} ${
-                    teamDrag.dragId === character.id ? 'team-chip--dragging' : ''
-                  }`}
-                  style={{ '--element-color': element.cssColor } as React.CSSProperties}
-                  {...teamDrag.chipHandlers(character.id, character.displayName[0], element.cssColor)}
-                >
-                  <span className="team-chip__ring">
-                    <ConstellationRing
-                      variant="chip"
-                      letter={character.displayName[0]}
-                      unlocked={constellationById[character.id] ?? 0}
-                      activated={activatedById[character.id] ?? constellationById[character.id] ?? 0}
-                    />
-                  </span>
-                  <span className="team-chip__text">
-                    <span className="team-chip__name">{character.displayName}</span>
-                    <span className="team-chip__level">Līm. 1</span>
-                  </span>
-                </button>
-              );
-            })}
+            {CHARACTER_LIST.filter(
+              character =>
+                ownedCharacterIds.has(character.id) && !partyCharacterIds.includes(character.id)
+            ).map(character => (
+              <CharacterChip
+                key={character.id}
+                characterId={character.id}
+                constellation={constellationById[character.id] ?? 0}
+                activated={activatedById[character.id] ?? constellationById[character.id] ?? 0}
+                transcend={transcendById[character.id] ?? 0}
+                dragging={teamDrag.dragId === character.id}
+                handlers={teamDrag.chipHandlers(
+                  character.id,
+                  character.displayName[0],
+                  ELEMENTS[character.element].cssColor
+                )}
+              />
+            ))}
           </nav>
         ) : (
           <span className="gacha__spacer" />
@@ -325,9 +323,10 @@ export function GachaScreen({
                   <span className="pull-btn__cost">✦ {GACHA_PULL_COST}</span>
                 </button>
                 <button
-                  className="pull-btn pull-btn--ten"
+                  className={`pull-btn pull-btn--ten ${maxPull.holding ? 'pull-btn--charging' : ''}`}
                   disabled={!canPullTen}
                   onClick={() => startPull(banner.id, 10)}
+                  {...maxPull.handlers}
                 >
                   <span className="pull-btn__count">VĒLĒTIES ×10</span>
                   <span className="pull-btn__cost">✦ {GACHA_PULL_COST * 10}</span>
@@ -390,7 +389,12 @@ export function GachaScreen({
                             }
                           />
                         </span>
-                        <CharacterIdentity character={character} className="team-slot__id" />
+                        <CharacterIdentity
+                          character={character}
+                          className="team-slot__id"
+                          unlocked={constellationById[character.id] ?? 0}
+                          transcendLevel={transcendById[character.id] ?? 0}
+                        />
                       </div>
                       <button
                         className="team-slot__stage"
@@ -446,8 +450,12 @@ export function GachaScreen({
                     </span>
                     <span className="inv-card__name">{character.displayName}</span>
                     <span className="inv-card__sub">{element.displayName}</span>
-                    {isOwned && (constellationById[character.id] ?? 0) > 0 && (
-                      <span className="inv-card__con">C{constellationById[character.id]}</span>
+                    {isOwned && (
+                      <CharacterBadges
+                        constellation={constellationById[character.id] ?? 0}
+                        transcend={transcendById[character.id] ?? 0}
+                        level={1}
+                      />
                     )}
                     {isActive && <span className="inv-card__badge">AKTĪVS</span>}
                     {!isOwned && <span className="inv-card__lock">◈</span>}

@@ -37,6 +37,14 @@ function enemyRow(overrides: Partial<Enemy> = {}): Enemy {
     maxHealth: 320,
     carriedGems: 0,
     alive: true,
+    // Hop columns (grounded/idle by default; tests override to simulate a hop).
+    hopStartedAtMicros: 0n,
+    hopDurationMicros: 0n,
+    hopTargetX: 3,
+    hopTargetZ: 4,
+    patrolTargetX: 3,
+    patrolTargetZ: 4,
+    restUntilMicros: 0n,
     ...overrides,
   } as Enemy;
 }
@@ -62,12 +70,14 @@ describe('createEnemyRenderer', () => {
   it('spawns a real enemy model and interpolates it from the table row', () => {
     const scene = new THREE.Scene();
     const effectSystem = createEffectSystem(scene);
-    const renderer = createEnemyRenderer(scene, effectSystem, vi.fn());
+    const renderer = createEnemyRenderer(scene, effectSystem);
 
     renderer.syncRows([enemyRow()]);
     expect(groupCount(scene)).toBeGreaterThan(0);
     expect(() => renderer.update(0.016, () => 0)).not.toThrow();
-    expect(renderer.getAlivePositions()).toHaveLength(1);
+    let aliveCount = 0;
+    renderer.forEachAliveTarget(() => aliveCount++);
+    expect(aliveCount).toBe(1);
 
     renderer.dispose();
   });
@@ -75,7 +85,7 @@ describe('createEnemyRenderer', () => {
   it('scales boss enemies up and pulls its display base gems from gemRewards', () => {
     const scene = new THREE.Scene();
     const effectSystem = createEffectSystem(scene);
-    const renderer = createEnemyRenderer(scene, effectSystem, vi.fn());
+    const renderer = createEnemyRenderer(scene, effectSystem);
 
     renderer.syncRows([enemyRow({ isBoss: true, rewardTier: 3 })]);
     renderer.update(0.016, () => 0);
@@ -87,11 +97,39 @@ describe('createEnemyRenderer', () => {
     renderer.dispose();
   });
 
+  it('bounces a slime along the server hop arc and squashes on landing', () => {
+    const nowSpy = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    const scene = new THREE.Scene();
+    const renderer = createEnemyRenderer(scene, createEffectSystem(scene));
+
+    // A live hop row: airtime 550ms, freshly started. The first update anchors
+    // the client's server-clock estimate at hopStartedAt.
+    renderer.syncRows([
+      enemyRow({ hopStartedAtMicros: 5_000_000n, hopDurationMicros: 550_000n }),
+    ]);
+    renderer.update(0.016, () => 0);
+    const group = scene.children.find((c): c is THREE.Group => c instanceof THREE.Group)!;
+    const rig = group.children.find((c): c is THREE.Group => c instanceof THREE.Group)!;
+    expect(rig.scale.y).toBeGreaterThan(1); // launch stretch
+
+    nowSpy.mockReturnValue(1275); // mid-hop (progress 0.5) → arc apex
+    renderer.update(0.016, () => 0);
+    expect(rig.position.y).toBeGreaterThan(0.5);
+
+    nowSpy.mockReturnValue(1600); // past the 550ms airtime → landed
+    renderer.update(0.016, () => 0);
+    expect(rig.position.y).toBe(0);
+    expect(rig.scale.y).toBeLessThan(1); // landing squash
+
+    nowSpy.mockRestore();
+    renderer.dispose();
+  });
+
   it('hides the model and reports a burst when an enemy dies', () => {
     const scene = new THREE.Scene();
     const effectSystem = createEffectSystem(scene);
     const burstSpy = vi.spyOn(effectSystem, 'spawnBurst');
-    const renderer = createEnemyRenderer(scene, effectSystem, vi.fn());
+    const renderer = createEnemyRenderer(scene, effectSystem);
     renderer.syncRows([enemyRow({ alive: true })]);
     renderer.update(0.016, () => 0);
 
@@ -108,7 +146,7 @@ describe('createEnemyRenderer', () => {
 describe('createGoliathRenderer', () => {
   it('spawns a real goliath model with animated limbs and topples it on death', () => {
     const scene = new THREE.Scene();
-    const renderer = createGoliathRenderer(scene, vi.fn());
+    const renderer = createGoliathRenderer(scene);
 
     renderer.syncRows([goliathRow({ sizeIndex: 2 })]);
     expect(groupCount(scene)).toBe(1);

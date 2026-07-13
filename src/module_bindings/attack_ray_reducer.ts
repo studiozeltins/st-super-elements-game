@@ -17,6 +17,6 @@ export default {
   dirZ: __t.f32(),
   range: __t.f32(),
   hitRadius: __t.f32(),
-  damage: __t.u32(),
+  isSkill: __t.bool(),
   comboCount: __t.u32(),
 };

@@ -2,7 +2,7 @@ import { schema, t, table, SenderError } from 'spacetimedb/server';
 import { ScheduleAt, Identity } from 'spacetimedb';
 import { sha256Hex, bytesToHex } from './sha256';
 import { createSeededRandom } from './rng';
-import { generateCampSites, type CampArchetypeId } from './worldGen';
+import { generateCampSites } from './worldGen';
 import {
   ENEMY_ARCHETYPE_STATS,
   MEMBERS_PER_CAMP,
@@ -15,13 +15,28 @@ import {
 } from './enemyStats';
 import { damagePerTick, distanceBetween, gemIsCollectible, stepToward, windowBucketFor } from './combatMath';
 import { pickRayHit } from './hitscan';
-import { resistedDamage, GOLIATH_RESISTANCES, PLAYER_RESISTANCES } from './resistances';
+import { resistedDamage, GOLIATH_RESISTANCES, PLAYER_RESISTANCES, type DamageType, type ResistanceProfile } from './resistances';
+import { computeBaseDamage, CHARACTER_COMBAT } from './damage';
+import { rollCrit } from './crit';
+import { nextSkillReadyAt, skillGrantActive } from './skillGate';
 import { isWalkable, nextGoliathWaypoint } from './bridges';
 import { chooseGoliathTargetCamp, headingFromStep, hasReachedCamp, isWithinForwardArc } from './goliathAI';
 import { resolveTranscendInstall } from './transcendInstall';
 import { resolveDupeGrant } from './gachaOverflow';
 import { applyDeathShardPenalty } from './deathPenalty';
 import { nextLeader, canAccept } from './partyRules';
+import { runUnitAttacks } from './unitAttacks';
+import { moveEnemies } from './enemyMovement';
+import { isSlimeArchetype } from './slimeHop';
+import { steeredStep } from './steering';
+import {
+  AGGRO_GOLIATH,
+  AGGRO_HOME,
+  AGGRO_PLAYER,
+  aggroExpired,
+  clampToWorld,
+  isInsideSafeZone,
+} from './worldRules';
 
 // Keep in sync with src/game/data/characters.ts (client roster).
 // maxHealth  = per-character pool.
@@ -35,33 +50,35 @@ interface CharacterStat {
   maxHealth: number;
   healthRegen: number;
   role: 'tank' | 'dps' | 'healer' | 'support';
+  critRate: number;
+  critDmg: number;
   healType: HealType;
   healMode: HealMode;
   healPower: number;
 }
 const NO_HEAL = { healType: 'none' as HealType, healMode: 'flat' as HealMode, healPower: 0 };
 const CHARACTER_STATS: Record<string, CharacterStat> = {
-  aeris: { stars: 5, maxHealth: 950, healthRegen: 0, role: 'support', ...NO_HEAL },
-  terron: { stars: 5, maxHealth: 1400, healthRegen: 0, role: 'tank', ...NO_HEAL },
-  volta: { stars: 5, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
-  silva: { stars: 5, maxHealth: 1050, healthRegen: 8, role: 'dps', ...NO_HEAL },
+  aeris: { stars: 5, maxHealth: 950, healthRegen: 0, role: 'support', critRate: 0.20, critDmg: 1.60, ...NO_HEAL },
+  terron: { stars: 5, maxHealth: 1400, healthRegen: 0, role: 'tank', critRate: 0.12, critDmg: 1.50, ...NO_HEAL },
+  volta: { stars: 5, maxHealth: 1000, healthRegen: 0, role: 'dps', critRate: 0.34, critDmg: 1.90, ...NO_HEAL },
+  silva: { stars: 5, maxHealth: 1050, healthRegen: 8, role: 'dps', critRate: 0.33, critDmg: 2.00, ...NO_HEAL },
   // Marina: active healer — her water ring heals the whole party for 20% of each pool.
-  marina: { stars: 5, maxHealth: 1150, healthRegen: 12, role: 'healer', healType: 'active', healMode: 'percent', healPower: 0.2 },
-  ignis: { stars: 5, maxHealth: 1300, healthRegen: 0, role: 'tank', ...NO_HEAL },
-  sarma: { stars: 5, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
+  marina: { stars: 5, maxHealth: 1150, healthRegen: 12, role: 'healer', critRate: 0.18, critDmg: 1.60, healType: 'active', healMode: 'percent', healPower: 0.2 },
+  ignis: { stars: 5, maxHealth: 1300, healthRegen: 0, role: 'tank', critRate: 0.13, critDmg: 1.55, ...NO_HEAL },
+  sarma: { stars: 5, maxHealth: 1000, healthRegen: 0, role: 'dps', critRate: 0.32, critDmg: 1.95, ...NO_HEAL },
   // Nereīda: active healer — her tide arrows mend the party for 20% of each pool.
-  nereida: { stars: 5, maxHealth: 1120, healthRegen: 14, role: 'healer', healType: 'active', healMode: 'percent', healPower: 0.2 },
-  vesper: { stars: 5, maxHealth: 1080, healthRegen: 0, role: 'dps', ...NO_HEAL },
-  glacia: { stars: 5, maxHealth: 1550, healthRegen: 0, role: 'tank', ...NO_HEAL },
-  zefs: { stars: 4, maxHealth: 900, healthRegen: 0, role: 'support', ...NO_HEAL },
-  petra: { stars: 4, maxHealth: 1200, healthRegen: 0, role: 'tank', ...NO_HEAL },
-  zibo: { stars: 4, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
+  nereida: { stars: 5, maxHealth: 1120, healthRegen: 14, role: 'healer', critRate: 0.19, critDmg: 1.65, healType: 'active', healMode: 'percent', healPower: 0.2 },
+  vesper: { stars: 5, maxHealth: 1080, healthRegen: 0, role: 'dps', critRate: 0.36, critDmg: 2.10, ...NO_HEAL },
+  glacia: { stars: 5, maxHealth: 1550, healthRegen: 0, role: 'tank', critRate: 0.10, critDmg: 1.45, ...NO_HEAL },
+  zefs: { stars: 4, maxHealth: 900, healthRegen: 0, role: 'support', critRate: 0.22, critDmg: 1.70, ...NO_HEAL },
+  petra: { stars: 4, maxHealth: 1200, healthRegen: 0, role: 'tank', critRate: 0.14, critDmg: 1.50, ...NO_HEAL },
+  zibo: { stars: 4, maxHealth: 1000, healthRegen: 0, role: 'dps', critRate: 0.30, critDmg: 1.85, ...NO_HEAL },
   // Lapa (dendro): active healer — spore burst heal scales with the combo count.
-  lapa: { stars: 4, maxHealth: 950, healthRegen: 15, role: 'healer', healType: 'active', healMode: 'combo', healPower: 6 },
+  lapa: { stars: 4, maxHealth: 950, healthRegen: 15, role: 'healer', critRate: 0.17, critDmg: 1.55, healType: 'active', healMode: 'combo', healPower: 6 },
   // Rasa (hydro): passive healer — water aura heals the party 10 HP/sec while on field.
-  rasa: { stars: 4, maxHealth: 1000, healthRegen: 10, role: 'healer', healType: 'passive', healMode: 'flat', healPower: 10 },
-  dzirkste: { stars: 4, maxHealth: 1000, healthRegen: 0, role: 'dps', ...NO_HEAL },
-  stindzis: { stars: 4, maxHealth: 950, healthRegen: 0, role: 'dps', ...NO_HEAL },
+  rasa: { stars: 4, maxHealth: 1000, healthRegen: 10, role: 'healer', critRate: 0.16, critDmg: 1.50, healType: 'passive', healMode: 'flat', healPower: 10 },
+  dzirkste: { stars: 4, maxHealth: 1000, healthRegen: 0, role: 'dps', critRate: 0.31, critDmg: 1.90, ...NO_HEAL },
+  stindzis: { stars: 4, maxHealth: 950, healthRegen: 0, role: 'dps', critRate: 0.35, critDmg: 2.05, ...NO_HEAL },
 };
 const MAX_COMBO_FOR_HEAL = 50;
 const CHARACTER_POOL = Object.entries(CHARACTER_STATS).map(([characterId, s]) => ({
@@ -125,8 +142,8 @@ const FEATURED_5STAR_WIN = 0.55;
 const FOUR_STAR_CHARACTER_SHARE = 0.5;
 const MAX_PULLS_PER_REQUEST = 10;
 // Keep in sync with src/game/data/constants.ts (archipelago extent).
+// MOVEMENT_LIMIT lives in worldRules.ts (shared with unitAttacks.ts via clampToWorld).
 const WORLD_BOUND = 130;
-const MOVEMENT_LIMIT = 135;
 const VOID_DEATH_DEPTH = -10;
 const MAX_VERTICAL_STEP = 8;
 
@@ -145,7 +162,6 @@ function isOverAnyIsland(positionX: number, positionZ: number) {
       Math.hypot(positionX - island.centerX, positionZ - island.centerZ) <= island.radius
   );
 }
-const SAFE_ZONE_RADIUS = 18;
 const SPAWN_X = 6;
 const SPAWN_Z = 6;
 const DEFAULT_MAX_HEALTH = 1000;
@@ -207,6 +223,10 @@ const MAX_ATTACK_RADIUS = 20;
 const MAX_RANGED_HIT_RADIUS = 3;
 const MAX_STEP_DISTANCE = 12;
 const MAX_COMBO_FOR_GEMS = 100;
+// How long after a valid castSkill an isSkill hit still earns the uncapped skill
+// multiplier (D2-03). ~5s spans the animation + travel of the longest skills; past
+// it, an isSkill hit downgrades to a basic swing (skillGrantActive gate).
+const SKILL_HIT_WINDOW_MICROS = 5_000_000n;
 const COMBO_GEM_STEP = 0.03; // +3% dropped gems per combo point (capped)
 const PVP_DEATH_SPILL = 1 / 3; // fraction of gems a PVP loser drops
 const PVE_DEATH_SPILL = 1 / 4; // fraction a player drops when an enemy kills them
@@ -249,9 +269,6 @@ const WORLD_TICK_INTERVAL_MICROS = 150_000n; // ~6.7 ticks/sec
 // Aggro is a 5-second refreshable memory: an entity fights whoever last DAMAGED
 // it, and forgets 5s after the last hit. Walking near never flips aggro.
 const AGGRO_DURATION_MICROS = 5_000_000n;
-const AGGRO_HOME = 0; // defend the camp (enemies) / roam camps (goliaths)
-const AGGRO_PLAYER = 1;
-const AGGRO_GOLIATH = 2;
 // Enemies spawn scattered around their camp home; matches client SPAWN_SCATTER_RADIUS.
 const SPAWN_SCATTER_RADIUS = 3;
 const ENEMY_SPAWN_SEED = 0xbeef5; // matches the client enemy spawn PRNG seed
@@ -262,13 +279,7 @@ const GOLIATH_SPLASH_RANGE = 4.0; // the largest raider hits everything in here
 // itself is still single-target unless the raider splashes). This is what makes a
 // fresh camp gang up and eventually overpower a wounded goliath.
 const GOLIATH_ENGAGE_RANGE = 8.0;
-const ENEMY_PLAYER_CONTACT_RANGE = 1.8; // camp member ↔ player it is chasing
-const GOLIATH_PLAYER_CONTACT_RANGE = 2.6; // goliath ↔ a player who provoked it (bigger reach)
-// Idle patrol: an un-aggro'd camp member walks a slow deterministic loop around its
-// home post instead of standing frozen at the fire. Radius + period are shared by
-// all members; each member's phase is derived from its id so the camp fans out.
-const ENEMY_PATROL_RADIUS = 1.7;
-const ENEMY_PATROL_PERIOD_MICROS = 11_000_000n; // ~11s per lap — a calm patrol
+const ENEMY_PLAYER_CONTACT_RANGE = 1.8; // walking member (wisp/golem) ↔ player it is chasing
 // DEV puppet (training dummy) chase tuning.
 const PUPPET_SPEED = 6; // units/sec toward the nearest real player
 const PUPPET_STOP_RADIUS = 1.8; // stop this close so it stays in melee reach
@@ -324,6 +335,17 @@ const player = table(
     // .default(0) lets the additive migrate backfill existing player rows to 0 (assumption A1)
     // without a data wipe — SpacetimeDB refuses to add a non-defaulted column to a populated table.
     transcendShards: t.u32().default(0),
+    // Authoritative skill cooldown state (CRIT-02 / D2-03). skillReadyAtMicros gates
+    // the next castSkill; skillWindowEndsAtMicros is the deadline through which an
+    // isSkill hit earns the uncapped skill multiplier. Both .default(0n) so the
+    // additive migrate backfills populated rows without a wipe (Pitfall 2).
+    skillReadyAtMicros: t.u64().default(0n),
+    skillWindowEndsAtMicros: t.u64().default(0n),
+    // Slam-victim stun window (HIT-01/D4-10): updatePosition rejects client
+    // positions while now < this, so the server owns the knocked-back position
+    // for the whole stun. Appended LAST with .default(0n) so the additive
+    // migrate backfills populated rows without a wipe (Pitfall 2).
+    stunnedUntilMicros: t.u64().default(0n),
   }
 );
 
@@ -386,6 +408,24 @@ const enemy = table(
     aggroExpiresAtMicros: t.u64(),
     alive: t.bool(),
     respawnAtMicros: t.u64(),
+    // NOTE: appended (not reordered) with defaults so the schema diff stays
+    // additive on a populated DB (STDB rejects a non-defaulted or mid-table
+    // column). Slime hop cycle in MICROS — tick-rate independent (slimeHop.ts):
+    // hopDurationMicros 0 = grounded/idle; the client animates the bounce arc
+    // from these two columns.
+    hopStartedAtMicros: t.u64().default(0n),
+    hopDurationMicros: t.u64().default(0n),
+    // Hop landing, locked at hop start (the slime travels toward it while
+    // airborne and slams there on the landing tick).
+    hopTargetX: t.f32().default(0),
+    hopTargetZ: t.f32().default(0),
+    // Current patrol destination on the home ring; (0,0) = none picked yet
+    // (never a legal ring point — camps sit far from the origin safe zone).
+    patrolTargetX: t.f32().default(0),
+    patrolTargetZ: t.f32().default(0),
+    // Rests (no hop/walk) until this deadline: the grounded pause between hops
+    // and the pause at each patrol point share it.
+    restUntilMicros: t.u64().default(0n),
   }
 );
 
@@ -422,6 +462,45 @@ const goliath = table(
     // this forward arc); kept pointing at the camp it walked into while stopped.
     headingX: t.f32().default(0),
     headingZ: t.f32().default(0),
+  }
+);
+
+// Per-unit attack-FSM state (FSM-01/FSM-06), unit-agnostic: unitKind 0 = goliath
+// (1 = camp enemy, 2 = hero later — zero schema change to reuse). Rows are lazily
+// upserted per unit by runUnitAttacks: the table starts EMPTY on a migrated DB and
+// is NEVER the iteration driver — the tick iterates live units and looks its row
+// up via by_unit. A whole new table (not columns on goliath) so the migrate stays
+// additive and other unit kinds join without touching their own tables.
+const unitAttack = table(
+  {
+    name: 'unit_attack',
+    public: true,
+    indexes: [{ accessor: 'by_unit', algorithm: 'btree', columns: ['unitKind', 'unitId'] }],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    unitKind: t.u32(),
+    unitId: t.u64(),
+    state: t.u32(), // ATTACK_STATE_* (attacks.ts): idle/windup/strike/recovery
+    attackId: t.string(), // key into ATTACKS ('' until the first windup)
+    startedAtMicros: t.u64(),
+    strikeAtMicros: t.u64(),
+    recoveryEndsAtMicros: t.u64(),
+    cooldownUntilMicros: t.u64(),
+    // Landing LOCKED at windup entry (ATK-01) — later transitions only read it.
+    landingX: t.f32(),
+    landingZ: t.f32(),
+    radius: t.f32(),
+    // The cast root the unit stays planted on through the windup (D4-12).
+    castX: t.f32(),
+    castZ: t.f32(),
+    strikeResolved: t.bool(),
+    poise: t.u32(), // reset on windup entry; consumed by Phase-7 interrupts
+    // Basic-attack cooldown, split from the skill cooldown (D5-08): 'basic' role
+    // attacks gate on and write THIS field so the swing/swirl rhythm never blocks
+    // the slam (or vice versa). Appended LAST with .default(0n) so the additive
+    // migrate backfills populated rows without a wipe (Pitfall 6).
+    basicCooldownUntilMicros: t.u64().default(0n),
   }
 );
 
@@ -494,15 +573,25 @@ const bannerPity = table(
   }
 );
 
-// Weapon inventory — one row per pulled weapon. No combat use yet.
+// Weapon inventory — one row per (owner, weapon) STACK; count = copies pulled.
+// Was one row per pull, which grew unbounded (3,711 rows) and became the client's
+// frame-cost bomb (see CLAUDE.md Client Performance Rules). No combat use yet.
 const weaponItem = table(
-  { name: 'weapon_item', public: true },
+  {
+    name: 'weapon_item',
+    public: true,
+    indexes: [{ accessor: 'by_owner_weapon', algorithm: 'btree', columns: ['owner', 'weaponId'] }],
+  },
   {
     id: t.u64().primaryKey().autoInc(),
     owner: t.identity().index('btree'),
     weaponId: t.string(),
     rarity: t.u32(),
-    acquiredAt: t.timestamp(),
+    acquiredAt: t.timestamp(), // when the FIRST copy arrived
+    // NEW columns append at the END (additive migrate rejects reordering).
+    // .default(1) backfills pre-stack rows; the one-shot consolidateWeaponItems
+    // reducer then merges duplicates into real counts.
+    count: t.u32().default(1),
   }
 );
 
@@ -523,12 +612,16 @@ const pullResult = table(
   }
 );
 
-// Broadcasts a PVP hit so the victim's client can float a purple number.
+// Broadcasts a PVP hit so every client can float a truthful number: victim
+// purple, attacker crit upgrade, spectators (CRIT-07). Carries the FULL
+// computed amount (D3-02) — HP application caps separately.
 const pvpHit = table(
   { name: 'pvp_hit', public: true, event: true },
   {
     target: t.identity(),
     amount: t.u32(),
+    attacker: t.identity().default(Identity.zero()),
+    isCrit: t.bool().default(false),
   }
 );
 
@@ -545,6 +638,36 @@ const rangedAttack = table(
     originZ: t.f32(),
     directionX: t.f32(),
     directionZ: t.f32(),
+  }
+);
+
+// Broadcasts one landed enemy/goliath hit with the SERVER-authoritative amount +
+// crit bit (CRIT-05). Event-only: rows are never stored, one insert per surviving
+// hit so the attacker's client can float the authoritative number in Plan 03.
+const enemyHit = table(
+  { name: 'enemy_hit', public: true, event: true },
+  {
+    attacker: t.identity(),
+    positionX: t.f32(),
+    positionZ: t.f32(),
+    amount: t.u32(),
+    isCrit: t.bool(),
+  }
+);
+
+// Broadcasts one landed unit attack strike (ANIM-04 producer). Event-only: rows
+// are never stored, ONE insert per strike — not per victim (victims learn their
+// fate via their own player row) — emitted unconditionally at the strike
+// transition, before any victim branching.
+const attackStrike = table(
+  { name: 'attack_strike', public: true, event: true },
+  {
+    unitKind: t.u32(),
+    unitId: t.u64(),
+    attackId: t.string(),
+    landingX: t.f32(),
+    landingZ: t.f32(),
+    radius: t.f32(),
   }
 );
 
@@ -671,6 +794,7 @@ const spacetimedb = schema({
   shardDrop,
   enemy,
   goliath,
+  unitAttack,
   ownedCharacter,
   characterActivation,
   skillCast,
@@ -679,6 +803,8 @@ const spacetimedb = schema({
   pullResult,
   pvpHit,
   rangedAttack,
+  enemyHit,
+  attackStrike,
   healEvent,
   regenTimer,
   worldTimer,
@@ -776,6 +902,9 @@ function seedPlayer(ctx: { db: any; timestamp: any }, identity: any, name: strin
     gemsFromKills: 0,
     gemsCollected: 0,
     transcendShards: 0,
+    skillReadyAtMicros: 0n,
+    skillWindowEndsAtMicros: 0n,
+    stunnedUntilMicros: 0n,
   });
   ctx.db.ownedCharacter.insert({
     id: 0n,
@@ -797,10 +926,6 @@ function requirePlayer(ctx: { db: any; sender: any }) {
 function ownsCharacter(ctx: { db: any }, owner: any, characterId: string) {
   const owned = [...ctx.db.ownedCharacter.owner.filter(owner)];
   return owned.some(row => row.characterId === characterId);
-}
-
-function clampToWorld(coordinate: number) {
-  return Math.max(-MOVEMENT_LIMIT, Math.min(MOVEMENT_LIMIT, coordinate));
 }
 
 function findOwnedRow(ctx: { db: any }, targetPlayer: any, characterId: string) {
@@ -924,10 +1049,6 @@ function spillShards(
   });
 }
 
-function isInsideSafeZone(positionX: number, positionZ: number) {
-  return Math.hypot(positionX, positionZ) <= SAFE_ZONE_RADIUS;
-}
-
 function distanceBetweenPlayers(playerA: any, playerB: any) {
   return Math.hypot(
     playerA.positionX - playerB.positionX,
@@ -1033,6 +1154,9 @@ export const updatePosition = spacetimedb.reducer(
     const currentPlayer = requirePlayer(ctx);
     // A puppet (training dummy) is server-driven — ignore its client's position.
     if (ctx.db.puppet.identity.find(currentPlayer.identity)) return;
+    // A slam victim is server-owned for the stun window (HIT-01/T-04-03): reject
+    // client positions until it ends so a modified client cannot wiggle out.
+    if (ctx.timestamp.microsSinceUnixEpoch < currentPlayer.stunnedUntilMicros) return;
     const stepX = positionX - currentPlayer.positionX;
     const stepZ = positionZ - currentPlayer.positionZ;
     const stepDistance = Math.hypot(stepX, stepZ);
@@ -1058,8 +1182,8 @@ export const updatePosition = spacetimedb.reducer(
 );
 
 export const attackPlayer = spacetimedb.reducer(
-  { targetIdentity: t.identity(), damage: t.u32() },
-  (ctx, { targetIdentity, damage }) => {
+  { targetIdentity: t.identity(), isSkill: t.bool(), comboCount: t.u32() },
+  (ctx, { targetIdentity, isSkill, comboCount }) => {
     const attacker = requirePlayer(ctx);
     const target = ctx.db.player.identity.find(targetIdentity);
     if (!target) throw new SenderError('Target not found');
@@ -1080,9 +1204,13 @@ export const attackPlayer = spacetimedb.reducer(
       throw new SenderError('Target out of range');
     }
 
-    const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
-    const dealt = Math.min(clampedDamage, target.currentHealth);
-    ctx.db.pvpHit.insert({ target: targetIdentity, amount: dealt });
+    // Server owns the number (CRIT-07): intent in, resolvePlayerHit composes
+    // base → × crit (ctx.random) → clamp. No resistance profile for PVP (D3-03).
+    const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
+    const { amount, isCrit } = resolvePlayerHit(ctx, attacker, isSkill, combo, 'melee');
+    // D3-02: FULL computed amount, PRE-branch — killing blows float full strength.
+    ctx.db.pvpHit.insert({ target: targetIdentity, attacker: attacker.identity, amount, isCrit });
+    const dealt = Math.min(amount, target.currentHealth);
 
     const remainingHealth = target.currentHealth - dealt;
     if (remainingHealth > 0) {
@@ -1135,6 +1263,11 @@ export const setActiveCharacter = spacetimedb.reducer(
   { characterId: t.string() },
   (ctx, { characterId }) => {
     const currentPlayer = requirePlayer(ctx);
+    // A stunned player is server-owned for the whole stun window (HIT-01, same
+    // gate as updatePosition): switching is a combat action — swapping to a
+    // fresh body/HP pool mid-stun would sidestep the swing tag's escape race
+    // (D5-12). Silent return; the client UI gates the same window for feel.
+    if (ctx.timestamp.microsSinceUnixEpoch < currentPlayer.stunnedUntilMicros) return;
     if (characterId === currentPlayer.activeCharacterId) return;
     const nextOwned = findOwnedRow(ctx, currentPlayer, characterId);
     if (!nextOwned) throw new SenderError('Character not owned');
@@ -1652,6 +1785,20 @@ export const castSkill = spacetimedb.reducer(
   },
   (ctx, { skillId, originX, originZ, directionX, directionZ }) => {
     const currentPlayer = requirePlayer(ctx);
+    const now = ctx.timestamp.microsSinceUnixEpoch;
+    // Authoritative skill rate-limit: reject a cast still on cooldown (emit NO
+    // skill_cast). The cooldown is derived from server CHARACTER_COMBAT, never the
+    // client-sent skillId (Pitfall 5), so a spoofed id can't shorten it.
+    if (now < currentPlayer.skillReadyAtMicros) return;
+    const cc = CHARACTER_COMBAT[currentPlayer.activeCharacterId];
+    const cooldownSeconds = cc ? cc.skillCooldownSeconds : 0;
+    // Open the skill-hit window and arm the next cooldown BEFORE the broadcast, so
+    // an isSkill hit landing inside SKILL_HIT_WINDOW_MICROS earns the skill multiplier.
+    ctx.db.player.identity.update({
+      ...currentPlayer,
+      skillReadyAtMicros: nextSkillReadyAt(now, cooldownSeconds),
+      skillWindowEndsAtMicros: now + SKILL_HIT_WINDOW_MICROS,
+    });
     ctx.db.skillCast.insert({
       caster: currentPlayer.identity,
       characterId: currentPlayer.activeCharacterId,
@@ -1782,6 +1929,14 @@ function killEnemyRow(
     aggroGoliathId: 0n,
     aggroExpiresAtMicros: 0n,
     respawnAtMicros: nowMicros + ENEMY_RESPAWN_MICROS,
+    // A dead slime is not mid-hop; the whole move state resets with the corpse.
+    hopStartedAtMicros: 0n,
+    hopDurationMicros: 0n,
+    hopTargetX: 0,
+    hopTargetZ: 0,
+    patrolTargetX: 0,
+    patrolTargetZ: 0,
+    restUntilMicros: 0n,
   });
   return dropped;
 }
@@ -1807,6 +1962,46 @@ function killGoliathRow(
   return dropped;
 }
 
+// Server-authoritative resolution of ONE landed player hit into a final
+// {amount, isCrit}. Composes the pure helpers: base via computeBaseDamage (weapon
+// or skill ramp + constellation/transcend), the seeded crit roll (ctx.random —
+// the sole client-untrusted decision, CRIT-02), and the target's resistance.
+// Apply order is load-bearing: base → × crit → resist. No output cap — every
+// input is server-derived, so the full computed value is the real hit.
+// grantSkill gates the uncapped skill multiplier to the authoritative cast window.
+function resolvePlayerHit(
+  ctx: any,
+  hitter: any,
+  isSkill: boolean,
+  combo: number,
+  dmgType: DamageType,
+  profile?: ResistanceProfile
+): { amount: number; isCrit: boolean } {
+  const cc = CHARACTER_COMBAT[hitter.activeCharacterId];
+  if (!cc) return { amount: 0, isCrit: false };
+  const owned = findOwnedRow(ctx, hitter, hitter.activeCharacterId);
+  const constellation = activatedConstellationFor(
+    ctx,
+    hitter.identity,
+    hitter.activeCharacterId,
+    owned ? owned.constellation : 0
+  );
+  const transcend = owned ? owned.transcendLevel : 0;
+  const grantSkill = skillGrantActive(isSkill, ctx.timestamp.microsSinceUnixEpoch, hitter.skillWindowEndsAtMicros);
+  const base = computeBaseDamage({
+    weaponId: cc.weaponId,
+    skillDamage: grantSkill ? cc.skillDamage : null,
+    combo,
+    constellation,
+    transcend,
+  });
+  const stat = CHARACTER_STATS[hitter.activeCharacterId];
+  const { isCrit, multiplier } = rollCrit(stat ? stat.critRate : 0, stat ? stat.critDmg : 1, () => ctx.random());
+  const resisted = resistedDamage(base * multiplier, profile, dmgType);
+  const amount = Math.round(resisted);
+  return { amount, isCrit };
+}
+
 // A player's real, authoritative attack: every alive enemy AND goliath within
 // radius of the center takes `damage` and has its aggro flipped to the caller.
 // Anything that dies pays its combo-boosted base + hoard, credited to the killer.
@@ -1816,10 +2011,10 @@ export const attackEnemies = spacetimedb.reducer(
     centerX: t.f32(),
     centerZ: t.f32(),
     radius: t.f32(),
-    damage: t.u32(),
+    isSkill: t.bool(),
     comboCount: t.u32(),
   },
-  (ctx, { centerX, centerZ, radius, damage, comboCount }) => {
+  (ctx, { centerX, centerZ, radius, isSkill, comboCount }) => {
     const currentPlayer = requirePlayer(ctx);
     // Reject implausible strikes so a client can't sweep the whole map risk-free
     // from the safe zone: the strike centre must be within weapon range of the
@@ -1829,7 +2024,6 @@ export const attackEnemies = spacetimedb.reducer(
     if (distanceBetween(currentPlayer.positionX, currentPlayer.positionZ, centerX, centerZ) > MAX_HIT_RANGE) return;
     const boundedRadius = Math.max(0, Math.min(radius, MAX_ATTACK_RADIUS));
     const now = ctx.timestamp.microsSinceUnixEpoch;
-    const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
     const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
     const comboScale = 1 + combo * COMBO_GEM_STEP;
     let gemsCredited = 0;
@@ -1837,7 +2031,19 @@ export const attackEnemies = spacetimedb.reducer(
     for (const enemyRow of [...ctx.db.enemy.iter()]) {
       if (!enemyRow.alive) continue;
       if (distanceBetween(enemyRow.positionX, enemyRow.positionZ, centerX, centerZ) > boundedRadius) continue;
-      const remaining = enemyRow.health - Math.min(clampedDamage, enemyRow.health);
+      // Server owns the number: base + crit are computed here per target (each gets
+      // its own crit roll — correct and acceptable), never sent by the client.
+      const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'melee');
+      // Every landed hit floats a number — INCLUDING the killing blow (which shows
+      // the full computed hit strength, ARPG-style, not the sliver of HP left).
+      ctx.db.enemyHit.insert({
+        attacker: currentPlayer.identity,
+        positionX: enemyRow.positionX,
+        positionZ: enemyRow.positionZ,
+        amount,
+        isCrit,
+      });
+      const remaining = enemyRow.health - Math.min(amount, enemyRow.health);
       if (remaining > 0) {
         ctx.db.enemy.enemyId.update({
           ...enemyRow,
@@ -1855,7 +2061,15 @@ export const attackEnemies = spacetimedb.reducer(
     for (const goliathRow of [...ctx.db.goliath.iter()]) {
       if (!goliathRow.alive) continue;
       if (distanceBetween(goliathRow.positionX, goliathRow.positionZ, centerX, centerZ) > boundedRadius) continue;
-      const remaining = goliathRow.health - Math.min(clampedDamage, goliathRow.health);
+      const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'melee');
+      ctx.db.enemyHit.insert({
+        attacker: currentPlayer.identity,
+        positionX: goliathRow.positionX,
+        positionZ: goliathRow.positionZ,
+        amount,
+        isCrit,
+      });
+      const remaining = goliathRow.health - Math.min(amount, goliathRow.health);
       if (remaining > 0) {
         ctx.db.goliath.goliathId.update({
           ...goliathRow,
@@ -1904,10 +2118,10 @@ export const attackRay = spacetimedb.reducer(
     dirZ: t.f32(),
     range: t.f32(),
     hitRadius: t.f32(),
-    damage: t.u32(),
+    isSkill: t.bool(),
     comboCount: t.u32(),
   },
-  (ctx, { originX, originZ, dirX, dirZ, range, hitRadius, damage, comboCount }) => {
+  (ctx, { originX, originZ, dirX, dirZ, range, hitRadius, isSkill, comboCount }) => {
     const currentPlayer = requirePlayer(ctx);
     if (
       !Number.isFinite(originX) ||
@@ -1925,7 +2139,6 @@ export const attackRay = spacetimedb.reducer(
 
     const boundedRange = Math.max(0, Math.min(range, MAX_HIT_RANGE));
     const boundedRadius = Math.max(0, Math.min(hitRadius, MAX_RANGED_HIT_RADIUS));
-    const clampedDamage = Math.min(damage, MAX_HIT_DAMAGE);
     const combo = Math.min(comboCount, MAX_COMBO_FOR_GEMS);
     const comboScale = 1 + combo * COMBO_GEM_STEP;
     const now = ctx.timestamp.microsSinceUnixEpoch;
@@ -1970,9 +2183,18 @@ export const attackRay = spacetimedb.reducer(
     let gemsCredited = 0;
     if (strikeGoliath) {
       const goliathRow = aliveGoliaths[goliathHit.index];
-      // Ranged resistance: a projectile only chips a fraction off a goliath.
-      const goliathDamage = resistedDamage(clampedDamage, GOLIATH_RESISTANCES, 'ranged');
-      const remaining = goliathRow.health - Math.min(goliathDamage, goliathRow.health);
+      // Server owns the number: resolvePlayerHit applies GOLIATH_RESISTANCES ranged
+      // (0.10) to the server-computed raw — the client sends no damage.
+      const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'ranged', GOLIATH_RESISTANCES);
+      // Killing blow floats a number too — full computed hit strength, ARPG-style.
+      ctx.db.enemyHit.insert({
+        attacker: currentPlayer.identity,
+        positionX: goliathRow.positionX,
+        positionZ: goliathRow.positionZ,
+        amount,
+        isCrit,
+      });
+      const remaining = goliathRow.health - Math.min(amount, goliathRow.health);
       if (remaining > 0) {
         ctx.db.goliath.goliathId.update({
           ...goliathRow,
@@ -1996,7 +2218,15 @@ export const attackRay = spacetimedb.reducer(
       }
     } else {
       const enemyRow = aliveEnemies[enemyHit.index];
-      const remaining = enemyRow.health - Math.min(clampedDamage, enemyRow.health);
+      const { amount, isCrit } = resolvePlayerHit(ctx, currentPlayer, isSkill, combo, 'melee');
+      ctx.db.enemyHit.insert({
+        attacker: currentPlayer.identity,
+        positionX: enemyRow.positionX,
+        positionZ: enemyRow.positionZ,
+        amount,
+        isCrit,
+      });
+      const remaining = enemyRow.health - Math.min(amount, enemyRow.health);
       if (remaining > 0) {
         ctx.db.enemy.enemyId.update({
           ...enemyRow,
@@ -2056,6 +2286,7 @@ const RestoreWeaponItemRow = t.object('RestoreWeaponItemRow', {
   owner: t.identity(),
   weaponId: t.string(),
   rarity: t.u32(),
+  count: t.u32(),
 });
 
 const RestoreBannerPityRow = t.object('RestoreBannerPityRow', {
@@ -2076,7 +2307,9 @@ export const restorePlayers = spacetimedb.reducer(
   (ctx, { rows }) => {
     requireEmpty(ctx.db.player.iter(), 'player');
     for (const row of rows) {
-      ctx.db.player.insert({ ...row, online: false, lastKillRewardAt: ctx.timestamp });
+      // Skill-window/stun state are additive columns absent from pre-existing
+      // backups; seed them to 0n so a restored player starts off-cooldown, unstunned.
+      ctx.db.player.insert({ ...row, online: false, lastKillRewardAt: ctx.timestamp, skillReadyAtMicros: 0n, skillWindowEndsAtMicros: 0n, stunnedUntilMicros: 0n });
     }
   }
 );
@@ -2098,6 +2331,25 @@ export const restoreWeaponItems = spacetimedb.reducer(
     for (const row of rows) ctx.db.weaponItem.insert({ id: 0n, ...row, acquiredAt: ctx.timestamp });
   }
 );
+
+// One-shot migration: merge legacy one-row-per-pull weapon_item duplicates into
+// (owner, weapon) stacks by summing counts. Idempotent — already-stacked rows
+// have nothing to merge. Run once per environment after the stacking publish:
+// `spacetime call <db> consolidate_weapon_items`.
+export const consolidateWeaponItems = spacetimedb.reducer((ctx) => {
+  const keeperByKey = new Map<string, any>();
+  for (const row of [...ctx.db.weaponItem.iter()]) {
+    const key = `${row.owner.toHexString()}:${row.weaponId}`;
+    const keeper = keeperByKey.get(key);
+    if (!keeper) {
+      keeperByKey.set(key, { ...row });
+      continue;
+    }
+    keeper.count += row.count;
+    ctx.db.weaponItem.id.delete(row.id);
+  }
+  for (const keeper of keeperByKey.values()) ctx.db.weaponItem.id.update(keeper);
+});
 
 export const restoreBannerPity = spacetimedb.reducer(
   { rows: t.array(RestoreBannerPityRow) },
@@ -2258,11 +2510,18 @@ function grantCharacter(ctx: { db: any }, owner: any, characterId: string) {
 }
 
 function grantWeapon(ctx: { db: any; timestamp: any }, owner: any, weaponId: string, rarity: number) {
+  // Stack upsert: a dupe bumps the existing row's count instead of adding a row.
+  const existing = [...ctx.db.weaponItem.by_owner_weapon.filter([owner, weaponId])][0];
+  if (existing) {
+    ctx.db.weaponItem.id.update({ ...existing, count: existing.count + 1 });
+    return;
+  }
   ctx.db.weaponItem.insert({
     id: 0n,
     owner,
     weaponId,
     rarity,
+    count: 1,
     acquiredAt: ctx.timestamp,
   });
 }
@@ -2274,7 +2533,15 @@ export const pullBanner = spacetimedb.reducer(
     const banner = BANNERS[bannerId];
     if (!banner) throw new SenderError('Unknown banner');
 
-    const pullCount = count >= MAX_PULLS_PER_REQUEST ? MAX_PULLS_PER_REQUEST : 1;
+    // count semantics: 0 = "max" (long-press ×10 → spend the whole wallet in
+    // one atomic transaction), otherwise the classic ×1 / ×10 buttons.
+    const pullCount =
+      count === 0
+        ? Math.floor(currentPlayer.gems / GACHA_PULL_COST)
+        : count >= MAX_PULLS_PER_REQUEST
+          ? MAX_PULLS_PER_REQUEST
+          : 1;
+    if (pullCount < 1) throw new SenderError('Not enough gems');
     const totalCost = GACHA_PULL_COST * pullCount;
     if (currentPlayer.gems < totalCost) throw new SenderError('Not enough gems');
 
@@ -2455,6 +2722,13 @@ function spawnCamps(ctx: { db: any }) {
         aggroExpiresAtMicros: 0n,
         alive: true,
         respawnAtMicros: 0n,
+        hopStartedAtMicros: 0n,
+        hopDurationMicros: 0n,
+        hopTargetX: 0,
+        hopTargetZ: 0,
+        patrolTargetX: 0,
+        patrolTargetZ: 0,
+        restUntilMicros: 0n,
       });
     }
   });
@@ -2529,10 +2803,6 @@ function runGoliathLifecycle(ctx: { db: any; random: any; sender: any; timestamp
   });
 }
 
-function aggroExpired(expiresAtMicros: bigint, nowMicros: bigint): boolean {
-  return expiresAtMicros !== 0n && nowMicros >= expiresAtMicros;
-}
-
 // Two optional identities are equal when both are absent or share a hex.
 function sameOptionalIdentity(a: any, b: any): boolean {
   if (!a && !b) return true;
@@ -2586,6 +2856,13 @@ function respawnEnemies(ctx: { db: any }, nowMicros: bigint) {
       aggroGoliathId: 0n,
       aggroExpiresAtMicros: 0n,
       respawnAtMicros: 0n,
+      hopStartedAtMicros: 0n,
+      hopDurationMicros: 0n,
+      hopTargetX: 0,
+      hopTargetZ: 0,
+      patrolTargetX: 0,
+      patrolTargetZ: 0,
+      restUntilMicros: 0n,
     });
   }
 }
@@ -2713,6 +2990,9 @@ export const debugSpawnBots = spacetimedb.reducer(
         gemsFromKills: 0,
         gemsCollected: 0,
         transcendShards: 0,
+        skillReadyAtMicros: 0n,
+        skillWindowEndsAtMicros: 0n,
+        stunnedUntilMicros: 0n,
       });
     }
   }
@@ -2867,8 +3147,20 @@ export const worldTick = spacetimedb.reducer(
     const goliathEngageEnds = new Map<bigint, bigint>();
     const goliathLastRaided = new Map<bigint, number>();
     const goliathHeading = new Map<bigint, { x: number; z: number }>();
+    // Tick-start goliath bodies for mutual-avoidance steering: two raiders on
+    // the same path arc around each other (deterministic sides by id) instead
+    // of shoving. <= 3 raiders per window, so the O(n) nearest scan inside
+    // steeredStep is a handful of hypots — no spatial hash (see steering.ts).
+    const goliathObstacles = goliaths.map(otherGoliath => ({
+      id: otherGoliath.goliathId,
+      x: otherGoliath.positionX,
+      z: otherGoliath.positionZ,
+      radius: GOLIATH_SIZE_STATS[Math.min(Math.max(otherGoliath.sizeIndex, 0), GOLIATH_SIZE_STATS.length - 1)].collisionRadius,
+    }));
     for (const goliathRow of goliaths) {
       const speed = goliathRow.moveSpeed * (Number(tick) / 1_000_000);
+      const collisionRadius =
+        GOLIATH_SIZE_STATS[Math.min(Math.max(goliathRow.sizeIndex, 0), GOLIATH_SIZE_STATS.length - 1)].collisionRadius;
       const fromX = goliathRow.positionX;
       const fromZ = goliathRow.positionZ;
       // Provoked → drop the raid and chase the player who hit it for the 5s aggro.
@@ -2881,7 +3173,7 @@ export const worldTick = spacetimedb.reducer(
         // would send the raider off the island into the void). The raid timer is
         // paused (engage 0, target -1) but heading still tracks the real step.
         const waypoint = nextGoliathWaypoint(fromX, fromZ, chasedPlayer.positionX, chasedPlayer.positionZ);
-        const moved = stepToward(fromX, fromZ, waypoint.x, waypoint.z, speed);
+        const moved = steeredStep(goliathRow.goliathId, fromX, fromZ, waypoint.x, waypoint.z, speed, collisionRadius, goliathObstacles);
         const toX = clampToWorld(moved.x);
         const toZ = clampToWorld(moved.z);
         goliathTarget.set(goliathRow.goliathId, -1);
@@ -2918,7 +3210,7 @@ export const worldTick = spacetimedb.reducer(
       if (!reached) {
         // Route along bridges toward the camp so the raider stays on walkable ground.
         const waypoint = nextGoliathWaypoint(fromX, fromZ, center.x, center.z);
-        const moved = stepToward(fromX, fromZ, waypoint.x, waypoint.z, speed);
+        const moved = steeredStep(goliathRow.goliathId, fromX, fromZ, waypoint.x, waypoint.z, speed, collisionRadius, goliathObstacles);
         toX = clampToWorld(moved.x);
         toZ = clampToWorld(moved.z);
       }
@@ -2942,58 +3234,47 @@ export const worldTick = spacetimedb.reducer(
     const goliathById = new Map<bigint, any>();
     for (const goliathRow of goliaths) goliathById.set(goliathRow.goliathId, goliathRow);
 
-    // Pass 2 — enemies move toward whatever their aggro points at (post-decay).
-    const enemyPosition = new Map<bigint, { x: number; z: number }>();
-    for (const enemyRow of enemies) {
-      const expired = aggroExpired(enemyRow.aggroExpiresAtMicros, now);
-      let targetX = enemyRow.homeX;
-      let targetZ = enemyRow.homeZ;
-      let patrolling = true;
-      if (!expired && enemyRow.aggroKind === AGGRO_GOLIATH) {
-        const chased = goliathPosition.get(enemyRow.aggroGoliathId);
-        if (chased) {
-          targetX = chased.x;
-          targetZ = chased.z;
-          patrolling = false;
-        }
-      } else if (!expired && enemyRow.aggroKind === AGGRO_PLAYER && enemyRow.aggroPlayer) {
-        const chased = playerByHex.get(enemyRow.aggroPlayer.toHexString());
-        if (chased) {
-          targetX = chased.positionX;
-          targetZ = chased.positionZ;
-          patrolling = false;
-        }
-      }
-      if (patrolling) {
-        // Deterministic slow orbit around the member's home post — no RNG/wall clock.
-        // Phase from the enemy id spreads members around the loop; angle advances with
-        // world time. The isWalkable step guard below keeps the loop on solid ground.
-        const phase = (Number(enemyRow.enemyId % 628n) / 628) * Math.PI * 2;
-        const lap = Number(now % ENEMY_PATROL_PERIOD_MICROS) / Number(ENEMY_PATROL_PERIOD_MICROS);
-        const angle = phase + lap * Math.PI * 2;
-        targetX = enemyRow.homeX + Math.cos(angle) * ENEMY_PATROL_RADIUS;
-        targetZ = enemyRow.homeZ + Math.sin(angle) * ENEMY_PATROL_RADIUS;
-      }
-      const moveSpeed = ENEMY_ARCHETYPE_STATS[enemyRow.archetypeId as CampArchetypeId].moveSpeed;
-      const moved = stepToward(enemyRow.positionX, enemyRow.positionZ, targetX, targetZ, moveSpeed * (Number(tick) / 1_000_000));
-      const steppedX = clampToWorld(moved.x);
-      const steppedZ = clampToWorld(moved.z);
-      // Enemies get no bridge pathing; they just must not walk off into the void.
-      // A step that would land off all walkable ground is refused (stay put this tick).
-      const stepStaysOnGround = isWalkable(steppedX, steppedZ);
-      enemyPosition.set(enemyRow.enemyId, {
-        x: stepStaysOnGround ? steppedX : enemyRow.positionX,
-        z: stepStaysOnGround ? steppedZ : enemyRow.positionZ,
-      });
-    }
+    // Player-directed damage from slime slams (pass 2), strikes (attack FSM
+    // below), and enemy bites (pass 4) accumulates in ONE map so the single
+    // apply loop at the bottom (resist 'contact' → death → spill → respawn)
+    // stays the only damage sink. Goliath-directed damage (slime slams + pass-4
+    // bites) likewise sums here and applies once in the goliath loop.
+    const playerDamage = new Map<string, number>();
+    const goliathDamage = new Map<bigint, number>();
+
+    // Pass 2 — enemy movement (enemyMovement.ts): slimes bounce on a micros hop
+    // cycle and slam on landing, wisps/golems walk with steering, idle members
+    // patrol their camp ring. Landing damage lands in the shared maps above.
+    const enemyPosition = moveEnemies(ctx, now, tick, enemies, goliaths, goliathPosition, playerByHex, playerDamage, goliathDamage);
+
+    // Goliath→enemy damage + hard-aggro maps are shared by the attack FSM
+    // (skill strikes) and pass 3 (contact drain) — one apply loop consumes both.
+    const enemyDamage = new Map<bigint, number>();
+    const enemyHardAggroGoliath = new Map<bigint, bigint>();
+
+    // Attack FSM pass (FSM-01): windup → strike → recovery for every live
+    // goliath. Runs AFTER the position-build passes — it overrides entries in
+    // goliathPosition/goliathHeading (root during windup, leap at strike) that
+    // the goliath apply loop persists — and BEFORE every damage consumer, so
+    // slam damage lands in playerDamage ahead of the single apply (ATK-05:
+    // strikes are now the ONLY goliath→player damage source; the old per-tick
+    // contact drain is deleted). With no player aggro the FSM aims the same
+    // skills at the nearest living camp member, and every strike also damages
+    // the members caught in its hitbox (raids fought with real attacks).
+    runUnitAttacks(ctx, now, tick, goliaths, goliathPosition, goliathHeading, playerByHex, playerDamage, {
+      enemies,
+      enemyPosition,
+      enemyDamage,
+      enemyHardAggroGoliath,
+      damageMultiplier: GOLIATH_VS_ENEMY_DAMAGE_MULTIPLIER,
+      engageRange: GOLIATH_ENGAGE_RANGE,
+    });
 
     // Pass 3 — goliaths raid the camp. Proximity RALLIES every nearby member to
     // defend (soft aggro); the STRIKE lands on all members in splash range for the
     // largest raider, else on its nearest member. A member that actually takes a
     // hit gets a HARD aggro flip (a real "damaged by" event that can steal it from
     // a player), whereas a mere rally never steals a member mid-fight with a player.
-    const enemyDamage = new Map<bigint, number>();
-    const enemyHardAggroGoliath = new Map<bigint, bigint>();
     const enemyRallyGoliath = new Map<bigint, bigint>();
     for (const goliathRow of goliaths) {
       const from = goliathPosition.get(goliathRow.goliathId)!;
@@ -3021,12 +3302,12 @@ export const worldTick = spacetimedb.reducer(
       }
     }
 
-    // Pass 4 — enemies bite back: an enemy aggroed to a goliath (in reach) hurts
-    // it; one aggroed to a player (in reach, player outside the safe zone) hurts
-    // the player. Player-directed damage is summed for a single apply below.
-    const goliathDamage = new Map<bigint, number>();
-    const playerDamage = new Map<string, number>();
+    // Pass 4 — WALKING enemies bite back per tick: an enemy aggroed to a
+    // goliath (in reach) hurts it; one aggroed to a player (in reach, player
+    // outside the safe zone) hurts the player. Slimes are excluded — their only
+    // damage is the hop-landing slam resolved in pass 2.
     for (const enemyRow of enemies) {
+      if (isSlimeArchetype(enemyRow.archetypeId)) continue;
       const expired = aggroExpired(enemyRow.aggroExpiresAtMicros, now);
       if (expired) continue;
       const from = enemyPosition.get(enemyRow.enemyId)!;
@@ -3043,18 +3324,6 @@ export const worldTick = spacetimedb.reducer(
         if (distanceBetween(from.x, from.z, chased.positionX, chased.positionZ) > ENEMY_PLAYER_CONTACT_RANGE) continue;
         playerDamage.set(hex, (playerDamage.get(hex) ?? 0) + damagePerTick(enemyRow.contactDamage, tick));
       }
-    }
-
-    // Pass 4b — a provoked goliath hammers the player who hit it (brutal), as long
-    // as the aggro is live and that player is out in the open (not the safe zone).
-    for (const goliathRow of goliaths) {
-      if (aggroExpired(goliathRow.aggroExpiresAtMicros, now) || !goliathRow.aggroPlayer) continue;
-      const hex = goliathRow.aggroPlayer.toHexString();
-      const chased = playerByHex.get(hex);
-      if (!chased || isInsideSafeZone(chased.positionX, chased.positionZ)) continue;
-      const from = goliathPosition.get(goliathRow.goliathId)!;
-      if (distanceBetween(from.x, from.z, chased.positionX, chased.positionZ) > GOLIATH_PLAYER_CONTACT_RANGE) continue;
-      playerDamage.set(hex, (playerDamage.get(hex) ?? 0) + damagePerTick(goliathRow.contactDamage, tick));
     }
 
     // Nearest open-field (non-safe-zone) player within aggro range, or null.
@@ -3091,8 +3360,19 @@ export const worldTick = spacetimedb.reducer(
     // Apply enemy movement + damage + aggro; dead members drop loot (uncredited,
     // droppedBy the module identity) and schedule a respawn.
     for (const enemyRow of enemies) {
-      const position = enemyPosition.get(enemyRow.enemyId)!;
-      const moved = { ...enemyRow, positionX: position.x, positionZ: position.z };
+      const move = enemyPosition.get(enemyRow.enemyId)!;
+      const moved = {
+        ...enemyRow,
+        positionX: move.x,
+        positionZ: move.z,
+        hopStartedAtMicros: move.hopStartedAtMicros,
+        hopDurationMicros: move.hopDurationMicros,
+        hopTargetX: move.hopTargetX,
+        hopTargetZ: move.hopTargetZ,
+        patrolTargetX: move.patrolTargetX,
+        patrolTargetZ: move.patrolTargetZ,
+        restUntilMicros: move.restUntilMicros,
+      };
       const damage = Math.round(enemyDamage.get(enemyRow.enemyId) ?? 0);
       if (damage >= enemyRow.health) {
         killEnemyRow(ctx, moved, enemyBaseGems(false, 0, enemyRow.rewardTier, enemyRow.isBoss), ctx.sender, now);
@@ -3151,6 +3431,13 @@ export const worldTick = spacetimedb.reducer(
       const unchanged =
         moved.positionX === enemyRow.positionX &&
         moved.positionZ === enemyRow.positionZ &&
+        moved.hopStartedAtMicros === enemyRow.hopStartedAtMicros &&
+        moved.hopDurationMicros === enemyRow.hopDurationMicros &&
+        moved.hopTargetX === enemyRow.hopTargetX &&
+        moved.hopTargetZ === enemyRow.hopTargetZ &&
+        moved.patrolTargetX === enemyRow.patrolTargetX &&
+        moved.patrolTargetZ === enemyRow.patrolTargetZ &&
+        moved.restUntilMicros === enemyRow.restUntilMicros &&
         newHealth === enemyRow.health &&
         aggroKind === enemyRow.aggroKind &&
         aggroGoliathId === enemyRow.aggroGoliathId &&
@@ -3268,6 +3555,91 @@ export const seedWorld = spacetimedb.reducer(ctx => {
   ensureWorldTickScheduled(ctx);
   spawnCamps(ctx);
 });
+
+// ---- Dev/test harness reducers (perf playtests) ------------------------------
+// Called from the CLI / test scripts, never from game UI. They exist so an
+// automated combat playtest can build a maxed roster and force a full goliath
+// batch on demand instead of waiting out the 5-minute spawn window.
+
+const DEBUG_LOADOUT_CHARACTERS = ['terron', 'glacia', 'nereida', 'ignis'];
+
+// Grants the owner four maxed 5★ characters (C6, B10, full HP) and sets them
+// as the active party, so a test player survives a multi-goliath fight.
+export const debugGrantLoadout = spacetimedb.reducer(
+  { owner: t.identity() },
+  (ctx, { owner }) => {
+    for (const characterId of DEBUG_LOADOUT_CHARACTERS) {
+      const maxHealth = statsFor(characterId).maxHealth;
+      const owned = [...ctx.db.ownedCharacter.owner.filter(owner)].find(
+        (row: any) => row.characterId === characterId
+      );
+      if (owned) {
+        ctx.db.ownedCharacter.id.update({
+          ...owned,
+          constellation: MAX_CONSTELLATION,
+          transcendLevel: MAX_TRANSCEND_LEVEL,
+          currentHealth: maxHealth,
+        });
+      } else {
+        ctx.db.ownedCharacter.insert({
+          id: 0n,
+          owner,
+          characterId,
+          currentHealth: maxHealth,
+          constellation: MAX_CONSTELLATION,
+          transcendLevel: MAX_TRANSCEND_LEVEL,
+        });
+      }
+      setActivation(ctx, owner, characterId, MAX_CONSTELLATION);
+    }
+    const existingPlayer = ctx.db.player.identity.find(owner);
+    if (existingPlayer) {
+      ctx.db.player.identity.update({
+        ...existingPlayer,
+        partyOrder: DEBUG_LOADOUT_CHARACTERS,
+        activeCharacterId: DEBUG_LOADOUT_CHARACTERS[0],
+        currentHealth: statsFor(DEBUG_LOADOUT_CHARACTERS[0]).maxHealth,
+      });
+    }
+  }
+);
+
+// Replaces the current goliath batch with one raider of EVERY size around the
+// given point — the "3 golems at once" worst case the fps playtest measures.
+export const debugSpawnGoliaths = spacetimedb.reducer(
+  { x: t.f64(), z: t.f64() },
+  (ctx, { x, z }) => {
+    const nowMicros = ctx.timestamp.microsSinceUnixEpoch;
+    const windowBucket = windowBucketFor(nowMicros, GOLIATH_BATCH_WINDOW_MICROS);
+    for (const goliathRow of [...ctx.db.goliath.iter()]) {
+      ctx.db.goliath.goliathId.delete(goliathRow.goliathId);
+    }
+    GOLIATH_SIZE_STATS.forEach((stats, sizeIndex) => {
+      const angle = (sizeIndex / GOLIATH_SIZE_STATS.length) * Math.PI * 2;
+      ctx.db.goliath.insert({
+        goliathId: GOLIATH_SLOT_ID_BASE + BigInt(sizeIndex + 1),
+        sizeIndex,
+        positionX: clampToWorld(x + Math.cos(angle) * 6),
+        positionZ: clampToWorld(z + Math.sin(angle) * 6),
+        health: stats.maxHealth,
+        maxHealth: stats.maxHealth,
+        contactDamage: stats.contactDamage,
+        moveSpeed: stats.moveSpeed,
+        splashes: stats.splashesOnAttack,
+        carriedGems: 0,
+        targetCampIndex: -1,
+        engageEndsAtMicros: 0n,
+        lastRaidedCampIndex: -1,
+        headingX: 0,
+        headingZ: 0,
+        aggroPlayer: undefined,
+        aggroExpiresAtMicros: 0n,
+        alive: true,
+        windowBucket,
+      });
+    });
+  }
+);
 
 export const onConnect = spacetimedb.clientConnected(ctx => {
   const canonical = accountIdentity(ctx);

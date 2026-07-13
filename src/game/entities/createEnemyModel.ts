@@ -191,6 +191,13 @@ export interface EnemyModel {
   group: THREE.Group;
   body: THREE.Mesh;
   overlay: EnemyOverlay;
+  /**
+   * Slime-only inner group holding EVERY visual part (body, eyes, spikes) but
+   * NOT the overlay sprite — the hop bounce arcs/squashes this rig as one blob
+   * without dragging the health bar along. Origin sits at ground level so a
+   * squash presses the blob into the ground instead of scaling about its middle.
+   */
+  rig?: THREE.Group;
 }
 
 // Module-lifetime resources shared across all enemies and system instances.
@@ -200,62 +207,200 @@ const sharedSpikeGeometry = new THREE.ConeGeometry(0.14, 0.5, 5);
 const sharedGolemTorsoGeometry = new THREE.BoxGeometry(1.1, 1.2, 0.8);
 const sharedGolemHeadGeometry = new THREE.BoxGeometry(0.6, 0.5, 0.55);
 const sharedGolemArmGeometry = new THREE.BoxGeometry(0.35, 1.1, 0.4);
-const sharedEyeMaterial = new THREE.MeshBasicMaterial({ color: 0x101410 });
+const sharedGolemEyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffab3d });
 const sharedSpikeMaterial = new THREE.MeshLambertMaterial({ color: 0x3a4a2a });
 
+// ---- Baked slime skin -------------------------------------------------------
+// All the surface nuance lives in ONE procedural canvas texture per archetype
+// (built once, shared by every instance): vertical light gradient, mottled
+// spots, a lighter belly, glowing oval Genshin-style eyes, and a gloss patch.
+// Zero extra meshes/draw calls — the blob itself carries the detail.
+
+// Low-res on purpose: 48px around the whole sphere ≈ chunky texels that read
+// as PIXEL ART (with nearest filtering), matching the voxel world — a smooth
+// gradient would read as plastic.
+const SKIN_SIZE = 48;
+// SphereGeometry maps world +Z (the facing direction) to u = 0.25.
+const SKIN_FRONT_X = Math.round(SKIN_SIZE * 0.25);
+
+function seededRandomFrom(seed: number): () => number {
+  let state = seed >>> 0 || 1;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+function cssColor(hex: number, lightness: number): string {
+  const color = new THREE.Color(hex);
+  color.multiplyScalar(lightness);
+  return `#${color.getHexString()}`;
+}
+
+/** Pixel-art eye: a dark-rimmed tall oval with a glowing core, in whole texels. */
+function drawPixelEye(ctx: CanvasRenderingContext2D, centerX: number, eyeCss: string) {
+  const top = 19;
+  // Rim column widths per row build the oval from stacked rects (pixel-art style).
+  const rimRows = [2, 4, 4, 4, 4, 4, 4, 2];
+  rimRows.forEach((width, rowIndex) => {
+    ctx.fillStyle = '#141a12';
+    ctx.fillRect(centerX - width / 2, top + rowIndex, width, 1);
+  });
+  ctx.fillStyle = eyeCss;
+  ctx.fillRect(centerX - 1, top + 1, 2, 6);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(centerX - 1, top + 2, 1, 2);
+}
+
+/**
+ * The slime's pixel-art skin, painted texel by texel: banded + dithered
+ * vertical light, single-pixel speckle, a dithered belly patch, glowing eyes,
+ * and a pixel gloss cap. Deterministic per archetype (seeded by body color).
+ */
+function buildSlimeSkin(bodyColor: number, eyeCss: string): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = SKIN_SIZE;
+  canvas.height = SKIN_SIZE;
+  const ctx = canvas.getContext('2d')!;
+  const random = seededRandomFrom(bodyColor);
+
+  // Banded gradient with checkerboard dither at each band seam — the classic
+  // pixel-art shading ramp (crown bright → sod dark).
+  const BANDS = [1.35, 1.15, 1.0, 0.82, 0.6];
+  for (let y = 0; y < SKIN_SIZE; y += 1) {
+    for (let x = 0; x < SKIN_SIZE; x += 1) {
+      const bandPosition = (y / SKIN_SIZE) * (BANDS.length - 1);
+      let band = Math.floor(bandPosition);
+      // Within the seam zone, half the texels (checker) take the next band.
+      if (bandPosition - band > 0.65 && (x + y) % 2 === 0) band += 1;
+      ctx.fillStyle = cssColor(bodyColor, BANDS[Math.min(band, BANDS.length - 1)]);
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  // Single-texel speckle — jelly impurities.
+  for (let speck = 0; speck < 70; speck += 1) {
+    const x = Math.floor(random() * SKIN_SIZE);
+    const y = 6 + Math.floor(random() * (SKIN_SIZE - 6));
+    ctx.fillStyle = cssColor(bodyColor, random() < 0.6 ? 0.72 : 1.35);
+    ctx.fillRect(x, y, 1, 1);
+  }
+
+  // Dither-edged lighter belly patch under the face.
+  ctx.fillStyle = cssColor(bodyColor, 1.25);
+  for (let y = 30; y < 42; y += 1) {
+    const halfWidth = 10 - Math.abs(y - 36);
+    for (let x = SKIN_FRONT_X - halfWidth; x <= SKIN_FRONT_X + halfWidth; x += 1) {
+      const isEdge = Math.abs(x - SKIN_FRONT_X) > halfWidth - 2;
+      if (isEdge && (x + y) % 2 === 0) continue; // dithered rim
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+
+  drawPixelEye(ctx, SKIN_FRONT_X - 3, eyeCss);
+  drawPixelEye(ctx, SKIN_FRONT_X + 3, eyeCss);
+
+  // Pixel gloss cap: two stepped white dashes on the upper-left shoulder.
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fillRect(4, 4, 5, 2);
+  ctx.fillRect(3, 6, 3, 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  // Nearest on both axes keeps the texels square and crisp — the pixel look.
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+// Body materials are never mutated per-instance, so each archetype shares ONE —
+// respawns during farming otherwise made three re-resolve shader programs.
+const sharedBodyMaterials = new Map<string, THREE.MeshLambertMaterial>();
+function bodyMaterialFor(
+  archetype: EnemyArchetype,
+  create: () => THREE.MeshLambertMaterial
+): THREE.MeshLambertMaterial {
+  let material = sharedBodyMaterials.get(archetype.id);
+  if (!material) {
+    material = create();
+    sharedBodyMaterials.set(archetype.id, material);
+  }
+  return material;
+}
+
 function addEyes(group: THREE.Group, y: number, z: number) {
-  const leftEye = new THREE.Mesh(sharedEyeGeometry, sharedEyeMaterial);
+  const leftEye = new THREE.Mesh(sharedEyeGeometry, sharedGolemEyeMaterial);
   leftEye.position.set(-0.22, y, z);
   const rightEye = leftEye.clone();
   rightEye.position.x = 0.22;
   group.add(leftEye, rightEye);
 }
 
-function buildSlimeBody(group: THREE.Group, archetype: EnemyArchetype, withSpikes: boolean) {
+function buildSlimeBody(
+  group: THREE.Group,
+  archetype: EnemyArchetype,
+  withSpikes: boolean
+): { body: THREE.Mesh; rig: THREE.Group } {
+  // Every visual part lives on the rig (origin at ground level) so the hop
+  // bounce moves body + eyes + spikes as one blob — see EnemyModel.rig.
+  const rig = new THREE.Group();
+  group.add(rig);
   const body = new THREE.Mesh(
     sharedBodyGeometry,
-    new THREE.MeshLambertMaterial({ color: archetype.bodyColor, emissive: 0x000000 })
+    bodyMaterialFor(
+      archetype,
+      () =>
+        new THREE.MeshLambertMaterial({
+          // The baked skin carries color, gradient, spots, eyes, and gloss —
+          // no separate face/decoration meshes, no extra draw calls.
+          map: buildSlimeSkin(archetype.bodyColor, '#ffdf8f'),
+          emissive: 0x000000,
+        })
+    )
   );
   body.scale.y = 0.72;
   body.position.y = 0.55;
   body.castShadow = true;
-  group.add(body);
-  addEyes(group, 0.7, 0.6);
+  rig.add(body);
 
-  if (!withSpikes) return body;
+  if (!withSpikes) return { body, rig };
   for (let spikeIndex = 0; spikeIndex < 6; spikeIndex++) {
     const angle = (spikeIndex / 6) * Math.PI * 2;
     const spike = new THREE.Mesh(sharedSpikeGeometry, sharedSpikeMaterial);
     spike.position.set(Math.cos(angle) * 0.5, 0.9, Math.sin(angle) * 0.5);
     spike.rotation.set(Math.sin(angle) * 0.6, 0, -Math.cos(angle) * 0.6);
-    group.add(spike);
+    rig.add(spike);
   }
-  return body;
+  return { body, rig };
 }
 
 function buildWispBody(group: THREE.Group, archetype: EnemyArchetype) {
   const body = new THREE.Mesh(
     sharedBodyGeometry,
-    new THREE.MeshLambertMaterial({
-      color: archetype.bodyColor,
-      emissive: archetype.bodyColor,
-      emissiveIntensity: 0.4,
-      transparent: true,
-      opacity: 0.85,
-    })
+    bodyMaterialFor(
+      archetype,
+      () =>
+        new THREE.MeshLambertMaterial({
+          map: buildSlimeSkin(archetype.bodyColor, '#eafff4'),
+          emissive: archetype.bodyColor,
+          emissiveIntensity: 0.4,
+          transparent: true,
+          opacity: 0.85,
+        })
+    )
   );
   body.scale.setScalar(0.7);
   body.position.y = 1.1;
   group.add(body);
-  addEyes(group, 1.2, 0.45);
   return body;
 }
 
 function buildGolemBody(group: THREE.Group, archetype: EnemyArchetype) {
-  const stoneMaterial = new THREE.MeshLambertMaterial({
-    color: archetype.bodyColor,
-    emissive: 0x000000,
-  });
+  const stoneMaterial = bodyMaterialFor(
+    archetype,
+    () => new THREE.MeshLambertMaterial({ color: archetype.bodyColor, emissive: 0x000000 })
+  );
   const body = new THREE.Mesh(sharedGolemTorsoGeometry, stoneMaterial);
   body.position.y = 0.9;
   body.castShadow = true;
@@ -267,27 +412,28 @@ function buildGolemBody(group: THREE.Group, archetype: EnemyArchetype) {
   const rightArm = leftArm.clone();
   rightArm.position.x = 0.75;
   group.add(body, head, leftArm, rightArm);
-  addEyes(group, 1.8, 0.3);
+  addEyes(group, 1.8, 0.3); // amber-lit glare (geo-slime read)
   return body;
 }
 
 export function createEnemyModel(archetype: EnemyArchetype, scale: number): EnemyModel {
   const group = new THREE.Group();
   let body: THREE.Mesh;
+  let rig: THREE.Group | undefined;
   if (archetype.id === 'stoneGolem') body = buildGolemBody(group, archetype);
   else if (archetype.id === 'windWisp') body = buildWispBody(group, archetype);
-  else body = buildSlimeBody(group, archetype, archetype.id === 'spikySlime');
+  else ({ body, rig } = buildSlimeBody(group, archetype, archetype.id === 'spikySlime'));
 
   const barHeight = archetype.id === 'stoneGolem' ? 2.7 : 2.0;
   const overlay = createEnemyOverlay(scale, barHeight);
   group.add(overlay.sprite);
 
   group.scale.setScalar(scale);
-  return { group, body, overlay };
+  return { group, body, overlay, rig };
 }
 
 export function disposeEnemyModel(model: EnemyModel) {
-  (model.body.material as THREE.Material).dispose();
+  // Body material is shared per archetype (sharedBodyMaterials) — never dispose.
   model.overlay.dispose();
   model.group.traverse(node => {
     if (node instanceof THREE.Sprite) node.material.dispose();

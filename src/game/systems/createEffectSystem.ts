@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ELEMENTS, type ElementId } from '../data/elements';
 import type { SkillDefinition } from '../data/characters';
 import type { DamageKind } from '../combat/damageKind';
-import { disposeObject } from '../engine/disposeObject';
+import type { LightPool } from './createLightPool';
 
 /** Applies damage around a point; returns true when something was hit. */
 export type DamageApplier = (
@@ -51,6 +51,8 @@ export interface EffectSystem {
     damageKind: DamageKind;
   }): void;
   spawnMeleeSlash(position: THREE.Vector3, facingAngle: number, color: number): void;
+  /** Ground shockwave: a flat ring expanding from the point out to radius. */
+  spawnShockwave(position: THREE.Vector3, radius: number, color: number): void;
   spawnSkillEffect(options: SkillEffectOptions): void;
   dispose(): void;
 }
@@ -60,22 +62,96 @@ export interface EffectSystem {
 export const PROJECTILE_LIFETIME_SECONDS = 2.5;
 const RING_TICK_SECONDS = 0.5;
 
-function createBurstPoints(color: number, particleCount: number): THREE.Points {
-  const positions = new Float32Array(particleCount * 3);
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const material = new THREE.PointsMaterial({
-    color,
-    size: 0.28,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-  });
-  return new THREE.Points(geometry, material);
-}
+const BURST_POINT_SIZE = 0.28;
+const SPARKLE_POINT_SIZE = 0.22;
 
-export function createEffectSystem(scene: THREE.Scene): EffectSystem {
+export function createEffectSystem(
+  scene: THREE.Scene,
+  /** Ground-influence stamp — flying projectiles part the grass beneath them. */
+  stampGround?: (x: number, z: number, radius: number, strength: number, dirX?: number, dirZ?: number) => void,
+  /** Pooled point lights — projectiles glow and light the world around them. */
+  lightPool?: LightPool,
+  /** World solidity for projectiles: slopes/rocks/tents stop them with a splash. */
+  projectileWorld?: {
+    blockedAt(x: number, y: number, z: number): boolean;
+    /**
+     * Fired once per world impact with the (normalized) flight direction —
+     * the game layer plays the impact SFX and sprays voxel debris here.
+     */
+    onImpact(
+      x: number,
+      y: number,
+      z: number,
+      element: ElementId,
+      directionX: number,
+      directionZ: number
+    ): void;
+  }
+): EffectSystem {
   const activeEffects: ActiveEffect[] = [];
+
+  // Pooled materials + shared static geometries: creating fresh ones per
+  // burst/ring/slash made three re-resolve shader programs constantly —
+  // getParameters/getProgramCacheKey were ~15% of combat frame time.
+  const materialPools = new Map<string, THREE.Material[]>();
+  function acquireMaterial<T extends THREE.Material>(key: string, create: () => T): T {
+    const reused = materialPools.get(key)?.pop() as T | undefined;
+    if (reused) return reused;
+    const material = create();
+    material.userData.poolKey = key;
+    return material;
+  }
+  function releaseMaterial(material: THREE.Material) {
+    const key = material.userData.poolKey as string | undefined;
+    if (!key) {
+      material.dispose();
+      return;
+    }
+    let pool = materialPools.get(key);
+    if (!pool) {
+      pool = [];
+      materialPools.set(key, pool);
+    }
+    if (pool.length < 24) pool.push(material);
+    else material.dispose();
+  }
+  function markShared(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+    geometry.userData.shared = true;
+    return geometry;
+  }
+
+  // Static geometries reused across every spawn of their effect type.
+  const ringGeometry = markShared(new THREE.RingGeometry(0.4, 0.9, 32));
+  const slashGeometry = markShared(new THREE.RingGeometry(0.9, 1.5, 16, 1, 0, Math.PI * 0.8));
+  const projectileGeometry = markShared(new THREE.OctahedronGeometry(0.22));
+  const torusGeometries = new Map<number, THREE.BufferGeometry>();
+  function torusGeometryFor(radius: number): THREE.BufferGeometry {
+    let geometry = torusGeometries.get(radius);
+    if (!geometry) {
+      geometry = markShared(new THREE.TorusGeometry(radius, 0.12, 8, 32));
+      torusGeometries.set(radius, geometry);
+    }
+    return geometry;
+  }
+
+  function createBurstPoints(color: number, particleCount: number, size: number): THREE.Points {
+    const positions = new Float32Array(particleCount * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = acquireMaterial(
+      `points:${color}:${size}`,
+      () =>
+        new THREE.PointsMaterial({
+          color,
+          size,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        })
+    );
+    material.opacity = 1;
+    return new THREE.Points(geometry, material);
+  }
 
   function addEffect(effect: ActiveEffect) {
     scene.add(effect.object);
@@ -84,11 +160,16 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
 
   function removeEffect(effect: ActiveEffect) {
     scene.remove(effect.object);
-    disposeObject(effect.object);
+    effect.object.traverse(node => {
+      const renderable = node as THREE.Mesh;
+      if (!renderable.geometry) return;
+      if (!renderable.geometry.userData.shared) renderable.geometry.dispose();
+      releaseMaterial(renderable.material as THREE.Material);
+    });
   }
 
   function spawnBurst(position: THREE.Vector3, color: number, particleCount = 18) {
-    const points = createBurstPoints(color, particleCount);
+    const points = createBurstPoints(color, particleCount, BURST_POINT_SIZE);
     points.position.copy(position);
     const velocities = Array.from({ length: particleCount }, () =>
       new THREE.Vector3(
@@ -123,8 +204,7 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
   // A slow, gentle sparkle: a handful of pixel motes that rise a little and fade
   // over ~1.4s. Chunky point size keeps it reading as pixels, not smoke.
   function spawnSparkle(position: THREE.Vector3, color: number, particleCount = 5) {
-    const points = createBurstPoints(color, particleCount);
-    (points.material as THREE.PointsMaterial).size = 0.22;
+    const points = createBurstPoints(color, particleCount, SPARKLE_POINT_SIZE);
     points.position.copy(position);
     const velocities = Array.from({ length: particleCount }, () =>
       new THREE.Vector3(
@@ -171,8 +251,11 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
   }) {
     const elementColor = ELEMENTS[options.element].color;
     const projectile = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.22),
-      new THREE.MeshBasicMaterial({ color: elementColor })
+      projectileGeometry,
+      acquireMaterial(
+        `projectile:${elementColor}`,
+        () => new THREE.MeshBasicMaterial({ color: elementColor })
+      )
     );
     projectile.position.copy(options.origin);
     projectile.position.y = Math.max(projectile.position.y, 1.1);
@@ -180,12 +263,46 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
       .normalize()
       .multiplyScalar(options.speed);
     let ageSeconds = 0;
+    // First 4 concurrent projectiles glow; pool exhaustion degrades to no light.
+    const pooledLight = lightPool?.acquire(elementColor) ?? null;
     addEffect({
       object: projectile,
       update(deltaSeconds) {
         ageSeconds += deltaSeconds;
+        const beforeX = projectile.position.x;
+        const beforeY = projectile.position.y;
+        const beforeZ = projectile.position.z;
         projectile.position.addScaledVector(velocity, deltaSeconds);
+        // World solidity: a rising slope, rock, tree, or tent stops the shot.
+        if (
+          projectileWorld?.blockedAt(
+            projectile.position.x,
+            projectile.position.y,
+            projectile.position.z
+          )
+        ) {
+          // Splash at the last clear spot so the burst sits ON the surface,
+          // not buried inside it.
+          projectile.position.set(beforeX, beforeY, beforeZ);
+          const directionX = velocity.x / options.speed;
+          const directionZ = velocity.z / options.speed;
+          spawnImpactSpear(projectile.position, directionX, directionZ, elementColor);
+          spawnBurst(projectile.position, elementColor, 10);
+          spawnSparkle(projectile.position, elementColor, 4);
+          projectileWorld.onImpact(
+            beforeX,
+            beforeY,
+            beforeZ,
+            options.element,
+            directionX,
+            directionZ
+          );
+          if (pooledLight) lightPool?.release(pooledLight);
+          return false;
+        }
         projectile.rotation.y += deltaSeconds * 10;
+        stampGround?.(projectile.position.x, projectile.position.z, 0.5, 0.35, velocity.x, velocity.z);
+        pooledLight?.light.position.copy(projectile.position).setY(projectile.position.y + 0.4);
         const hitSomething = options.applyDamage?.(
           projectile.position,
           options.hitRadius,
@@ -193,28 +310,109 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
           options.element,
           options.damageKind
         );
-        if (hitSomething) {
-          spawnBurst(projectile.position, elementColor);
-          return false;
-        }
-        return ageSeconds < PROJECTILE_LIFETIME_SECONDS;
+        const alive = !hitSomething && ageSeconds < PROJECTILE_LIFETIME_SECONDS;
+        if (!alive && pooledLight) lightPool?.release(pooledLight);
+        if (hitSomething) spawnBurst(projectile.position, elementColor);
+        return alive;
+      },
+    });
+  }
+
+  // Impact spear: the shot "sticks" in the surface — an elongated shard along
+  // the flight direction, tilted down, quivering for a beat, then shrinking
+  // away. Reads as a spear planted in the ground/rock, not a flat ring.
+  const IMPACT_SPEAR_DOWN_TILT = 0.55; // radians below the flight line
+  const IMPACT_SPEAR_LENGTH_SCALE = 3.2; // octahedron y-stretch (≈1.4 world units)
+  const IMPACT_SPEAR_HOLD_SECONDS = 0.22;
+  const IMPACT_SPEAR_FADE_SECONDS = 0.28;
+  const SPEAR_UP = new THREE.Vector3(0, 1, 0);
+
+  function spawnImpactSpear(
+    position: THREE.Vector3,
+    directionX: number,
+    directionZ: number,
+    color: number
+  ) {
+    const shard = new THREE.Mesh(
+      projectileGeometry,
+      acquireMaterial(`projectile:${color}`, () => new THREE.MeshBasicMaterial({ color }))
+    );
+    // Shaft axis: flight direction pitched down — "stabbed into the surface".
+    const shaftAxis = new THREE.Vector3(
+      directionX,
+      -Math.tan(IMPACT_SPEAR_DOWN_TILT),
+      directionZ
+    ).normalize();
+    const baseQuaternion = new THREE.Quaternion().setFromUnitVectors(SPEAR_UP, shaftAxis);
+    shard.quaternion.copy(baseQuaternion);
+    shard.scale.set(0.55, IMPACT_SPEAR_LENGTH_SCALE, 0.55);
+    // Tip at the impact point, tail sticking back out toward the shooter.
+    const halfLength = 0.22 * IMPACT_SPEAR_LENGTH_SCALE;
+    shard.position.copy(position).addScaledVector(shaftAxis, -halfLength * 0.6);
+
+    const wobbleQuaternion = new THREE.Quaternion();
+    const wobbleAxis = new THREE.Vector3(-directionZ, 0, directionX).normalize();
+    const totalSeconds = IMPACT_SPEAR_HOLD_SECONDS + IMPACT_SPEAR_FADE_SECONDS;
+    let ageSeconds = 0;
+    addEffect({
+      object: shard,
+      update(deltaSeconds) {
+        ageSeconds += deltaSeconds;
+        // Impact quiver: a fast, decaying rock around the sideways axis.
+        const quiver = Math.sin(ageSeconds * 45) * 0.14 * Math.max(0, 1 - ageSeconds * 4);
+        shard.quaternion
+          .copy(baseQuaternion)
+          .premultiply(wobbleQuaternion.setFromAxisAngle(wobbleAxis, quiver));
+        const fade = Math.min(
+          1,
+          Math.max(0, (totalSeconds - ageSeconds) / IMPACT_SPEAR_FADE_SECONDS)
+        );
+        shard.scale.set(0.55 * fade, IMPACT_SPEAR_LENGTH_SCALE * fade, 0.55 * fade);
+        return ageSeconds < totalSeconds;
+      },
+    });
+  }
+
+  // Shared ground-ring visual: expands from the point out to radius, fading out.
+  // Used by nova skills and the slam shockwave.
+  function spawnExpandingRing(
+    x: number,
+    y: number,
+    z: number,
+    radius: number,
+    color: number,
+    expandSeconds: number
+  ) {
+    const ring = new THREE.Mesh(
+      ringGeometry,
+      acquireMaterial(
+        `ring:${color}`,
+        () =>
+          new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          })
+      )
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, y, z);
+    let ageSeconds = 0;
+    addEffect({
+      object: ring,
+      update(deltaSeconds) {
+        ageSeconds += deltaSeconds;
+        const progress = Math.min(1, ageSeconds / expandSeconds);
+        ring.scale.setScalar(1 + progress * radius);
+        (ring.material as THREE.MeshBasicMaterial).opacity = 1 - progress;
+        return progress < 1;
       },
     });
   }
 
   function spawnNova(options: SkillEffectOptions) {
     const elementColor = ELEMENTS[options.element].color;
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.4, 0.9, 32),
-      new THREE.MeshBasicMaterial({
-        color: elementColor,
-        transparent: true,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      })
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.set(options.origin.x, options.origin.y - 0.85, options.origin.z);
     options.applyDamage?.(
       options.origin,
       options.skill.radius,
@@ -223,26 +421,31 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
       SKILL_DAMAGE_KIND
     );
     spawnBurst(options.origin, elementColor, 26);
-    let ageSeconds = 0;
-    const expandSeconds = 0.45;
-    addEffect({
-      object: ring,
-      update(deltaSeconds) {
-        ageSeconds += deltaSeconds;
-        const progress = Math.min(1, ageSeconds / expandSeconds);
-        ring.scale.setScalar(1 + progress * options.skill.radius);
-        (ring.material as THREE.MeshBasicMaterial).opacity = 1 - progress;
-        return progress < 1;
-      },
-    });
+    spawnExpandingRing(
+      options.origin.x,
+      options.origin.y - 0.85,
+      options.origin.z,
+      options.skill.radius,
+      elementColor,
+      0.45
+    );
+  }
+
+  // Slam impact shockwave (04-07 playtest ask): two staggered rings racing out
+  // from the landing center read as a wave, not a fading circle.
+  function spawnShockwave(position: THREE.Vector3, radius: number, color: number) {
+    spawnExpandingRing(position.x, position.y, position.z, radius, color, 0.35);
+    spawnExpandingRing(position.x, position.y, position.z, radius * 0.7, 0xffffff, 0.5);
   }
 
   function spawnDamageRing(options: SkillEffectOptions) {
     const elementColor = ELEMENTS[options.element].color;
-    const torus = new THREE.Mesh(
-      new THREE.TorusGeometry(options.skill.radius, 0.12, 8, 32),
-      new THREE.MeshBasicMaterial({ color: elementColor, transparent: true, opacity: 0.85 })
+    const torusMaterial = acquireMaterial(
+      `torus:${elementColor}`,
+      () => new THREE.MeshBasicMaterial({ color: elementColor, transparent: true })
     );
+    torusMaterial.opacity = 0.85;
+    const torus = new THREE.Mesh(torusGeometryFor(options.skill.radius), torusMaterial);
     torus.rotation.x = -Math.PI / 2;
     let ageSeconds = 0;
     let nextTickSeconds = 0;
@@ -293,13 +496,17 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
 
   function spawnMeleeSlash(position: THREE.Vector3, facingAngle: number, color: number) {
     const slash = new THREE.Mesh(
-      new THREE.RingGeometry(0.9, 1.5, 16, 1, 0, Math.PI * 0.8),
-      new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      })
+      slashGeometry,
+      acquireMaterial(
+        `slash:${color}`,
+        () =>
+          new THREE.MeshBasicMaterial({
+            color,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          })
+      )
     );
     slash.rotation.x = -Math.PI / 2;
     slash.rotation.z = facingAngle - Math.PI * 0.4;
@@ -356,10 +563,18 @@ export function createEffectSystem(scene: THREE.Scene): EffectSystem {
     spawnSparkle,
     spawnProjectile,
     spawnMeleeSlash,
+    spawnShockwave,
     spawnSkillEffect,
     dispose() {
       for (const effect of activeEffects) removeEffect(effect);
       activeEffects.length = 0;
+      for (const pool of materialPools.values()) for (const material of pool) material.dispose();
+      materialPools.clear();
+      ringGeometry.dispose();
+      slashGeometry.dispose();
+      projectileGeometry.dispose();
+      for (const geometry of torusGeometries.values()) geometry.dispose();
+      torusGeometries.clear();
     },
   };
 }

@@ -51,7 +51,7 @@ function drawNumber(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const label =
-    kind === 'crit' || kind === 'takenCrit'
+    kind === 'crit' || kind === 'takenCrit' || kind === 'pvpCrit'
       ? `${amount}!`
       : kind === 'heal'
         ? `+${amount}`
@@ -67,9 +67,51 @@ function toCssColor(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`;
 }
 
+// Candidate offsets tried in order at spawn: center first, then alternating
+// sides, then an upper row — the first slot not colliding with a live number
+// wins, so simultaneous hits fan out instead of stacking on each other.
+const SLOT_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0],
+  [1.0, 0],
+  [-1.0, 0],
+  [2.0, 0],
+  [-2.0, 0],
+  [0.5, 0.7],
+  [-0.5, 0.7],
+  [1.5, 0.7],
+  [-1.5, 0.7],
+  [0, 1.4],
+];
+// A slot collides when a live number sits closer than these (sprite ≈ 2.1×1.05
+// world units; z-window keeps far-apart fights from blocking each other's slots).
+const CLEAR_X = 1.35;
+const CLEAR_Y = 0.75;
+const CLEAR_Z = 2.5;
+
 export function createDamageNumbers(scene: THREE.Scene): DamageNumbers {
   const pool: FloatingNumber[] = [];
   let spawnCounter = 0;
+
+  function findClearOffset(baseX: number, baseY: number, baseZ: number): readonly [number, number] {
+    for (const offset of SLOT_OFFSETS) {
+      let clear = true;
+      for (const entry of pool) {
+        if (!entry.active) continue;
+        const position = entry.sprite.position;
+        if (
+          Math.abs(baseX + offset[0] - position.x) < CLEAR_X &&
+          Math.abs(baseY + offset[1] - position.y) < CLEAR_Y &&
+          Math.abs(baseZ - position.z) < CLEAR_Z
+        ) {
+          clear = false;
+          break;
+        }
+      }
+      if (clear) return offset;
+    }
+    // Everything crowded (burst of 10+): fall back to the small deterministic fan.
+    return [(spawnCounter % 5) * 0.16 - 0.32, 0];
+  }
 
   function acquire(): FloatingNumber | null {
     const reused = pool.find(entry => !entry.active);
@@ -113,8 +155,13 @@ export function createDamageNumbers(scene: THREE.Scene): DamageNumbers {
       entry.sprite.scale.set(entry.baseScaleX, entry.baseScaleY, 1);
       entry.sprite.position.copy(worldPosition);
       entry.sprite.position.y += BASE_WORLD_HEIGHT;
-      // Fan successive spawns sideways so simultaneous equal hits do not stack.
-      entry.sprite.position.x += (spawnCounter % 5) * 0.16 - 0.32;
+      const offset = findClearOffset(
+        entry.sprite.position.x,
+        entry.sprite.position.y,
+        entry.sprite.position.z
+      );
+      entry.sprite.position.x += offset[0];
+      entry.sprite.position.y += offset[1];
       spawnCounter++;
       entry.sprite.visible = true;
       entry.ageSeconds = 0;
