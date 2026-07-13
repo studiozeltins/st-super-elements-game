@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.3.0-alpha
 milestone_name: Living World
-current_phase: 8
-current_phase_name: Wind Core
+current_phase: 08
+current_phase_name: wind-core
 status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-07-13T23:10:40.381Z"
-last_activity: 2026-07-14
-last_activity_desc: v0.3.0-alpha roadmap created (Phases 8–13, 32/32 requirements mapped)
+last_updated: "2026-07-13T23:20:05.778Z"
+last_activity: 2026-07-13
+last_activity_desc: Phase 08 execution started
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 5
+  completed_plans: 1
   percent: 0
 ---
 
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-13)
 **Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor). This milestone makes the world BETWEEN fights worth living in.
-**Current focus:** Phase 8 — Wind Core (v0.3.0-alpha Living World, Phases 8–13)
+**Current focus:** Phase 08 — wind-core
 
 ## Current Position
 
-Phase: 8 of 13 (Wind Core) — first of 6 milestone phases
-Plan: — (not yet planned)
+Phase: 08 (wind-core) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-07-14 — v0.3.0-alpha roadmap created (Phases 8–13, 32/32 requirements mapped)
+Last activity: 2026-07-13 — Phase 08 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -67,6 +67,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | - | - | - | - |
 
 *Updated after each plan completion.*
+| Phase 08 P01 | 7 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -91,6 +92,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
   get dedicated fixed lights at build, fireflies stay emissive.
 
 - **Camera motion transient-only** + reduce-motion toggle (XAG 117) as acceptance criterion.
+- [Phase 08]: GUST periods tuned to 9/10/22s (RESEARCH 37/23/53s failed the cadence spec with gaps up to 369s) — Plan discretion grant: the cadence test is the spec; grid-searched incommensurate triples over a simulated hour
+- [Phase 08]: WANDER retuned to a1=0.25/T=600s + a2=0.12/T=1300s — RESEARCH example exceeded the 0.0035 rad/s wander rate bound 3x; retune keeps ~11 deg/min max with 0.35 rad range per 10-min window
 
 ### Pending Todos
 
@@ -131,7 +134,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-13T22:31:08.316Z
+Last session: 2026-07-13T23:19:28.267Z
 Stopped at: Phase 8 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/08-wind-core/08-CONTEXT.md

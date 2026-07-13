@@ -56,7 +56,7 @@ enabled — per-phase costs sum.
 Plans:
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — windMath pure helper, test-first (gust envelope, traveling front, wander) [Wave 1]
+- [x] 08-01-PLAN.md — windMath pure helper, test-first (gust envelope, traveling front, wander) [Wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -151,7 +151,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Wind Core | 0/5 | Planned | - |
+| 8. Wind Core | 1/5 | In Progress|  |
 | 9. Atmosphere & Day/Night | 0/TBD | Not started | - |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |

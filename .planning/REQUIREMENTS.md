@@ -9,12 +9,14 @@ zero server publish.
 
 ### Wind Core (WIND)
 
-- [ ] **WIND-01**: Player sees grass, camp flags/banners, tree canopies, and campfire smoke
+- [x] **WIND-01**: Player sees grass, camp flags/banners, tree canopies, and campfire smoke
   all sway from ONE shared wind module (direction, strength, time, gust envelope) — grass
   rendering unchanged after the `uTime` extraction
-- [ ] **WIND-02**: Player sees gusts visibly TRAVEL across the field (spatial phase offset
+
+- [x] **WIND-02**: Player sees gusts visibly TRAVEL across the field (spatial phase offset
   by `dot(worldPos, windDir)/gustWavelength`), not the whole world bowing in unison
-- [ ] **WIND-03**: Each consumer keeps its own character on the shared phase — flags flap
+
+- [x] **WIND-03**: Each consumer keeps its own character on the shared phase — flags flap
   faster, smoke drifts laterally (instanced quads rising with sine drift), canopies sway
   low-amplitude/low-frequency
 
@@ -23,8 +25,10 @@ zero server publish.
 - [ ] **ATMO-01**: Player sees distant terrain dissolve into the sky color — linear
   `scene.fog` (mutated in place, never reassigned) with `near` beyond combat readability
   radius, `far` hiding the world edge
+
 - [ ] **ATMO-02**: Player sees a sky/horizon gradient whose bottom color equals the fog
   color — fog + sky + day/night are ONE color pipeline from a single source
+
 - [ ] **ATMO-03**: Combat readability is untouched — telegraphs, enemies, and gem drops
   inside the gameplay radius keep ~full contrast at all times of day
 
@@ -33,11 +37,14 @@ zero server publish.
 - [ ] **DAYNITE-01**: World color drifts through dawn → day → dusk → night (~20min cycle,
   asymmetric: day-weighted, short dusk/dawn) via smoothstep-blended keys of hemisphere/sun
   color+intensity, fog color, and sky — sun/shadow DIRECTION never moves
+
 - [ ] **DAYNITE-02**: All players see the same time of day — phase derived from a
   server-anchored timestamp (SDK event timestamp; `Date.now()` fallback), advanced in the
   game loop (never derived per React render), bigint modulo before Number()
+
 - [ ] **DAYNITE-03**: Night keeps a blue ambient floor — never below combat-readable
   contrast (~40–50% day exposure); night = palette, not darkness
+
 - [ ] **DAYNITE-04**: Plaza lanterns fade in at dusk and out at dawn (warm points vs cool
   night; no runtime light add/remove — intensity fade on build-time lights)
 
@@ -45,16 +52,21 @@ zero server publish.
 
 - [ ] **AMBI-01**: Audio routes through a master/ambient/sfx bus with a compressor —
   existing SFX migrated off direct `context.destination`; single shared AudioContext
+
 - [ ] **AMBI-02**: Player hears a continuous procedural wind bed (filtered noise, slowly
   modulated) whose gain swells with the wind module's gust envelope
+
 - [ ] **AMBI-03**: Player hears randomized one-shots — bird chirps every 5–15s with pitch
   ±10–20% + pan + volume jitter (never a fixed-interval metronome); synth-first,
   playtest-gated with CC0 recording swap as fallback
+
 - [ ] **AMBI-04**: Player hears grass rustle when sprinting through grass cells
 - [ ] **AMBI-05**: Player hears distant goliath grunts, gain scaled by nearest-camp
   proximity, long random intervals
+
 - [ ] **AMBI-06**: Combat ducks the ambience — birds stop entirely, bed ducks −6..−12dB
   over ~1s, restores over ~2–3s after combat ends (never hard-cut)
+
 - [ ] **AMBI-07**: Ambience varies by time of day — birds by day, crickets/owl at night
   (paired with DAYNITE phase)
 
@@ -62,8 +74,10 @@ zero server publish.
 
 - [ ] **MUSIC-01**: Player hears a region exploration music loop (CC0/properly-licensed
   track, seamless loop) on the music bus at ambient-friendly volume
+
 - [ ] **MUSIC-02**: Combat music crossfades in when combat starts and back out when combat
   ends (same combat-state signal as AMBI-06) — horizontal crossfade, no hard cuts
+
 - [ ] **MUSIC-03**: Player can mute/adjust music independently of SFX (music vs sfx bus
   gain), persisted locally
 
@@ -72,9 +86,11 @@ zero server publish.
 - [ ] **WILD-01**: Player sees butterflies wandering over grass patches by day — instanced
   quads, summed-sine/noise wander, sparse population (encounter = event, not wallpaper),
   spawn/despawn near player
+
 - [ ] **WILD-02**: Birds flush — sprinting through grass makes 2–4 birds burst up on a
   scripted rising arc with a wing one-shot, then despawn (hooked at the CPU groundInfluence
   stamp site, never reading the GPU texture)
+
 - [ ] **WILD-03**: Player sees fireflies at dusk/night — emissive instanced quads with
   randomized glow pulse phase; NO pooled runtime lights (lightPool stays combat-owned)
 
@@ -83,22 +99,29 @@ zero server publish.
 - [ ] **WEAR-01**: Worn footpaths run along REAL routes (camp↔camp, plaza↔bridge) —
   static bake: grass placement thinned along path splines + ground tint strip (never the
   decaying influence channels)
+
 - [ ] **WEAR-02**: Plaza has lived-in props — crates, fences, lanterns arranged to answer
   "who put this here" (market edge, path gaps), frozen-matrix static meshes
+
 - [ ] **WEAR-03**: Scorch marks regrow — existing scorch decay tuned so battle wear heals
   over minutes
+
 - [ ] **WEAR-04**: Player leaves a lingering grass-bend trail (~2s fade) — existing
   groundInfluence bend decay tuned/verified for the target feel
+
 - [ ] **WEAR-05**: Sprint steps on dirt/path puff small pooled dust sprites
 
 ### Camera Feel (CAM) — do last
 
 - [ ] **CAM-01**: Character (not camera) leans slightly into run direction with a spring
   (~2–4°, playtest-tuned)
+
 - [ ] **CAM-02**: Idle characters have a subtle breathing sway (on the character model,
   never continuous camera motion — pixel-crawl + nausea)
+
 - [ ] **CAM-03**: Burst damage triggers a brief FOV kick (+2–5°, ~60ms in / ~300ms
   spring-back) — rare high-tier events only, never every hit
+
 - [ ] **CAM-04**: A "reduce camera motion" toggle zeroes lean/roll/FOV-kick (XAG 117),
   persisted locally
 
@@ -142,9 +165,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WIND-01 | Phase 8 | Pending |
-| WIND-02 | Phase 8 | Pending |
-| WIND-03 | Phase 8 | Pending |
+| WIND-01 | Phase 8 | Complete |
+| WIND-02 | Phase 8 | Complete |
+| WIND-03 | Phase 8 | Complete |
 | ATMO-01 | Phase 9 | Pending |
 | ATMO-02 | Phase 9 | Pending |
 | ATMO-03 | Phase 9 | Pending |
@@ -176,6 +199,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CAM-04 | Phase 13 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 32 total
 - Mapped to phases: 32
 - Unmapped: 0 ✓
