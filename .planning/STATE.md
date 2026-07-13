@@ -6,14 +6,14 @@ current_phase: 08
 current_phase_name: wind-core
 status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-07-13T23:20:05.778Z"
+last_updated: "2026-07-13T23:29:07.374Z"
 last_activity: 2026-07-13
 last_activity_desc: Phase 08 execution started
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 5
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 08 (wind-core) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-07-13 — Phase 08 execution started
 
@@ -68,6 +68,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 
 *Updated after each plan completion.*
 | Phase 08 P01 | 7 min | 2 tasks | 2 files |
+| Phase 08 P02 | 6 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - **Camera motion transient-only** + reduce-motion toggle (XAG 117) as acceptance criterion.
 - [Phase 08]: GUST periods tuned to 9/10/22s (RESEARCH 37/23/53s failed the cadence spec with gaps up to 369s) — Plan discretion grant: the cadence test is the spec; grid-searched incommensurate triples over a simulated hour
 - [Phase 08]: WANDER retuned to a1=0.25/T=600s + a2=0.12/T=1300s — RESEARCH example exceeded the 0.0035 rad/s wander rate bound 3x; retune keeps ~11 deg/min max with 0.35 rad range per 10-min window
+- [Phase 08]: Grass sway axis vec2 stays FIXED (no uWindDir in base sway — zero regression, D-01) but its values interpolate from SWAY.ampX/ampZ via toFixed(4) so all nine grass literals single-source from windMath
+- [Phase 08]: GrassField.update() deleted whole (interface + object + world call site) — shared wind clock made it empty; wind.update(deltaSeconds) at top of frame() is the client's only wind clock advance
 
 ### Pending Todos
 
@@ -134,7 +137,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-13T23:19:28.267Z
+Last session: 2026-07-13T23:28:30.541Z
 Stopped at: Phase 8 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/08-wind-core/08-CONTEXT.md
