@@ -9,5 +9,6 @@ export { createMushroom } from './createMushroom';
 export { createTeepee } from './createTeepee';
 export { createTotem } from './createTotem';
 export { createCampfire } from './createCampfire';
+export { createCampFlag } from './createCampFlag';
 export { createSpikes } from './createSpikes';
 export { createWoodenArch } from './createWoodenArch';
