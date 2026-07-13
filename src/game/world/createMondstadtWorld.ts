@@ -10,6 +10,7 @@ import {
   createBoulder,
   createBush,
   createCampfire,
+  createCampFlag,
   createCanopyTree,
   createFlower,
   createMushroom,
@@ -425,6 +426,7 @@ export function createMondstadtWorld(
     placeAroundCamp(createTeepee(campRandom), 4.5, 1.4);
     placeAroundCamp(createTeepee(campRandom), 5, 1.4);
     placeAroundCamp(createTotem(campRandom), 3.5, 0.5);
+    placeAroundCamp(createCampFlag(campRandom, options.wind), 5.5);
     placeAroundCamp(createSpikes(campRandom), 6);
     placeAroundCamp(createSpikes(campRandom), 6.5);
     if (campRandom() < 0.5) placeAroundCamp(createWoodenArch(campRandom), 7);
