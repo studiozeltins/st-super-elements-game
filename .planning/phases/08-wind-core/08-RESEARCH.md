@@ -519,17 +519,20 @@ export function swayGlsl(timeExpr: string, xExpr: string, zExpr: string): string
 | A3 | Static shadows under swaying canopies are invisible at D-07 amplitude [ASSUMED] | Pattern 4 | Low: accepted trade documented in plan; escalation (customDepthMaterial) exists but should not be pre-built |
 | A4 | ~48 opaque Lambert cubes updated on CPU per frame is negligible frame cost [ASSUMED — consistent with debris system scale already shipped] | Pattern 6 | Low: `?nosmoke` exists precisely to bisect this; pool size is a discretion constant |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Does grass `update()` survive at all after extraction?**
+1. **Does grass `update()` survive at all after extraction?** — **RESOLVED: deleted.**
    - What we know: its only job today is the clock increment (:184-186).
    - What's unclear: whether removing it simplifies or complicates the `MondstadtWorld.update` call site (:447).
    - Recommendation: delete the method and its call if nothing else lands in it (no-legacy rule); planner decides at task granularity.
-2. **One flag or two per camp, and any plaza banners?**
+   - **Adopted ruling (Plan 08-02 Task 2):** grass `update()` and its `MondstadtWorld.update` call at :447 are deleted in the same commit that moves grass onto the shared clock; the GrassField interface drops the method entirely (no-legacy rule).
+2. **One flag or two per camp, and any plaza banners?** — **RESOLVED: one flag per camp.**
    - What we know: success criteria say "camp flags/banners"; camps get seeded decoration (:399-419).
    - Recommendation: 1 flag per camp minimum for the phase promise; extra plaza banners are Phase 11 (Lived-in Props) territory — don't scope-creep here.
-3. **Exact `?nowind` semantics for smoke rise** — D-12 zeroes "smoke drift"; puffs presumably still rise (fire without wind still smokes).
+   - **Adopted ruling (Plan 08-03 Task 3):** exactly one flag per camp placed in the world decoration loop; plaza banners deferred to Phase 11 (Lived-in Props).
+3. **Exact `?nowind` semantics for smoke rise** — **RESOLVED: rise unchanged, lateral drift × 0.** D-12 zeroes "smoke drift"; puffs presumably still rise (fire without wind still smokes).
    - Recommendation: `?nowind` → lateral drift and gust kick × 0, vertical rise unchanged; `?nosmoke` for full removal. State it in the plan so verification is unambiguous.
+   - **Adopted ruling (Plan 08-04 Task 1):** `?nowind` zeroes lateral drift and gust kick while vertical rise continues unchanged; `?nosmoke` removes the smoke system entirely.
 
 ## Environment Availability
 

@@ -1,9 +1,9 @@
 ---
 phase: 8
 slug: wind-core
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-14
 ---
 
@@ -38,7 +38,17 @@ created: 2026-07-14
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| *(filled by planner)* | | | WIND-01..03 | — | N/A | unit | `pnpm vitest run` | ❌ W0 | ⬜ pending |
+| 08-01 T1 | 08-01 | 1 | WIND-01, WIND-02, WIND-03 | — | N/A | unit (TDD RED) | `pnpm vitest run src/game/systems/__tests__/windMath.test.ts` (MUST fail — Wave 0 gap closes here) | created by task | ⬜ pending |
+| 08-01 T2 | 08-01 | 1 | WIND-01, WIND-02, WIND-03 | — | N/A | unit (TDD GREEN) | `pnpm vitest run src/game/systems/__tests__/windMath.test.ts` | ✅ (from T1) | ⬜ pending |
+| 08-02 T1 | 08-02 | 2 | WIND-01 | — | N/A | unit + build | `pnpm vitest run src/game/systems/__tests__/createWind.test.ts && pnpm build` | created by task | ⬜ pending |
+| 08-02 T2 | 08-02 | 2 | WIND-01, WIND-02 | T-08-01, T-08-03 | Constants-only GLSL interpolation; `?nowind` is a presence-only `URLSearchParams.has()` check | unit + build | `pnpm vitest run && pnpm build` | ✅ | ⬜ pending |
+| 08-03 T1 | 08-03 | 3 | WIND-01 | — | N/A | suite + build | `pnpm vitest run && pnpm build` | ✅ | ⬜ pending |
+| 08-03 T2 | 08-03 | 3 | WIND-01, WIND-03 | — | N/A | suite + build | `pnpm vitest run && pnpm build` | ✅ | ⬜ pending |
+| 08-03 T3 | 08-03 | 3 | WIND-01, WIND-03 | — | N/A | suite + build | `pnpm vitest run && pnpm build` | ✅ | ⬜ pending |
+| 08-04 T1 | 08-04 | 3 | WIND-01, WIND-03 | — | N/A | suite + build | `pnpm vitest run && pnpm build` | ✅ | ⬜ pending |
+| 08-04 T2 | 08-04 | 3 | WIND-01, WIND-03 | — | N/A | suite + build | `pnpm vitest run && pnpm build` | ✅ | ⬜ pending |
+| 08-05 T1 | 08-05 | 4 | WIND-01, WIND-02, WIND-03 | — | N/A | full gate | `pnpm vitest run && pnpm build` | ✅ | ⬜ pending |
+| 08-05 T2 | 08-05 | 4 | WIND-01, WIND-02, WIND-03 | — | N/A | manual (checkpoint:human-verify) | MISSING — visual judgment only (see Manual-Only Verifications below); automated coverage lives in 08-05 T1 + windMath suite | n/a | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -46,7 +56,7 @@ created: 2026-07-14
 
 ## Wave 0 Requirements
 
-- [ ] `src/game/systems/__tests__/windMath.test.ts` — stubs for WIND-01, WIND-02, WIND-03 (peak cadence, rigid wave translation, wander-rate bound)
+- [x] `src/game/systems/__tests__/windMath.test.ts` — stubs for WIND-01, WIND-02, WIND-03 (peak cadence, rigid wave translation, wander-rate bound) — covered by Plan 08-01 Task 1 (TDD RED, wave 1, first task executed)
 
 ---
 
@@ -62,11 +72,11 @@ created: 2026-07-14
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies (08-05 T2 is a justified manual checkpoint; its MISSING marker points to 08-05 T1 automated coverage)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify (every auto task carries its own `<automated>` command)
+- [x] Wave 0 covers all MISSING references (windMath.test.ts created by 08-01 T1)
+- [x] No watch-mode flags (all commands use `vitest run`)
+- [x] Feedback latency < 30s (quick command ~10s)
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved by planner (revision pass, 2026-07-14)
