@@ -2,9 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.3.0-alpha
 milestone_name: Living World
+current_phase: 8
+current_phase_name: Wind Core
 status: ready-to-plan
-last_updated: "2026-07-14"
+stopped_at: Phase 8 context gathered
+last_updated: "2026-07-13T22:31:08.332Z"
 last_activity: 2026-07-14
+last_activity_desc: v0.3.0-alpha roadmap created (Phases 8–13, 32/32 requirements mapped)
 progress:
   total_phases: 6
   completed_phases: 0
@@ -51,6 +55,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 ## Performance Metrics
 
 **Velocity (this milestone):**
+
 - Total plans completed: 0
 - Average duration: —
 - Total execution time: —
@@ -72,14 +77,19 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - **Zero new dependencies**: three@0.185.1 built-ins + Web Audio + existing seams (`audioCore`,
   `timeUniform`, `groundInfluence`, `lightPool`, `scorchMap`). Rejected: Tone.js/howler,
   noise packages, GSAP, three Audio wrappers, runtime Fog↔FogExp2 swaps, moving the sun.
+
 - **Client-only milestone**: zero server publishes. Day/night clock anchors from SDK event
   timestamps (`world_timer` is PRIVATE — cannot subscribe); `Date.now()` fallback.
+
 - **One color pipeline**: fog color, sky, hemisphere, sun tint all blend from a single
   day/night palette, mutated in place (fog reassignment = full shader recompile).
+
 - **Audio bus + compressor BEFORE the first looped bed** — Phase 10's first task; existing
   SFX rerouted in the same change.
+
 - **Wildlife = emissive instanced quads**, never pooled lights, never GPU readbacks; lanterns
   get dedicated fixed lights at build, fireflies stay emissive.
+
 - **Camera motion transient-only** + reduce-motion toggle (XAG 117) as acceptance criterion.
 
 ### Pending Todos
@@ -91,13 +101,17 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 - **Phase 9 first task**: verify the installed SpacetimeDB TS SDK exposes the reducer event's
   server timestamp on row-callback `EventContext` (30-min spike; `Date.now()` fallback is safe).
+
 - **Perf rules are the milestone's real risk**: frozen matrices, pooled materials, no per-frame
   allocs, game-loop-owned clocks (never React — the 144→20fps regression class). Every phase
   ships a `?no*` bisect flag.
+
 - **Summed frame cost**: features built per-phase, cost paid together — milestone verification
   runs `scripts/fps_playtest.py` in a golem-class fight with ALL ambiance enabled (Phase 12 SC4).
+
 - **Phase 11 open decision**: ~2s bend-trail vs shared 4–5s bend decay clock — decide in
   planning (accept shared clock vs second influence texture), not mid-implementation.
+
 - **Ops invariants**: pnpm only; server module path `./spacetimedb`; no publishes expected this
   milestone at all (client-only).
 
@@ -117,7 +131,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-14
-Stopped at: v0.3.0-alpha roadmap created — Phases 8–13 defined, 32/32 requirements mapped,
+Last session: 2026-07-13T22:31:08.316Z
+Stopped at: Phase 8 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
-Resume file: None
+Resume file: .planning/phases/08-wind-core/08-CONTEXT.md
