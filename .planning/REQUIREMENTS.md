@@ -142,13 +142,44 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| — | — | Pending roadmap |
+| WIND-01 | Phase 8 | Pending |
+| WIND-02 | Phase 8 | Pending |
+| WIND-03 | Phase 8 | Pending |
+| ATMO-01 | Phase 9 | Pending |
+| ATMO-02 | Phase 9 | Pending |
+| ATMO-03 | Phase 9 | Pending |
+| DAYNITE-01 | Phase 9 | Pending |
+| DAYNITE-02 | Phase 9 | Pending |
+| DAYNITE-03 | Phase 9 | Pending |
+| DAYNITE-04 | Phase 9 | Pending |
+| AMBI-01 | Phase 10 | Pending |
+| AMBI-02 | Phase 10 | Pending |
+| AMBI-03 | Phase 10 | Pending |
+| AMBI-04 | Phase 10 | Pending |
+| AMBI-05 | Phase 10 | Pending |
+| AMBI-06 | Phase 10 | Pending |
+| AMBI-07 | Phase 10 | Pending |
+| MUSIC-01 | Phase 10 | Pending |
+| MUSIC-02 | Phase 10 | Pending |
+| MUSIC-03 | Phase 10 | Pending |
+| WEAR-01 | Phase 11 | Pending |
+| WEAR-02 | Phase 11 | Pending |
+| WEAR-03 | Phase 11 | Pending |
+| WEAR-04 | Phase 11 | Pending |
+| WEAR-05 | Phase 11 | Pending |
+| WILD-01 | Phase 12 | Pending |
+| WILD-02 | Phase 12 | Pending |
+| WILD-03 | Phase 12 | Pending |
+| CAM-01 | Phase 13 | Pending |
+| CAM-02 | Phase 13 | Pending |
+| CAM-03 | Phase 13 | Pending |
+| CAM-04 | Phase 13 | Pending |
 
 **Coverage:**
 - v1 requirements: 32 total
-- Mapped to phases: 0
-- Unmapped: 32 ⚠️ (roadmap pending)
+- Mapped to phases: 32
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-13*
-*Last updated: 2026-07-13 after initial definition (music category added at user request; hybrid sound-sourcing ruling)*
+*Last updated: 2026-07-14 — traceability mapped to roadmap Phases 8–13 (v0.3.0-alpha)*
