@@ -4,17 +4,17 @@ milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 08
 current_phase_name: wind-core
-status: executing
+status: verifying
 stopped_at: Phase 8 context gathered
-last_updated: "2026-07-13T23:50:24.451Z"
+last_updated: "2026-07-13T23:56:28.630Z"
 last_activity: 2026-07-13
 last_activity_desc: Phase 08 execution started
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 5
-  completed_plans: 4
-  percent: 0
+  completed_plans: 5
+  percent: 17
 ---
 
 # Project State
@@ -32,7 +32,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 
 Phase: 08 (wind-core) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-13 — Phase 08 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -71,6 +71,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 08 P02 | 6 min | 2 tasks | 5 files |
 | Phase 08 P03 | 10min | 3 tasks | 5 files |
 | Phase 08 P04 | ~6 min | 2 tasks | 2 files |
+| Phase 08 P05 | ~8 min | 2 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 08]: Asset unit tests inject createWind(true) via initCanopyWind at module load — fail-fast throw kept, contract mirrored
 - [Phase 08]: Smoke puff recycle via age >= PUFF_LIFE (= MAX_RISE/RISE_SPEED) — identical to the height check at constant rise, one pool field fewer
 - [Phase 08]: camps namespace import keeps the construction-time getCampSites() call the file's single occurrence — data-driven anchors, no scene traversal
+- [Phase 08]: Plan 08-05 blocking human-verify checkpoint auto-approved per --auto policy — 10-item playtest deferred to /gsd-verify-work (D2 coverage entry in 08-05-SUMMARY)
 
 ### Pending Todos
 
@@ -127,6 +129,8 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 - **Ops invariants**: pnpm only; server module path `./spacetimedb`; no publishes expected this
   milestone at all (client-only).
 
+- Phase 8 human playtest NOT yet run — 08-05 Task 2 checkpoint was auto-approved in --auto mode; a human must walk the 10-item checklist via /gsd-verify-work before phase sign-off
+
 ## Deferred Items
 
 | Category | Item | Status | Deferred At |
@@ -143,7 +147,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-13T23:49:37.351Z
+Last session: 2026-07-13T23:56:03.907Z
 Stopped at: Phase 8 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/08-wind-core/08-CONTEXT.md

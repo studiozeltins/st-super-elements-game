@@ -69,7 +69,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 08-05-PLAN.md — full gate + human playtest checkpoint (grass unchanged, gust travel, character) [Wave 4]
+- [x] 08-05-PLAN.md — full gate + human playtest checkpoint (grass unchanged, gust travel, character) [Wave 4]
 
 ### Phase 9: Atmosphere & Day/Night
 
@@ -151,7 +151,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Wind Core | 4/5 | In Progress|  |
+| 8. Wind Core | 5/5 | Complete   | 2026-07-13 |
 | 9. Atmosphere & Day/Night | 0/TBD | Not started | - |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
