@@ -38,6 +38,11 @@ export interface MondstadtWorld {
   getGroundHeight(x: number, z: number, maxSurfaceY?: number): number;
   /** Solid trunks/walls entities cannot pass through (trees, spires, houses…). */
   getObstacles(): readonly ObstacleCircle[];
+  /**
+   * Re-centers the sun's shadow camera on the player (texel-snapped so shadow
+   * edges don't crawl while walking). Call once per frame.
+   */
+  setShadowFocus(x: number, z: number): void;
   dispose(): void;
 }
 
@@ -86,7 +91,23 @@ export function isInsideSafeZone(positionX: number, positionZ: number): boolean 
   return Math.hypot(positionX, positionZ) <= SAFE_ZONE_RADIUS;
 }
 
-function createLighting(group: THREE.Group) {
+// The sun's constant direction offset from the shadow focus point.
+const SUN_OFFSET = new THREE.Vector3(30, 50, 20);
+// Half-extent of the player-following shadow camera. A world-spanning camera
+// (±140) gave ~0.27u per shadow texel — the "blocky enemy shadows". Following
+// the player at ±45 is 3x the texel density from the same 1024 map.
+const SHADOW_FOCUS_SPAN = 45;
+const SHADOW_MAP_SIZE = 1024;
+
+// Fixed light-space basis for texel snapping (the sun never moves relative to
+// the focus): moving the shadow camera in world-sized steps that are NOT whole
+// shadow texels makes every shadow edge crawl ("shimmer") as the player walks.
+const sunDirection = SUN_OFFSET.clone().negate().normalize();
+const sunRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), sunDirection).normalize();
+const sunUp = new THREE.Vector3().crossVectors(sunDirection, sunRight).normalize();
+const shadowFocusScratch = new THREE.Vector3();
+
+function createLighting(group: THREE.Group): THREE.DirectionalLight {
   const skyLight = new THREE.HemisphereLight(0xbfe3ff, 0x4a7a3a, 0.9);
   // EVERY light must be visible to EVERY camera layer (world pass + overlay
   // pass). If a pass culls lights, the renderer's lights-state hash flips each
@@ -97,18 +118,19 @@ function createLighting(group: THREE.Group) {
 
   const sunLight = new THREE.DirectionalLight(0xfff2d8, 1.4);
   sunLight.layers.enableAll();
-  sunLight.position.set(30, 50, 20);
+  sunLight.position.copy(SUN_OFFSET);
   sunLight.castShadow = true;
-  // 1024 halves shadow raster cost vs 2048; at the pixelated internal
-  // resolution the softer edge is invisible.
-  sunLight.shadow.mapSize.set(1024, 1024);
-  const shadowSpan = WORLD_BOUND + 10;
-  sunLight.shadow.camera.left = -shadowSpan;
-  sunLight.shadow.camera.right = shadowSpan;
-  sunLight.shadow.camera.top = shadowSpan;
-  sunLight.shadow.camera.bottom = -shadowSpan;
+  sunLight.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+  sunLight.shadow.camera.left = -SHADOW_FOCUS_SPAN;
+  sunLight.shadow.camera.right = SHADOW_FOCUS_SPAN;
+  sunLight.shadow.camera.top = SHADOW_FOCUS_SPAN;
+  sunLight.shadow.camera.bottom = -SHADOW_FOCUS_SPAN;
   sunLight.shadow.camera.far = 400;
-  group.add(sunLight);
+  // Softer read: shadows darken instead of blacking out (the "harsh" note).
+  sunLight.shadow.intensity = 0.72;
+  sunLight.shadow.bias = -0.0005;
+  group.add(sunLight, sunLight.target);
+  return sunLight;
 }
 
 function createPlaza(group: THREE.Group) {
@@ -187,12 +209,12 @@ export function createMondstadtWorld(
     asset.group.position.set(x, groundY, z);
     group.add(asset.group);
     if (collisionRadius) obstacles.push({ x, y: groundY, z, radius: collisionRadius });
-    if (asset.platformRadius && asset.platformTopHeight) {
+    for (const platform of asset.platforms ?? []) {
       platforms.push({
-        x,
-        z,
-        radius: asset.platformRadius,
-        topY: groundY + asset.platformTopHeight,
+        x: x + platform.x,
+        z: z + platform.z,
+        radius: platform.radius,
+        topY: groundY + platform.topHeight,
       });
     }
   }
@@ -312,7 +334,7 @@ export function createMondstadtWorld(
     );
   }
 
-  createLighting(group);
+  const sunLight = createLighting(group);
   group.add(createTerrainMesh());
   createPlaza(group);
   group.add(createFountain());
@@ -433,6 +455,22 @@ export function createMondstadtWorld(
     },
     getObstacles() {
       return obstacles;
+    },
+    setShadowFocus(x, z) {
+      // Snap the focus to whole shadow texels IN LIGHT SPACE (the sun basis is
+      // fixed, so this is a plain 2D grid snap on the light's right/up axes).
+      const texelSize = (SHADOW_FOCUS_SPAN * 2) / SHADOW_MAP_SIZE;
+      shadowFocusScratch.set(x, 0, z);
+      const rightCoord = shadowFocusScratch.dot(sunRight);
+      const upCoord = shadowFocusScratch.dot(sunUp);
+      shadowFocusScratch
+        .addScaledVector(sunRight, Math.round(rightCoord / texelSize) * texelSize - rightCoord)
+        .addScaledVector(sunUp, Math.round(upCoord / texelSize) * texelSize - upCoord);
+      sunLight.target.position.copy(shadowFocusScratch);
+      sunLight.position.copy(shadowFocusScratch).add(SUN_OFFSET);
+      // The world subtree is matrix-frozen — push the light's move through by hand.
+      sunLight.updateMatrixWorld(true);
+      sunLight.target.updateMatrixWorld(true);
     },
     dispose() {
       grassField.dispose();

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { SeededRandom, WorldAsset } from './types';
+import type { AssetPlatform, SeededRandom, WorldAsset } from './types';
 import { randomBetween, randomIntBetween } from './assetHelpers';
 import { buildVoxelCluster, sphereVoxelCells, voxelClusterTopY, voxelSizeFor } from './voxelHelpers';
 
@@ -16,7 +16,7 @@ export function createBoulder(random: SeededRandom): WorldAsset {
 
   let stackTopHeight = 0;
   let radius = baseRadius;
-  let topChunkRadius = baseRadius;
+  const platforms: AssetPlatform[] = [];
   for (let index = 0; index < chunkCount; index += 1) {
     const isTopChunk = index === chunkCount - 1;
     const shades = isTopChunk ? [SLATE_LIGHT, SLATE_MID] : [SLATE_DARK, SLATE_MID, SLATE_LIGHT];
@@ -35,14 +35,17 @@ export function createBoulder(random: SeededRandom): WorldAsset {
 
     // Standing height = the actual top voxel face, so players rest flush.
     stackTopHeight = chunk.position.y + voxelClusterTopY(cells, voxelSize);
-    topChunkRadius = radius;
+    // EVERY chunk is standable at its own top, centered where the chunk
+    // actually sits — landing on the wide base of a stacked boulder used to
+    // fall through to the terrain (only the summit was registered).
+    platforms.push({
+      x: chunk.position.x,
+      z: chunk.position.z,
+      radius: radius * 0.8,
+      topHeight: stackTopHeight,
+    });
     radius *= randomBetween(random, 0.6, 0.8);
   }
 
-  return {
-    group,
-    // Standable area is the TOP chunk, not the base — otherwise players float.
-    platformRadius: topChunkRadius * 0.8,
-    platformTopHeight: stackTopHeight,
-  };
+  return { group, platforms };
 }

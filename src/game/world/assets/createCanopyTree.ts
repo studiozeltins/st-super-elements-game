@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import type { SeededRandom, WorldAsset } from './types';
 import { lambert, randomBetween, randomIntBetween } from './assetHelpers';
-import { buildVoxelCluster, sphereVoxelCells, voxelSizeFor } from './voxelHelpers';
 
 const TRUNK_COLOR = 0x6b4a2f;
 const CANOPY_ORANGE = 0xe8722f;
@@ -9,15 +8,13 @@ const CANOPY_ORANGE_DEEP = 0xd8621f;
 const CANOPY_GREEN = 0x4f9147;
 const CANOPY_GREEN_LIGHT = 0x58a24f;
 
-const CANOPY_Y_SCALE = 0.55;
-
 export function createCanopyTree(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
   const totalHeight = randomBetween(random, 5, 7);
   const trunkHeight = totalHeight * 0.55;
 
   const trunk = new THREE.Mesh(
-    new THREE.BoxGeometry(0.55, trunkHeight, 0.55),
+    new THREE.CylinderGeometry(0.28, 0.55, trunkHeight, 5),
     lambert(TRUNK_COLOR)
   );
   trunk.position.y = trunkHeight / 2;
@@ -34,13 +31,11 @@ export function createCanopyTree(random: SeededRandom): WorldAsset {
   let layerHeight = trunkHeight * 0.9;
   let layerRadius = randomBetween(random, 2.2, 3);
   for (let index = 0; index < canopyLayers; index += 1) {
-    const voxelSize = voxelSizeFor(layerRadius * 2);
-    const cap = buildVoxelCluster(
-      sphereVoxelCells(layerRadius, voxelSize, CANOPY_Y_SCALE),
-      voxelSize,
-      canopyColors,
-      random
+    const cap = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(layerRadius, 0),
+      lambert(canopyColors[index % canopyColors.length])
     );
+    cap.scale.y = 0.55;
     cap.position.set(
       randomBetween(random, -0.2, 0.2),
       layerHeight,

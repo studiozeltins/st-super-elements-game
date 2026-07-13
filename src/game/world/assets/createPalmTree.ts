@@ -16,9 +16,8 @@ export function createPalmTree(random: SeededRandom): WorldAsset {
   const crownPosition = new THREE.Vector3(0, 0, 0);
   for (let index = 0; index < segmentCount; index += 1) {
     const tilt = curveStrength * (index + 1);
-    const segmentWidth = (0.2 - index * 0.02) * 1.8;
     const segment = new THREE.Mesh(
-      new THREE.BoxGeometry(segmentWidth, segmentHeight, segmentWidth),
+      new THREE.CylinderGeometry(0.16 - index * 0.02, 0.2 - index * 0.02, segmentHeight, 5),
       trunkMaterial
     );
     segment.position.set(

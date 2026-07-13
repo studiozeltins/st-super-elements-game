@@ -35,7 +35,10 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.BasicShadowMap;
+  // PCFSoft filters the depth lookups — combined with the player-following
+  // shadow camera (createMondstadtWorld) this reads as smooth soft shadows;
+  // Basic (unfiltered) over a world-spanning camera was the blocky look.
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   // The sun and all shadow-casting geometry are static (only units move a little),
   // and each renderer.render() below would otherwise rebuild the 2048² sun depth
   // map over the WHOLE scene. Drive it once per frame instead of twice.

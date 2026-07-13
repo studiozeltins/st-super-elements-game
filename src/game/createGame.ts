@@ -1301,6 +1301,8 @@ export function createGame(
     resolveAllCollisions();
     damageNumbers.update(deltaSeconds);
     world.update(deltaSeconds);
+    // Shadow camera follows the player (texel-snapped) — see setShadowFocus.
+    world.setShadowFocus(playerPosition.x, playerPosition.z);
     updateRemotePlayerViews(deltaSeconds);
     updateFootsteps();
     updateCamera(deltaSeconds);
