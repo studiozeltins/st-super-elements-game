@@ -10,46 +10,47 @@ churn** — the installed C0–C6 constellation base is a protected floor.
 **One-liner:** A power chase where scarce shards buy real, permanent-floor power, PVP makes
 that power worth stealing, and a co-op raid faucet lets any ganked player recover.
 
-## Milestone
+## Current State
 
-**Transcendence (shipped)** — layered the transcendence economy, shard risk, character roles,
-and parties onto the live game. **Now building: Combat Depth (v0.2.0-alpha).**
+**Shipped: v0.2.0-alpha Combat Depth (2026-07-13)** — goliath combat is now fully dodgeable
+and cheat-proof:
 
-## Current Milestone: v0.2.0-alpha Combat Depth
+- ONE unit-agnostic server attack FSM (windup → strike → recovery, `unit_attack`/`attack_strike`
+  tables) drives the full goliath roster: `leapSlam` (circle), `swordSwing` → `swordSwirl`
+  (cone chaining into 360°), `shieldDash` (travelling lane with body commit). The old per-tick
+  contact drain is DELETED — every point of goliath damage is a telegraphed, dodgeable strike.
+- Damage + crit are SERVER-authoritative end-to-end: reducers take intent (isSkill/combo), the
+  server computes base damage from mirrored `WEAPONS` math and rolls per-character crit via
+  `ctx.random` — PVE and PVP damage/crit spoof holes closed.
+- Clients render only: Frost terrain-draped telegraphs (circle/sector/lane) fill on
+  server-derived timing; per-attack procedural clips + strike juice; server knockback + stun.
+- Test suite 384 → 582 (serverSync parity extended to crit, ATTACKS, ATTACK_RENDER); every
+  schema change was an additive migrate-publish (zero data wipes).
 
-**Goal:** Replace the undodgeable per-tick contact drain with discrete, telegraphed,
-DODGEABLE attacks (windup → strike → recovery) driven by ONE unit-agnostic,
-server-authoritative attack state machine, plus a real per-character crit system and a
-custom animation state machine layered on the same FSM.
+**Deferred at close (user ruling):** Phase 7 crit poise interrupt (POISE-01..03) — all its
+dependencies shipped (poise column + server `isCrit`), a small pure-helper slice for a later
+milestone. Spec: `.planning/todos/pending/2026-07-13-phase-7-crit-poise-interrupt-DEFERRED.md`.
 
-**Target features:**
-- Unit-agnostic `unit_attack` FSM (windup/strike/recovery) on the world tick; damage resolves
-  once at the strike frame vs LIVE positions so players can dash out.
-- Data-driven `ATTACKS` registry + per-archetype `UNIT_ATTACKS` lists (new attack = one entry,
-  new unit = one list); shared client + server.
-- Real per-character crit: `critRate`/`critDmg` on `CharacterDefinition`, replacing the client
-  global `Math.random()<0.22`; `isCrit` added to `attackEnemies`/`attackRay`.
-- Crit poise interrupt: a crit landing during a unit's windup adds poise → cancel/stagger.
-- Custom animation state machine (idle/move/windup/strike/recovery) shared by hero + enemy
-  meshes, per-attack clips, strike VFX on an `attack_strike` event table.
-- Goliath v1 roster: `shieldDash` (lane), `leapSlam` (circle), `swordSwing` (cone),
-  `swordSwirl` (circle). Goliath **contact drain deleted** — goliaths damage only via strikes.
-- Camp enemies reuse the SAME machine with zero schema change (proves unit-agnosticism).
-
-**Scope:** Enemies only. Heroes stay on the current client swing (no hero attack FSM this
-milestone); the FSM is built so heroes CAN reuse it later with zero schema change. Crit stats
-on characters ARE in scope (they modify the existing hero→enemy attack, not a hero FSM).
+**Also still deferred (from v0.1.0-alpha):** raid boss + role enforcement/balance — INV-4
+(ganked non-payer recovery) remains unsatisfied until the raid faucet ships.
 
 ## Previous State
 
-**Shipped: v0.1.0-alpha (2026-07-08)** — the transcendence economy is live end-to-end:
+**Shipped: v0.1.0-alpha (2026-07-08)** — the transcendence economy live end-to-end:
 scarce-shard mint → install (BŪSTS) for real power → shards at risk on death/PVP → character
 roles → invite-only parties. Merged to `master`, tagged `v0.1.0-alpha`.
 
-**Deferred to a LATER milestone (not this one):** the raid boss (was Phase 6) and its role
-enforcement + balance pass (was Phase 7). Until the raid faucet ships, **INV-4 is unsatisfied** —
-a ganked, shard-poor player has no PVE recovery path yet. Reserved as deferred phases 6/7.
-Specs preserved under `.planning/todos/pending/*-DEFERRED.md`.
+## Next Milestone Goals
+
+Candidates (decide at `/gsd-new-milestone`):
+
+- **Raid recovery loop** — the raid boss shard faucet + role enforcement (closes INV-4, the
+  biggest open invariant; specs preserved).
+- **Crit poise interrupt** — the deferred Phase 7 slice (small, all deps shipped).
+- **World ambiance / polish** — the voxel-ambiance branch experiment (ambient audio bed, fog,
+  coherent wind, wildlife, day/night lite) if feel > systems is the next priority.
+- Backlog: camp-enemy FSM conversion (XCMB-01), miss/evasion decision, boost-orbit v2,
+  transcend scaling expansion, CIEŅA star restyle.
 
 ## Target Runtime
 
@@ -173,17 +174,24 @@ downstream.
 | 2026-07-08 | Ship alpha at Phase 5; defer raid (6) + balance (7) to next milestone | Get the economy + PVP loop in players' hands sooner; raid is a self-contained slice | ⚠️ Revisit — INV-4 unmet until raid ships |
 | 2026-07-08 | Merged `feat/transcendence` → `master`, tagged `v0.1.0-alpha` | Mark the shipped alpha; `master` is trunk | ✓ Good |
 | 2026-07-08 | Start v0.2.0-alpha Combat Depth on branch `alpha-v0.2.0` (cut from `master`) | Trunk-based; keep combat work isolated from trunk until shippable | ✓ Good |
-| 2026-07-08 | Combat FSM built unit-agnostic but scoped enemies-only this milestone (heroes stay on client swing) | Ship the dodgeable-attack loop faster; heroes reuse the same table/registry later with zero schema change | — new |
+| 2026-07-08 | Combat FSM built unit-agnostic but scoped enemies-only this milestone (heroes stay on client swing) | Ship the dodgeable-attack loop faster; heroes reuse the same table/registry later with zero schema change | ✓ Good — FSM proven across 4 attacks / 3 shapes with zero schema change between them |
+| 2026-07-08 | Base damage computed SERVER-side (Option B, CRIT-06) — reducers take intent, not a damage number | Closes the PVP damage-spoof hole; only choice that makes the poise interrupt un-spoofable | ✓ Good — landed atomically in Phase 2, extended to PVP in Phase 3 |
+| 2026-07-09 | Self-host pivot: maincloud DROPPED, deploy target = self-hosted standalone | Maincloud DB paused; user chose self-host | ✓ Good — SC5 RTT check carried to prod-deploy gate |
+| 2026-07-10 | Contact drain deleted in the same slice that guarantees no facetank dead zone (Phase 4) | Keeping drain + strikes double-dips and re-introduces undodgeable damage | ✓ Good |
+| 2026-07-13 | leapSlam maxBand 8→5.5 + size-2 laneLength 7.95 (seed deviations, user-accepted at close) | Without band fix shieldDash was dead code; 8.0 sat on the strict-> SNAP_DISTANCE float hazard | ✓ Good |
+| 2026-07-13 | Close v0.2.0-alpha at Phase 6; defer crit poise interrupt (Phase 7) | User ruling — playtests approved phases 4/6; interrupt is a small standalone slice with all deps shipped | — Pending (POISE-01..03 open) |
 
-## Out of Scope (shipped alpha v0.1.0-alpha)
+## Out of Scope
 
-- Raid boss (Phase 6) + role enforcement/balance (Phase 7) — **deferred to next milestone**,
-  full specs preserved (`.planning/todos/pending/*-DEFERRED.md`). These carry INV-4.
+- Raid boss + role enforcement/balance — **deferred since v0.1.0-alpha**, full specs preserved
+  (`.planning/todos/pending/*-DEFERRED.md`). These carry INV-4.
+- Crit poise interrupt (POISE-01..03) — **deferred at v0.2.0-alpha close**, spec preserved.
+- Camp-enemy FSM conversion, hero attack FSM / i-frames / parry, weapon/constellation crit,
+  tiered poise, elemental telegraphs — v2 combat expansion (XCMB-01..06).
 - Elemental resistance system (future).
 - XP/levelling for players and enemies (future).
 - Email password reset (needs external service).
-- Maincloud deploy of the transcendence schema — alpha shipped to local + `master`; the
-  paused maincloud DB republish is a pending human action.
+- Maincloud — DROPPED 2026-07-09 (self-host pivot); prod deploy = self-hosted standalone.
 
 ## Evolution
 
@@ -203,4 +211,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-11 — Phase 5 (swordSwing → swordSwirl combo) complete: attack chaining + cone hitbox proven on the FSM spine (ATK-02/ATK-03); playtest-approved after 2 fix rounds*
+*Last updated: 2026-07-13 after v0.2.0-alpha Combat Depth milestone close*

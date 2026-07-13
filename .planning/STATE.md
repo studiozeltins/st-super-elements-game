@@ -2,39 +2,39 @@
 gsd_state_version: 1.0
 milestone: v0.2.0-alpha
 milestone_name: Combat Depth
-current_phase: 06
-current_phase_name: shieldDash lane
-status: executing
-stopped_at: Phase 06 context gathered
-last_updated: "2026-07-11T18:18:16.689Z"
-last_activity: 2026-07-11
-last_activity_desc: Phase 06 execution started
+current_phase: 2.0
+status: Awaiting next milestone
+stopped_at: v0.2.0-alpha closed and archived
+last_updated: "2026-07-13T19:09:09.951Z"
+last_activity: 2026-07-13
+last_activity_desc: Milestone v0.2.0-alpha completed and archived
 progress:
-  total_phases: 7
-  completed_phases: 5
+  total_phases: 6
+  completed_phases: 6
   total_plans: 25
-  completed_plans: 24
-  percent: 71
+  completed_plans: 25
+  percent: 100
+current_phase_name: —
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-08)
+See: .planning/PROJECT.md (updated 2026-07-13)
 
 **Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
-floor). This milestone deepens *combat feel*: enemy attacks become dodgeable and crit becomes a
-real per-character stat, so power investment (crit) buys tempo, not just damage.
-**Current focus:** Phase 06 — shieldDash lane
+floor).
+**Current focus:** Planning next milestone (candidates: raid recovery loop / crit poise
+interrupt / world ambiance — see PROJECT.md Next Milestone Goals)
 
 ## Current Position
 
-Phase: 06 (shieldDash lane) — EXECUTING
-Plan: 5 of 5
-Status: Ready to execute
-Last activity: 2026-07-11 — Phase 06 execution started
+Phase: Milestone v0.2.0-alpha complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-13 — Milestone v0.2.0-alpha completed and archived
 
 ## Roadmap Summary
 
@@ -180,7 +180,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 
 ### Pending Todos
 
-6 pending (see `.planning/todos/pending/`). Latest: Miss/evasion system decision (accuracy vs evasion vs none) — needs user pros/cons decision before any milestone slot.
+7 pending (see `.planning/todos/pending/`). Latest: Phase 7 crit poise interrupt deferred at v0.2.0-alpha close. Miss/evasion system decision still needs a user pros/cons ruling before any milestone slot.
 
 ### Blockers/Concerns
 
@@ -217,15 +217,28 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 | Combat | Weapon/constellation crit contributions (XCMB-02) | v2 | 2026-07-08 |
 | Combat | Hero attack FSM + i-frame/parry (XCMB-04) | v2 | 2026-07-08 |
 | Combat | Tiered poise/hyperarmor/break (XCMB-05) | v2 | 2026-07-08 |
+| Phase | Crit poise interrupt (POISE-01/02/03, was Phase 7) | Deferred at v0.2.0-alpha close by user ruling; spec at `.planning/todos/pending/2026-07-13-phase-7-crit-poise-interrupt-DEFERRED.md` | 2026-07-13 |
+
+Items acknowledged and deferred at v0.2.0-alpha milestone close on 2026-07-13 (pre-close audit):
+
+| Category | Item | Status |
+|----------|------|--------|
+| todo | 2026-07-07-boost-orbit-v2-paths-shapes | pending (backlog) |
+| todo | 2026-07-07-ciena-star-restyle | pending (backlog) |
+| todo | 2026-07-07-expand-transcend-scaling | pending (backlog) |
+| todo | 2026-07-08-miss-evasion-system-decision | pending (needs user decision) |
+| todo | 2026-07-08-phase-6-raid-boss-DEFERRED | pending (reserved phase spec) |
+| todo | 2026-07-08-phase-7-role-enforcement-balance-DEFERRED | pending (reserved phase spec) |
+| todo | 2026-07-13-phase-7-crit-poise-interrupt-DEFERRED | pending (deferred this close) |
 
 ## Session Continuity
 
-Last session: 2026-07-11T18:17:37.090Z
-Stopped at: Phase 06 context gathered
-Resume file: .planning/phases/06-shielddash-lane/06-CONTEXT.md
-
-**Gate override (2026-07-09):** Phase 4 decision-coverage gate returned `could-not-parse` — CONTEXT.md uses `D4-NN` decision IDs, parser expects `D-NN`. Proceeded on plan-checker Dimension 7 PASS (all D4-01…D4-17 manually traced to plan tasks). verify-phase should re-confirm decision coverage semantically, not via the parser.
+Last session: 2026-07-13
+Stopped at: v0.2.0-alpha milestone closed and archived (override closeout — Phase 7 deferred to
+todo, phases 04/06 capstones ruled complete by user; phase dirs archived to
+milestones/v0.2.0-alpha-phases/)
 
 ## Operator Next Steps
 
-- Verify Phase 5 with `/gsd-verify-work 5`, then plan Phase 6 (shieldDash lane) with `/gsd-discuss-phase 6`.
+- `/gsd-new-milestone` — pick the next milestone (raid recovery loop / crit poise interrupt /
+  world ambiance; see PROJECT.md Next Milestone Goals).
