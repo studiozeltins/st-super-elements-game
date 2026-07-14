@@ -1,10 +1,10 @@
 ---
-status: complete
+status: diagnosed
 phase: 08-wind-core
 source: [08-VERIFICATION.md]
 round: 2
 started: 2026-07-14T11:00:00Z
-updated: 2026-07-14T11:30:00Z
+updated: 2026-07-14T11:45:00Z
 ---
 
 > Round 2 — re-verify after UAT gap closure (plans 08-08/08-09). Round 1 results (5 pass / 3 issues / 1 skip) and root-cause diagnoses are preserved in git history (commits 397257f, 090596e) and summarized in 08-VERIFICATION.md. The beige-blade cosmetic gap was dispositioned out of phase (pre-existing flower art — todo `flower-blade-color-art-pass.md`).
@@ -55,19 +55,42 @@ pending: 0
 skipped: 0
 blocked: 0
 
+> **Scope correction (user, mid-diagnosis):** Voxel-THICKNESS geometry is REJECTED — the flat plane reads fine under the pixel filter; do not add depth/voxel geometry. Two real gaps remain: (1) windless droop, (2) projectile reaction (promoted from backlog into this closure).
+
 ## Gaps
 
-- truth: "Windless flag hangs limp/drapes down the pole (?nowind or gust lull), never rigid horizontal (D-12)"
+- truth: "Windless/calm flag droops/hangs limp, never stays rigid horizontal (D-12)"
   status: failed
-  reason: "User reported (round 2 test 3): 'false, its ridged all the time' — flag stays rigid horizontal at ?nowind, drape term does not visually land"
+  reason: "User reported (round 2 test 3): 'false, its ridged all the time' — flag never droops during play. User clarified: no voxel needed, just needs the cloth to droop when there is no wind."
   severity: major
   test: 3
-  artifacts: [src/game/world/assets/createCampFlag.ts, src/game/systems/windMath.ts]
-  missing: []  # Filled by diagnosis
-- truth: "Flag cloth reads as solid voxel-thickness geometry with voxel-style sway/drape, not a paper-thin sheet"
+  root_cause: "Drape is gated on uWindStrength, which is a BINARY constant (createWind.ts:47 enabled?1:0, never mutated per-frame). In normal play strength is pinned at 1, so drape maxes at 0.30 (25 deg pitch) between gusts — a flat banner. Real limp hang (drape 1, 83 deg) needs strength 0, which only happens under the ?nowind debug flag, never in play. The flag has no calm/lull droop state during gameplay."
+  artifacts:
+    - path: src/game/world/assets/createCampFlag.ts
+      issue: "drape driven by binary uWindStrength; no continuous calm signal"
+    - path: src/game/systems/windMath.ts
+      issue: "flagDrape driver is strength, not a continuous low-wind activity signal"
+    - path: src/game/systems/createWind.ts
+      issue: "strengthUniform is binary 1/0, never eases through the droop regime"
+  missing:
+    - "Drive drape off a continuous low-wind activity signal (live gust envelope / smoothed local magnitude) that ebbs to ~0 between gusts, still x uWindStrength so ?nowind = full limp"
+    - "Cloth sags toward limp during lulls, lifts/streams when a gust passes"
+  debug_session: .planning/debug/flag-droop-and-projectile-reaction.md
+- truth: "Flag cloth reacts to projectiles flying past — a directional impulse along the projectile's travel, decaying back to the wind pose"
   status: failed
-  reason: "User reported (round 2 tests 1/3, restated across session): flag is 'paper thin' / 'looks like thin paper'; wants 'woxel style sway drupe animation' — solid chunky cloth, not a flat single-sided plane"
+  reason: "User request (round 2 test 4, reaffirmed as in-scope): 'I want flag to react to projectile direction and be affected by passing projectiles'. Promoted from backlog todo into this gap closure at user request."
   severity: major
-  test: 3
-  artifacts: [src/game/world/assets/createCampFlag.ts]
-  missing: []  # Filled by diagnosis
+  test: 4
+  root_cause: "No coupling between the projectile system and flag cloth — never built. Projectiles (createEffectSystem.spawnProjectile:242) have .position + normalized velocity and already push world influence via stampGround (grass parting, :305). The same pattern can push a directional impulse to nearby flags; the responder, the per-frame hook, and the shader displacement term are all missing."
+  artifacts:
+    - path: src/game/world/assets/createCampFlag.ts
+      issue: "no projectile-impulse displacement term"
+    - path: src/game/systems/createEffectSystem.ts
+      issue: "projectile update loop has no disturbFlags hook (stampGround precedent exists)"
+    - path: src/game/createGame.ts
+      issue: "no wiring of a flag-disturbance callback into the projectile system"
+  missing:
+    - "disturbFlags(x,z,dirX,dirZ) callback wired into projectile update, gated by distance to camp flags (only flags near an active projectile pay cost)"
+    - "Per-flag CPU impulse state -> shader uniform; decaying (~0.3-0.6s) direction-aligned displacement summed on top of the wind pose"
+    - "Preserve pooled campFlag material + frozen-matrix rule"
+  debug_session: .planning/debug/flag-droop-and-projectile-reaction.md
