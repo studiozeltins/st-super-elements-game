@@ -35,10 +35,12 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.shadowMap.enabled = true;
-  // PCFSoft filters the depth lookups — combined with the player-following
-  // shadow camera (createMondstadtWorld) this reads as smooth soft shadows;
-  // Basic (unfiltered) over a world-spanning camera was the blocky look.
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // Basic (unfiltered) shadows give HARD pixel edges — the crisp look the pixel
+  // filter wants, no PCF blur mushing the shadow into a soft blob. The old
+  // "Basic == blocky" note was from a world-spanning shadow camera; the current
+  // player-following ±45 camera at 2048 (createMondstadtWorld) is dense enough
+  // that unfiltered edges read clean, not blocky (Phase 09.1 SHADOW-03 gap fix).
+  renderer.shadowMap.type = THREE.BasicShadowMap;
   // The sun DIRECTION now drifts on a slow 20-min arc (Phase 09.1), but the
   // per-frame angular delta is sub-texel, so the existing every-other-frame depth
   // refresh (frameParity below) keeps up with ZERO new GPU cost. autoUpdate=false

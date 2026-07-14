@@ -152,9 +152,13 @@ export function isInsideSafeZone(positionX: number, positionZ: number): boolean 
 const SUN_OFFSET = new THREE.Vector3(30, 50, 20);
 // Half-extent of the player-following shadow camera. A world-spanning camera
 // (±140) gave ~0.27u per shadow texel — the "blocky enemy shadows". Following
-// the player at ±45 is 3x the texel density from the same 1024 map.
+// the player at ±45 is 3x the texel density from the same map.
 const SHADOW_FOCUS_SPAN = 45;
-const SHADOW_MAP_SIZE = 1024;
+// 2048 (Phase 09.1 SHADOW-03 gap fix): the texel-snap in setShadowFocus pops the
+// shadow one whole texel at a time as the sun basis rotates while the player stands
+// still ("ticks like a clock"). texelSize = 90/2048 ≈ 0.044u halves the 1024 tick
+// amplitude AND sharpens BasicShadowMap's hard edges. FPS-gated (golem fight harness).
+const SHADOW_MAP_SIZE = 2048;
 
 // Light-space basis for texel snapping. The sun DIRECTION is now a live per-frame
 // write channel (Phase 09.1): createDayNightCycle writes it via setSunDirection,
