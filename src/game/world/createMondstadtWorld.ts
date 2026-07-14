@@ -151,6 +151,67 @@ const sunRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), su
 const sunUp = new THREE.Vector3().crossVectors(sunDirection, sunRight).normalize();
 const shadowFocusScratch = new THREE.Vector3();
 
+// Fog near sits well past SAFE_ZONE_RADIUS (18) + typical engage range so the
+// whole gameplay radius keeps full contrast at every time of day (ATMO-03); far
+// dissolves the world edge (WORLD_BOUND=130 → ATMO-01). Tuned in place; the Fog
+// object identity is never swapped (Pitfall 4).
+const FOG_NEAR = 80;
+const FOG_FAR = 300;
+
+// Fixed-origin sky dome. Radius is cosmetically irrelevant — the gradient reads
+// the NORMALIZED world direction, and the vertex shader pins the dome to the far
+// plane (xyww) so a static-origin dome is never clipped by the camera far plane
+// (500) while the player roams WORLD_BOUND=130 (RESEARCH Open Question 1).
+const SKY_DOME_RADIUS = 400;
+
+/**
+ * Inward-facing gradient sky dome (classic three.js 2-uniform sky shader).
+ * `bottomColor`/`topColor` uniform values are the SAME THREE.Color instances
+ * passed in — the caller wires bottomColor to `scene.fog.color` (ATMO-02
+ * single-source) and topColor to the setSkyTop scratch, so both drift in place
+ * with zero per-frame allocation. `fog:false` (the dome is the fog backdrop,
+ * not fogged), `depthWrite:false` + renderOrder -1 so it is pure background
+ * fill that every world object overdraws.
+ */
+function createSkyDome(bottomColor: THREE.Color, topColor: THREE.Color): THREE.Mesh {
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      topColor: { value: topColor },
+      bottomColor: { value: bottomColor },
+      offset: { value: 30 },
+      exponent: { value: 0.7 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec3 vWorldPosition;
+      void main() {
+        vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+        // xyww pins the dome to the far plane so its fixed origin is never
+        // clipped as the camera roams; the gradient uses vWorldPosition (above).
+        vec4 clip = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_Position = clip.xyww;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform vec3 topColor;
+      uniform vec3 bottomColor;
+      uniform float offset;
+      uniform float exponent;
+      varying vec3 vWorldPosition;
+      void main() {
+        float h = normalize(vWorldPosition + offset).y;
+        gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+      }
+    `,
+    side: THREE.BackSide,
+    fog: false,
+    depthWrite: false,
+  });
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(SKY_DOME_RADIUS, 32, 15), material);
+  dome.renderOrder = -1;
+  dome.frustumCulled = false;
+  return dome;
+}
+
 function createLighting(group: THREE.Group): {
   skyLight: THREE.HemisphereLight;
   sunLight: THREE.DirectionalLight;
@@ -247,8 +308,19 @@ export function createMondstadtWorld(
   scene: THREE.Scene,
   options: MondstadtWorldOptions
 ): MondstadtWorld {
+  // scene.background stays a Color mutated in place forever (the dome occludes
+  // it; it is only the fallback fill) — never reassigned, never a Texture, or
+  // the overlay-pass save/restore-by-reference breaks (Pitfall 4).
   scene.background = new THREE.Color(0x8ecae6);
-  scene.fog = new THREE.Fog(0x8ecae6, 80, 300);
+  scene.fog = new THREE.Fog(0x8ecae6, FOG_NEAR, FOG_FAR);
+
+  // Gradient sky-dome. bottomColor uniform IS scene.fog.color (SAME reference →
+  // ATMO-02: fog + sky-bottom physically cannot diverge); topColor uniform IS
+  // skyTopColor, so ambience.setSkyTop writing into it drives the dome directly.
+  // Added to `scene` OUTSIDE the frozen world.group so it renders behind it.
+  const skyTopColor = new THREE.Color(0x8ecae6);
+  const skyDome = createSkyDome(scene.fog.color, skyTopColor);
+  scene.add(skyDome);
 
   const group = new THREE.Group();
   const random = createSeededRandom(WORLD_DECOR_SEED);
@@ -512,10 +584,6 @@ export function createMondstadtWorld(
   // Plaza lanterns are collected here by name in a later plan (Plan 03); the
   // day/night cycle fades their intensity. Empty until then.
   const lanternLights: THREE.PointLight[] = [];
-  // The sky-dome topColor uniform value (Task 2 points the dome's topColor
-  // uniform at THIS Color instance, so setSkyTop writing into it drives the
-  // dome directly, zero alloc). Seeded to the current daytime sky hex.
-  const skyTopColor = new THREE.Color(0x8ecae6);
 
   return {
     group,
@@ -596,6 +664,8 @@ export function createMondstadtWorld(
     },
     dispose() {
       grassField.dispose();
+      scene.remove(skyDome);
+      disposeObject(skyDome);
       scene.remove(group);
       disposeObject(group);
     },
