@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { phase01, samplePalette } from './dayNightMath';
+import { phase01, samplePalette, sunDir } from './dayNightMath';
 import type { ServerClock } from '../net/createServerClock';
 import type { AmbienceHandles } from '../world/createMondstadtWorld';
 import { LANTERN_BASE_INTENSITY } from '../world/assets/createLantern';
@@ -16,9 +16,11 @@ import { LANTERN_BASE_INTENSITY } from '../world/assets/createLantern';
  *
  * IMPORTANT: consumers hold the OBJECTS (fog.color, the lights, the sky-dome
  * uniform). Their `.color`/`.intensity` are mutated in place every frame; this
- * is the only system that touches them. The sun DIRECTION basis is off-limits
- * (D-02) — only `.color` and `.intensity` drift. Materials are never re-tinted;
- * the lights carry the mood.
+ * is the only system that touches them. The sun DIRECTION is a first-class
+ * per-frame write channel now (Phase 09.1): when movingSunEnabled this factory
+ * writes sunDir(phase) through ambience.setSunDirection every frame; otherwise the
+ * world keeps its frozen high-noon default. Materials are never re-tinted; the
+ * lights carry the mood.
  *
  * `createGame.frame()` is the only caller of `update()` — the phase advances in
  * the game loop, NEVER per React render (client-perf rule).
@@ -37,6 +39,7 @@ const NEUTRAL_DAY_PHASE = 0.3;
 
 export function createDayNightCycle(
   enabled: boolean,
+  movingSunEnabled: boolean,
   clock: ServerClock,
   ambience: AmbienceHandles,
 ): DayNightCycle {
@@ -61,10 +64,20 @@ export function createDayNightCycle(
     scratchSkyTop.setHex(palette.skyTop);
     ambience.setSkyTop(scratchSkyTop);
 
-    // Sun: color + intensity drift only — the direction basis is FROZEN (D-02).
+    // Sun color + intensity drift with the palette.
     scratchSunColor.setHex(palette.sunColor);
     ambience.sunLight.color.copy(scratchSunColor);
     ambience.sunLight.intensity = palette.sunIntensity;
+
+    // Sun DIRECTION rides the same phase (Phase 09.1, SHADOW-01): when moving,
+    // write the capped-dome sunDir(phase) through the single ambience channel
+    // (pure math → world scratch, zero alloc). When !movingSunEnabled we DON'T
+    // call sunDir — the world keeps its frozen FROZEN_SUN_DIR default (byte-exact
+    // SHADOW-04), while colors above STILL drift whenever dayNightEnabled (D-10).
+    if (movingSunEnabled) {
+      const d = sunDir(phase);
+      ambience.setSunDirection(d.x, d.y, d.z);
+    }
 
     // Hemisphere fill: sky color, ground color, intensity.
     scratchHemiSky.setHex(palette.hemiSky);
