@@ -5,6 +5,8 @@ import {
   GUST,
   SWAY,
   WANDER,
+  flagDrape,
+  flagSwing,
   gustAt,
   gustEnvelope,
   gustGainFactor,
@@ -181,6 +183,72 @@ describe('gustGainFactor (D-04, D-12)', () => {
     const peak = gustGainFactor(1, 1);
     expect(peak).toBeGreaterThanOrEqual(2.0);
     expect(peak).toBeLessThanOrEqual(3.5);
+  });
+});
+
+describe('flagSwing downwind alignment (WIND-01/WIND-03, UAT tests 4/5)', () => {
+  it('strength 0 never yaws the cloth off its baked heading, for any gust', () => {
+    for (const gust of [0, 0.5, 1]) {
+      expect(flagSwing(0, gust)).toBe(0);
+    }
+  });
+
+  it('is monotonic non-decreasing in strength and in gust', () => {
+    const steps = [0, 0.25, 0.5, 0.75, 1];
+    for (const gust of steps) {
+      let prev = -Infinity;
+      for (const strength of steps) {
+        const value = flagSwing(strength, gust);
+        expect(value).toBeGreaterThanOrEqual(prev);
+        prev = value;
+      }
+    }
+    for (const strength of steps) {
+      let prev = -Infinity;
+      for (const gust of steps) {
+        const value = flagSwing(strength, gust);
+        expect(value).toBeGreaterThanOrEqual(prev);
+        prev = value;
+      }
+    }
+  });
+
+  it('is clamped to at most 1 and gusts visibly increase downwind alignment', () => {
+    expect(flagSwing(1, 1)).toBeLessThanOrEqual(1);
+    expect(flagSwing(1, 1)).toBeGreaterThan(flagSwing(1, 0));
+  });
+});
+
+describe('flagDrape limp-hang weight (D-12 ?nowind contract, D-04 gust taut)', () => {
+  it('zero strength means full limp hang — exactly 1, for any gust', () => {
+    for (const gust of [0, 0.5, 1]) {
+      expect(flagDrape(0, gust)).toBe(1);
+    }
+  });
+
+  it('is monotonic non-increasing in strength and in gust', () => {
+    const steps = [0, 0.25, 0.5, 0.75, 1];
+    for (const gust of steps) {
+      let prev = Infinity;
+      for (const strength of steps) {
+        const value = flagDrape(strength, gust);
+        expect(value).toBeLessThanOrEqual(prev);
+        prev = value;
+      }
+    }
+    for (const strength of steps) {
+      let prev = Infinity;
+      for (const gust of steps) {
+        const value = flagDrape(strength, gust);
+        expect(value).toBeLessThanOrEqual(prev);
+        prev = value;
+      }
+    }
+  });
+
+  it('a full gust at full strength lifts the cloth essentially taut', () => {
+    expect(flagDrape(1, 1)).toBeGreaterThanOrEqual(0);
+    expect(flagDrape(1, 1)).toBeLessThanOrEqual(0.15);
   });
 });
 
