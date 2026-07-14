@@ -13,6 +13,16 @@ const BANNER_COLORS = [BANNER_RED, BANNER_BLUE, BANNER_GOLD] as const;
 const POLE_HEIGHT = 2.2;
 const POLE_RADIUS = 0.04;
 
+/**
+ * Voxel band count for the cloth deformation (UAT test 8): the ripple/drape
+ * terms floor-quantize `along` to this many discrete steps so the cloth
+ * deforms in chunky segments, not a smooth sheet — the D-09 stepped-puff
+ * identity applied to cloth. ART constant, not wind math: it shapes how the
+ * cloth reads under the nearest-filtered pixel target, so it lives here
+ * beside the other flag art constants, NOT in windMath.ts.
+ */
+const CLOTH_BANDS = 6;
+
 /** GLSL float literal — raw ints break the shader compile (grass precedent). */
 const f = (n: number): string => n.toFixed(4);
 
@@ -64,9 +74,13 @@ function getFlagMaterials(wind: WindUniforms): {
   if (poleMaterial && clothMaterial) return { pole: poleMaterial, cloth: clothMaterial };
 
   poleMaterial = lambert(POLE_COLOR);
+  // flatShading: the displaced surface renders as faceted voxel bands via
+  // fragment-derivative normals — follows the vertex patch for free, no
+  // normal recomputation, no CPU cost, cache key unchanged (UAT test 8).
   const material = new THREE.MeshLambertMaterial({
     vertexColors: true,
     side: THREE.DoubleSide,
+    flatShading: true,
   });
   material.onBeforeCompile = shader => {
     // Wind uniforms wired by OBJECT reference — .value mutates in place each frame.
@@ -89,27 +103,33 @@ function getFlagMaterials(wind: WindUniforms): {
         vec3 transformed = vec3(position);
         // 0 at the pole edge -> 1 at the free end (fixed edge never moves).
         float along = position.x * ${f(FLAG.invLength)};
+        // Floor-quantized along for the ripple/drape terms: the cloth deforms
+        // in CLOTH_BANDS discrete voxel segments, not a smooth curve (UAT 8).
+        // The yaw below stays on the raw along — a stepped yaw reads as tears.
+        float alongQ = floor(along * ${f(CLOTH_BANDS)}) * ${f(1 / CLOTH_BANDS)};
         vec4 flagWorld = modelMatrix * vec4(position, 1.0);
         float gust = ${gustGlsl('uTime', 'dot(flagWorld.xz, uWindDir)')};
         // Ripple flap + taut pull — still x uWindStrength: both correctly die
         // at strength 0, where the drape below owns the pose (D-12).
-        float flap = sin(uTime * ${f(FLAG.freq)} - along * ${f(FLAG.waveK)})
-                   * along * along
+        float flap = sin(uTime * ${f(FLAG.freq)} - alongQ * ${f(FLAG.waveK)})
+                   * alongQ * alongQ
                    * (${f(FLAG.idleAmp)} + gust * ${f(FLAG.gustAmp)});
         transformed.z += flap * uWindStrength;
         // Cloth shortens as it lifts — snaps taut at the gust peak (D-04).
-        transformed.x -= abs(flap) * ${f(FLAG.tautPull)} * along;
+        transformed.x -= abs(flap) * ${f(FLAG.tautPull)} * alongQ;
         // Drape pitch about the horizontal pole-edge axis (flagDrape blend,
         // windMath): strength 0 evaluates to 1 -> the cloth falls limp down
-        // the pole; wind + gusts lift it back toward the taut banner.
+        // the pole; wind + gusts lift it back toward the taut banner. The
+        // y-drop uses the banded distance (stepped hang); the x foreshorten
+        // stays continuous so band columns never collapse onto one x.
         float drape = ${flagDrapeGlsl('uWindStrength', 'gust')};
         float pitch = drape * ${f(FLAG.drapePitch)};
-        transformed.y -= transformed.x * sin(pitch);
+        transformed.y -= alongQ * ${f(FLAG.width)} * sin(pitch);
         transformed.x *= cos(pitch);
         // Limp micro-sway: gated on DRAPE, never uWindStrength — the one term
         // that survives ?nowind so a hanging flag keeps a breath of life
         // (mirror of gustGainFactor keeping grass alive, drape-gated here).
-        transformed.z += sin(uTime * ${f(FLAG.limpFreq)}) * ${f(FLAG.limpAmp)} * drape * along;
+        transformed.z += sin(uTime * ${f(FLAG.limpFreq)}) * ${f(FLAG.limpAmp)} * drape * alongQ;
         // Downwind yaw (UAT 4/5/9): signed angle from the baked world heading
         // to uWindDir. modelMatrix[0].xz is the local +x basis in world space
         // — the group's build-time bake is a pure y-rotation, so this IS the
@@ -139,9 +159,13 @@ function getFlagMaterials(wind: WindUniforms): {
   return { pole: poleMaterial, cloth: clothMaterial };
 }
 
-/** Subdivided cloth with the x=0 edge at the pole and a per-flag banner color. */
+/**
+ * Subdivided cloth with the x=0 edge at the pole and a per-flag banner color.
+ * X segmentation is two columns per voxel band so the floor-quantized shader
+ * steps land on clean facet edges (still only tens of vertices, D-13).
+ */
 function createClothGeometry(color: number): THREE.BufferGeometry {
-  const geometry = new THREE.PlaneGeometry(FLAG.width, FLAG.height, 8, 3);
+  const geometry = new THREE.PlaneGeometry(FLAG.width, FLAG.height, CLOTH_BANDS * 2, 4);
   // The plane is centered on the origin — shift so x spans [0, width].
   geometry.translate(FLAG.width / 2, 0, 0);
   const banner = new THREE.Color(color);
