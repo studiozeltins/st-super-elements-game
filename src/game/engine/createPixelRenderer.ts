@@ -39,9 +39,12 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
   // shadow camera (createMondstadtWorld) this reads as smooth soft shadows;
   // Basic (unfiltered) over a world-spanning camera was the blocky look.
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  // The sun and all shadow-casting geometry are static (only units move a little),
-  // and each renderer.render() below would otherwise rebuild the 2048² sun depth
-  // map over the WHOLE scene. Drive it once per frame instead of twice.
+  // The sun DIRECTION now drifts on a slow 20-min arc (Phase 09.1), but the
+  // per-frame angular delta is sub-texel, so the existing every-other-frame depth
+  // refresh (frameParity below) keeps up with ZERO new GPU cost. autoUpdate=false
+  // avoids each renderer.render() rebuilding the sun depth map over the WHOLE scene
+  // twice per frame. Do NOT force needsUpdate every frame — that doubles the biggest
+  // GPU cost (a SHADOW-03 regression); the throttle is enough for the slow arc.
   renderer.shadowMap.autoUpdate = false;
 
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 500);

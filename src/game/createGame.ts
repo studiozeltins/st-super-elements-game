@@ -304,8 +304,8 @@ export function createGame(
   const scene = new THREE.Scene();
   const pixelRenderer = createPixelRenderer(canvas);
   // Perf bisect kill-switches: append ?nograss / ?nobend / ?noshadow / ?nofx
-  // / ?nowind / ?nosmoke / ?nodaynight to the URL to disable one ambiance
-  // system and find a frame-cost culprit.
+  // / ?nowind / ?nosmoke / ?nodaynight / ?nomovingsun to the URL to disable one
+  // ambiance system and find a frame-cost culprit.
   const perfFlags = new URLSearchParams(window.location.search);
   if (perfFlags.has('noshadow')) pixelRenderer.renderer.shadowMap.enabled = false;
   // Ground influence map: everything that moves stamps into it, grass bends out.
@@ -322,6 +322,11 @@ export function createGame(
   // ?nodaynight freezes the palette at a neutral day key (D-09) — a clean FPS
   // bisection baseline, mirroring the ?nowind/?nosmoke convention.
   const dayNightEnabled = !perfFlags.has('nodaynight');
+  // Moving sun (Phase 09.1): ?nomovingsun OR prefers-reduced-motion pins the sun
+  // to the frozen high-noon key (colors still drift); nodaynight ⊇ nomovingsun,
+  // so the sun is frozen too whenever the palette is (D-09/D-11).
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const movingSunEnabled = dayNightEnabled && !perfFlags.has('nomovingsun') && !reduceMotion;
   const wind = createWind(windEnabled);
   const world = createMondstadtWorld(scene, {
     grass: {
@@ -335,7 +340,7 @@ export function createGame(
   // timestamp via the bridge tap) feeds the cycle — the ONE writer of the
   // ambience handles. Constructed AFTER the world so world.ambience exists.
   const serverClock = createServerClock();
-  const daynight = createDayNightCycle(dayNightEnabled, serverClock, world.ambience);
+  const daynight = createDayNightCycle(dayNightEnabled, movingSunEnabled, serverClock, world.ambience);
   // The overlay pass only draws sprites — skip walking the whole static world.
   pixelRenderer.setOverlayCullTarget(world.group);
   // Light pool must exist before the effect system (projectiles borrow lights).
