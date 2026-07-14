@@ -101,3 +101,63 @@ describe('flag material cache lifetime', () => {
     expect(second.pole).toBe(first.pole);
   });
 });
+
+describe('canopy aTreeHeight attribute (WR-02 — sway ramps on height above the TREE BASE)', () => {
+  const capMeshes = (tree: { group: THREE.Group }): THREE.Mesh[] =>
+    tree.group.children.slice(1) as THREE.Mesh[];
+
+  it('every cap carries an aTreeHeight attribute matching the position count', () => {
+    initCanopyWind(createWind(true));
+    const caps = capMeshes(createCanopyTree(createSeededRandom(1)));
+    expect(caps.length).toBeGreaterThanOrEqual(1);
+    for (const cap of caps) {
+      const heights = cap.geometry.getAttribute('aTreeHeight');
+      expect(heights).toBeDefined();
+      expect(heights.itemSize).toBe(1);
+      expect(heights.count).toBe(cap.geometry.getAttribute('position').count);
+    }
+  });
+
+  it('heights vary within one tree and are all finite — the ramp has span', () => {
+    initCanopyWind(createWind(true));
+    const caps = capMeshes(createCanopyTree(createSeededRandom(1)));
+    let min = Infinity;
+    let max = -Infinity;
+    for (const cap of caps) {
+      const heights = cap.geometry.getAttribute('aTreeHeight');
+      for (let index = 0; index < heights.count; index += 1) {
+        const value = heights.getX(index);
+        expect(Number.isFinite(value)).toBe(true);
+        min = Math.min(min, value);
+        max = Math.max(max, value);
+      }
+    }
+    expect(max - min).toBeGreaterThan(1);
+  });
+
+  it('the highest cap layer reaches higher above the base than the lowest', () => {
+    initCanopyWind(createWind(true));
+    const caps = capMeshes(createCanopyTree(createSeededRandom(1)));
+    const maxHeight = (cap: THREE.Mesh): number => {
+      const heights = cap.geometry.getAttribute('aTreeHeight');
+      let max = -Infinity;
+      for (let index = 0; index < heights.count; index += 1) {
+        max = Math.max(max, heights.getX(index));
+      }
+      return max;
+    };
+    expect(maxHeight(caps[caps.length - 1])).toBeGreaterThan(maxHeight(caps[0]));
+  });
+
+  it('is deterministic: two trees from the same seed bake identical heights', () => {
+    initCanopyWind(createWind(true));
+    const first = capMeshes(createCanopyTree(createSeededRandom(1)));
+    const second = capMeshes(createCanopyTree(createSeededRandom(1)));
+    expect(first.length).toBe(second.length);
+    for (let cap = 0; cap < first.length; cap += 1) {
+      const a = first[cap].geometry.getAttribute('aTreeHeight');
+      const b = second[cap].geometry.getAttribute('aTreeHeight');
+      expect(Array.from(a.array as Float32Array)).toEqual(Array.from(b.array as Float32Array));
+    }
+  });
+});
