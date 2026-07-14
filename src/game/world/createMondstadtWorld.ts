@@ -62,7 +62,32 @@ export interface MondstadtWorld {
    * so only flags beside an active shot pay any cost.
    */
   disturbFlags(x: number, z: number, dirX: number, dirZ: number): void;
+  /**
+   * The mutable render handles the day/night cycle writes through. Day/night
+   * NEVER reaches into the scene directly — it drifts .color/.intensity on
+   * these lights, mutates the fog/background Colors IN PLACE, and pushes the
+   * sky-dome top color via setSkyTop. The sun DIRECTION basis is off-limits
+   * (D-02): only .color/.intensity drift, never position.
+   */
+  ambience: AmbienceHandles;
   dispose(): void;
+}
+
+/**
+ * Write surface for the day/night cycle (Plan 04). Every member is mutated in
+ * place — no field is ever reassigned by the consumer. `fog` and `background`
+ * are the live scene objects; `setSkyTop` copies into the gradient sky-dome's
+ * topColor uniform (its bottomColor uniform IS `fog.color`, ATMO-02).
+ */
+export interface AmbienceHandles {
+  skyLight: THREE.HemisphereLight;
+  sunLight: THREE.DirectionalLight;
+  fog: THREE.Fog;
+  background: THREE.Color;
+  /** Plaza lanterns — Plan 03 populates this; empty until then. */
+  lanternLights: THREE.PointLight[];
+  /** Copies `c` into the sky-dome topColor uniform in place (zero alloc). */
+  setSkyTop(c: THREE.Color): void;
 }
 
 interface Platform {
@@ -126,7 +151,10 @@ const sunRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), su
 const sunUp = new THREE.Vector3().crossVectors(sunDirection, sunRight).normalize();
 const shadowFocusScratch = new THREE.Vector3();
 
-function createLighting(group: THREE.Group): THREE.DirectionalLight {
+function createLighting(group: THREE.Group): {
+  skyLight: THREE.HemisphereLight;
+  sunLight: THREE.DirectionalLight;
+} {
   const skyLight = new THREE.HemisphereLight(0xbfe3ff, 0x4a7a3a, 0.9);
   // EVERY light must be visible to EVERY camera layer (world pass + overlay
   // pass). If a pass culls lights, the renderer's lights-state hash flips each
@@ -149,7 +177,7 @@ function createLighting(group: THREE.Group): THREE.DirectionalLight {
   sunLight.shadow.intensity = 0.72;
   sunLight.shadow.bias = -0.0005;
   group.add(sunLight, sunLight.target);
-  return sunLight;
+  return { skyLight, sunLight };
 }
 
 function createPlaza(group: THREE.Group) {
@@ -366,7 +394,7 @@ export function createMondstadtWorld(
     );
   }
 
-  const sunLight = createLighting(group);
+  const { skyLight, sunLight } = createLighting(group);
   group.add(createTerrainMesh(options.scorch));
   createPlaza(group);
   group.add(createFountain());
@@ -481,6 +509,14 @@ export function createMondstadtWorld(
   });
   let flickerSeconds = 0;
 
+  // Plaza lanterns are collected here by name in a later plan (Plan 03); the
+  // day/night cycle fades their intensity. Empty until then.
+  const lanternLights: THREE.PointLight[] = [];
+  // The sky-dome topColor uniform value (Task 2 points the dome's topColor
+  // uniform at THIS Color instance, so setSkyTop writing into it drives the
+  // dome directly, zero alloc). Seeded to the current daytime sky hex.
+  const skyTopColor = new THREE.Color(0x8ecae6);
+
   return {
     group,
     update(deltaSeconds) {
@@ -503,6 +539,16 @@ export function createMondstadtWorld(
           );
         }
       }
+    },
+    ambience: {
+      skyLight,
+      sunLight,
+      fog: scene.fog,
+      background: scene.background as THREE.Color,
+      lanternLights,
+      setSkyTop(c) {
+        skyTopColor.copy(c);
+      },
     },
     disturbFlags(x, z, dirX, dirZ) {
       for (const flag of campFlags) {
