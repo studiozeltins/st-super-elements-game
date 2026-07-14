@@ -6,7 +6,9 @@ import {
   SWAY,
   WANDER,
   flagDrape,
+  flagDrapeGlsl,
   flagSwing,
+  flagSwingGlsl,
   gustAt,
   gustEnvelope,
   gustGainFactor,
@@ -275,5 +277,21 @@ describe('GLSL generators (WIND-01 single source of truth)', () => {
     expect(glsl).toContain(GUST.sharpness.toFixed(4));
     // Retarded time: the projection expression is SUBTRACTED from the time expression.
     expect(glsl).toContain('uTime - proj /');
+  });
+
+  it('flagSwingGlsl renders the exact flagSwing closed form from the FLAG constants', () => {
+    const glsl = flagSwingGlsl('uWindStrength', 'gustV');
+    // Pin the full expression: same constants, 4-decimal literals, injected
+    // expressions verbatim — no raw GLSL ints possible by construction.
+    expect(glsl).toBe(
+      `min(1.0, uWindStrength * (${FLAG.swingBase.toFixed(4)} + ${FLAG.swingGust.toFixed(4)} * gustV))`
+    );
+  });
+
+  it('flagDrapeGlsl renders the exact flagDrape closed form from the FLAG constants', () => {
+    const glsl = flagDrapeGlsl('uWindStrength', 'gustV');
+    expect(glsl).toBe(
+      `(1.0 - min(1.0, uWindStrength * (${FLAG.drapeLift.toFixed(4)} + ${FLAG.drapeLiftGust.toFixed(4)} * gustV)))`
+    );
   });
 });

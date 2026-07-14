@@ -203,3 +203,21 @@ export function gustGlsl(timeExpr: string, projExpr: string): string {
     ` * sin(${tR} * ${f(GUST.w3)})), ${f(GUST.sharpness)})`
   );
 }
+
+/**
+ * Downwind swing fraction as GLSL text — EXACTLY the flagSwing closed form,
+ * built from the same FLAG constants (WIND-01: shader and CPU cannot drift).
+ * Consumed by createCampFlag.ts (plan 08-09).
+ */
+export function flagSwingGlsl(strengthExpr: string, gustExpr: string): string {
+  return `min(1.0, ${strengthExpr} * (${f(FLAG.swingBase)} + ${f(FLAG.swingGust)} * ${gustExpr}))`;
+}
+
+/**
+ * Limp-hang drape weight as GLSL text — EXACTLY the flagDrape closed form,
+ * built from the same FLAG constants (WIND-01). strength 0 evaluates to 1.0
+ * in-shader, the `?nowind` full-drape contract (D-12).
+ */
+export function flagDrapeGlsl(strengthExpr: string, gustExpr: string): string {
+  return `(1.0 - min(1.0, ${strengthExpr} * (${f(FLAG.drapeLift)} + ${f(FLAG.drapeLiftGust)} * ${gustExpr})))`;
+}
