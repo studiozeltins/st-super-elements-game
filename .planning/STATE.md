@@ -6,14 +6,14 @@ current_phase: 9
 current_phase_name: Atmosphere & Day/Night
 status: executing
 stopped_at: Phase 9 context gathered
-last_updated: "2026-07-14T14:04:39.927Z"
+last_updated: "2026-07-14T14:12:19.556Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 9 execution started
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 16
-  completed_plans: 13
+  completed_plans: 14
   percent: 17
 ---
 
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 9 (Atmosphere & Day/Night) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 9 execution started
 
@@ -78,6 +78,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 08 P09 | 5 min | 2 tasks | 1 files |
 | Phase 09 P01 | 12 min | 2 tasks | 2 files |
 | Phase 09 P02 | 12min | 2 tasks | 1 files |
+| Phase 09 P03 | 4min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -118,6 +119,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 08]: Flag downwind yaw recovered in-shader from modelMatrix[0].xz vs uWindDir (atan of dot/cross) — zero new uniforms on the pooled campFlag material; drape y-drop banded, x foreshorten continuous; CLOTH_BANDS=6 art constant lives in the asset, not windMath
 - [Phase ?]: 09-02: Sky-dome fixed-origin with xyww far-plane vertex pin (not camera-tracking) — clipping-proof as the camera roams, keeps Plan 05 wiring to one daynight.update() line
 - [Phase ?]: 09-02: ATMO-02 single-source enforced by construction — sky-dome bottomColor uniform IS scene.fog.color, topColor uniform IS the setSkyTop scratch (same THREE.Color instances, zero-alloc drift)
+- [Phase 09]: 09-03: 6 plaza lanterns as named build-time PointLights collected into ambience.lanternLights (no runtime add/remove, plaza-only per D-07)
 
 ### Pending Todos
 
@@ -160,7 +162,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-14T14:04:09.462Z
+Last session: 2026-07-14T14:11:29.895Z
 Stopped at: Phase 9 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/09-atmosphere-day-night/09-CONTEXT.md
