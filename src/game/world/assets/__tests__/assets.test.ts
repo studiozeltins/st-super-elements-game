@@ -5,6 +5,7 @@ import { createWind } from '../../../systems/createWind';
 import {
   createBoulder,
   createBush,
+  createCampFlag,
   createCampfire,
   createCanopyTree,
   createFlower,
@@ -20,9 +21,11 @@ import {
   type WorldAsset,
 } from '../index';
 
-// Canopy caps read the shared wind uniforms — the world injects them before
-// scattering trees; tests mirror that contract (fail-fast without injection).
-initCanopyWind(createWind(true));
+// Canopy caps and flag cloth read the shared wind uniforms — the world
+// injects them before scattering; tests mirror that contract (fail-fast
+// without injection). One wind serves the whole suite (one wind lifetime).
+const testWind = createWind(true);
+initCanopyWind(testWind);
 
 type AssetFactory = (random: SeededRandom) => WorldAsset;
 
@@ -38,6 +41,7 @@ const FACTORIES: Record<string, { create: AssetFactory; climbable: boolean }> = 
   createTeepee: { create: createTeepee, climbable: false },
   createTotem: { create: createTotem, climbable: false },
   createCampfire: { create: createCampfire, climbable: false },
+  createCampFlag: { create: random => createCampFlag(random, testWind), climbable: false },
   createSpikes: { create: createSpikes, climbable: false },
   createWoodenArch: { create: createWoodenArch, climbable: false },
 };
