@@ -6,15 +6,15 @@ current_phase: 08
 current_phase_name: wind-core
 status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-07-14T07:22:29.009Z"
+last_updated: "2026-07-14T07:31:01.121Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 08 execution started
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 9
-  completed_plans: 8
-  percent: 0
+  completed_plans: 9
+  percent: 17
 ---
 
 # Project State
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 08 (wind-core) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 08 execution started
 
@@ -75,6 +75,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 08 P06 | 8 min | 3 tasks | 5 files |
 | Phase 08 P07 | 3min | 1 tasks | 2 files |
 | Phase 08 P08 | 4 min | 2 tasks | 2 files |
+| Phase 08 P09 | 5 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 08]: Canopy sway ramp reads a baked aTreeHeight vertex attribute (height above the tree base) — pooled materials cannot take per-mesh uniforms, and world-Y ramps saturate on hills
 - [Phase 08]: InstancedMesh teardown requires mesh.dispose() in addition to geometry/material dispose to free instance attribute GPU buffers
 - [Phase 08]: flagSwing/flagDrape closed forms: min(1, s*(0.75+0.5*g)) swing and 1-min(1, s*(0.7+0.25*g)) drape — strength-0 identities exact (swing 0, drape 1 per D-12); GLSL generators pin the full rendered expression so shader/CPU cannot drift
+- [Phase 08]: Flag downwind yaw recovered in-shader from modelMatrix[0].xz vs uWindDir (atan of dot/cross) — zero new uniforms on the pooled campFlag material; drape y-drop banded, x foreshorten continuous; CLOTH_BANDS=6 art constant lives in the asset, not windMath
 
 ### Pending Todos
 
@@ -154,7 +156,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-14T07:22:18.040Z
+Last session: 2026-07-14T07:30:38.337Z
 Stopped at: Phase 8 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/08-wind-core/08-CONTEXT.md
