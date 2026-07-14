@@ -298,22 +298,19 @@ export function sunDir(phase: number, out: Vec3 = { x: 0, y: 0, z: 0 }): Vec3 {
 }
 
 /**
- * Pure Gram-Schmidt light-space basis from a sun-POSITION direction — the
- * renderer-free twin of the frozen basis at createMondstadtWorld.ts:151-153.
- * Negates `dir` to the light-travel direction, then
+ * Gram-Schmidt light-space basis from a sun-POSITION direction — the SINGLE
+ * source of truth for the shadow snap basis, shared by production
+ * (createMondstadtWorld.setShadowFocus) and its unit test so the two can never
+ * drift (WR-01). Negates `dir` to the light-travel direction, then
  * `right = normalize(cross(worldUp=(0,1,0), lightDir))`,
- * `up = normalize(cross(lightDir, right))`. Zero THREE (plain number math) so the
- * SHADOW-04 frozen-basis reproduction is unit-testable without a renderer:
- * buildSunBasis(sunDir(0.5)) must equal the shipped module-const sunRight/sunUp.
+ * `up = normalize(cross(lightDir, right))`.
+ *
+ * Zero THREE (plain number math) so the SHADOW-04 frozen-basis reproduction is
+ * unit-testable without a renderer. OUT-PARAM: writes into caller-provided
+ * `right`/`up` scratch (THREE.Vector3 satisfies Vec3) and allocates nothing, so
+ * the per-frame renderer can call it directly on the zero-alloc path.
  */
-export function buildSunBasis(dir: { x: number; y: number; z: number }): {
-  rightX: number;
-  rightY: number;
-  rightZ: number;
-  upX: number;
-  upY: number;
-  upZ: number;
-} {
+export function buildSunBasis(dir: Vec3, right: Vec3, up: Vec3): void {
   // Light-travel direction = -sun-position direction (normalized).
   const lm = Math.hypot(dir.x, dir.y, dir.z) || 1;
   const dx = -dir.x / lm;
@@ -327,6 +324,9 @@ export function buildSunBasis(dir: { x: number; y: number; z: number }): {
   rx /= rm;
   ry /= rm;
   rz /= rm;
+  right.x = rx;
+  right.y = ry;
+  right.z = rz;
   // up = cross(lightDir, right), then normalize.
   let ux = dy * rz - dz * ry;
   let uy = dz * rx - dx * rz;
@@ -335,5 +335,7 @@ export function buildSunBasis(dir: { x: number; y: number; z: number }): {
   ux /= um;
   uy /= um;
   uz /= um;
-  return { rightX: rx, rightY: ry, rightZ: rz, upX: ux, upY: uy, upZ: uz };
+  up.x = ux;
+  up.y = uy;
+  up.z = uz;
 }

@@ -384,21 +384,28 @@ describe('sunDir dawn/dusk azimuth asymmetry (SHADOW-01)', () => {
 });
 
 describe('buildSunBasis reproduces the shipped frozen basis (SHADOW-04 — renderer-free)', () => {
+  // buildSunBasis is the SAME function production (setShadowFocus) runs (WR-01):
+  // it writes the Gram-Schmidt right/up into caller-provided scratch, so this
+  // pins the shipped path, not a hand-mirrored twin.
   it('buildSunBasis(sunDir(0.5)) ≈ the module-const sunRight/sunUp derived from SUN_OFFSET', () => {
-    const basis = buildSunBasis(sunDir(0.5));
-    expect(basis.rightX).toBeCloseTo(SHIPPED_SUN_RIGHT.x, 3);
-    expect(basis.rightY).toBeCloseTo(SHIPPED_SUN_RIGHT.y, 3);
-    expect(basis.rightZ).toBeCloseTo(SHIPPED_SUN_RIGHT.z, 3);
-    expect(basis.upX).toBeCloseTo(SHIPPED_SUN_UP.x, 3);
-    expect(basis.upY).toBeCloseTo(SHIPPED_SUN_UP.y, 3);
-    expect(basis.upZ).toBeCloseTo(SHIPPED_SUN_UP.z, 3);
+    const right = { x: 0, y: 0, z: 0 };
+    const up = { x: 0, y: 0, z: 0 };
+    buildSunBasis(sunDir(0.5, { x: 0, y: 0, z: 0 }), right, up);
+    expect(right.x).toBeCloseTo(SHIPPED_SUN_RIGHT.x, 3);
+    expect(right.y).toBeCloseTo(SHIPPED_SUN_RIGHT.y, 3);
+    expect(right.z).toBeCloseTo(SHIPPED_SUN_RIGHT.z, 3);
+    expect(up.x).toBeCloseTo(SHIPPED_SUN_UP.x, 3);
+    expect(up.y).toBeCloseTo(SHIPPED_SUN_UP.y, 3);
+    expect(up.z).toBeCloseTo(SHIPPED_SUN_UP.z, 3);
   });
 
   it('yields an orthonormal right/up basis', () => {
-    const b = buildSunBasis(sunDir(0.5));
-    expect(Math.hypot(b.rightX, b.rightY, b.rightZ)).toBeCloseTo(1, 9);
-    expect(Math.hypot(b.upX, b.upY, b.upZ)).toBeCloseTo(1, 9);
-    const dot = b.rightX * b.upX + b.rightY * b.upY + b.rightZ * b.upZ;
+    const right = { x: 0, y: 0, z: 0 };
+    const up = { x: 0, y: 0, z: 0 };
+    buildSunBasis(sunDir(0.5, { x: 0, y: 0, z: 0 }), right, up);
+    expect(Math.hypot(right.x, right.y, right.z)).toBeCloseTo(1, 9);
+    expect(Math.hypot(up.x, up.y, up.z)).toBeCloseTo(1, 9);
+    const dot = right.x * up.x + right.y * up.y + right.z * up.z;
     expect(dot).toBeCloseTo(0, 9);
   });
 });

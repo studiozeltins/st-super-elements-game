@@ -37,6 +37,7 @@ import {
   type FlagImpulse,
 } from './assets/flagImpulse';
 import { createFountain, createHouse, createWindmill } from './createPlazaStructures';
+import { buildSunBasis } from '../systems/dayNightMath';
 import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
 import type { WindUniforms } from '../systems/createWind';
@@ -157,21 +158,18 @@ const SHADOW_MAP_SIZE = 1024;
 
 // Light-space basis for texel snapping. The sun DIRECTION is now a live per-frame
 // write channel (Phase 09.1): createDayNightCycle writes it via setSunDirection,
-// and setShadowFocus rebuilds the basis from it each frame BEFORE the texel snap.
+// and setShadowFocus rebuilds the basis from it (via the shared buildSunBasis, the
+// SINGLE source of truth with the unit test — WR-01) BEFORE the texel snap.
 // All of these are pre-allocated ONCE and mutated in place forever — the frame
 // path allocates nothing (zero-alloc client-perf rule).
-const WORLD_UP = new THREE.Vector3(0, 1, 0);
-// Preserve the shipped light distance (|SUN_OFFSET| ≈ 61.644) so only direction drifts.
 const SUN_DISTANCE = SUN_OFFSET.length();
+// Preserve the shipped light distance (|SUN_OFFSET| ≈ 61.644) so only direction drifts.
 // The frozen high-noon sun-POSITION direction (normalized SUN_OFFSET). liveSunDir
 // defaults to this, so a world that never receives setSunDirection stays byte-exact
 // to the Phase 9 frozen sun.
 const FROZEN_SUN_DIR = SUN_OFFSET.clone().normalize();
 // Live sun-POSITION direction (toward the sun), written by setSunDirection.
 const liveSunDir = new THREE.Vector3().copy(FROZEN_SUN_DIR);
-// Negated (light-travel) direction scratch for the Gram-Schmidt basis rebuild —
-// pre-allocated so the per-frame negate step allocates nothing.
-const liveLightDir = new THREE.Vector3();
 // The live position offset (focus → sun). Seeded from the LITERAL SUN_OFFSET so
 // the frozen path is IEEE754 bit-identical to `focus + SUN_OFFSET` (no
 // normalize→remultiply round-trip); setSunDirection recomputes it on the moving path.
@@ -704,11 +702,10 @@ export function createMondstadtWorld(
     setShadowFocus(x, z) {
       // Rebuild the light-space basis from the LIVE sun direction FIRST (Phase
       // 09.1): the sun drifts on a slow arc, so the snap grid rotates with it.
-      // liveLightDir = -liveSunDir (sun-position → light-travel), then the same
-      // Gram-Schmidt as the old module const, now per-frame into pre-alloc scratch.
-      liveLightDir.copy(liveSunDir).negate();
-      sunRight.crossVectors(WORLD_UP, liveLightDir).normalize();
-      sunUp.crossVectors(liveLightDir, sunRight).normalize();
+      // buildSunBasis is the SHARED source of truth with the dayNightMath unit
+      // test (WR-01) — it negates liveSunDir to light-travel and writes the
+      // Gram-Schmidt right/up straight into the pre-alloc scratch (zero alloc).
+      buildSunBasis(liveSunDir, sunRight, sunUp);
       // Snap the focus to whole shadow texels IN LIGHT SPACE — a plain 2D grid
       // snap on the live right/up axes (per-frame rotation is sub-texel, so edges
       // stay stable; texel math unchanged from the frozen-sun era).
