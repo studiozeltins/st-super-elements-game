@@ -83,8 +83,8 @@ Plans:
 
 **UAT Gap Closure — Round 2** *(from 08-UAT.md round-2 flag issues — run with `/gsd-execute-phase 8 --gaps-only`)*
 
-- [ ] 08-10-PLAN.md — windMath drape-driver rebalance (test-first): continuous gust-envelope droop so the calm flag hangs between gusts and lifts under a gust (Gap 1, UAT test 3) [Wave 1]
-- [ ] 08-11-PLAN.md — projectile→flag coupling: distance-gated disturbFlags + per-flag decaying impulse displacement, mirroring stampGround (Gap 2, UAT test 4) [Wave 2]
+- [x] 08-10-PLAN.md — windMath drape-driver rebalance (test-first): continuous gust-envelope droop so the calm flag hangs between gusts and lifts under a gust (Gap 1, UAT test 3) [Wave 1]
+- [x] 08-11-PLAN.md — projectile→flag coupling: distance-gated disturbFlags + per-flag decaying impulse displacement, mirroring stampGround (Gap 2, UAT test 4) [Wave 2]
 
 ### Phase 9: Atmosphere & Day/Night
 
@@ -166,7 +166,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Wind Core | 9/11 | UAT gap closure | - |
+| 8. Wind Core | 11/11 | Complete   | 2026-07-14 |
 | 9. Atmosphere & Day/Night | 0/TBD | Not started | - |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
