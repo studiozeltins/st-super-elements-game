@@ -68,8 +68,9 @@ export interface MondstadtWorld {
    * The mutable render handles the day/night cycle writes through. Day/night
    * NEVER reaches into the scene directly — it drifts .color/.intensity on
    * these lights, mutates the fog/background Colors IN PLACE, and pushes the
-   * sky-dome top color via setSkyTop. The sun DIRECTION basis is off-limits
-   * (D-02): only .color/.intensity drift, never position.
+   * sky-dome top color via setSkyTop. The sun DIRECTION is a live per-frame write
+   * channel now (Phase 09.1): day/night writes it via setSunDirection and
+   * setShadowFocus reads it to rebuild the shadow-camera basis each frame.
    */
   ambience: AmbienceHandles;
   dispose(): void;
@@ -90,6 +91,13 @@ export interface AmbienceHandles {
   lanternLights: THREE.PointLight[];
   /** Copies `c` into the sky-dome topColor uniform in place (zero alloc). */
   setSkyTop(c: THREE.Color): void;
+  /**
+   * Writes the live sun-POSITION direction (toward the sun; the vector `sunDir()`
+   * returns). Copied into the world's `liveSunDir` scratch and used to recompute
+   * `liveSunOffset = dir * SUN_DISTANCE`, both in place (zero alloc). setShadowFocus
+   * reads these each frame to rebuild the shadow basis (Phase 09.1, single-writer).
+   */
+  setSunDirection(x: number, y: number, z: number): void;
 }
 
 interface Platform {
@@ -137,7 +145,9 @@ export function isInsideSafeZone(positionX: number, positionZ: number): boolean 
   return Math.hypot(positionX, positionZ) <= SAFE_ZONE_RADIUS;
 }
 
-// The sun's constant direction offset from the shadow focus point.
+// The Phase 9 frozen high-noon key: the LITERAL sun-position offset from the
+// shadow focus. Still the byte-exact fallback the sun snaps to under
+// ?nomovingsun / reduce-motion / ?nodaynight (SHADOW-04) — see liveSunOffset.
 const SUN_OFFSET = new THREE.Vector3(30, 50, 20);
 // Half-extent of the player-following shadow camera. A world-spanning camera
 // (±140) gave ~0.27u per shadow texel — the "blocky enemy shadows". Following
@@ -145,12 +155,30 @@ const SUN_OFFSET = new THREE.Vector3(30, 50, 20);
 const SHADOW_FOCUS_SPAN = 45;
 const SHADOW_MAP_SIZE = 1024;
 
-// Fixed light-space basis for texel snapping (the sun never moves relative to
-// the focus): moving the shadow camera in world-sized steps that are NOT whole
-// shadow texels makes every shadow edge crawl ("shimmer") as the player walks.
-const sunDirection = SUN_OFFSET.clone().negate().normalize();
-const sunRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), sunDirection).normalize();
-const sunUp = new THREE.Vector3().crossVectors(sunDirection, sunRight).normalize();
+// Light-space basis for texel snapping. The sun DIRECTION is now a live per-frame
+// write channel (Phase 09.1): createDayNightCycle writes it via setSunDirection,
+// and setShadowFocus rebuilds the basis from it each frame BEFORE the texel snap.
+// All of these are pre-allocated ONCE and mutated in place forever — the frame
+// path allocates nothing (zero-alloc client-perf rule).
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+// Preserve the shipped light distance (|SUN_OFFSET| ≈ 61.644) so only direction drifts.
+const SUN_DISTANCE = SUN_OFFSET.length();
+// The frozen high-noon sun-POSITION direction (normalized SUN_OFFSET). liveSunDir
+// defaults to this, so a world that never receives setSunDirection stays byte-exact
+// to the Phase 9 frozen sun.
+const FROZEN_SUN_DIR = SUN_OFFSET.clone().normalize();
+// Live sun-POSITION direction (toward the sun), written by setSunDirection.
+const liveSunDir = new THREE.Vector3().copy(FROZEN_SUN_DIR);
+// Negated (light-travel) direction scratch for the Gram-Schmidt basis rebuild —
+// pre-allocated so the per-frame negate step allocates nothing.
+const liveLightDir = new THREE.Vector3();
+// The live position offset (focus → sun). Seeded from the LITERAL SUN_OFFSET so
+// the frozen path is IEEE754 bit-identical to `focus + SUN_OFFSET` (no
+// normalize→remultiply round-trip); setSunDirection recomputes it on the moving path.
+const liveSunOffset = new THREE.Vector3().copy(SUN_OFFSET);
+// Per-frame-mutated basis scratch (was the frozen module const). Allocated once.
+const sunRight = new THREE.Vector3();
+const sunUp = new THREE.Vector3();
 const shadowFocusScratch = new THREE.Vector3();
 
 // Fog near sits well past SAFE_ZONE_RADIUS (18) + typical engage range so the
@@ -637,6 +665,13 @@ export function createMondstadtWorld(
       setSkyTop(c) {
         skyTopColor.copy(c);
       },
+      setSunDirection(x, y, z) {
+        // Copy into the shared scratch (consumers hold the reference — never
+        // reassign) and recompute the position offset from the live dir. Both
+        // mutate in place: zero alloc (mirrors setSkyTop).
+        liveSunDir.set(x, y, z);
+        liveSunOffset.copy(liveSunDir).multiplyScalar(SUN_DISTANCE);
+      },
     },
     disturbFlags(x, z, dirX, dirZ) {
       for (const flag of campFlags) {
@@ -667,8 +702,16 @@ export function createMondstadtWorld(
       return obstacles;
     },
     setShadowFocus(x, z) {
-      // Snap the focus to whole shadow texels IN LIGHT SPACE (the sun basis is
-      // fixed, so this is a plain 2D grid snap on the light's right/up axes).
+      // Rebuild the light-space basis from the LIVE sun direction FIRST (Phase
+      // 09.1): the sun drifts on a slow arc, so the snap grid rotates with it.
+      // liveLightDir = -liveSunDir (sun-position → light-travel), then the same
+      // Gram-Schmidt as the old module const, now per-frame into pre-alloc scratch.
+      liveLightDir.copy(liveSunDir).negate();
+      sunRight.crossVectors(WORLD_UP, liveLightDir).normalize();
+      sunUp.crossVectors(liveLightDir, sunRight).normalize();
+      // Snap the focus to whole shadow texels IN LIGHT SPACE — a plain 2D grid
+      // snap on the live right/up axes (per-frame rotation is sub-texel, so edges
+      // stay stable; texel math unchanged from the frozen-sun era).
       const texelSize = (SHADOW_FOCUS_SPAN * 2) / SHADOW_MAP_SIZE;
       shadowFocusScratch.set(x, 0, z);
       const rightCoord = shadowFocusScratch.dot(sunRight);
@@ -677,7 +720,8 @@ export function createMondstadtWorld(
         .addScaledVector(sunRight, Math.round(rightCoord / texelSize) * texelSize - rightCoord)
         .addScaledVector(sunUp, Math.round(upCoord / texelSize) * texelSize - upCoord);
       sunLight.target.position.copy(shadowFocusScratch);
-      sunLight.position.copy(shadowFocusScratch).add(SUN_OFFSET);
+      // liveSunOffset is dir*SUN_DISTANCE (moving) or the literal SUN_OFFSET (frozen).
+      sunLight.position.copy(shadowFocusScratch).add(liveSunOffset);
       // The world subtree is matrix-frozen — push the light's move through by hand.
       sunLight.updateMatrixWorld(true);
       sunLight.target.updateMatrixWorld(true);
