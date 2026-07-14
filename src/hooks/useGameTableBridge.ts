@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
-import type { DbConnection } from '../module_bindings';
+import type { DbConnection, EventContext } from '../module_bindings';
 import type { Enemy, GemDrop, Goliath, ShardDrop, UnitAttack } from '../module_bindings/types';
 import type { Game } from '../game/createGame';
 
@@ -27,13 +27,19 @@ type TableName = keyof MirroredRows;
 
 interface TableHandle<Row> {
   iter(): Iterable<Row>;
-  onInsert(cb: (ctx: unknown, row: Row) => void): void;
-  removeOnInsert(cb: (ctx: unknown, row: Row) => void): void;
-  onUpdate(cb: (ctx: unknown, oldRow: Row, newRow: Row) => void): void;
-  removeOnUpdate(cb: (ctx: unknown, oldRow: Row, newRow: Row) => void): void;
-  onDelete(cb: (ctx: unknown, row: Row) => void): void;
-  removeOnDelete(cb: (ctx: unknown, row: Row) => void): void;
+  onInsert(cb: (ctx: EventContext, row: Row) => void): void;
+  removeOnInsert(cb: (ctx: EventContext, row: Row) => void): void;
+  onUpdate(cb: (ctx: EventContext, oldRow: Row, newRow: Row) => void): void;
+  removeOnUpdate(cb: (ctx: EventContext, oldRow: Row, newRow: Row) => void): void;
+  onDelete(cb: (ctx: EventContext, row: Row) => void): void;
+  removeOnDelete(cb: (ctx: EventContext, row: Row) => void): void;
 }
+
+// Logged exactly once at runtime to settle Assumption A1 (09-RESEARCH Pattern 2):
+// confirm a SCHEDULED reducer's (worldTick) row-update broadcast to a NON-caller
+// client arrives tagged 'Reducer' (carrying a server timestamp), not 'Transaction'.
+// The Date.now() fallback in createServerClock covers it either way.
+let loggedFirstReducerTap = false;
 
 function mirror<Row>(
   handle: TableHandle<Row>,
@@ -41,21 +47,38 @@ function mirror<Row>(
   // Primary-key accessor — the tables disagree on the column name
   // (enemyId / goliathId / id), so the key is injected per table.
   keyOf: (row: Row) => bigint,
-  markDirty: () => void
+  markDirty: () => void,
+  // Optional day/night clock re-anchor. Only the ~150ms worldTick tables
+  // (enemy/goliath) pass this — every tick mutates their rows, so the onUpdate
+  // callback fires ~6.7×/s carrying the reducer's server timestamp.
+  anchor?: (serverMicros: bigint) => void
 ): () => void {
   // Rows cached before this effect ran (reconnect, effect ordering) never fire
-  // onInsert — seed from the client cache first.
+  // onInsert — seed from the client cache first. This loop has NO ctx and must
+  // never anchor the clock (only live callbacks carry a server timestamp).
   for (const row of handle.iter()) map.set(keyOf(row), row);
   markDirty();
-  const onInsert = (_ctx: unknown, row: Row) => {
+  const onInsert = (_ctx: EventContext, row: Row) => {
     map.set(keyOf(row), row);
     markDirty();
   };
-  const onUpdate = (_ctx: unknown, _oldRow: Row, row: Row) => {
+  const onUpdate = (ctx: EventContext, _oldRow: Row, row: Row) => {
+    // Re-anchor the cosmetic day/night clock off the worldTick reducer's start
+    // timestamp — broadcast identically to every LAN subscriber, so all clients
+    // converge on the same time of day (DAYNITE-02). This is a setter call from
+    // a live table callback, NOT a render. The tag === 'Reducer' guard skips the
+    // 'SubscribeApplied' snapshot (which carries no timestamp).
+    if (anchor && ctx.event.tag === 'Reducer') {
+      if (!loggedFirstReducerTap) {
+        loggedFirstReducerTap = true;
+        console.log('[daynight] first server-clock tap:', ctx.event.tag, ctx.event.value.reducer.name);
+      }
+      anchor(ctx.event.value.timestamp.microsSinceUnixEpoch);
+    }
     map.set(keyOf(row), row);
     markDirty();
   };
-  const onDelete = (_ctx: unknown, row: Row) => {
+  const onDelete = (_ctx: EventContext, row: Row) => {
     map.delete(keyOf(row));
     markDirty();
   };
@@ -119,9 +142,12 @@ export function useGameTableBridge(
         queueMicrotask(flush);
       }
     };
+    // Re-anchor the day/night clock; a no-op until the game exists (syncAll seeds
+    // it on creation). Threaded only into the two worldTick-driven tables.
+    const anchorClock = (serverMicros: bigint) => gameRef.current?.syncServerClock(serverMicros);
     const unregister = [
-      mirror(connection.db.enemy, rows.enemy, row => row.enemyId, markDirty('enemy')),
-      mirror(connection.db.goliath, rows.goliath, row => row.goliathId, markDirty('goliath')),
+      mirror(connection.db.enemy, rows.enemy, row => row.enemyId, markDirty('enemy'), anchorClock),
+      mirror(connection.db.goliath, rows.goliath, row => row.goliathId, markDirty('goliath'), anchorClock),
       mirror(connection.db.unitAttack, rows.unitAttack, row => row.id, markDirty('unitAttack')),
       mirror(connection.db.gemDrop, rows.gemDrop, row => row.id, markDirty('gemDrop')),
       mirror(connection.db.shardDrop, rows.shardDrop, row => row.id, markDirty('shardDrop')),
