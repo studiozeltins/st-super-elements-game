@@ -1,9 +1,10 @@
 ---
 phase: 08-wind-core
-verified: 2026-07-14T12:00:00Z
-status: human_needed
-score: 11/14 must-haves verified
-behavior_unverified: 3
+verified: 2026-07-14T12:30:00Z
+status: passed
+score: 14/14 must-haves verified
+behavior_unverified: 0
+human_verification: "UAT round 3 — all 3 visual reads (droop, projectile kick+settle, FPS sanity) PASS (user, 2026-07-14)"
 overrides_applied: 0
 re_verification:
   previous_status: human_needed
