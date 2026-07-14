@@ -20,10 +20,25 @@ let canopyWind: WindUniforms | null = null;
 
 // ONE patched material per canopy color (4 total) shared by every cap of every
 // tree — replaces the old per-cap lambert() allocation (pool-materials rule).
+// Lifetime contract: the pool belongs to the CURRENTLY injected wind. Cached
+// materials may also be disposed by world.dispose() at game teardown; that is
+// safe because the next game constructs a NEW wind, which forces the rebuild
+// path below — the pool never hands a disposed material to a live world.
 const canopyMaterials = new Map<number, THREE.MeshLambertMaterial>();
 
-/** Inject the shared wind uniforms. Must run before any canopy tree is built. */
+/**
+ * Inject the shared wind uniforms. Must run before any canopy tree is built.
+ * One pool per injected wind: re-injection with a DIFFERENT wind disposes the
+ * orphaned materials and clears the pool, so the next getCanopyMaterial call
+ * rebuilds against the new uniform objects (CR-02 — the world injects once per
+ * game instance, so this is exactly one rebuild per game re-creation).
+ * Re-injecting the SAME wind is a no-op: D-13 pooling is preserved.
+ */
 export function initCanopyWind(wind: WindUniforms): void {
+  if (canopyWind !== wind) {
+    for (const material of canopyMaterials.values()) material.dispose();
+    canopyMaterials.clear();
+  }
   canopyWind = wind;
 }
 

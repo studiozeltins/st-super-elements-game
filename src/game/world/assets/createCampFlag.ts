@@ -16,25 +16,47 @@ const POLE_RADIUS = 0.04;
 /** GLSL float literal — raw ints break the shader compile (grass precedent). */
 const f = (n: number): string => n.toFixed(4);
 
-// ONE pooled material for every flag's pole and every flag's cloth. The cloth
-// carries per-flag banner color via a vertex color attribute, so a single
-// patched material serves all flags (pool-materials rule, D-08).
-const poleMaterial = lambert(POLE_COLOR);
+// ONE pooled material for every flag's pole and every flag's cloth, cached
+// per WIND INSTANCE (CR-01). The cloth carries per-flag banner color via a
+// vertex color attribute, so a single patched material serves all flags
+// within one wind lifetime (pool-materials rule, D-08). When a new game hands
+// in a different wind, both materials are disposed and rebuilt so the cloth's
+// shader closure captures the LIVE uniforms. The pole carries no wind but
+// joins the cache anyway: disposeObject disposes it on world teardown, so its
+// lifetime must match the world too. A cached material may be disposed by
+// world.dispose() at game teardown — that is safe because the next game
+// constructs a NEW wind, forcing the rebuild path; the cache never hands a
+// disposed material to a live world.
+let flagWind: WindUniforms | null = null;
+let poleMaterial: THREE.MeshLambertMaterial | null = null;
 let clothMaterial: THREE.MeshLambertMaterial | null = null;
 
 /**
- * Lazy singleton cloth material, created with the shared wind uniforms on the
- * first flag build. The ripple is pure vertex-shader displacement: a wave
- * traveling from the pole toward the free end (which whips more), amplitude
- * driven by the SAME idle + traveling-gust phase every consumer reads
- * (WIND-01), at 2.5× grass frequency (WIND-03 — flags flap faster).
+ * Wind-guarded lazy material pair, built with the shared wind uniforms on the
+ * first flag build of each wind lifetime. The ripple is pure vertex-shader
+ * displacement: a wave traveling from the pole toward the free end (which
+ * whips more), amplitude driven by the SAME idle + traveling-gust phase every
+ * consumer reads (WIND-01), at 2.5× grass frequency (WIND-03 — flags flap
+ * faster).
  *
  * Known assumption A2: the double-sided Lambert cloth may read dark on the
  * back face — checked in the Plan 08-05 playtest; only then borrow the grass
  * normal-fragment replacement.
  */
-function getClothMaterial(wind: WindUniforms): THREE.MeshLambertMaterial {
-  if (clothMaterial) return clothMaterial;
+function getFlagMaterials(wind: WindUniforms): {
+  pole: THREE.MeshLambertMaterial;
+  cloth: THREE.MeshLambertMaterial;
+} {
+  if (wind !== flagWind) {
+    poleMaterial?.dispose();
+    clothMaterial?.dispose();
+    poleMaterial = null;
+    clothMaterial = null;
+    flagWind = wind;
+  }
+  if (poleMaterial && clothMaterial) return { pole: poleMaterial, cloth: clothMaterial };
+
+  poleMaterial = lambert(POLE_COLOR);
   const material = new THREE.MeshLambertMaterial({
     vertexColors: true,
     side: THREE.DoubleSide,
@@ -74,7 +96,7 @@ function getClothMaterial(wind: WindUniforms): THREE.MeshLambertMaterial {
   // Distinct cache key — must not collide with grassField/canopySway programs.
   material.customProgramCacheKey = () => 'campFlag';
   clothMaterial = material;
-  return material;
+  return { pole: poleMaterial, cloth: clothMaterial };
 }
 
 /** Subdivided cloth with the x=0 edge at the pole and a per-flag banner color. */
@@ -94,10 +116,11 @@ function createClothGeometry(color: number): THREE.BufferGeometry {
 
 export function createCampFlag(random: SeededRandom, wind: WindUniforms): WorldAsset {
   const group = new THREE.Group();
+  const materials = getFlagMaterials(wind);
 
   const pole = new THREE.Mesh(
     new THREE.CylinderGeometry(POLE_RADIUS, POLE_RADIUS * 1.4, POLE_HEIGHT, 5),
-    poleMaterial
+    materials.pole
   );
   pole.position.y = POLE_HEIGHT / 2;
   pole.castShadow = true;
@@ -105,7 +128,7 @@ export function createCampFlag(random: SeededRandom, wind: WindUniforms): WorldA
 
   const cloth = new THREE.Mesh(
     createClothGeometry(pickRandom(random, BANNER_COLORS)),
-    getClothMaterial(wind)
+    materials.cloth
   );
   cloth.position.y = POLE_HEIGHT - FLAG.height / 2 - 0.06;
   cloth.castShadow = false; // the depth pass cannot follow the vertex patch
