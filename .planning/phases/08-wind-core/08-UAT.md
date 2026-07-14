@@ -1,113 +1,55 @@
 ---
-status: complete
+status: testing
 phase: 08-wind-core
 source: [08-VERIFICATION.md]
-started: 2026-07-14T08:15:00Z
-updated: 2026-07-14T06:09:03.775Z
+round: 2
+started: 2026-07-14T11:00:00Z
+updated: 2026-07-14T11:00:00Z
 ---
+
+> Round 2 — re-verify after UAT gap closure (plans 08-08/08-09). Round 1 results (5 pass / 3 issues / 1 skip) and root-cause diagnoses are preserved in git history (commits 397257f, 090596e) and summarized in 08-VERIFICATION.md. The beige-blade cosmetic gap was dispositioned out of phase (pre-existing flower art — todo `flower-blade-color-art-pass.md`).
 
 ## Current Test
 
-[testing complete]
+number: 1
+name: Flag answers gust direction + strength like the smoke does (reopened UAT 4/5/9)
+expected: |
+  Flag streams the same direction smoke kinks; harder gusts swing harder; direction follows the slow wander over minutes
+awaiting: user response
 
 ## Tests
 
-### 1. Grass at rest between gusts vs pre-phase build (D-01 hard gate)
-expected: Identical feel — no visible change to base sway
-result: pass
-note: "user: possible lower grass density, but maybe also in original — sway itself unchanged; density not touched by this phase"
+### 1. Flag answers gust direction + strength like the smoke does (reopened UAT 4/5/9)
+expected: Flag streams the same direction smoke kinks; harder gusts swing harder; direction follows the slow wander over minutes
+result: [pending]
 
-### 2. Watch a wide grass field for ~60s (WIND-02 / D-03)
-expected: Gust arrives as a broad front sweeping across over ~3-5s; near blades lean before far blades
-result: pass
+### 2. Four-consumer coherence at a camp during one gust; alt-tab 30s (SC1/SC3)
+expected: Flag/grass/canopy/smoke all answer the same passing gust with distinct character; no desync
+result: [pending]
 
-### 3. Gust strength + cadence over ~3 minutes (D-04 / D-02)
-expected: Peak lean ~2-3x base, telegraph readable; gusts every 30-60s, never on a beat
-result: pass
-note: "user: hard to tell looking at only grass, but sways sometimes faster sometimes not"
+### 3. ?nowind limp drape (reopened UAT 6, D-12)
+expected: Cloth hangs limp down the pole with faint micro-sway, never rigid horizontal; smoke drift + flag wind motion killed; grass base sway remains
+result: [pending]
 
-### 4. Visit a camp during a gust; alt-tab 30s and return (WIND-03 / WIND-01)
-expected: Flag faster than grass, canopy slower/subtler with rigid trunk and tops moving most, smoke drifts as it rises; all respond to the same passing gust; no desync after alt-tab
-result: issue
-reported: "there are these beige grass blades, they look out of place, I think, they should be maybe darker green with gradient, but regarding flag, fail it does not sway with wind gusts, like fireplace smoke!"
-severity: major
+### 4. Voxel cloth read (UAT 8)
+expected: Chunky stepped facets, not a smooth sheet
+result: [pending]
 
-### 5. Watch drift/travel direction over several minutes (D-05)
-expected: Direction changes slowly — not a fixed fan
-result: issue
-reported: "fail it does not sway with wind gusts direction, like fireplace smoke, reacts to wind gusts"
-severity: major
-note: "clarifies test 4: smoke DOES react to gusts (good reference); flag does NOT follow gust strength/direction"
+### 5. FPS sanity after shader rework (D-13)
+expected: Unchanged frame feel; scripts/fps_playtest.py if suspicious
+result: [pending]
 
-### 6. Reload with ?nowind, then ?nosmoke (D-12)
-expected: ?nowind kills gust lean/flap/canopy sway/smoke lateral drift (grass base sway remains — D-12 deviation from SC4's literal wording, confirm intent); ?nosmoke removes smoke entirely
-result: issue
-reported: "?nowind kills smoke sway direction, but for flag kills wiggle, yes, when wind is on flag is wiggling, but not following wind/gust direction. when no wind, flag should like cloth hang down."
-severity: minor
-note: "bisect mechanics themselves PASS (?nowind kills smoke drift + flag wiggle); issue is flag pose: windless flag should hang limp like cloth, not stay rigid horizontal"
-
-### 7. FPS sanity vs pre-phase (D-13)
-expected: Unchanged frame feel, no gust-arrival hitches; scripts/fps_playtest.py if suspicious
-result: pass
-
-### 8. View a camp flag from behind (assumption A2)
-expected: Cloth not black on the back face
-result: skipped
-reason: "Fixed top-down camera — cannot rotate to see back face; only observable when wind direction flips the flag. User also requests more flag detail (maybe voxel cloth)."
-
-### 9. StrictMode/reconnect coherence spot-check (npm run dev, double-mount)
-expected: Flags flap and canopies sway in the dev server too — the environment where the old CR-01/CR-02 freeze always reproduced
-result: pass
-note: "freeze fix works — flag animates in dev server. User re-confirmed the direction bug: 'flag is not flapping its wiggling in the same direction, it does not obey wind gust direction!' — covered by gaps for tests 4/5"
+### 6. Flag back face (A2 — deferred from round 1, now more exposed by the yaw)
+expected: Cloth not black from behind
+result: [pending]
 
 ## Summary
 
-total: 9
-passed: 5
-issues: 3
-pending: 0
-skipped: 1
+total: 6
+passed: 0
+issues: 0
+pending: 6
+skipped: 0
 blocked: 0
 
 ## Gaps
-
-- truth: "Camp flag responds to wind gusts (flaps faster on shared gust phase — WIND-03/WIND-01)"
-  status: failed
-  reason: "User reported: regarding flag, fail it does not sway with wind gusts, like fireplace smoke! (ambiguous whether smoke also fails to respond to gusts — diagnose both flag gust response and smoke gust kink)"
-  severity: major
-  test: 4
-  root_cause: "uWindDir enters flag shader only as gust-front phase (dot in gustGlsl, createCampFlag.ts:86), never as displacement direction; displacement is zero-mean sine along cloth LOCAL z (line 90) on a random baked heading (line 139) — fixed-axis wiggle, no downwind lean/stream"
-  artifacts: [src/game/world/assets/createCampFlag.ts, src/game/systems/windMath.ts]
-  missing: ["in-shader yaw of vertex offsets about the pole hinge toward uWindDir using modelMatrix[0].xz baked heading (zero new uniforms)", "gust-scaled downwind swing/stream blended with uWindStrength and existing gust envelope"]
-- truth: "Grass blade coloring reads coherent (no out-of-place beige blades)"
-  status: failed
-  reason: "User reported: beige grass blades look out of place, should maybe be darker green with gradient (likely pre-existing art, not introduced by phase 8 — cosmetic)"
-  severity: cosmetic
-  test: 4
-  root_cause: "PRE-EXISTING (not phase 8): beige blades are flower blades — FLOWER_COLOR 0xfff0a8 in grassPlacement.ts:41, deliberately cream; they read as out-of-place grass instead of flowers"
-  artifacts: [src/game/world/grassPlacement.ts]
-  missing: ["tune FLOWER_COLOR toward the field palette or make flowers read as flowers (e.g. warmer head on green stem) — cosmetic art pass"]
-- truth: "Flag flap follows gust strength and wind direction from the shared clock (D-05/WIND-03) — smoke is the working reference"
-  status: failed
-  reason: "User reported (tests 5+9): flag wiggles on a fixed axis regardless of wind/gust direction — 'not flapping, wiggling in the same direction, does not obey wind gust direction'. Smoke reacts to gusts correctly (working reference)."
-  severity: major
-  test: 5
-  root_cause: "same as test-4 gap: direction never enters the displacement, only the gust-arrival phase"
-  artifacts: [src/game/world/assets/createCampFlag.ts, src/game/systems/windMath.ts]
-  missing: ["covered by test-4 gap fix — single shader change"]
-- truth: "Windless flag hangs down limp like cloth (?nowind or gust lull); wind lifts and ripples it"
-  status: failed
-  reason: "User reported (test 6): when no wind, flag should like cloth hang down — currently stays rigid horizontal with wiggle removed"
-  severity: minor
-  test: 6
-  root_cause: "rest geometry IS the strong-wind pose (createClothGeometry builds fully-stretched horizontal plane, createCampFlag.ts:103-115); all motion multiplied by uWindStrength (line 90) so strength 0 = rigid stretched quad; no drape/sag term exists"
-  artifacts: [src/game/world/assets/createCampFlag.ts, src/game/systems/windMath.ts]
-  missing: ["drape term weighted by (1 - windFactor): pitch vertices down about pole edge as function of along-distance with x foreshortening; strength 0 = limp hang with tiny residual micro-sway"]
-- truth: "Flag cloth has more visual detail (voxel-style cloth to match game aesthetic)"
-  status: failed
-  reason: "User request (test 8): I want more details for flag, make it maybe voxels also the cloth — enhancement, current cloth reads too plain"
-  severity: cosmetic
-  test: 8
-  root_cause: "design enhancement, not a defect: cloth is a smooth 8x5-segment plane; game aesthetic is voxel-styled"
-  artifacts: [src/game/world/assets/createCampFlag.ts]
-  missing: ["optional: chunkier voxel-look cloth (stepped quads / flat-shaded segments) — bundle with the flag shader rework"]

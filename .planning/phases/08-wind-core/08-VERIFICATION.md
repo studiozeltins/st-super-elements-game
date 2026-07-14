@@ -1,100 +1,102 @@
 ---
 phase: 08-wind-core
-verified: 2026-07-14T08:10:00Z
+verified: 2026-07-14T10:50:00Z
 status: human_needed
-score: 16/20 must-haves verified
-behavior_unverified: 4
+score: 14/20 must-haves verified
+behavior_unverified: 6
 overrides_applied: 0
 re_verification:
-  previous_status: gaps_found
-  previous_score: 13/20
+  previous_status: human_needed
+  previous_score: 16/20
   gaps_closed:
-    - "Grass, camp flags/banners, tree canopies, and campfire smoke columns all sway from ONE shared wind phase — no system drifts out of sync (SC1/WIND-01, CR-01/CR-02)"
-    - "Canopy caps sway height-weighted — tops move most (WIND-03, WR-02)"
-    - "Flat frame cost / clean lifecycle for smoke (WR-01)"
+    - "UAT tests 4/5/9 (major): flag cloth now yaws/streams toward uWindDir in-shader — direction enters the DISPLACEMENT via flagSwingGlsl, not just the gust-front phase (plans 08-08/08-09)"
+    - "UAT test 6 (minor): ?nowind / gust-lull limp drape — flagDrapeGlsl pitches the cloth down the pole at strength 0 with a drape-gated micro-sway, never a rigid horizontal quad"
+    - "UAT test 8 (cosmetic): voxel-stepped cloth — CLOTH_BANDS floor-quantization + flatShading facets"
   gaps_remaining: []
   regressions: []
 behavior_unverified_items:
-  - truth: "Gusts visibly TRAVEL across the field as a moving wave, not the whole world bowing in unison (ROADMAP SC2 / WIND-02)"
-    test: "Stand at a wide grass field for ~60s in the built game (laragon-served dist/)"
-    expected: "A gust arrives as a broad front sweeping across the field over ~3-5s — near blades lean before far blades"
-    why_human: "The rigid-translation invariant is unit-tested in windMath (gustAt), and the grass shader interpolates the same retarded-time formula via gustGlsl — but the on-screen GPU read (front visible at this speed/wavelength/blade density) is a visual judgment no grep or test exercises"
-  - truth: "Each consumer keeps its own character on the shared phase — flags faster, canopies slow/low, smoke drifting laterally (ROADMAP SC3 / WIND-03)"
-    test: "Visit a camp; watch flag vs grass vs canopy vs campfire smoke during one gust; also alt-tab 30s and return to confirm no desync"
-    expected: "Flag flaps visibly faster than grass; canopies subtler and slower with rigid trunks (tops moving more than cap bottoms — the new tree-base ramp); smoke rises in chunky stepped puffs drifting sideways; all four respond to the same gust as it passes"
-    why_human: "Constant ordering (FLAG.freq > SWAY.f1 > CANOPY.freq) and the aTreeHeight ramp math are unit-tested, but 'reads as distinct character while coherent' is a perceptual truth"
-  - truth: "Grass rendering looks unchanged after the uTime extraction, and ?nowind kills wind-driven sway for bisecting (ROADMAP SC4 / D-01 / D-12)"
-    test: "Compare grass at rest vs pre-phase memory; reload with ?nowind and ?nosmoke"
-    expected: "Between gusts grass is indistinguishable from the pre-phase build; ?nowind kills gust lean/flag flap/canopy sway/smoke lateral drift (grass base sway intentionally remains per D-12 — NOTE: ROADMAP SC4 literally says 'kills all sway'); ?nosmoke removes smoke entirely"
-    why_human: "Arithmetic identity is proven in code (envelope rests at 0, gustGainFactor(0,g)===1 tested, toFixed(4) renders identical literals) but 'looks unchanged' is the locked D-01 contract only human eyes can close. The ?nowind grass-base-sway-remains semantics deviate from the literal ROADMAP SC4 wording by locked decision D-12 — human should confirm intent and consider an override entry"
-  - truth: "Campfire smoke puffs rise, drift downwind, and visibly kink at gust fronts at runtime (Plan 08-04)"
-    test: "Stand near a campfire for a couple of minutes, include one gust arrival; also check FPS feels unchanged (D-13) and wind direction wanders over several minutes (D-05)"
-    expected: "Thin stepped voxel columns rise ~4.5u, lean downwind, kink sharply when a gust passes; no rhythmic hitches; drift direction slowly changes"
-    why_human: "The update loop mutates instanced-mesh state per frame — spawn/recycle/drift/fade is a runtime state-transition pipeline with no test exercising it; presence + wiring verified only"
+  - truth: "Flag cloth visibly swings/streams toward the current wind direction, free end leading, and gusts snap it further downwind — same passing gust the smoke answers (UAT tests 4/5/9 reopened; WIND-01/WIND-03, D-05)"
+    test: "Visit a camp during a gust in the built game (laragon dist/); compare the flag's swing direction to the fireplace smoke's kink; watch several minutes for the wander"
+    expected: "Flag streams the SAME direction the smoke drifts; harder gusts swing it harder (75% aligned steady -> fully aligned at gust peak); pointing direction follows the slow wander, not one fixed axis"
+    why_human: "The signed-angle yaw (atan(sinA,cosA) from modelMatrix[0].xz vs uWindDir) is self-consistent on paper and the flagSwing blend is unit-tested, but this exact invariant was FALSIFIED once by UAT — only eyes can confirm the rework reads correctly on screen"
+  - truth: "Per-consumer character coheres with the flag reworked — flag faster AND direction-following, canopy slow/subtle, smoke lateral drift, all on one gust (ROADMAP SC3/SC1)"
+    test: "Same camp visit: watch flag vs grass vs canopy vs smoke during one gust arrival; alt-tab 30s and return"
+    expected: "All four respond to the same passing gust with distinct character; no desync after alt-tab; the flag no longer wiggles on a fixed axis"
+    why_human: "Constants ordering and shared-uniform wiring are code-verified; multi-system perceptual coherence is a visual judgment, and the flag half of it was the UAT failure being re-verified"
+  - truth: "?nowind (and deep lulls) hangs the cloth limp down the pole with a faint micro-sway — never a rigid horizontal quad (UAT test 6 reopened, D-12)"
+    test: "Reload with ?nowind and look at a camp flag"
+    expected: "Cloth pitched ~83 degrees down the pole (drapePitch 1.45), stepped voxel hang, tiny lazy pendulum sway (limpFreq 0.9 < grass f1 1.7); grass base sway still runs (D-12 semantics, accepted in UAT test 6 note)"
+    why_human: "flagDrape(0,g)===1 is an exact unit-tested identity and the micro-sway term is verifiably NOT gated on uWindStrength, but 'hangs like cloth' is the user's visual acceptance bar"
+  - truth: "Cloth reads chunky/voxel-faceted matching the game's art identity (UAT test 8 request, D-09)"
+    test: "Look at a flag up close during wind and at rest"
+    expected: "Discrete stepped bands (6), flat-shaded facets — not a smooth sheet"
+    why_human: "flatShading:true and the alongQ quantization are present in code; 'reads chunky enough' is a cosmetic perceptual call"
+  - truth: "Frame feel unchanged after the flag shader rework (D-13)"
+    test: "Play near a camp; run scripts/fps_playtest.py if anything feels off"
+    expected: "No regression — the patch adds atan + two rotations per cloth vertex (65 verts x a handful of flags, negligible on paper)"
+    why_human: "Runtime performance feel; no automated frame benchmark ran"
+  - truth: "Flag back face not black (assumption A2 — now MORE reachable since the cloth yaws toward the wind and can flip relative to the fixed camera)"
+    test: "Watch a flag as the wander swings the wind direction around"
+    expected: "DoubleSide Lambert cloth readable from both sides"
+    why_human: "Skipped in the first UAT (fixed camera couldn't see it); the new downwind yaw makes back-face exposure more likely, so it should ride along in the re-verify"
 human_verification:
-  - test: "Grass at rest between gusts vs pre-phase build (D-01 hard gate)"
-    expected: "Identical feel — no visible change to base sway"
-    why_human: "Locked visual contract; arithmetic identity proven but 'looks unchanged' needs eyes"
-  - test: "Watch a wide grass field for ~60s (WIND-02 / D-03)"
-    expected: "Gust arrives as a broad front sweeping across over ~3-5s; near blades lean before far blades"
-    why_human: "GPU visual read of the traveling front"
-  - test: "Gust strength + cadence over ~3 minutes (D-04 / D-02)"
-    expected: "Peak lean ~2-3x base, telegraph readable; gusts every 30-60s, never on a beat"
-    why_human: "Perceptual timing/intensity"
-  - test: "Visit a camp during a gust; alt-tab 30s and return (WIND-03 / WIND-01)"
-    expected: "Flag faster than grass, canopy slower/subtler with rigid trunk and tops moving most, smoke drifts as it rises; all respond to the same passing gust; no desync after alt-tab"
-    why_human: "Multi-system perceptual coherence judgment"
-  - test: "Watch drift/travel direction over several minutes (D-05)"
-    expected: "Direction changes slowly — not a fixed fan"
-    why_human: "Long-horizon visual"
-  - test: "Reload with ?nowind, then ?nosmoke (D-12)"
-    expected: "?nowind kills gust lean/flap/canopy sway/smoke lateral drift (grass base sway remains — D-12 deviation from SC4's literal wording); ?nosmoke removes smoke entirely"
-    why_human: "End-to-end flag behavior in the real build; D-12 vs SC4 wording needs human sign-off (consider an override entry)"
-  - test: "FPS sanity vs pre-phase (D-13); scripts/fps_playtest.py if suspicious"
-    expected: "Unchanged frame feel, no gust-arrival hitches"
+  - test: "Flag answers gust direction + strength like the smoke does (reopened UAT 4/5/9)"
+    expected: "Flag streams the same direction smoke kinks; harder gusts swing harder; direction follows the slow wander over minutes"
+    why_human: "The one invariant UAT falsified — code fix present, wired, math-pinned, but unwitnessed"
+  - test: "Four-consumer coherence at a camp during one gust; alt-tab 30s (SC1/SC3)"
+    expected: "Flag/grass/canopy/smoke all answer the same passing gust with distinct character; no desync"
+    why_human: "Multi-system perceptual judgment"
+  - test: "?nowind limp drape (reopened UAT 6, D-12)"
+    expected: "Cloth hangs limp down the pole with faint micro-sway, never rigid horizontal; smoke drift + flag wind motion killed; grass base sway remains"
+    why_human: "Visual acceptance bar for 'hangs like cloth'"
+  - test: "Voxel cloth read (UAT 8)"
+    expected: "Chunky stepped facets, not a smooth sheet"
+    why_human: "Cosmetic perceptual call"
+  - test: "FPS sanity after shader rework (D-13)"
+    expected: "Unchanged frame feel; scripts/fps_playtest.py if suspicious"
     why_human: "Runtime performance feel"
-  - test: "View a camp flag from behind (assumption A2)"
-    expected: "Cloth not black on the back face"
-    why_human: "Known open assumption deferred to playtest; fix (grass normal-fragment borrow) only if it fails"
-  - test: "StrictMode/reconnect coherence spot-check: run the vite dev server (npm run dev, StrictMode double-mount) and confirm flags + canopies sway"
-    expected: "Flags flap and canopies sway in the dev server too — the environment where the old CR-01/CR-02 freeze always reproduced"
-    why_human: "The staleness fix is unit-test-pinned, but the full React remount path (dispose -> new wind -> rebuild) is best confirmed once in the real double-mount environment"
+  - test: "Flag back face (A2 — deferred from first UAT, now more exposed by the yaw)"
+    expected: "Cloth not black from behind"
+    why_human: "Known open assumption; fix (grass normal-fragment borrow) only if it fails"
 ---
 
-# Phase 8: Wind Core Verification Report (RE-VERIFICATION)
+# Phase 8: Wind Core Verification Report (RE-VERIFICATION after UAT gap closure)
 
 **Phase Goal:** Everything that sways in the world moves on one coherent, gusting wind
-**Verified:** 2026-07-14T08:10:00Z
+**Verified:** 2026-07-14T10:50:00Z
 **Status:** human_needed
-**Re-verification:** Yes — after gap closure (plans 08-06, 08-07; commits 7c4e9c6..cf6a382)
+**Re-verification:** Yes — third pass, after UAT (5 pass / 3 issues / 1 skip) and gap-closure plans 08-08/08-09
 
 ## Re-Verification Summary
 
-Prior report (2026-07-14T03:12Z): gaps_found, 13/20, 3 gaps. All 3 gaps re-checked against the current codebase with full 3-level verification — **all closed**, each pinned by a new RED-first regression test. All previously-passed truths regression-checked — **no regressions** (full suite 46 files / 716 tests green this session; production build exit 0). What remains is exactly the human playtest that plan 08-05's blocking checkpoint deferred: it was auto-approved in --auto mode and **has still never been run by a human**, so all four ROADMAP success criteria (all visual truths) stay behavior-unverified.
+The prior verification (08:10Z) ended human_needed; the human UAT then ran and **falsified** part of what code inspection had passed: the flag wiggled on a fixed random axis regardless of wind direction (major, tests 4/5/9), stayed a rigid horizontal quad under `?nowind` (minor, test 6), and read too plain for the voxel identity (cosmetic, test 8). Plans 08-08/08-09 closed all four flag gaps in code. This pass verified those fixes at all levels against the actual codebase — **all present, substantive, wired, and unit-pinned** — and regression-checked every previously-passed truth (full suite 46 files / 724 tests green this session; production build exit 0). What remains is exactly the reopened visual UAT: the flag's on-screen wind response was falsified once, so it must be re-witnessed, not presumed.
 
-### Gap Closure Evidence
+Positive movement from the UAT itself: SC2 (traveling gust front), the D-01 grass-unchanged gate, gust cadence, FPS, `?nowind`/`?nosmoke` bisect mechanics, and the StrictMode remount coherence fix were all **humanly confirmed passing** (UAT tests 1, 2, 3, 6-mechanics, 7, 9) — those truths are now fully closed, which is why previously behavior-unverified items 2 and part of 4 flipped to VERIFIED.
 
-**Gap 1 — CR-01/CR-02: flag + canopy materials frozen to the first game's wind — CLOSED (commit 554858a; RED test commit 7c4e9c6)**
+### Gap Closure Evidence (UAT gaps -> code, verified this session)
 
-- `src/game/world/assets/createCampFlag.ts:30-57` — module singletons replaced by a wind-guarded cache (`flagWind` identity check in `getFlagMaterials`); a different wind disposes both cached materials and lazily rebuilds them, so the cloth's `onBeforeCompile` closure captures the LIVE game's uniform objects. Shader patch and `campFlag` cache key byte-identical to before (lifetime-only change).
-- `src/game/world/assets/createCanopyTree.ts:43-49` — `initCanopyWind` now disposes every pooled material and calls `canopyMaterials.clear()` when a different wind arrives; `getCanopyMaterial` rebuilds against the new uniforms. Same-wind re-injection is a no-op (D-13 pooling preserved).
-- Regression-pinned: `windMaterialLifecycle.test.ts` (10 tests, ran green this session) covers staleness (fresh materials on new wind, for canopy AND both flag materials), orphan disposal (dispose events fire), and same-wind pooling preservation. The 08-06 SUMMARY records 4/6 lifecycle tests failing RED against the pre-fix singletons at commit 7c4e9c6 — the freeze cannot silently return.
-- `createWind` returns a fresh object literal per call (`createWind.ts:40-68`), so the `!==` identity guard reliably distinguishes game instances.
+**Gap A — flag direction-blind wiggle (UAT 4/5/9, major) — CLOSED (commits 0f67694 RED -> 90595d9/6a56540 math -> 936a87f shader)**
 
-**Gap 2 — WR-02: canopy height ramp measured from sea level — CLOSED (commit 42adcdd; RED test commit 20b5cff)**
+- Root cause (from 08-UAT.md): `uWindDir` entered the flag shader only as gust-front phase; displacement was a zero-mean sine on a random baked heading.
+- `src/game/systems/windMath.ts:159-161` — `flagSwing(strength, gust) = min(1, strength * (0.75 + 0.5 * gust))`: exact 0 at strength 0, 0.75 steady full wind, clamps to 1 at gust peak. `flagSwingGlsl` (:212-214) renders the identical closed form from the same FLAG constants through `f()` 4-decimal literals — no drift path.
+- `src/game/world/assets/createCampFlag.ts:139-152` — begin_vertex patch recovers the baked world heading from `modelMatrix[0].xz` (build-time bake is a pure y-rotation, so exact), computes the signed angle to `uWindDir` via dot + 2D cross recovered with `atan(sinA, cosA)`, and yaws the vertex offset about the pole hinge scaled by `flagSwingGlsl('uWindStrength','gust')` with a `(0.7 + 0.3*along)` free-end-leads ease. Sign convention checked by hand: `sinA = h.z*w.x - h.x*w.z` matches the applied rotation matrix (`x' = x cos + z sin; z' = -x sin + z cos`) — the yaw rotates the heading toward the wind, self-consistent.
+- Zero new uniforms (only `uTime/uWindDir/uWindStrength`, :87-89); pooled `campFlag` cache key intact (:157); wind-guarded material cache untouched (:67-73).
+- Unit-pinned: windMath.test.ts:191-221 (strength-0 exact zero, monotonicity both args, `flagSwing(1,1) > flagSwing(1,0)` — gusts increase alignment) and :282-289 (GLSL expression pinned verbatim). RED-first: test commit 0f67694 (6 observed failures per 08-08 SUMMARY) precedes feat 90595d9 in git log — confirmed.
 
-- `src/game/world/assets/createCanopyTree.ts:143-148` — each cap bakes `aTreeHeight = layerHeight + localY * CAP_SCALE_Y` (height above the TREE base) into a per-vertex attribute; `CAP_SCALE_Y = 0.55` (line 20) is the single source for both `cap.scale.y` (line 154) and the bake, so baked heights equal rendered heights (Y-only cap rotation is height-invariant; the group carries no scale; `placeAsset` only translates).
-- Shader (lines 86, 100): `attribute float aTreeHeight;` declared; `heightWeight = clamp((aTreeHeight - 2.0000) * 0.2000, 0.0, 1.0)` — no non-comment `canopyWorld.y` read remains in the ramp; `canopyWorld` survives solely for the wind-direction projection. Hill and valley trees now get identical weights; cap bottoms (~0.8u above base, below swayBaseY 2.0) stay near the trunk while tops ramp to 1.
-- CANOPY constants untouched (`windMath.ts:76-77` — swayBaseY 2.0, invSwaySpan 0.2; doc comment corrected, IN-02 "byte-for-byte" claim softened at :158).
-- Regression-pinned: 4 aTreeHeight tests (attribute shape, span > 1, layer ordering, determinism) in `windMaterialLifecycle.test.ts:105-163`, green.
+**Gap B — rigid horizontal quad under ?nowind (UAT 6, minor) — CLOSED (same commit chain)**
 
-**Gap 3 — WR-01: smoke never disposed by createGame — CLOSED (commit b0fcdb7)**
+- Root cause: rest geometry was the strong-wind pose and ALL motion was multiplied by `uWindStrength`.
+- `windMath.ts:168-170` — `flagDrape(strength, gust) = 1 - min(1, strength * (0.7 + 0.25 * gust))`: exactly 1 at strength 0 (full limp, D-12), 0.05 at full gust (essentially taut, D-04). `flagDrapeGlsl` (:221-223) mirrors it exactly.
+- `createCampFlag.ts:125-132` — drape pitches vertices down about the pole edge (`transformed.y -= alongQ * width * sin(pitch)`, `transformed.x *= cos(pitch)`, pitch = drape × 1.45 rad); the limp micro-sway (`sin(uTime * 0.9) * 0.03 * drape * alongQ`) is gated on DRAPE, verifiably NOT on `uWindStrength` — the flag never freezes rigid at strength 0. Ripple flap + taut pull stay ×uWindStrength and correctly die at 0 (:114-119).
+- Unit-pinned: windMath.test.ts:224-253 (`flagDrape(0,g) === 1` exact, monotone non-increasing, `flagDrape(1,1) <= 0.15`).
 
-- `src/game/createGame.ts:1502` — `smokeColumns?.dispose();` sits in the dispose block between `debrisSystem?.dispose()` (:1501) and `lightPool?.dispose()` (:1503), matching the optional-system teardown pattern, and runs before `world.dispose()`/renderer teardown.
-- `src/game/systems/createSmokeColumns.ts:201-208` — dispose now also calls `mesh.dispose()`, which releases the instanceMatrix/instanceColor GPU buffers that geometry+material disposal alone do not free.
-- Bonus (IN-01 cleared): the dead per-puff `fireIndex` field is gone from the interface, pool initializer, and `spawnPuff` — zero non-comment occurrences remain.
+**Gap C — plain cloth vs voxel identity (UAT 8, cosmetic) — CLOSED (commit 8047e97)**
 
-**Warning WR-03 (flag missing from asset invariants suite) — also CLOSED (commit ce74406):** `assets.test.ts:27-28,44` hoists `const testWind = createWind(true)` and adds `createCampFlag: { create: random => createCampFlag(random, testWind), climbable: false }` to FACTORIES; the "every factory exported from assets/index.ts" doc claim is true again; the flag passes the group-shape/determinism/non-climbable checks (39 tests green).
+- `createCampFlag.ts:24` — `CLOTH_BANDS = 6` documented as an ART constant deliberately kept out of windMath (boundary noted in the comment); `:109` floor-quantizes `along` for the ripple/drape terms while the yaw stays on raw `along` (stepped yaw would read as tearing — per plan); `:83` `flatShading: true` gives faceted fragment-derivative normals for free; `:168` plane segmentation 12x4 (two columns per band, 65 verts — within D-13's "tens of vertices").
+
+**Gap D — beige "grass" blades (UAT 4, cosmetic) — DISPOSITIONED OUT OF PHASE (commit cf8c361)**
+
+- UAT root-caused this as PRE-EXISTING art (flower blades, `FLOWER_COLOR 0xfff0a8` in grassPlacement.ts:41 — predates phase 8, not introduced by it). Captured as `.planning/todos/pending/flower-blade-color-art-pass.md`. Not a phase-8 gap; correctly not in scope for closure here.
 
 ## Goal Achievement
 
@@ -102,68 +104,66 @@ Prior report (2026-07-14T03:12Z): gaps_found, 13/20, 3 gaps. All 3 gaps re-check
 
 | #   | Truth | Status | Evidence |
 | --- | ----- | ------ | -------- |
-| 1 | All four consumers sway from ONE shared wind phase, no drift (SC1) | ✓ VERIFIED | Wind-scoped material caches close CR-01/CR-02; a second game's flags/canopies bind to ITS wind (behaviorally tested — windMaterialLifecycle 10/10 green); all four consumers share the same uniform objects by reference; on-screen coherence read remains in human item 4 |
-| 2 | Gusts visibly TRAVEL across the field (SC2) | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Retarded-time front unit-tested (rigid translation); gustGlsl wired into grass shader; on-screen read needs human (playtest never run) |
-| 3 | Per-consumer character on shared phase (SC3) | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | FLAG.freq(4.25) > SWAY.f1(1.7) > CANOPY.freq(0.68) unit-tested; all consumers wired and now lifetime-correct; visual character needs human |
-| 4 | Grass looks unchanged + ?nowind bisect flag (SC4) | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Arithmetic identity verified (`gustGainFactor(0,g)===1` tested); ?nowind uniform-driven (`createGame.ts:311-313` unchanged); "looks unchanged" is the locked D-01 human gate; D-12 deviation from SC4's literal "kills all sway" still needs human sign-off |
-| 5 | gustEnvelope stays in [0,1], rests near 0 | ✓ VERIFIED | windMath.test.ts green in this session's full run (716/716) |
-| 6 | Gust peaks every 30-60s, non-metronomic | ✓ VERIFIED | Cadence test green (regression check via full run) |
-| 7 | Gust front translates rigidly at GUST.speed | ✓ VERIFIED | Translation-invariance test green |
-| 8 | windAngle deterministic, bounded wander | ✓ VERIFIED | Determinism + rate tests green |
-| 9 | Nine grass sway constants byte-identical to prior literals | ✓ VERIFIED | Exact-value pins green; SWAY values untouched by gap closure (comment-only windMath edits; swayBaseY 2.0 / invSwaySpan 0.2 confirmed at :76-77) |
-| 10 | Exactly ONE wind clock; grass private accumulator gone | ✓ VERIFIED | Regression grep: `wind.update(` appears once in game code (`createGame.ts:1325`); other hits are tests/comments |
-| 11 | Between-gust grass sway arithmetically identical to pre-phase | ✓ VERIFIED | Multiplicative gust term unchanged; envelope rests at 0 → factor exactly 1.0 |
-| 12 | ?nowind zeroes strength uniform, no recompile | ✓ VERIFIED | `createWind(false)` test green; flag wiring confirmed unchanged (`createGame.ts:311-313`) |
-| 13 | wind.getGustEnvelope() 0..1 — Phase 10 audio contract | ✓ VERIFIED | Delegation-equality test green (createWind.test.ts in full run) |
-| 14 | Canopy sway height-weighted — tops move most | ✓ VERIFIED | WR-02 closed: per-vertex `aTreeHeight` ramp (tree-local, terrain-independent), bake math = render math via shared CAP_SCALE_Y; 4 behavioral tests pin attribute shape/span/layer-ordering/determinism; on-screen subtlety folded into human item 4 |
-| 15 | Every camp has a flag whose cloth ripples with a phase gradient, faster than grass | ✓ VERIFIED | Ripple math + one `placeAroundCamp(createCampFlag...)` per camp unchanged; CR-01 closed so the cloth binds to the live wind on every instance; flag now also passes the shared invariants suite (WR-03) |
-| 16 | Pooled materials: 4 canopy caps + 1 cloth | ✓ VERIFIED | Pooling now scoped per wind lifetime (the correct lifetime): 4 canopy + 1 cloth + 1 pole per wind, same-wind reuse behaviorally pinned (windMaterialLifecycle same-wind tests) |
-| 17 | No updateMatrixWorld — sway is vertex-shader displacement only | ✓ VERIFIED | Gap fixes are lifetime/bake-only; neither canopy nor flag registers in any update loop; distinct cache keys grassField/canopySway/campFlag intact |
-| 18 | Smoke puffs rise, drift downwind, kink at gust fronts near player | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Pipeline wired (live uniform reads, spawn/recycle); runtime instanced-mesh state pipeline still has no test — human item |
-| 19 | ?nosmoke skips construction entirely; opaque stepped fade; fixed 48-slot pool | ✓ VERIFIED | Conditional construction confirmed (`createGame.ts:358-360`); update loop untouched by 08-07 (dispose + dead-state removal only) |
-| 20 | Full test suite and production build green with all consumers wired | ✓ VERIFIED | Ran this session: `pnpm vitest run` — 46 files / 716 tests passed (703 prior + 13 new: 10 lifecycle + 3 flag-factory cases); `pnpm build` exit 0 (pre-existing >500kB chunk warning only) |
+| 1 | SC1: all four consumers sway from ONE shared wind phase, no drift — including the flag actually ANSWERING gusts | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Shared clock/uniforms + lifetime caches code-verified and regression-checked; the flag half of on-screen coherence was UAT-falsified once, fix present+wired+math-pinned but unwitnessed — human item 2 |
+| 2 | SC2: gusts visibly TRAVEL across the field as a moving wave | ✓ VERIFIED | Retarded-time front unit-tested (rigid translation) AND humanly confirmed — UAT test 2 PASS 2026-07-14 |
+| 3 | SC3: per-consumer character on the shared phase (flags faster, smoke lateral, canopies low/slow) | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Canopy + smoke character humanly observed OK; flag character was the UAT failure — reworked (direction-following swing + drape), re-witness pending — human items 1/2 |
+| 4 | SC4: grass unchanged after uTime extraction; ?nowind kills wind-driven sway for bisecting | ✓ VERIFIED | UAT test 1 PASS (grass at rest identical — D-01 gate humanly closed); UAT test 6: bisect mechanics PASS (?nowind kills smoke drift + flag wind motion; grass base sway remains per locked D-12 — deviation from SC4's literal wording de-facto accepted in the UAT note); the NEW limp-drape pose under ?nowind is truth 11 |
+| 5 | flagSwing contracts: exact 0 at strength 0, monotone, gusts increase alignment, clamped | ✓ VERIFIED | windMath.test.ts:191-221 green (21/21 file, in full run this session) |
+| 6 | flagDrape contracts: exactly 1 at strength 0 (?nowind full drape), gust leaves <=0.15 | ✓ VERIFIED | windMath.test.ts:224-253 green |
+| 7 | GLSL generators render EXACTLY the JS closed forms from the same FLAG constants (no drift path) | ✓ VERIFIED | flagSwingGlsl/flagDrapeGlsl expression-pinning tests :282-297 green; both built through the same f() 4-decimal path as gustGlsl |
+| 8 | gustGainFactor + SWAY/GUST/WANDER/CANOPY + existing FLAG values untouched (D-01 hard gate) | ✓ VERIFIED | git diff across 08-08: 0 deletions in windMath.ts (purely additive — verified via git show 90595d9/6a56540 stats); SWAY literals :18-28 unchanged; gustGainFactor :149-151 unchanged; strength-0-returns-1 test green |
+| 9 | Flag cloth swings/streams toward uWindDir in-shader, free end leads, zero new uniforms | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Yaw term present (:139-152), consumes flagSwingGlsl (grep-confirmed, no locally re-derived pose math), sign convention self-consistent; on-screen direction match vs smoke is human item 1 |
+| 10 | Gusts snap the flag further downwind on the SAME traveling gust envelope the smoke reads | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Same gustGlsl retarded-time value feeds both the flap amplitude and the swing blend (:111, :145); flagSwing(1,1)>flagSwing(1,0) unit-tested; visible synchrony with smoke = human item 1 |
+| 11 | ?nowind / lulls: cloth hangs limp with drape-gated micro-sway, never a rigid horizontal quad | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Drape pitch + micro-sway present (:125-132), micro-sway verifiably NOT gated on uWindStrength, flagDrape(0,g)===1 exact; "hangs like cloth" is the user's visual bar — human item 3 |
+| 12 | Cloth reads chunky/voxel-stepped (faceted bands) matching the art identity | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | CLOTH_BANDS quantization + flatShading + 12x4 segmentation present; perceptual read = human item 4 |
+| 13 | Constraints intact: zero new uniforms, pooled 'campFlag' key, frozen matrix, castShadow false, no per-frame CPU | ✓ VERIFIED | Uniforms exactly uTime/uWindDir/uWindStrength (:87-89); cache key :157; build-time rotation.y only (:206), no update-loop registration; cloth.castShadow false (:198); file 209 total lines, under 300 functional LOC |
+| 14 | CR-01/CR-02 lifecycle + assets invariant suites unchanged in meaning and green | ✓ VERIFIED | 08-09 modified ONLY createCampFlag.ts (git stat: 936a87f, 8047e97 touch 1 file) — zero test files edited; windMaterialLifecycle 10/10, assets 39/39 green this session |
+| 15 | Regression: exactly ONE wind clock | ✓ VERIFIED | `wind.update(` once in game code (createGame.ts:1325); other hit is a comment |
+| 16 | Regression: canopy tree-local aTreeHeight ramp intact | ✓ VERIFIED | Bake :148, attribute decl :86, heightWeight ramp :100 in createCanopyTree.ts — untouched by 08-08/09 |
+| 17 | Regression: smoke update + dispose wiring intact | ✓ VERIFIED | smokeColumns?.update :1345, smokeColumns?.dispose :1502 in createGame.ts |
+| 18 | Regression: world builder threads wind — initCanopyWind + one flag per camp | ✓ VERIFIED | createMondstadtWorld.ts:391 (initCanopyWind), :429 (placeAroundCamp(createCampFlag(campRandom, options.wind), 5.5)) |
+| 19 | Full test suite + production build green with the rework in | ✓ VERIFIED | Ran this session: `pnpm vitest run` 46 files / 724 tests pass (716 prior + 8 new flag-pose contracts); `pnpm build` exit 0 (pre-existing >500kB chunk warning only) |
+| 20 | All UAT gaps dispositioned — three closed in code, pre-existing cosmetic captured as todo | ✓ VERIFIED | Gaps A/B/C closed per evidence above; Gap D (flower blades, pre-existing) captured at .planning/todos/pending/flower-blade-color-art-pass.md (commit cf8c361) |
 
-**Score:** 16/20 truths verified (4 present, behavior-unverified; 0 failed)
+**Score:** 14/20 truths verified (6 present, behavior-unverified; 0 failed)
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 | -------- | -------- | ------ | ------- |
-| `src/game/systems/windMath.ts` | Pure helper, constants + GLSL generators | ✓ VERIFIED | Comment-only edits in gap closure; constants unchanged |
-| `src/game/systems/createWind.ts` | Wind factory, fresh object per call | ✓ VERIFIED | Unchanged; per-call object literal makes the `!==` cache guards sound |
-| `src/game/world/createGrassField.ts` | Consumes options.wind | ✓ VERIFIED | Untouched by gap closure; regression via full suite |
-| `src/game/world/assets/createCanopyTree.ts` | Wind-scoped pooled cap materials + tree-local sway ramp | ✓ VERIFIED | Pool invalidation in initCanopyWind (:43-49); aTreeHeight bake (:143-148) + shader ramp (:100); was HOLLOW-on-instance-#2, now lifetime-correct and test-pinned |
-| `src/game/world/assets/createCampFlag.ts` | Wind-guarded material cache, campFlag key, DoubleSide cloth | ✓ VERIFIED | getFlagMaterials wind guard (:46-57); shader patch + cache key untouched; was HOLLOW-on-instance-#2, now lifetime-correct and test-pinned |
-| `src/game/world/assets/__tests__/windMaterialLifecycle.test.ts` | NEW regression suite for CR-01/CR-02/WR-02 | ✓ VERIFIED | 10 tests, ran green this session; RED phase recorded in 08-06 SUMMARY at commits 7c4e9c6/20b5cff |
-| `src/game/world/assets/__tests__/assets.test.ts` | createCampFlag in FACTORIES table | ✓ VERIFIED | testWind hoisted (:27), flag entry (:44); 39 tests green |
-| `src/game/systems/createSmokeColumns.ts` | Complete dispose, no dead state | ✓ VERIFIED | mesh.dispose() added (:207); fireIndex gone (zero non-comment occurrences) |
-| `src/game/createGame.ts` | smoke teardown wired into dispose() | ✓ VERIFIED | `smokeColumns?.dispose()` at :1502, adjacent to debrisSystem/lightPool teardown, before world/renderer disposal |
-| `src/game/world/createMondstadtWorld.ts` | wind threaded; initCanopyWind + one flag per camp | ✓ VERIFIED | Untouched by gap closure; regression via full suite |
+| `src/game/systems/windMath.ts` | FLAG pose constants + flagSwing/flagDrape mirrors + flagSwingGlsl/flagDrapeGlsl generators, zero imports | ✓ VERIFIED | 7 new FLAG keys (:97-110), mirrors (:159-170), generators (:212-223); zero imports; purely additive vs prior state |
+| `src/game/systems/__tests__/windMath.test.ts` | Contract tests for the new helpers | ✓ VERIFIED | 8 new tests (swing/drape contracts + expression pinning); 21/21 green; pre-existing tests unmodified (git: additions only) |
+| `src/game/world/assets/createCampFlag.ts` | Directional swing + drape + voxel-stepped cloth in begin_vertex + geometry | ✓ VERIFIED | Yaw :139-152, drape :125-132, quantization :109, flatShading :83, 12x4 geometry :168; consumes windMath generators (no duplicated pose math) |
+| `src/game/world/assets/__tests__/windMaterialLifecycle.test.ts` | Unchanged in meaning (CR-01/CR-02 semantics) | ✓ VERIFIED | Not modified by 08-09 (git stat); 10/10 green |
+| `src/game/world/assets/__tests__/assets.test.ts` | Unchanged in meaning (flag invariants) | ✓ VERIFIED | Not modified by 08-09; 39/39 green |
+
+(All phase-8 artifacts from plans 08-01..08-07 regression-verified in the prior pass and spot-rechecked above — truths 15-18.)
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | ---- | -- | --- | ------ | ------- |
-| createGame frame() | wind.update(deltaSeconds) | only clock advance | ✓ WIRED | Single occurrence (`createGame.ts:1325`) |
-| wind uniform objects | grass shader uniforms | by-reference assignment | ✓ WIRED | Unchanged |
-| wind uniform objects | canopy + flag shader uniforms | by-reference in onBeforeCompile, per wind lifetime | ✓ WIRED | Was PARTIAL (bound to first game's wind forever); now caches are keyed on the wind instance — rebuild on new wind is behaviorally tested |
-| initCanopyWind(newWind) | canopyMaterials pool cleared + orphans disposed | identity guard | ✓ WIRED | `createCanopyTree.ts:43-49`; dispose events asserted in test |
-| createCampFlag(random, wind) | wind-guarded material cache | getFlagMaterials | ✓ WIRED | `createCampFlag.ts:46-57`; rebuild + disposal asserted in test |
-| cap geometry aTreeHeight attribute | shader heightWeight ramp | BufferAttribute → attribute read | ✓ WIRED | Bake :148, GLSL declaration :86, ramp :100; no world-Y read remains |
-| createMondstadtWorld camp loop | placeAroundCamp(createCampFlag(...)) | decoration loop | ✓ WIRED | Unchanged |
-| wind.sampleGust + directionUniform | per-puff CPU drift | live reads each frame | ✓ WIRED | Unchanged |
-| createGame frame() | smokeColumns?.update(...) | after wind.update | ✓ WIRED | :1345, ordering intact |
-| createGame dispose() | smokeColumns.dispose() | teardown chain | ✓ WIRED | Was NOT_WIRED (WR-01); now :1502, and dispose releases mesh + geometry + material + instance buffers |
+| FLAG pose constants | flagSwing/flagDrape JS mirrors AND GLSL generators | same constants through f() | ✓ WIRED | Single source; expression-pinning tests forbid drift |
+| windMath flagSwingGlsl/flagDrapeGlsl | createCampFlag begin_vertex patch | template interpolation :125, :145 | ✓ WIRED | grep-confirmed both consumed; import at :3 |
+| wind.directionUniform | vertex DISPLACEMENT yaw (not just gust phase) | uWindDir in atan + rotation :140-152 | ✓ WIRED | The exact coupling the UAT found missing — now present |
+| modelMatrix[0].xz baked heading | in-shader per-flag variation on a pooled material | normalize(modelMatrix[0].xz) :139 | ✓ WIRED | Zero new uniforms/attributes; build-time rotation.y bake :206 feeds it |
+| gustGlsl retarded-time value | both flap amplitude AND swing blend | `gust` local :111 -> :116, :145 | ✓ WIRED | Flag answers the same traveling front as grass/smoke (WIND-01) |
+| createGame frame() | wind.update(deltaSeconds) | single clock advance | ✓ WIRED | createGame.ts:1325, sole occurrence |
+| ?nowind flag | strengthUniform zeroing (no recompile) | perfFlags :311 | ✓ WIRED | Unchanged; drape now gives the windless pose meaning |
+| createMondstadtWorld camp loop | createCampFlag(campRandom, options.wind) | placeAroundCamp :429 | ✓ WIRED | Unchanged |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | -------- | ------- | ------ | ------ |
-| Material staleness across game re-creation (the prior report's failing spot-check) | `pnpm vitest run src/game/world/assets/__tests__/windMaterialLifecycle.test.ts` | 10/10 pass (staleness, orphan disposal, same-wind pooling, aTreeHeight invariants) | ✓ PASS |
-| Flag through shared asset invariants | `pnpm vitest run src/game/world/assets/__tests__/assets.test.ts` | 39/39 pass (flag: shape, determinism, non-climbable) | ✓ PASS |
-| Full suite regression (once) | `pnpm vitest run` | 46 files / 716 tests pass | ✓ PASS |
-| Production build | `pnpm build` | exit 0, built in 5.96s (pre-existing chunk-size warning only) | ✓ PASS |
-| TDD RED-first evidence | git log 7c4e9c6..cf6a382 | test commits 7c4e9c6 (lifecycle) and 20b5cff (aTreeHeight) precede fix commits 554858a and 42adcdd; 08-06 SUMMARY records observed RED failures | ✓ PASS |
+| Full suite regression (once, saved output) | `pnpm vitest run` | 46 files / 724 tests pass, exit 0 | ✓ PASS |
+| Flag pose contracts + generator pinning | windMath.test.ts (from saved run) | 21 tests pass | ✓ PASS |
+| CR-01/CR-02 lifecycle regression | windMaterialLifecycle.test.ts (from saved run) | 10 tests pass | ✓ PASS |
+| Flag through shared asset invariants | assets.test.ts (from saved run) | 39 tests pass | ✓ PASS |
+| Production build (shader template assembly TS-checked) | `pnpm build` | exit 0, built in 5.74s (pre-existing chunk-size warning only) | ✓ PASS |
+| TDD RED-first evidence (08-08) | git log order | test 0f67694 precedes feat 90595d9/6a56540; 08-08 SUMMARY records 6 observed RED failures | ✓ PASS |
+| Commit integrity | git show 0f67694 90595d9 6a56540 936a87f 8047e97 | all exist; file stats match SUMMARY claims (08-09 touched only createCampFlag.ts) | ✓ PASS |
+| Yaw sign-convention consistency | manual derivation | sinA = h.z·w.x − h.x·w.z matches the applied rotation matrix convention — rotation moves heading toward wind, not away | ✓ PASS |
 
 ### Probe Execution
 
@@ -171,61 +171,50 @@ No `scripts/*/tests/probe-*.sh` probes exist in this project and none are declar
 
 ### Requirements Coverage
 
-| Requirement | Source Plan | Description | Status | Evidence |
-| ----------- | ----------- | ----------- | ------ | -------- |
-| WIND-01 | 08-01..08-07 | All four consumers sway from ONE shared wind module; grass unchanged after uTime extraction | ? NEEDS HUMAN | Code-side fully satisfied and regression-pinned (CR-01/CR-02 closed); "grass unchanged" (D-01) and on-screen coherence remain the unrun human gate |
-| WIND-02 | 08-01, 08-02, 08-05, 08-06 | Gusts visibly travel (spatial phase offset) | ? NEEDS HUMAN | Math unit-tested (rigid front), shader wired; "visibly" is playtest item 2 |
-| WIND-03 | 08-01, 08-03, 08-04, 08-05..08-07 | Per-consumer character: flags faster, smoke lateral drift, canopies low/slow | ? NEEDS HUMAN | Constants, wiring, and now lifetime + tree-base ramp all verified; perceptual character is playtest item 4 |
+| Requirement | Source Plans | Description | Status | Evidence |
+| ----------- | ------------ | ----------- | ------ | -------- |
+| WIND-01 | 08-01..08-09 | All four consumers on ONE shared wind module; grass unchanged after uTime extraction | ? NEEDS HUMAN | Code fully satisfied (single clock, shared uniforms, single-sourced pose math, D-01 gate humanly passed in UAT test 1); flag-coherence half reopened by UAT 4/5/9 — fix in code, re-witness pending |
+| WIND-02 | 08-01, 08-02, 08-05, 08-06 | Gusts visibly travel (spatial phase offset) | ✓ SATISFIED | Unit-tested rigid front AND humanly confirmed — UAT test 2 PASS |
+| WIND-03 | 08-01, 08-03, 08-04, 08-05..08-09 | Per-consumer character: flags faster, smoke lateral, canopies low/slow | ? NEEDS HUMAN | Canopy/smoke character humanly observed; flag character reworked (direction + drape) after UAT failure — re-witness pending |
 
-No orphaned requirements: REQUIREMENTS.md maps exactly WIND-01/02/03 to Phase 8 and all three appear in plan frontmatter (gap plans 08-06/08-07 included). NOTE (carried forward): REQUIREMENTS.md marks all three `[x] Complete` — still premature until the human playtest closes the visual criteria.
+No orphaned requirements: REQUIREMENTS.md maps exactly WIND-01/02/03 to Phase 8 and all three appear across plan frontmatter (gap plans 08-08/08-09 declare [WIND-01, WIND-03]). NOTE (carried forward): REQUIREMENTS.md marks all three `[x] Complete` — still premature for WIND-01/WIND-03 until the reopened UAT items pass.
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 | ---- | ---- | ------- | -------- | ------ |
-| src/game/createGame.ts | (whole file) | 1,983-line monolith vs CLAUDE.md ≤300 LOC rule | ℹ️ Info | IN-03 — explicitly declined in gap-closure scope; recorded debt (next touch: extract createAmbiance) |
-| windMath.ts:139-141, createCampFlag.ts:17, createCanopyTree.ts:14 | — | GLSL float-literal helper `f()` duplicated in three files | ℹ️ Info | IN-04 — trivial DRY nit from re-review; export from windMath next touch |
+| src/game/createGame.ts | (whole file) | ~2,000-line monolith vs CLAUDE.md <=300 LOC rule | ℹ️ Info | IN-03 carried forward — untouched by gap closure; recorded debt (next touch: extract createAmbiance) |
+| windMath.ts:176-178, createCampFlag.ts:27, createCanopyTree.ts | — | GLSL float-literal helper `f()` still duplicated across three files | ℹ️ Info | IN-04 carried forward — 08-08/08-09 did not consolidate; export from windMath on next touch |
 
-All prior blockers (CR-01, CR-02) and warnings (WR-01, WR-02, WR-03) resolved and verified against code. No TBD/FIXME/XXX/TODO/HACK/placeholder markers in any phase-modified file (scanned this session).
+No TBD/FIXME/XXX/TODO/HACK/placeholder markers in any file modified by plans 08-08/08-09 (scanned this session). No stub patterns: every new constant/helper flows into the shader patch; no hardcoded-empty or console-only implementations.
 
 ### Human Verification Required
 
-**The Plan 08-05 blocking playtest checkpoint has STILL not been run by a human** — it was auto-approved in --auto mode. All code-level gaps are now closed, so this checklist is the only remaining gate. Run against the laragon-served `dist/` build; item 9 additionally uses the vite dev server (the StrictMode environment where the old freeze reproduced).
+All code-level work is done and pinned; the remaining gate is the **reopened UAT** — specifically the flag items UAT falsified plus the ride-along checks. Run against the laragon-served `dist/` build.
 
-### 1. Grass unchanged between gusts (D-01 hard gate)
-**Test:** Watch grass at rest between gusts. **Expected:** Identical feel to the pre-phase build. **Why human:** Locked visual contract.
+### 1. Flag answers gust direction + strength (reopened UAT 4/5/9)
+**Test:** Visit a camp during a gust; compare the flag's swing to the fireplace smoke's kink; watch several minutes for the wander. **Expected:** Flag streams the SAME direction smoke drifts; harder gusts swing harder; pointing direction follows the slow wander, not one fixed axis. **Why human:** This exact invariant was falsified once by UAT; the fix is present, wired, and math-pinned but unwitnessed.
 
-### 2. Gust travels as a front (WIND-02/D-03)
-**Test:** Watch a wide field for ~60s. **Expected:** Broad front sweeps across over ~3-5s; near blades lean first. **Why human:** GPU visual read.
+### 2. Four-consumer coherence (SC1/SC3)
+**Test:** Same camp visit — flag vs grass vs canopy vs smoke through one gust; alt-tab 30s and return. **Expected:** All four answer the same passing gust with distinct character; no desync. **Why human:** Multi-system perceptual judgment.
 
-### 3. Gust strength + cadence (D-04/D-02)
-**Test:** ~3 minutes of observation. **Expected:** Peak lean ~2-3x base, telegraphs readable; gusts every 30-60s, never on a beat. **Why human:** Perceptual timing/intensity.
+### 3. ?nowind limp drape (reopened UAT 6, D-12)
+**Test:** Reload with `?nowind`; look at a camp flag. **Expected:** Cloth hangs limp down the pole (stepped voxel hang, ~83 degrees) with a faint lazy micro-sway — never a rigid horizontal quad; smoke drift and flag wind motion killed; grass base sway remains (D-12). **Why human:** "Hangs like cloth" is the user's visual acceptance bar.
 
-### 4. Per-consumer character + coherence (WIND-03/WIND-01)
-**Test:** Visit a camp during a gust; alt-tab 30s and return. **Expected:** Flag faster, canopy slower/subtler with rigid trunk and tops moving most, smoke drifts as it rises; all respond to the same passing gust; no desync. **Why human:** Multi-system perceptual judgment.
+### 4. Voxel cloth read (UAT 8)
+**Test:** Look at a flag up close, moving and at rest. **Expected:** Chunky flat-shaded stepped bands, not a smooth sheet. **Why human:** Cosmetic perceptual call.
 
-### 5. Wander (D-05)
-**Test:** Several minutes. **Expected:** Drift/travel direction changes slowly — not a fixed fan. **Why human:** Long-horizon visual.
+### 5. FPS sanity (D-13)
+**Test:** Frame feel near camps vs pre-rework; `scripts/fps_playtest.py` if suspicious. **Expected:** Unchanged — the patch adds atan + two rotations across ~65 verts per flag. **Why human:** Runtime performance feel.
 
-### 6. ?nowind / ?nosmoke (D-12)
-**Test:** Reload with each flag. **Expected:** ?nowind kills gust lean/flap/canopy sway/smoke lateral drift (grass base sway remains — D-12 deviation from SC4's literal wording); ?nosmoke removes smoke entirely. **Why human:** End-to-end flag behavior; D-12 vs SC4 wording needs sign-off (consider an override entry).
-
-### 7. FPS sanity (D-13)
-**Test:** Compare frame feel vs pre-phase; `scripts/fps_playtest.py` if suspicious. **Expected:** Unchanged, no gust-arrival hitches. **Why human:** Runtime performance feel.
-
-### 8. Flag back face (assumption A2)
-**Test:** View a flag from behind. **Expected:** Cloth not black on the back face. **Why human:** Known open assumption; fix (grass normal-fragment borrow) only if it fails.
-
-### 9. StrictMode remount coherence (CR-01/CR-02 fix, end-to-end)
-**Test:** Open the vite dev server (`npm run dev`, StrictMode double-mount) and confirm flags flap + canopies sway. **Expected:** Both animate — this environment previously froze them 100% of the time. **Why human:** The rebuild path is unit-test-pinned, but one look in the real double-mount environment closes it end-to-end.
+### 6. Flag back face (A2 — now more exposed)
+**Test:** Watch a flag as the wander swings the wind around (the yaw can now flip the cloth relative to the fixed camera). **Expected:** DoubleSide cloth not black from behind. **Why human:** Deferred from the first UAT (camera couldn't reach it); the downwind yaw makes it reachable now. Fix (grass normal-fragment borrow) only if it fails.
 
 ### Gaps Summary
 
-No code gaps remain. All three gaps from the initial verification were closed by plans 08-06/08-07 (commits 7c4e9c6..cf6a382) and verified directly against the codebase — not from SUMMARY claims: the wind-scoped material caches are identity-sound and dispose their orphans, the canopy ramp is terrain-independent with bake math matching render math, and the smoke teardown chain is wired and complete. Each fix is guarded by RED-first regression tests (13 new tests; full suite 716/716 green; build green). The re-review (08-REVIEW.md) independently confirms resolution, leaving only two info-level debts (IN-03 monolith, IN-04 helper duplication).
-
-The phase's remaining exposure is singular: all four ROADMAP success criteria are visual truths, and the human playtest that plan 08-05 gated on was auto-approved, never run. Until a human walks the 9-item checklist above (via `/gsd-verify-work`), the phase goal — "everything that sways moves on one coherent, gusting wind" — is proven in math, wiring, and lifetime, but not on screen.
+No code gaps. All three phase-scoped UAT gaps (flag direction response — major; windless limp drape — minor; voxel cloth — cosmetic) are closed in the codebase with single-sourced, unit-pinned math (8 new contract tests, RED-first), zero new uniforms, and all pooling/frozen-matrix constraints intact; the fourth UAT finding (beige flower blades) was root-caused as pre-existing art outside phase 8 and captured as a pending todo (commit cf8c361). The full suite (724 tests) and production build are green. The phase cannot be marked passed because the flag's wind response is a behavior UAT has already falsified once — the six behavior-unverified truths above must be closed by the reopened human UAT (items 1-6), after which WIND-01 and WIND-03 can be considered humanly satisfied and REQUIREMENTS.md's `Complete` marks become accurate.
 
 ---
 
-_Verified: 2026-07-14T08:10:00Z_
+_Verified: 2026-07-14T10:50:00Z_
 _Verifier: Claude (gsd-verifier)_
