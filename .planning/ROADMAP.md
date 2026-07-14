@@ -134,11 +134,13 @@ rather than discard them.
   3. The shadow-map basis recomputes per-frame from the moving sun WITH texel-snapping — no shadow shimmer/crawl under the pixel filter, and no FPS regression during a golem-class fight (`scripts/fps_playtest.py`)
   4. A reduce-motion / `?nomovingsun` path pins the sun to a fixed high-noon key — i.e. falls back to Phase 9's frozen-sun behavior exactly
 
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
 
-- [ ] TBD (run /gsd-plan-phase 09.1 to break down)
+- [ ] 09.1-01-PLAN.md — Pure-twin sun-arc math + vitest (sunDir/SUN_ARC/buildSunBasis; floor/continuity/asymmetry/noon-peak) [Wave 1]
+- [ ] 09.1-02-PLAN.md — Renderer wiring: per-frame basis rebuild + setSunDirection channel + ?nomovingsun/reduce-motion freeze + comment rewrites [Wave 2]
+- [ ] 09.1-03-PLAN.md — Golem-fight FPS gate + crawl/midday-A/B/LAN-sync human verification [Wave 3]
 
 ### Phase 10: Ambient Audio & Music
 
