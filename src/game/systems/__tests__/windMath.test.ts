@@ -252,6 +252,17 @@ describe('flagDrape limp-hang weight (D-12 ?nowind contract, D-04 gust taut)', (
     expect(flagDrape(1, 1)).toBeGreaterThanOrEqual(0);
     expect(flagDrape(1, 1)).toBeLessThanOrEqual(0.15);
   });
+
+  it('droops in the lull and lifts under a gust at full strength', () => {
+    // Gap 1 (UAT round 2, test 3): in normal play uWindStrength is pinned at 1,
+    // so the lull state (gust ~0) MUST be the droop — the continuous in-shader
+    // gust envelope, not a constant baseline, drives the lift. A dead-calm full
+    // strength cloth is a strong droop, at least 0.6 (was a near-horizontal 0.30).
+    expect(flagDrape(1, 0)).toBeGreaterThanOrEqual(0.6);
+    // The lull-to-full-gust swing is large: calm droops, a passing gust lifts it
+    // toward taut. Big span = the gust envelope owns the pose, not a baseline.
+    expect(flagDrape(1, 0) - flagDrape(1, 1)).toBeGreaterThanOrEqual(0.6);
+  });
 });
 
 describe('per-consumer character ordering (WIND-03)', () => {

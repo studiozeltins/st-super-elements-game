@@ -98,10 +98,22 @@ export const FLAG = {
   swingBase: 0.75,
   /** Extra alignment under a gust peak — gusts snap the cloth further downwind (UAT 5, D-04). */
   swingGust: 0.5,
-  /** Lift fraction at full steady strength — between gusts the cloth keeps some sag. */
-  drapeLift: 0.7,
-  /** Additional gust lift: a full gust leaves only ~0.05 drape, essentially taut (D-04). */
-  drapeLiftGust: 0.25,
+  /**
+   * Idle lift fraction — the lift when NO gust is passing. Small on purpose: in
+   * normal play uWindStrength is pinned at 1, so this is the calm/lull pose and
+   * it must DROOP (a limp-ish hang, ~0.85 drape), not stand out as a near-flat
+   * banner. The continuous gust envelope, not this baseline, drives the lift
+   * (Gap 1 / UAT round 2 test 3). The cloth keeps only a little body in a dead
+   * calm rather than fully collapsing to the ?nowind hang.
+   */
+  drapeLift: 0.15,
+  /**
+   * Gust lift fraction — how far a full traveling gust lifts the cloth. Large:
+   * 0.15 + 0.9 exceeds 1, so a peak gust clamps flagDrape to ~0 (taut/streaming).
+   * The calm droop lifts toward taut as a gust rolls through, then sags back as
+   * it passes — the continuous-droop character the UAT expected (D-04).
+   */
+  drapeLiftGust: 0.9,
   /** How far the cloth pitches down about the pole edge at full drape, radians (~83°, D-12). */
   drapePitch: 1.45,
   /** Residual micro-sway amplitude of a hanging flag at strength 0 (D-12: limp, not frozen). */
