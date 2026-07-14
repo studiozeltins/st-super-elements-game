@@ -99,7 +99,14 @@ Plans:
   4. All LAN players see the same time of day, and night keeps a blue combat-readable ambient floor — night is a palette, never darkness
   5. Plaza lanterns fade in at dusk and out at dawn (intensity fade on build-time lights, no runtime light add/remove)
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Pure day/night math + vitest twin (phase01, keyframe palette, night floor, lantern/firefly scalars)
+- [ ] 09-02-PLAN.md — Gradient sky-dome + fog coupling + AmbienceHandles (single-source fog/sky, fog near/far tune)
+- [ ] 09-03-PLAN.md — Plaza lanterns (build-time named PointLights collected into ambience.lanternLights)
+- [ ] 09-04-PLAN.md — Day/night runtime: server clock (Date.now fallback) + zero-alloc cycle factory
+- [ ] 09-05-PLAN.md — Wire into frame loop + EventContext LAN-sync tap + ?nodaynight + two-client playtest
 
 ### Phase 10: Ambient Audio & Music
 
