@@ -348,7 +348,9 @@ export function createGame(
           { x: -directionX, z: -directionZ }
         );
       },
-    }
+    },
+    // Flying projectiles kick nearby camp flags — the world distance-gates.
+    (x, z, dx, dz) => world.disturbFlags(x, z, dx, dz)
   );
   const debrisSystem = fxEnabled
     ? createDebrisSystem(scene, (x, z) => world.getGroundHeight(x, z))

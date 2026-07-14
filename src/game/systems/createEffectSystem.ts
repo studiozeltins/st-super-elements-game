@@ -86,7 +86,12 @@ export function createEffectSystem(
       directionX: number,
       directionZ: number
     ): void;
-  }
+  },
+  /**
+   * Flag disturbance — a flying projectile kicks nearby camp flags in its
+   * NORMALIZED travel direction (mirror of stampGround parting the grass).
+   */
+  disturbFlags?: (x: number, z: number, dirX: number, dirZ: number) => void
 ): EffectSystem {
   const activeEffects: ActiveEffect[] = [];
 
@@ -302,6 +307,16 @@ export function createEffectSystem(
         }
         projectile.rotation.y += deltaSeconds * 10;
         stampGround?.(projectile.position.x, projectile.position.z, 0.5, 0.35, velocity.x, velocity.z);
+        // Kick nearby camp flags in the NORMALIZED travel direction (the same
+        // normalization the impact uses at :287-288), beside stampGround. Only
+        // fires while the shot is alive and flying — an impacted shot returned
+        // above, so it stops kicking.
+        disturbFlags?.(
+          projectile.position.x,
+          projectile.position.z,
+          velocity.x / options.speed,
+          velocity.z / options.speed
+        );
         pooledLight?.light.position.copy(projectile.position).setY(projectile.position.y + 0.4);
         const hitSomething = options.applyDamage?.(
           projectile.position,
