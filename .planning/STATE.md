@@ -4,17 +4,17 @@ milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 08
 current_phase_name: wind-core
-status: executing
+status: verifying
 stopped_at: Phase 8 context gathered
-last_updated: "2026-07-14T04:42:33.802Z"
+last_updated: "2026-07-14T04:53:59.864Z"
 last_activity: 2026-07-13
 last_activity_desc: Phase 08 execution started
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
-  percent: 17
+  completed_phases: 0
+  total_plans: 7
+  completed_plans: 6
+  percent: 0
 ---
 
 # Project State
@@ -32,7 +32,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 
 Phase: 08 (wind-core) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-13 — Phase 08 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -72,6 +72,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 08 P03 | 10min | 3 tasks | 5 files |
 | Phase 08 P04 | ~6 min | 2 tasks | 2 files |
 | Phase 08 P05 | ~8 min | 2 tasks | 0 files |
+| Phase 08 P06 | 8 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 08]: Smoke puff recycle via age >= PUFF_LIFE (= MAX_RISE/RISE_SPEED) — identical to the height check at constant rise, one pool field fewer
 - [Phase 08]: camps namespace import keeps the construction-time getCampSites() call the file's single occurrence — data-driven anchors, no scene traversal
 - [Phase 08]: Plan 08-05 blocking human-verify checkpoint auto-approved per --auto policy — 10-item playtest deferred to /gsd-verify-work (D2 coverage entry in 08-05-SUMMARY)
+- [Phase 08]: Pooled wind materials cached per WIND INSTANCE (identity guard + dispose-on-change), never per module — fixes StrictMode/reconnect freeze, keeps D-13 pooling; flag pole joins the cache because disposeObject reaches it at teardown
+- [Phase 08]: Canopy sway ramp reads a baked aTreeHeight vertex attribute (height above the tree base) — pooled materials cannot take per-mesh uniforms, and world-Y ramps saturate on hills
 
 ### Pending Todos
 
@@ -147,7 +150,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-13T23:56:03.907Z
+Last session: 2026-07-14T04:53:06.527Z
 Stopped at: Phase 8 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/08-wind-core/08-CONTEXT.md
