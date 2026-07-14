@@ -32,7 +32,8 @@ export type Keyframe = {
   skyTop: number;
   /** Sky-dome bottom color === fog color (hex). Single-sourced downstream (D-04). */
   horizon: number;
-  /** DirectionalLight tint (hex). Direction is FROZEN (D-02); only color/intensity drift. */
+  /** DirectionalLight tint (hex). Only the color/intensity live in the palette; the
+   *  sun DIRECTION is a first-class per-phase export now (see sunDir, Phase 09.1). */
   sunColor: number;
   /** DirectionalLight intensity. */
   sunIntensity: number;
@@ -226,4 +227,100 @@ export function samplePalette(phase: number): DayNightPalette {
     lanternLevel: lerp(a.lanternLevel, b.lanternLevel, t),
     fireflyLevel: lerp(a.fireflyLevel, b.fireflyLevel, t),
   };
+}
+
+/**
+ * Sun-arc envelope (Phase 09.1). The moving sun rides a CAPPED dome — azimuth
+ * sweeps with phase (dawn east, dusk west) while elevation stays above a
+ * readability floor so telegraph/enemy/gem shadows never graze the horizon
+ * (SHADOW-02, re-earning Phase 9's D-02 readability guarantee under motion).
+ *
+ * ELEV_PEAK_DEG / AZ_NOON_DEG are D-03 CONTRACT constants — they MUST equal the
+ * Phase 9 SUN_OFFSET (30,50,20) direction so the ?nomovingsun / reduce-motion
+ * fallback is byte-identical to the shipped frozen sun (SHADOW-04): asin(50/61.644)
+ * = 54.204° elevation, atan2(30,20) = 56.310° azimuth (RESEARCH A1). These are NOT
+ * tunables — they are pinned in vitest. NOTE: this supersedes the CONTEXT D-02
+ * prose's loose "~75°" peak, which would make the live midday sun jump when the
+ * frozen fallback toggles.
+ *
+ * ELEV_FLOOR_DEG (40) and AZ_SWING_DEG (70) ARE playtest-tunable starting values
+ * (readability/FPS golem-fight gate, D-14) — floor 38–44°, swing 50–90°.
+ */
+export const SUN_ARC = {
+  NOON_PHASE: 0.5,
+  ELEV_PEAK_DEG: 54.204,
+  ELEV_FLOOR_DEG: 40,
+  AZ_NOON_DEG: 56.31,
+  AZ_SWING_DEG: 70,
+} as const;
+
+/**
+ * The moving sun-POSITION direction (unit vector) at a normalized phase — the
+ * SAME phase01 the color palette consumes, so the sun can never desync from the
+ * cycle (SHADOW-01). Zero THREE import (D-01/D-13): deterministic pure math,
+ * unit-testable without a renderer, mirroring samplePalette.
+ *
+ * Elevation is a RAISED COSINE dome mapped to [FLOOR, PEAK]: `0.5 + 0.5*cos(w)`
+ * is in [0,1], so elevation is PROVABLY >= FLOOR at every phase (SHADOW-02) and
+ * peaks at noon. Azimuth is a SINE swing about AZ_NOON: `sin(0)=0` at noon gives
+ * the exact D-03 key, and dawn (p<0.5) vs dusk (p>0.5) get opposite-sign offsets
+ * → distinct dawn/dusk shadow direction (SHADOW-01). Both are periodic and C∞, so
+ * the 0.99→0.01 wrap seam has no derivative discontinuity — no midnight flip.
+ *
+ * Convention: `atan2(x,z)=azimuth`, `y=up` — this reproduces the normalized
+ * SUN_OFFSET at noon. It is the sun-POSITION direction (toward the sun), NOT the
+ * light-travel direction; the renderer negates it downstream (D-05 sign convention).
+ */
+export function sunDir(phase: number): { x: number; y: number; z: number } {
+  const p = ((phase % 1) + 1) % 1;
+  const w = 2 * Math.PI * (p - SUN_ARC.NOON_PHASE);
+  // cos(w) ∈ [-1,1] → domeT ∈ [0,1] → elev ∈ [FLOOR, PEAK]. Peaks at noon (w=0).
+  const domeT = 0.5 + 0.5 * Math.cos(w);
+  const elevDeg = SUN_ARC.ELEV_FLOOR_DEG + (SUN_ARC.ELEV_PEAK_DEG - SUN_ARC.ELEV_FLOOR_DEG) * domeT;
+  const azDeg = SUN_ARC.AZ_NOON_DEG + SUN_ARC.AZ_SWING_DEG * Math.sin(w);
+  const elev = (elevDeg * Math.PI) / 180;
+  const az = (azDeg * Math.PI) / 180;
+  const cosE = Math.cos(elev);
+  return { x: cosE * Math.sin(az), y: Math.sin(elev), z: cosE * Math.cos(az) };
+}
+
+/**
+ * Pure Gram-Schmidt light-space basis from a sun-POSITION direction — the
+ * renderer-free twin of the frozen basis at createMondstadtWorld.ts:151-153.
+ * Negates `dir` to the light-travel direction, then
+ * `right = normalize(cross(worldUp=(0,1,0), lightDir))`,
+ * `up = normalize(cross(lightDir, right))`. Zero THREE (plain number math) so the
+ * SHADOW-04 frozen-basis reproduction is unit-testable without a renderer:
+ * buildSunBasis(sunDir(0.5)) must equal the shipped module-const sunRight/sunUp.
+ */
+export function buildSunBasis(dir: { x: number; y: number; z: number }): {
+  rightX: number;
+  rightY: number;
+  rightZ: number;
+  upX: number;
+  upY: number;
+  upZ: number;
+} {
+  // Light-travel direction = -sun-position direction (normalized).
+  const lm = Math.hypot(dir.x, dir.y, dir.z) || 1;
+  const dx = -dir.x / lm;
+  const dy = -dir.y / lm;
+  const dz = -dir.z / lm;
+  // right = cross(worldUp=(0,1,0), lightDir) = (dz, 0, -dx), then normalize.
+  let rx = dz;
+  let ry = 0;
+  let rz = -dx;
+  const rm = Math.hypot(rx, ry, rz) || 1;
+  rx /= rm;
+  ry /= rm;
+  rz /= rm;
+  // up = cross(lightDir, right), then normalize.
+  let ux = dy * rz - dz * ry;
+  let uy = dz * rx - dx * rz;
+  let uz = dx * ry - dy * rx;
+  const um = Math.hypot(ux, uy, uz) || 1;
+  ux /= um;
+  uy /= um;
+  uz /= um;
+  return { rightX: rx, rightY: ry, rightZ: rz, upX: ux, upY: uy, upZ: uz };
 }
