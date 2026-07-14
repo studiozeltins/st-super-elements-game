@@ -50,8 +50,10 @@ let clothMaterial: THREE.MeshLambertMaterial | null = null;
  * 1. Ripple flap: a wave traveling from the pole toward the free end (which
  *    whips more), amplitude driven by the idle + traveling-gust envelope.
  * 2. Drape (D-12): a limp-hang pitch about the pole edge weighted by the
- *    windMath flagDrape blend — strength 0 hangs the cloth down the pole with
- *    only a drape-gated micro-sway; wind and gusts lift it back to the banner.
+ *    windMath flagDrape blend, which is driven by the CONTINUOUS gust envelope
+ *    (not a constant baseline). In normal play (uWindStrength 1) the cloth
+ *    DROOPS between gusts and lifts toward taut as a gust passes; strength 0
+ *    (?nowind) pins the full limp hang with only a drape-gated micro-sway.
  * 3. Downwind yaw (UAT 4/5/9): the offset-from-the-pole is yawed from the
  *    baked heading (modelMatrix[0].xz) toward uWindDir by the windMath
  *    flagSwing blend — gusts visibly snap the cloth further downwind.
@@ -118,10 +120,12 @@ function getFlagMaterials(wind: WindUniforms): {
         // Cloth shortens as it lifts — snaps taut at the gust peak (D-04).
         transformed.x -= abs(flap) * ${f(FLAG.tautPull)} * alongQ;
         // Drape pitch about the horizontal pole-edge axis (flagDrape blend,
-        // windMath): strength 0 evaluates to 1 -> the cloth falls limp down
-        // the pole; wind + gusts lift it back toward the taut banner. The
-        // y-drop uses the banded distance (stepped hang); the x foreshorten
-        // stays continuous so band columns never collapse onto one x.
+        // windMath): the CONTINUOUS in-shader gust envelope drives the lift, so
+        // in a lull (gust ~0, strength 1) the cloth DROOPS during normal play —
+        // not only under ?nowind — and a passing gust lifts it toward taut;
+        // strength 0 still evaluates to 1 -> full limp hang (D-12). The y-drop
+        // uses the banded distance (stepped hang); the x foreshorten stays
+        // continuous so band columns never collapse onto one x.
         float drape = ${flagDrapeGlsl('uWindStrength', 'gust')};
         float pitch = drape * ${f(FLAG.drapePitch)};
         transformed.y -= alongQ * ${f(FLAG.width)} * sin(pitch);
