@@ -139,7 +139,7 @@ rather than discard them.
 Plans:
 **Wave 1**
 
-- [ ] 09.1-01-PLAN.md — Pure-twin sun-arc math + vitest (sunDir/SUN_ARC/buildSunBasis; floor/continuity/asymmetry/noon-peak) [Wave 1]
+- [x] 09.1-01-PLAN.md — Pure-twin sun-arc math + vitest (sunDir/SUN_ARC/buildSunBasis; floor/continuity/asymmetry/noon-peak) [Wave 1]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -216,7 +216,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
-| 9.1. Dynamic Sun and Shadows *(inserted)* | 0/TBD | Not started | - |
+| 9.1. Dynamic Sun and Shadows *(inserted)* | 1/3 | In Progress|  |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |

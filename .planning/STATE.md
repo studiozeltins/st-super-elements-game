@@ -2,18 +2,18 @@
 gsd_state_version: 1.0
 milestone: v0.3.0-alpha
 milestone_name: Living World
-current_phase: 10
-current_phase_name: Ambient Audio & Music
+current_phase: 09.1
+current_phase_name: dynamic-sun-and-shadows
 status: executing
 stopped_at: Phase 09.1 context gathered
-last_updated: "2026-07-14T19:35:42.348Z"
+last_updated: "2026-07-14T19:44:18.591Z"
 last_activity: 2026-07-14
-last_activity_desc: Phase 9 complete, transitioned to Phase 10
+last_activity_desc: Phase 09.1 execution started
 progress:
   total_phases: 7
   completed_phases: 2
-  total_plans: 16
-  completed_plans: 16
+  total_plans: 19
+  completed_plans: 17
   percent: 29
 ---
 
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-13)
 **Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor). This milestone makes the world BETWEEN fights worth living in.
-**Current focus:** Phase 9 — Atmosphere & Day/Night
+**Current focus:** Phase 09.1 — dynamic-sun-and-shadows
 
 ## Current Position
 
-Phase: 10 — Ambient Audio & Music
-Plan: Not started
+Phase: 09.1 (dynamic-sun-and-shadows) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-14 — Phase 9 complete, transitioned to Phase 10
+Last activity: 2026-07-14 — Phase 09.1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -82,6 +82,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 09 P03 | 4min | 2 tasks | 3 files |
 | Phase 09 P04 | 6min | 2 tasks | 2 files |
 | Phase 9 P05 | 27min | 3 tasks | 2 files |
+| Phase 09.1 P01 | 9min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 9]: 09-05: daynight.update() is called with no arg — the shipped DayNightCycle reads clock.nowMicros() internally; wiring passes serverClock into the factory so one coherent server clock drives the phase (no private accumulator).
 - [Phase 9]: 09-05: LAN day/night sync re-anchors off the enemy/goliath worldTick reducer EventContext timestamp (tag==='Reducer'), tapped in useGameTableBridge; Date.now() fallback covers the non-Reducer case. Zero server publish, cosmetic-only.
 - [Phase 9]: 09-05: 'shadows follow the sun' request DEFERRED — reverses D-02 (frozen sun basis) and contradicts DAYNITE-01; routed separately, not implemented in this phase.
+- [Phase 09.1]: 09.1-01: sun-arc math is pure-twin-first — sunDir(phase) raised-cosine dome + sine azimuth in zero-THREE dayNightMath.ts, ELEV_PEAK pinned to SUN_OFFSET 54.204deg (NOT CONTEXT prose 75deg, RESEARCH A1); buildSunBasis reproduces frozen basis renderer-free (SHADOW-04)
 
 ### Pending Todos
 
@@ -172,7 +174,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-14T19:02:05.330Z
+Last session: 2026-07-14T19:43:44.168Z
 Stopped at: Phase 09.1 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/09.1-dynamic-sun-and-shadows/09.1-CONTEXT.md
