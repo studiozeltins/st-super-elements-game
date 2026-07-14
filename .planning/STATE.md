@@ -6,14 +6,14 @@ current_phase: 09.1
 current_phase_name: dynamic-sun-and-shadows
 status: executing
 stopped_at: Phase 09.1 context gathered
-last_updated: "2026-07-14T19:44:18.591Z"
+last_updated: "2026-07-14T19:53:19.170Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 09.1 execution started
 progress:
   total_phases: 7
   completed_phases: 2
   total_plans: 19
-  completed_plans: 17
+  completed_plans: 18
   percent: 29
 ---
 
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 09.1 (dynamic-sun-and-shadows) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-14 — Phase 09.1 execution started
 
@@ -83,6 +83,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 09 P04 | 6min | 2 tasks | 2 files |
 | Phase 9 P05 | 27min | 3 tasks | 2 files |
 | Phase 09.1 P01 | 9min | 2 tasks | 2 files |
+| Phase 09.1 P02 | 4min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -128,6 +129,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 9]: 09-05: LAN day/night sync re-anchors off the enemy/goliath worldTick reducer EventContext timestamp (tag==='Reducer'), tapped in useGameTableBridge; Date.now() fallback covers the non-Reducer case. Zero server publish, cosmetic-only.
 - [Phase 9]: 09-05: 'shadows follow the sun' request DEFERRED — reverses D-02 (frozen sun basis) and contradicts DAYNITE-01; routed separately, not implemented in this phase.
 - [Phase 09.1]: 09.1-01: sun-arc math is pure-twin-first — sunDir(phase) raised-cosine dome + sine azimuth in zero-THREE dayNightMath.ts, ELEV_PEAK pinned to SUN_OFFSET 54.204deg (NOT CONTEXT prose 75deg, RESEARCH A1); buildSunBasis reproduces frozen basis renderer-free (SHADOW-04)
+- [Phase ?]: Phase 09.1-02: sun direction is a single day/night-owned channel (setSunDirection); setShadowFocus rebuilds the shadow basis per-frame from it with zero alloc
+- [Phase ?]: Phase 09.1-02: ?nomovingsun/reduce-motion/?nodaynight pin the sun byte-exact to the literal SUN_OFFSET while colors keep drifting; 30Hz shadow throttle left unchanged
 
 ### Pending Todos
 
@@ -174,7 +177,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-14T19:43:44.168Z
+Last session: 2026-07-14T19:52:48.071Z
 Stopped at: Phase 09.1 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/09.1-dynamic-sun-and-shadows/09.1-CONTEXT.md
