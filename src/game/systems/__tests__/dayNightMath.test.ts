@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildSunBasis,
   CYCLE_MICROS,
   KEYFRAMES,
   NIGHT_FLOOR,
   phase01,
   samplePalette,
   smoothstep,
+  SUN_ARC,
+  sunDir,
 } from '../dayNightMath';
 
 // Day-peak intensities are the reference the night floor is measured against —
@@ -19,6 +22,18 @@ const DAY_BAND: [number, number] = [0.15, 0.48];
 const NIGHT_BAND: [number, number] = [0.84, 0.99];
 const DUSK_RAMP: [number, number] = [0.5, 0.82];
 const DAWN_RAMP: [number, number] = [0.0, 0.12];
+
+// Sun-arc geometry (Phase 09.1). The D-03 noon key is the exact normalized
+// SUN_OFFSET (30,50,20) — |SUN_OFFSET|=61.644, elev 54.204°, az atan2(30,20)=56.310°.
+const NOON_SUN_DIR = { x: 0.486664, y: 0.811107, z: 0.324443 };
+// The shipped frozen light-space basis derived from SUN_OFFSET
+// (createMondstadtWorld.ts:151-153): sunDirection = -normalize(SUN_OFFSET),
+// sunRight = normalize(cross(worldUp, sunDirection)), sunUp = normalize(cross(sunDirection, sunRight)).
+const SHIPPED_SUN_RIGHT = { x: -0.554700, y: 0, z: 0.832050 };
+const SHIPPED_SUN_UP = { x: -0.674882, y: 0.584898, z: -0.449921 };
+
+type Vec3 = { x: number; y: number; z: number };
+const azimuthDeg = (d: Vec3): number => (Math.atan2(d.x, d.z) * 180) / Math.PI;
 
 function sampleRange(from: number, to: number, steps: number): number[] {
   const out: number[] = [];
@@ -262,5 +277,124 @@ describe('KEYFRAMES structure (D-01 asymmetric day-weighted, seam contract)', ()
     const peak = KEYFRAMES.reduce((a, b) => (b.sunIntensity > a.sunIntensity ? b : a));
     expect(peak.phase).toBeGreaterThan(0.12);
     expect(peak.phase).toBeLessThan(0.6);
+  });
+});
+
+// ── Sun-arc geometry (Phase 09.1: Dynamic Sun & Shadows) ────────────────────
+// sunDir(phase) is the moving-sun POSITION direction — a raised-cosine elevation
+// dome + sine azimuth swing, C∞-continuous across the phase wrap, provably above
+// a readability floor, passing through the exact SUN_OFFSET key at noon.
+
+describe('SUN_ARC contract constants (D-03 — exact-pinned, NOT playtest tunables)', () => {
+  // These mirror the CYCLE_MICROS exact pin: ELEV_PEAK_DEG / AZ_NOON_DEG are the
+  // SUN_OFFSET direction (byte-exact SHADOW-04 anchor), NOT the CONTEXT prose's 75°.
+  it('pins the noon peak elevation to the SUN_OFFSET direction (54.204°, NOT 75°)', () => {
+    expect(SUN_ARC.ELEV_PEAK_DEG).toBe(54.204);
+  });
+
+  it('pins the noon azimuth to atan2(30, 20) = 56.310°', () => {
+    expect(SUN_ARC.AZ_NOON_DEG).toBe(56.310);
+  });
+
+  it('centres the arc on the day-peak keyframe (noon phase 0.5)', () => {
+    expect(SUN_ARC.NOON_PHASE).toBe(0.5);
+  });
+
+  it('holds the readability floor strictly below the peak (a real, capped dome)', () => {
+    expect(SUN_ARC.ELEV_FLOOR_DEG).toBeGreaterThan(0);
+    expect(SUN_ARC.ELEV_FLOOR_DEG).toBeLessThan(SUN_ARC.ELEV_PEAK_DEG);
+  });
+});
+
+describe('sunDir elevation floor invariant (SHADOW-02 — capped dome)', () => {
+  it('never drops below ELEV_FLOOR_DEG at ANY phase in [0,1)', () => {
+    for (const p of sampleRange(0, 1, 1000)) {
+      const elevDeg = (Math.asin(sunDir(p).y) * 180) / Math.PI;
+      expect(elevDeg).toBeGreaterThanOrEqual(SUN_ARC.ELEV_FLOOR_DEG - 1e-9);
+    }
+  });
+
+  it('never rises above ELEV_PEAK_DEG at ANY phase — peaks at noon', () => {
+    for (const p of sampleRange(0, 1, 1000)) {
+      const elevDeg = (Math.asin(sunDir(p).y) * 180) / Math.PI;
+      expect(elevDeg).toBeLessThanOrEqual(SUN_ARC.ELEV_PEAK_DEG + 1e-9);
+    }
+    expect((Math.asin(sunDir(0.5).y) * 180) / Math.PI).toBeCloseTo(SUN_ARC.ELEV_PEAK_DEG, 6);
+  });
+});
+
+describe('sunDir noon key (SHADOW-04 / D-03 — passes through normalized SUN_OFFSET)', () => {
+  it('sunDir(0.5) ≈ normalized SUN_OFFSET (0.4867, 0.8111, 0.3244) to 3 decimals', () => {
+    const dir = sunDir(0.5);
+    expect(dir.x).toBeCloseTo(NOON_SUN_DIR.x, 3);
+    expect(dir.y).toBeCloseTo(NOON_SUN_DIR.y, 3);
+    expect(dir.z).toBeCloseTo(NOON_SUN_DIR.z, 3);
+  });
+});
+
+describe('sunDir unit length', () => {
+  it('returns a unit vector across the whole cycle', () => {
+    for (const p of sampleRange(0, 1, 500)) {
+      const dir = sunDir(p);
+      expect(Math.hypot(dir.x, dir.y, dir.z)).toBeCloseTo(1, 9);
+    }
+  });
+});
+
+describe('sunDir input normalization', () => {
+  it('normalizes out-of-range phase into the cycle (matches samplePalette prologue)', () => {
+    expect(sunDir(1.3)).toEqual(sunDir(0.3));
+    expect(sunDir(-0.7)).toEqual(sunDir(0.3));
+    expect(sunDir(2.5)).toEqual(sunDir(0.5));
+  });
+});
+
+describe('sunDir wrap continuity (SHADOW-01 / D-13 — no midnight direction flip)', () => {
+  it('a tiny phase step across the 0.99→0.01 seam is a tiny direction step', () => {
+    const before = sunDir(0.999);
+    const after = sunDir(0.001);
+    const delta = Math.hypot(after.x - before.x, after.y - before.y, after.z - before.z);
+    expect(delta).toBeLessThan(0.02);
+  });
+
+  it('does not flip direction across midnight — the dot product stays near 1', () => {
+    const before = sunDir(0.999);
+    const after = sunDir(0.001);
+    const dot = before.x * after.x + before.y * after.y + before.z * after.z;
+    expect(dot).toBeGreaterThan(0.99);
+  });
+});
+
+describe('sunDir dawn/dusk azimuth asymmetry (SHADOW-01)', () => {
+  it('dawn (phase < 0.5) and dusk (phase > 0.5) azimuths sit on OPPOSITE sides of noon', () => {
+    const d = 0.1;
+    const dawnAz = azimuthDeg(sunDir(0.5 - d));
+    const duskAz = azimuthDeg(sunDir(0.5 + d));
+    expect(dawnAz).toBeLessThan(SUN_ARC.AZ_NOON_DEG);
+    expect(duskAz).toBeGreaterThan(SUN_ARC.AZ_NOON_DEG);
+  });
+
+  it('noon azimuth is exactly AZ_NOON_DEG (sine swing is 0 at noon)', () => {
+    expect(azimuthDeg(sunDir(0.5))).toBeCloseTo(SUN_ARC.AZ_NOON_DEG, 6);
+  });
+});
+
+describe('buildSunBasis reproduces the shipped frozen basis (SHADOW-04 — renderer-free)', () => {
+  it('buildSunBasis(sunDir(0.5)) ≈ the module-const sunRight/sunUp derived from SUN_OFFSET', () => {
+    const basis = buildSunBasis(sunDir(0.5));
+    expect(basis.rightX).toBeCloseTo(SHIPPED_SUN_RIGHT.x, 3);
+    expect(basis.rightY).toBeCloseTo(SHIPPED_SUN_RIGHT.y, 3);
+    expect(basis.rightZ).toBeCloseTo(SHIPPED_SUN_RIGHT.z, 3);
+    expect(basis.upX).toBeCloseTo(SHIPPED_SUN_UP.x, 3);
+    expect(basis.upY).toBeCloseTo(SHIPPED_SUN_UP.y, 3);
+    expect(basis.upZ).toBeCloseTo(SHIPPED_SUN_UP.z, 3);
+  });
+
+  it('yields an orthonormal right/up basis', () => {
+    const b = buildSunBasis(sunDir(0.5));
+    expect(Math.hypot(b.rightX, b.rightY, b.rightZ)).toBeCloseTo(1, 9);
+    expect(Math.hypot(b.upX, b.upY, b.upZ)).toBeCloseTo(1, 9);
+    const dot = b.rightX * b.upX + b.rightY * b.upY + b.rightZ * b.upZ;
+    expect(dot).toBeCloseTo(0, 9);
   });
 });
