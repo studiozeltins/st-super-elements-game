@@ -104,7 +104,7 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 09-01-PLAN.md — Pure day/night math + vitest twin (phase01, keyframe palette, night floor, lantern/firefly scalars)
+- [x] 09-01-PLAN.md — Pure day/night math + vitest twin (phase01, keyframe palette, night floor, lantern/firefly scalars)
 - [ ] 09-02-PLAN.md — Gradient sky-dome + fog coupling + AmbienceHandles (single-source fog/sky, fog near/far tune)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -182,7 +182,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
-| 9. Atmosphere & Day/Night | 0/TBD | Not started | - |
+| 9. Atmosphere & Day/Night | 1/5 | In Progress|  |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |

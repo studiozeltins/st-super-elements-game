@@ -34,18 +34,18 @@ zero server publish.
 
 ### Day/Night Lite (DAYNITE)
 
-- [ ] **DAYNITE-01**: World color drifts through dawn → day → dusk → night (~20min cycle,
+- [x] **DAYNITE-01**: World color drifts through dawn → day → dusk → night (~20min cycle,
   asymmetric: day-weighted, short dusk/dawn) via smoothstep-blended keys of hemisphere/sun
   color+intensity, fog color, and sky — sun/shadow DIRECTION never moves
 
-- [ ] **DAYNITE-02**: All players see the same time of day — phase derived from a
+- [x] **DAYNITE-02**: All players see the same time of day — phase derived from a
   server-anchored timestamp (SDK event timestamp; `Date.now()` fallback), advanced in the
   game loop (never derived per React render), bigint modulo before Number()
 
-- [ ] **DAYNITE-03**: Night keeps a blue ambient floor — never below combat-readable
+- [x] **DAYNITE-03**: Night keeps a blue ambient floor — never below combat-readable
   contrast (~40–50% day exposure); night = palette, not darkness
 
-- [ ] **DAYNITE-04**: Plaza lanterns fade in at dusk and out at dawn (warm points vs cool
+- [x] **DAYNITE-04**: Plaza lanterns fade in at dusk and out at dawn (warm points vs cool
   night; no runtime light add/remove — intensity fade on build-time lights)
 
 ### Ambient Audio Bed (AMBI)
@@ -171,10 +171,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ATMO-01 | Phase 9 | Pending |
 | ATMO-02 | Phase 9 | Pending |
 | ATMO-03 | Phase 9 | Pending |
-| DAYNITE-01 | Phase 9 | Pending |
-| DAYNITE-02 | Phase 9 | Pending |
-| DAYNITE-03 | Phase 9 | Pending |
-| DAYNITE-04 | Phase 9 | Pending |
+| DAYNITE-01 | Phase 9 | Complete |
+| DAYNITE-02 | Phase 9 | Complete |
+| DAYNITE-03 | Phase 9 | Complete |
+| DAYNITE-04 | Phase 9 | Complete |
 | AMBI-01 | Phase 10 | Pending |
 | AMBI-02 | Phase 10 | Pending |
 | AMBI-03 | Phase 10 | Pending |
