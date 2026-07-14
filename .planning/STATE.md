@@ -4,17 +4,17 @@ milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 08
 current_phase_name: wind-core
-status: verifying
+status: executing
 stopped_at: Phase 8 context gathered
-last_updated: "2026-07-14T04:58:34.802Z"
-last_activity: 2026-07-13
+last_updated: "2026-07-14T07:22:29.009Z"
+last_activity: 2026-07-14
 last_activity_desc: Phase 08 execution started
 progress:
   total_phases: 6
-  completed_phases: 1
-  total_plans: 7
-  completed_plans: 7
-  percent: 17
+  completed_phases: 0
+  total_plans: 9
+  completed_plans: 8
+  percent: 0
 ---
 
 # Project State
@@ -31,9 +31,9 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 08 (wind-core) — EXECUTING
-Plan: 5 of 5
-Status: Phase complete — ready for verification
-Last activity: 2026-07-13 — Phase 08 execution started
+Plan: 2 of 9
+Status: Ready to execute
+Last activity: 2026-07-14 — Phase 08 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -74,6 +74,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 08 P05 | ~8 min | 2 tasks | 0 files |
 | Phase 08 P06 | 8 min | 3 tasks | 5 files |
 | Phase 08 P07 | 3min | 1 tasks | 2 files |
+| Phase 08 P08 | 4 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -110,6 +111,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 08]: Pooled wind materials cached per WIND INSTANCE (identity guard + dispose-on-change), never per module — fixes StrictMode/reconnect freeze, keeps D-13 pooling; flag pole joins the cache because disposeObject reaches it at teardown
 - [Phase 08]: Canopy sway ramp reads a baked aTreeHeight vertex attribute (height above the tree base) — pooled materials cannot take per-mesh uniforms, and world-Y ramps saturate on hills
 - [Phase 08]: InstancedMesh teardown requires mesh.dispose() in addition to geometry/material dispose to free instance attribute GPU buffers
+- [Phase 08]: flagSwing/flagDrape closed forms: min(1, s*(0.75+0.5*g)) swing and 1-min(1, s*(0.7+0.25*g)) drape — strength-0 identities exact (swing 0, drape 1 per D-12); GLSL generators pin the full rendered expression so shader/CPU cannot drift
 
 ### Pending Todos
 
@@ -152,7 +154,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-14T04:57:46.409Z
+Last session: 2026-07-14T07:22:18.040Z
 Stopped at: Phase 8 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/08-wind-core/08-CONTEXT.md

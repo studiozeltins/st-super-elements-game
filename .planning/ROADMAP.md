@@ -78,7 +78,7 @@ Plans:
 
 **UAT Gap Closure** *(from 08-UAT.md flag issues — run with `/gsd-execute-phase 8 --gaps-only`)*
 
-- [ ] 08-08-PLAN.md — windMath flag pose math: downwind swing + windless drape mirrors/GLSL generators, test-first (UAT tests 4/5/6/9) [Wave 1]
+- [x] 08-08-PLAN.md — windMath flag pose math: downwind swing + windless drape mirrors/GLSL generators, test-first (UAT tests 4/5/6/9) [Wave 1]
 - [ ] 08-09-PLAN.md — createCampFlag shader rework: in-shader downwind yaw, limp drape at ?nowind, voxel-stepped cloth (UAT tests 4/5/6/8/9) [Wave 2]
 
 ### Phase 9: Atmosphere & Day/Night
@@ -161,7 +161,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Wind Core | 7/7 | Complete   | 2026-07-14 |
+| 8. Wind Core | 8/9 | In Progress|  |
 | 9. Atmosphere & Day/Night | 0/TBD | Not started | - |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
