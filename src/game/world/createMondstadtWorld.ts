@@ -174,10 +174,17 @@ const liveSunDir = new THREE.Vector3().copy(FROZEN_SUN_DIR);
 // the frozen path is IEEE754 bit-identical to `focus + SUN_OFFSET` (no
 // normalize→remultiply round-trip); setSunDirection recomputes it on the moving path.
 const liveSunOffset = new THREE.Vector3().copy(SUN_OFFSET);
-// Per-frame-mutated basis scratch (was the frozen module const). Allocated once.
+// Light-space basis scratch (was the frozen module const). Allocated once and
+// rebuilt only when the sun direction changes — see basisDirty.
 const sunRight = new THREE.Vector3();
 const sunUp = new THREE.Vector3();
 const shadowFocusScratch = new THREE.Vector3();
+// Dirty flag for the light-space basis (IN-01): setSunDirection sets it, and
+// setShadowFocus rebuilds sunRight/sunUp only when set. Starts true so the first
+// frame builds the basis. When the sun is frozen (?nomovingsun / reduce-motion)
+// setSunDirection is never called, so the basis is computed ONCE — the frozen
+// path keeps its cheap Phase 9 cost instead of a per-frame Gram-Schmidt rebuild.
+let basisDirty = true;
 
 // Fog near sits well past SAFE_ZONE_RADIUS (18) + typical engage range so the
 // whole gameplay radius keeps full contrast at every time of day (ATMO-03); far
@@ -669,6 +676,8 @@ export function createMondstadtWorld(
         // mutate in place: zero alloc (mirrors setSkyTop).
         liveSunDir.set(x, y, z);
         liveSunOffset.copy(liveSunDir).multiplyScalar(SUN_DISTANCE);
+        // The basis depends on the sun direction — mark it for rebuild (IN-01).
+        basisDirty = true;
       },
     },
     disturbFlags(x, z, dirX, dirZ) {
@@ -700,12 +709,17 @@ export function createMondstadtWorld(
       return obstacles;
     },
     setShadowFocus(x, z) {
-      // Rebuild the light-space basis from the LIVE sun direction FIRST (Phase
-      // 09.1): the sun drifts on a slow arc, so the snap grid rotates with it.
-      // buildSunBasis is the SHARED source of truth with the dayNightMath unit
-      // test (WR-01) — it negates liveSunDir to light-travel and writes the
-      // Gram-Schmidt right/up straight into the pre-alloc scratch (zero alloc).
-      buildSunBasis(liveSunDir, sunRight, sunUp);
+      // Rebuild the light-space basis from the LIVE sun direction, but ONLY when
+      // it changed (IN-01): the moving sun drifts on a slow arc so the snap grid
+      // rotates with it, while the frozen / reduce-motion sun holds a constant
+      // basis and skips the rebuild entirely. buildSunBasis is the SHARED source
+      // of truth with the dayNightMath unit test (WR-01) — it negates liveSunDir
+      // to light-travel and writes the Gram-Schmidt right/up straight into the
+      // pre-alloc scratch (zero alloc).
+      if (basisDirty) {
+        buildSunBasis(liveSunDir, sunRight, sunUp);
+        basisDirty = false;
+      }
       // Snap the focus to whole shadow texels IN LIGHT SPACE — a plain 2D grid
       // snap on the live right/up axes (per-frame rotation is sub-texel, so edges
       // stay stable; texel math unchanged from the frozen-sun era).
