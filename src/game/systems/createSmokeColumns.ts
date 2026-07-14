@@ -46,7 +46,6 @@ interface SmokePuff {
   yaw: number;
   age: number;
   step: number;
-  fireIndex: number;
   active: boolean;
 }
 
@@ -76,7 +75,6 @@ export function createSmokeColumns(
     yaw: 0,
     age: 0,
     step: 0,
-    fireIndex: 0,
     active: false,
   }));
 
@@ -109,7 +107,7 @@ export function createSmokeColumns(
   let cullTimer = CULL_RECHECK_INTERVAL; // force a membership check on frame 1
 
   /** Returns true when a slot was claimed (instance color written). */
-  function spawnPuff(fireIndex: number): boolean {
+  function spawnPuff(emitterIndex: number): boolean {
     let slot = -1;
     for (let index = 0; index < SMOKE_POOL_SIZE; index += 1) {
       if (!pool[index].active) {
@@ -119,7 +117,7 @@ export function createSmokeColumns(
     }
     if (slot === -1) return false; // hard cap: every slot busy, skip this puff
     const puff = pool[slot];
-    const emitter = emitters[fireIndex];
+    const emitter = emitters[emitterIndex];
     // Non-deterministic Math.random is fine — cosmetic jitter (debris precedent).
     puff.x = emitter.x + (Math.random() - 0.5) * 0.16;
     puff.y = emitter.y;
@@ -127,7 +125,6 @@ export function createSmokeColumns(
     puff.yaw = Math.random() * Math.PI;
     puff.age = 0;
     puff.step = 0;
-    puff.fireIndex = fireIndex;
     puff.active = true;
     mesh.setColorAt(slot, fadeColors[0]);
     return true;
@@ -205,6 +202,9 @@ export function createSmokeColumns(
       scene.remove(mesh);
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
+      // InstancedMesh.dispose() dispatches the dispose event that releases the
+      // instanceMatrix/instanceColor GPU buffers — geometry/material alone don't.
+      mesh.dispose();
     },
   };
 }

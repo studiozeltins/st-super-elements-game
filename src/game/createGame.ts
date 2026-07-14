@@ -1499,6 +1499,7 @@ export function createGame(
       scene.remove(boostOrbit.group);
       boostOrbit.dispose();
       debrisSystem?.dispose();
+      smokeColumns?.dispose();
       lightPool?.dispose();
       gemGeometry.dispose();
       shardGeometry.dispose();
