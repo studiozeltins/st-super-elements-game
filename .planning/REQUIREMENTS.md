@@ -22,14 +22,14 @@ zero server publish.
 
 ### Atmosphere (ATMO)
 
-- [ ] **ATMO-01**: Player sees distant terrain dissolve into the sky color — linear
+- [x] **ATMO-01**: Player sees distant terrain dissolve into the sky color — linear
   `scene.fog` (mutated in place, never reassigned) with `near` beyond combat readability
   radius, `far` hiding the world edge
 
-- [ ] **ATMO-02**: Player sees a sky/horizon gradient whose bottom color equals the fog
+- [x] **ATMO-02**: Player sees a sky/horizon gradient whose bottom color equals the fog
   color — fog + sky + day/night are ONE color pipeline from a single source
 
-- [ ] **ATMO-03**: Combat readability is untouched — telegraphs, enemies, and gem drops
+- [x] **ATMO-03**: Combat readability is untouched — telegraphs, enemies, and gem drops
   inside the gameplay radius keep ~full contrast at all times of day
 
 ### Day/Night Lite (DAYNITE)
@@ -168,9 +168,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WIND-01 | Phase 8 | Complete |
 | WIND-02 | Phase 8 | Complete |
 | WIND-03 | Phase 8 | Complete |
-| ATMO-01 | Phase 9 | Pending |
-| ATMO-02 | Phase 9 | Pending |
-| ATMO-03 | Phase 9 | Pending |
+| ATMO-01 | Phase 9 | Complete |
+| ATMO-02 | Phase 9 | Complete |
+| ATMO-03 | Phase 9 | Complete |
 | DAYNITE-01 | Phase 9 | Complete |
 | DAYNITE-02 | Phase 9 | Complete |
 | DAYNITE-03 | Phase 9 | Complete |
