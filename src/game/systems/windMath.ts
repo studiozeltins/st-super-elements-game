@@ -80,6 +80,10 @@ export const CANOPY = {
 /**
  * Flag cloth character (WIND-03/D-08): flaps faster than grass, wave travels
  * down the cloth toward the free end, snaps taut under gusts.
+ *
+ * Pose constants (UAT gap fixes, tests 4/5/6/9): the cloth's yaw toward the
+ * wind and its limp-hang drape are blends of these values via flagSwing /
+ * flagDrape — closed forms a GLSL one-liner mirrors exactly (WIND-01).
  */
 export const FLAG = {
   freq: 2.5 * SWAY.f1,
@@ -90,6 +94,20 @@ export const FLAG = {
   width: 1.1,
   height: 0.65,
   invLength: 1 / 1.1,
+  /** Downwind yaw fraction at full steady strength — flags visibly point with the wind (UAT 4). */
+  swingBase: 0.75,
+  /** Extra alignment under a gust peak — gusts snap the cloth further downwind (UAT 5, D-04). */
+  swingGust: 0.5,
+  /** Lift fraction at full steady strength — between gusts the cloth keeps some sag. */
+  drapeLift: 0.7,
+  /** Additional gust lift: a full gust leaves only ~0.05 drape, essentially taut (D-04). */
+  drapeLiftGust: 0.25,
+  /** How far the cloth pitches down about the pole edge at full drape, radians (~83°, D-12). */
+  drapePitch: 1.45,
+  /** Residual micro-sway amplitude of a hanging flag at strength 0 (D-12: limp, not frozen). */
+  limpAmp: 0.03,
+  /** Micro-sway pendulum frequency — slower than grass (SWAY.f1), a lazy hanging swing. */
+  limpFreq: 0.9,
 } as const;
 
 /** JS mirror of the grass two-octave sway formula (WIND-01). */
@@ -130,6 +148,25 @@ export function windAngle(t: number): number {
  */
 export function gustGainFactor(strength: number, gust: number): number {
   return 1 + strength * GUST.gain * gust;
+}
+
+/**
+ * Fraction of yaw from the cloth's baked heading toward the wind direction,
+ * 0..1 (UAT 4/5). strength 0 returns exactly 0 — with the wind off the cloth
+ * never leaves its build-time heading; gusts push alignment further downwind.
+ * Branch-free clamped blend (D-06/D-13) — flagSwingGlsl mirrors it exactly.
+ */
+export function flagSwing(strength: number, gust: number): number {
+  return Math.min(1, strength * (FLAG.swingBase + FLAG.swingGust * gust));
+}
+
+/**
+ * Limp-hang weight, 0..1 (D-12/D-04). strength 0 returns exactly 1 — `?nowind`
+ * is a full drape (cloth pitched down FLAG.drapePitch about the pole edge);
+ * wind and gusts lift the cloth toward taut. flagDrapeGlsl mirrors it exactly.
+ */
+export function flagDrape(strength: number, gust: number): number {
+  return 1 - Math.min(1, strength * (FLAG.drapeLift + FLAG.drapeLiftGust * gust));
 }
 
 /**
