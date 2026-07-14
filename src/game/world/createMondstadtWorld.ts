@@ -26,6 +26,14 @@ import {
 } from './assets';
 import { createGrassField } from './createGrassField';
 import { CAMPFIRE_LIGHT_NAME } from './assets/createCampfire';
+import { CAMP_FLAG_CLOTH_NAME } from './assets/createCampFlag';
+import {
+  FLAG_DISTURB_RADIUS,
+  FLAG_IMPULSE_DECAY_SECONDS,
+  decayFlagImpulse,
+  withinDisturbRadius,
+  type FlagImpulse,
+} from './assets/flagImpulse';
 import { createFountain, createHouse, createWindmill } from './createPlazaStructures';
 import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
@@ -47,6 +55,13 @@ export interface MondstadtWorld {
    * edges don't crawl while walking). Call once per frame.
    */
   setShadowFocus(x: number, z: number): void;
+  /**
+   * A projectile flying past kicks nearby camp flags: sets a decaying,
+   * direction-aligned impulse on every flag within FLAG_DISTURB_RADIUS of
+   * (x,z). dirX/dirZ is the shot's NORMALIZED travel direction. Distance-gated
+   * so only flags beside an active shot pay any cost.
+   */
+  disturbFlags(x: number, z: number, dirX: number, dirZ: number): void;
   dispose(): void;
 }
 
@@ -446,8 +461,23 @@ export function createMondstadtWorld(
 
   // Campfire flames flicker — collect the named lights once, wobble per frame.
   const campfireLights: THREE.PointLight[] = [];
+  // Camp flags kick when a projectile flies past. Collect the named cloths once
+  // and capture each flag's WORLD xz here (the world is frozen after this, so
+  // the position never changes) — disturbFlags then distance-gates without
+  // walking any matrix. The impulse object is the SAME reference the cloth's
+  // onBeforeRender reads, so setting mag here shows up in-shader next draw.
+  const campFlags: { impulse: FlagImpulse; x: number; z: number }[] = [];
+  const flagWorldScratch = new THREE.Vector3();
   group.traverse(node => {
     if (node.name === CAMPFIRE_LIGHT_NAME) campfireLights.push(node as THREE.PointLight);
+    if (node.name === CAMP_FLAG_CLOTH_NAME) {
+      node.getWorldPosition(flagWorldScratch);
+      campFlags.push({
+        impulse: node.userData.flagImpulse as FlagImpulse,
+        x: flagWorldScratch.x,
+        z: flagWorldScratch.z,
+      });
+    }
   });
   let flickerSeconds = 0;
 
@@ -462,6 +492,26 @@ export function createMondstadtWorld(
       campfireLights.forEach((light, index) => {
         light.intensity = 2.5 + Math.sin(flickerSeconds * 9 + index * 2.1) * 0.35;
       });
+      // Decay live flag kicks back to rest. Idle flags (mag 0) are skipped —
+      // they cost nothing until a projectile passes.
+      for (const flag of campFlags) {
+        if (flag.impulse.mag > 0) {
+          flag.impulse.mag = decayFlagImpulse(
+            flag.impulse.mag,
+            deltaSeconds,
+            FLAG_IMPULSE_DECAY_SECONDS
+          );
+        }
+      }
+    },
+    disturbFlags(x, z, dirX, dirZ) {
+      for (const flag of campFlags) {
+        if (!withinDisturbRadius(flag.x - x, flag.z - z, FLAG_DISTURB_RADIUS)) continue;
+        // Fresh kick overwrites: the newest/nearest shot owns the flag's pose.
+        flag.impulse.dirX = dirX;
+        flag.impulse.dirZ = dirZ;
+        flag.impulse.mag = 1;
+      }
     },
     getGroundHeight(x, z, maxSurfaceY = Infinity) {
       let groundHeight = getTerrainHeight(x, z);
