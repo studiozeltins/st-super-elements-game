@@ -102,10 +102,18 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 09-01-PLAN.md — Pure day/night math + vitest twin (phase01, keyframe palette, night floor, lantern/firefly scalars)
 - [ ] 09-02-PLAN.md — Gradient sky-dome + fog coupling + AmbienceHandles (single-source fog/sky, fog near/far tune)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 09-03-PLAN.md — Plaza lanterns (build-time named PointLights collected into ambience.lanternLights)
 - [ ] 09-04-PLAN.md — Day/night runtime: server clock (Date.now fallback) + zero-alloc cycle factory
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 09-05-PLAN.md — Wire into frame loop + EventContext LAN-sync tap + ?nodaynight + two-client playtest
 
 ### Phase 10: Ambient Audio & Music
