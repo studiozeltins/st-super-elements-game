@@ -9,6 +9,7 @@ export { createMushroom } from './createMushroom';
 export { createTeepee } from './createTeepee';
 export { createTotem } from './createTotem';
 export { createCampfire } from './createCampfire';
+export { createLantern, LANTERN_LIGHT_NAME } from './createLantern';
 export { createCampFlag } from './createCampFlag';
 export { createSpikes } from './createSpikes';
 export { createWoodenArch } from './createWoodenArch';
