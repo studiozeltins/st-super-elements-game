@@ -31,7 +31,7 @@ enabled — per-phase costs sum.
 (8.1, 8.2) are urgent insertions. Numbering continues from v0.2.0-alpha (ended at Phase 7).
 
 - [x] **Phase 8: Wind Core** - One shared wind module (phase, gusts, direction) drives grass, flags, canopies, and smoke, with visibly traveling gust waves (completed 2026-07-14)
-- [ ] **Phase 9: Atmosphere & Day/Night** - Distance fog + sky gradient + ~20min day/night color drift as ONE server-anchored color pipeline, lanterns at dusk
+- [x] **Phase 9: Atmosphere & Day/Night** - Distance fog + sky gradient + ~20min day/night color drift as ONE server-anchored color pipeline, lanterns at dusk (completed 2026-07-14)
 - [ ] **Phase 10: Ambient Audio & Music** - Bus/compressor refactor, procedural wind bed + randomized one-shots, region + combat music crossfade, combat ducking
 - [ ] **Phase 11: Lived-in Props & Wear** - Worn footpaths on real routes, plaza props, scorch regrowth + bend-trail tuning, sprint dust puffs
 - [ ] **Phase 12: Wildlife** - Instanced butterflies by day, startle-flush birds off the sprint signal, emissive fireflies at dusk/night
@@ -182,7 +182,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
-| 9. Atmosphere & Day/Night | 5/5 | Complete   | 2026-07-14 |
+| 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |
