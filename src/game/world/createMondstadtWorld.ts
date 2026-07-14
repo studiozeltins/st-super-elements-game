@@ -13,6 +13,7 @@ import {
   createCampFlag,
   createCanopyTree,
   createFlower,
+  createLantern,
   createMushroom,
   createPalmTree,
   createRockSpire,
@@ -26,6 +27,7 @@ import {
 } from './assets';
 import { createGrassField } from './createGrassField';
 import { CAMPFIRE_LIGHT_NAME } from './assets/createCampfire';
+import { LANTERN_LIGHT_NAME } from './assets/createLantern';
 import { CAMP_FLAG_CLOTH_NAME } from './assets/createCampFlag';
 import {
   FLAG_DISTURB_RADIUS,
@@ -547,6 +549,24 @@ export function createMondstadtWorld(
     if (campRandom() < 0.5) placeAroundCamp(createWoodenArch(campRandom), 7);
   }
 
+  // Plaza lanterns (D-07): a ring of warm build-time lights well inside the safe
+  // zone (radius 14 < SAFE_ZONE_RADIUS 18), clear of the fountain basin (r 3).
+  // Their intensity later fades with the day/night cycle via ambience.lanternLights
+  // — added ONCE here, never at runtime (recompile ban). Own seeded RNG so the
+  // count/jitter is deterministic and independent of prior placement draws.
+  const lanternRandom = createSeededRandom(WORLD_DECOR_SEED ^ 0x1a27);
+  const LANTERN_COUNT = 6;
+  const LANTERN_RING_RADIUS = 14;
+  for (let index = 0; index < LANTERN_COUNT; index += 1) {
+    const angle = (index / LANTERN_COUNT) * Math.PI * 2 + 0.3;
+    placeAsset(
+      createLantern(lanternRandom),
+      Math.cos(angle) * LANTERN_RING_RADIUS,
+      Math.sin(angle) * LANTERN_RING_RADIUS,
+      0.3
+    );
+  }
+
   scene.add(group);
 
   // The world is static: compute every matrix ONCE and freeze the subtree.
@@ -568,8 +588,12 @@ export function createMondstadtWorld(
   // onBeforeRender reads, so setting mag here shows up in-shader next draw.
   const campFlags: { impulse: FlagImpulse; x: number; z: number }[] = [];
   const flagWorldScratch = new THREE.Vector3();
+  // Plaza lanterns: collected by name in this SAME frozen-world traverse (no
+  // second walk). The day/night cycle (Plan 04) fades these via ambience.
+  const lanternLights: THREE.PointLight[] = [];
   group.traverse(node => {
     if (node.name === CAMPFIRE_LIGHT_NAME) campfireLights.push(node as THREE.PointLight);
+    if (node.name === LANTERN_LIGHT_NAME) lanternLights.push(node as THREE.PointLight);
     if (node.name === CAMP_FLAG_CLOTH_NAME) {
       node.getWorldPosition(flagWorldScratch);
       campFlags.push({
@@ -580,10 +604,6 @@ export function createMondstadtWorld(
     }
   });
   let flickerSeconds = 0;
-
-  // Plaza lanterns are collected here by name in a later plan (Plan 03); the
-  // day/night cycle fades their intensity. Empty until then.
-  const lanternLights: THREE.PointLight[] = [];
 
   return {
     group,
