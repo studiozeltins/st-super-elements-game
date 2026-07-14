@@ -262,10 +262,10 @@ The four day/night-relevant pitfalls (full detail in `.planning/research/PITFALL
 
 **Everything else in this research is `[VERIFIED]` against live code or the installed SDK type defs.**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Sky-dome camera tracking vs fixed origin.** Recommendation: parent-to-camera (or `position.copy(camera.position)` each frame) so the horizon sits at the horizon as the player roams `WORLD_BOUND=130`; one matrix push, trivial. Fixed-origin huge dome is acceptable if the horizon shift proves invisible — decide in playtest.
-2. **Safe-zone ring brightness at night** (Pitfall 5). Recommendation: leave it bright (it's a gameplay affordance) unless the night screenshot audit says it dominates — then gate it by the day/night factor via a shared uniform. Flag for the night-readability playtest.
+1. **Sky-dome camera tracking vs fixed origin. — RESOLVED: fixed-origin.** Plan 09-02 Task 2 chooses a fixed-origin dome with `radius ≫ fog.far`, keeping Plan 05 frame wiring to a single `daynight.update()` line (no per-frame camera matrix push). Camera-tracking stays a playtest fallback only if the horizon shift proves visible while roaming `WORLD_BOUND=130`.
+2. **Safe-zone ring brightness at night** (Pitfall 5). **— RESOLVED: leave bright, verify in playtest.** The ring (`createMondstadtWorld.ts:167` `0x9fe86a`) + campfire-flame `MeshBasicMaterial` are unlit/emissive and won't dim with the light-carried palette. Kept bright as gameplay affordances; carried into Plan 09-05 Task 3 as an explicit night-readability check (confirm they don't dominate/wash out the night frame through the pixel filter). If the audit says they dominate, gate via the shared day/night factor uniform.
 
 ## Environment Availability
 
