@@ -51,7 +51,7 @@ enabled — per-phase costs sum.
   3. Each consumer keeps its own character on the shared phase — flags flap faster, smoke drifts laterally as it rises, canopies sway low-amplitude/low-frequency
   4. Grass rendering looks unchanged after the `uTime` extraction, and a `?nowind` flag kills all sway for bisecting
 
-**Plans**: 9 plans (5 original + 2 gap closure + 2 UAT gap closure)
+**Plans**: 11 plans (5 original + 2 gap closure + 2 UAT gap closure + 2 UAT round-2 gap closure)
 
 Plans:
 **Wave 1**
@@ -80,6 +80,11 @@ Plans:
 
 - [x] 08-08-PLAN.md — windMath flag pose math: downwind swing + windless drape mirrors/GLSL generators, test-first (UAT tests 4/5/6/9) [Wave 1]
 - [x] 08-09-PLAN.md — createCampFlag shader rework: in-shader downwind yaw, limp drape at ?nowind, voxel-stepped cloth (UAT tests 4/5/6/8/9) [Wave 2]
+
+**UAT Gap Closure — Round 2** *(from 08-UAT.md round-2 flag issues — run with `/gsd-execute-phase 8 --gaps-only`)*
+
+- [ ] 08-10-PLAN.md — windMath drape-driver rebalance (test-first): continuous gust-envelope droop so the calm flag hangs between gusts and lifts under a gust (Gap 1, UAT test 3) [Wave 1]
+- [ ] 08-11-PLAN.md — projectile→flag coupling: distance-gated disturbFlags + per-flag decaying impulse displacement, mirroring stampGround (Gap 2, UAT test 4) [Wave 2]
 
 ### Phase 9: Atmosphere & Day/Night
 
@@ -161,7 +166,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Wind Core | 9/9 | Complete   | 2026-07-14 |
+| 8. Wind Core | 9/11 | UAT gap closure | - |
 | 9. Atmosphere & Day/Night | 0/TBD | Not started | - |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
