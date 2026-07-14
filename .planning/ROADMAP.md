@@ -51,7 +51,7 @@ enabled — per-phase costs sum.
   3. Each consumer keeps its own character on the shared phase — flags flap faster, smoke drifts laterally as it rises, canopies sway low-amplitude/low-frequency
   4. Grass rendering looks unchanged after the `uTime` extraction, and a `?nowind` flag kills all sway for bisecting
 
-**Plans**: 7 plans (5 original + 2 gap closure)
+**Plans**: 9 plans (5 original + 2 gap closure + 2 UAT gap closure)
 
 Plans:
 **Wave 1**
@@ -75,6 +75,11 @@ Plans:
 
 - [x] 08-06-PLAN.md — wind-scoped flag/canopy material caches (CR-01/CR-02), tree-base height ramp (WR-02), flag test coverage (WR-03) [Wave 1]
 - [x] 08-07-PLAN.md — smoke teardown wiring in createGame.dispose() + complete buffer release (WR-01) [Wave 1]
+
+**UAT Gap Closure** *(from 08-UAT.md flag issues — run with `/gsd-execute-phase 8 --gaps-only`)*
+
+- [ ] 08-08-PLAN.md — windMath flag pose math: downwind swing + windless drape mirrors/GLSL generators, test-first (UAT tests 4/5/6/9) [Wave 1]
+- [ ] 08-09-PLAN.md — createCampFlag shader rework: in-shader downwind yaw, limp drape at ?nowind, voxel-stepped cloth (UAT tests 4/5/6/8/9) [Wave 2]
 
 ### Phase 9: Atmosphere & Day/Night
 
