@@ -32,6 +32,7 @@ enabled — per-phase costs sum.
 
 - [x] **Phase 8: Wind Core** - One shared wind module (phase, gusts, direction) drives grass, flags, canopies, and smoke, with visibly traveling gust waves (completed 2026-07-14)
 - [x] **Phase 9: Atmosphere & Day/Night** - Distance fog + sky gradient + ~20min day/night color drift as ONE server-anchored color pipeline, lanterns at dusk (completed 2026-07-14)
+- [ ] **Phase 9.1: Dynamic Sun and Shadows** *(INSERTED)* - Shadows sweep with the time-of-day sun on a readability-capped arc; overrides Phase 9's frozen-sun (D-02) with texel-snap + reduce-motion fallback
 - [ ] **Phase 10: Ambient Audio & Music** - Bus/compressor refactor, procedural wind bed + randomized one-shots, region + combat music crossfade, combat ducking
 - [ ] **Phase 11: Lived-in Props & Wear** - Worn footpaths on real routes, plaza props, scorch regrowth + bend-trail tuning, sprint dust puffs
 - [ ] **Phase 12: Wildlife** - Instanced butterflies by day, startle-flush birds off the sprint signal, emissive fireflies at dusk/night
@@ -116,6 +117,29 @@ Plans:
 
 - [x] 09-05-PLAN.md — Wire into frame loop + EventContext LAN-sync tap + ?nodaynight + two-client playtest
 
+### Phase 09.1: Dynamic Sun and Shadows (INSERTED)
+
+**Goal**: Shadows sweep with the time-of-day sun on a readability-capped arc — dynamic without hurting combat readability, shimmering, or FPS
+**Depends on**: Phase 9 (consumes the day/night phase + server clock)
+**Requirements**: SHADOW-01, SHADOW-02, SHADOW-03, SHADOW-04
+**Supersedes**: This phase DELIBERATELY reverses Phase 9 decision D-02 and relaxes DAYNITE-01's
+"sun/shadow direction never moves" clause. That was a considered default, not a mistake — the
+frozen sun protected combat readability, shadow-map perf, and pixel-crawl. This phase must
+re-earn those guarantees under a *moving* sun (capped arc + texel-snap + reduce-motion path)
+rather than discard them.
+**Success Criteria** (what must be TRUE):
+
+  1. The sun direction (and therefore shadows) drifts with the same day/night phase/server clock — dawn shadows fall one way, dusk the other — never desynced from the color cycle
+  2. The sun arc is CAPPED so it never grazes the horizon: telegraphs, enemies, and gem drops inside the gameplay radius keep ~full contrast at every time of day (ATMO-03 preserved under motion)
+  3. The shadow-map basis recomputes per-frame from the moving sun WITH texel-snapping — no shadow shimmer/crawl under the pixel filter, and no FPS regression during a golem-class fight (`scripts/fps_playtest.py`)
+  4. A reduce-motion / `?nomovingsun` path pins the sun to a fixed high-noon key — i.e. falls back to Phase 9's frozen-sun behavior exactly
+
+**Plans:** 0 plans
+
+Plans:
+
+- [ ] TBD (run /gsd-plan-phase 09.1 to break down)
+
 ### Phase 10: Ambient Audio & Music
 
 **Goal**: The world sounds alive — a layered procedural ambience bed and region music, both combat-aware
@@ -177,12 +201,13 @@ Plans:
 
 ## Progress
 
-**Execution Order:** 8 → 9 → 10 → 11 → 12 → 13 (8 and 9 are order-swappable in principle; 10 needs 8+9, 12 needs 8+9+10, 13 is last by ruling)
+**Execution Order:** 8 → 9 → (9.1) → 10 → 11 → 12 → 13 (8 and 9 order-swappable in principle; 10 needs 8+9, 12 needs 8+9+10, 13 is last by ruling). Phase 9.1 (dynamic sun/shadows) is a post-Phase-9 insertion — schedule at will; not a dependency for 10–13.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
+| 9.1. Dynamic Sun and Shadows *(inserted)* | 0/TBD | Not started | - |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |

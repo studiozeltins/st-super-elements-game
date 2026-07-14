@@ -6,15 +6,15 @@ current_phase: 10
 current_phase_name: Ambient Audio & Music
 status: verifying
 stopped_at: Phase 9 Plan 05 — blocking human-verify checkpoint (two-client LAN playtest)
-last_updated: "2026-07-14T15:17:04.796Z"
+last_updated: "2026-07-14T15:18:24.388Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 9 complete, transitioned to Phase 10
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 2
   total_plans: 16
   completed_plans: 16
-  percent: 33
+  percent: 29
 ---
 
 # Project State
@@ -151,6 +151,10 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
   milestone at all (client-only).
 
 - Phase 8 human playtest NOT yet run — 08-05 Task 2 checkpoint was auto-approved in --auto mode; a human must walk the 10-item checklist via /gsd-verify-work before phase sign-off
+
+### Roadmap Evolution
+
+- Phase 09.1 inserted after Phase 9: Dynamic sun/shadows — user request post-Phase-9; deliberately overrides D-02/DAYNITE-01 frozen-sun (URGENT)
 
 ## Deferred Items
 

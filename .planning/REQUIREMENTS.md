@@ -48,6 +48,22 @@ zero server publish.
 - [x] **DAYNITE-04**: Plaza lanterns fade in at dusk and out at dawn (warm points vs cool
   night; no runtime light add/remove — intensity fade on build-time lights)
 
+### Dynamic Sun & Shadows (SHADOW) — Phase 9.1 (inserted; overrides DAYNITE-01/D-02 frozen-sun)
+
+- [ ] **SHADOW-01**: Sun direction drifts with the SAME day/night phase/server clock as the
+  color cycle — dawn shadows fall one way, dusk the other, never desynced from the palette
+
+- [ ] **SHADOW-02**: The sun arc is CAPPED (never grazes the horizon) so telegraphs, enemies,
+  and gem drops inside the gameplay radius keep ~full contrast at every time of day — ATMO-03
+  preserved under a moving sun
+
+- [ ] **SHADOW-03**: The shadow-map basis recomputes per-frame from the moving sun WITH
+  texel-snapping — no shadow shimmer/crawl under the pixel filter, no FPS regression during a
+  golem-class fight (`scripts/fps_playtest.py`)
+
+- [ ] **SHADOW-04**: A reduce-motion / `?nomovingsun` path pins the sun to a fixed high-noon
+  key — exactly Phase 9's frozen-sun fallback
+
 ### Ambient Audio Bed (AMBI)
 
 - [ ] **AMBI-01**: Audio routes through a master/ambient/sfx bus with a compressor —
@@ -175,6 +191,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DAYNITE-02 | Phase 9 | Complete |
 | DAYNITE-03 | Phase 9 | Complete |
 | DAYNITE-04 | Phase 9 | Complete |
+| SHADOW-01 | Phase 9.1 | Pending |
+| SHADOW-02 | Phase 9.1 | Pending |
+| SHADOW-03 | Phase 9.1 | Pending |
+| SHADOW-04 | Phase 9.1 | Pending |
 | AMBI-01 | Phase 10 | Pending |
 | AMBI-02 | Phase 10 | Pending |
 | AMBI-03 | Phase 10 | Pending |
