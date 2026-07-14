@@ -334,8 +334,12 @@ describe('sunDir noon key (SHADOW-04 / D-03 — passes through normalized SUN_OF
 
 describe('sunDir unit length', () => {
   it('returns a unit vector across the whole cycle', () => {
+    // Exercise the out-param signature with a REUSED scratch (the zero-alloc
+    // render-loop shape): sunDir mutates it in place and returns the same object.
+    const scratch = { x: 0, y: 0, z: 0 };
     for (const p of sampleRange(0, 1, 500)) {
-      const dir = sunDir(p);
+      const dir = sunDir(p, scratch);
+      expect(dir).toBe(scratch);
       expect(Math.hypot(dir.x, dir.y, dir.z)).toBeCloseTo(1, 9);
     }
   });

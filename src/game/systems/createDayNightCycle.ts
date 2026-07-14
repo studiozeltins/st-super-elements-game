@@ -51,6 +51,9 @@ export function createDayNightCycle(
   const scratchSunColor = new THREE.Color();
   const scratchHemiSky = new THREE.Color();
   const scratchHemiGround = new THREE.Color();
+  // Persistent sun-direction scratch — sunDir() mutates this in place each frame,
+  // so the moving-sun path heap-allocates nothing (zero-alloc render rule, D-13).
+  const scratchSunDir = { x: 0, y: 0, z: 0 };
 
   function apply(phase: number): void {
     const palette = samplePalette(phase);
@@ -70,13 +73,14 @@ export function createDayNightCycle(
     ambience.sunLight.intensity = palette.sunIntensity;
 
     // Sun DIRECTION rides the same phase (Phase 09.1, SHADOW-01): when moving,
-    // write the capped-dome sunDir(phase) through the single ambience channel
-    // (pure math → world scratch, zero alloc). When !movingSunEnabled we DON'T
-    // call sunDir — the world keeps its frozen FROZEN_SUN_DIR default (byte-exact
-    // SHADOW-04), while colors above STILL drift whenever dayNightEnabled (D-10).
+    // write the capped-dome sunDir(phase) into the persistent scratch and push it
+    // through the single ambience channel (pure math → reused scratch, zero alloc).
+    // When !movingSunEnabled we DON'T call sunDir — the world keeps its frozen
+    // FROZEN_SUN_DIR default (byte-exact SHADOW-04), while colors above STILL drift
+    // whenever dayNightEnabled (D-10).
     if (movingSunEnabled) {
-      const d = sunDir(phase);
-      ambience.setSunDirection(d.x, d.y, d.z);
+      sunDir(phase, scratchSunDir);
+      ambience.setSunDirection(scratchSunDir.x, scratchSunDir.y, scratchSunDir.z);
     }
 
     // Hemisphere fill: sky color, ground color, intensity.

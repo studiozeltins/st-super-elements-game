@@ -6,8 +6,13 @@
  * rendering wrapper (createDayNightCycle, Plan 04) only lerps these numbers
  * into scratch THREE.Colors — CPU math and render can never drift.
  * Deterministic by construction: everything is a function of the server clock,
- * no RNG, no allocations beyond the single returned palette struct (D-01/D-03/D-08).
+ * no RNG. The hot path is allocation-free: samplePalette returns one struct, and
+ * the per-frame geometry helpers (sunDir, buildSunBasis) write into caller-owned
+ * scratch (out-params) so the render loop never heap-allocates (D-01/D-03/D-08).
  */
+
+/** Plain 3-component vector — the THREE-free scratch shape the geometry helpers mutate. */
+export type Vec3 = { x: number; y: number; z: number };
 
 /** 20 real minutes in micros (20 * 60 * 1_000_000). One full day/night cycle (D-01). */
 export const CYCLE_MICROS = 1_200_000_000n;
@@ -270,8 +275,13 @@ export const SUN_ARC = {
  * Convention: `atan2(x,z)=azimuth`, `y=up` — this reproduces the normalized
  * SUN_OFFSET at noon. It is the sun-POSITION direction (toward the sun), NOT the
  * light-travel direction; the renderer negates it downstream (D-05 sign convention).
+ *
+ * OUT-PARAM: writes into and returns `out` so the per-frame render caller can pass
+ * a persistent scratch vec and never heap-allocate (zero-alloc render rule). The
+ * default fresh object is a test/one-shot convenience only — production always
+ * passes its own scratch.
  */
-export function sunDir(phase: number): { x: number; y: number; z: number } {
+export function sunDir(phase: number, out: Vec3 = { x: 0, y: 0, z: 0 }): Vec3 {
   const p = ((phase % 1) + 1) % 1;
   const w = 2 * Math.PI * (p - SUN_ARC.NOON_PHASE);
   // cos(w) ∈ [-1,1] → domeT ∈ [0,1] → elev ∈ [FLOOR, PEAK]. Peaks at noon (w=0).
@@ -281,7 +291,10 @@ export function sunDir(phase: number): { x: number; y: number; z: number } {
   const elev = (elevDeg * Math.PI) / 180;
   const az = (azDeg * Math.PI) / 180;
   const cosE = Math.cos(elev);
-  return { x: cosE * Math.sin(az), y: Math.sin(elev), z: cosE * Math.cos(az) };
+  out.x = cosE * Math.sin(az);
+  out.y = Math.sin(elev);
+  out.z = cosE * Math.cos(az);
+  return out;
 }
 
 /**
