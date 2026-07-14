@@ -16,6 +16,8 @@ import { detectQualityProfile } from './engine/deviceProfile';
 import { createGroundInfluence } from './systems/createGroundInfluence';
 import { createScorchMap, SCORCH_PER_STRIKE } from './systems/createScorchMap';
 import { createWind } from './systems/createWind';
+import { createDayNightCycle } from './systems/createDayNightCycle';
+import { createServerClock } from './net/createServerClock';
 import { createMondstadtWorld, isInsideSafeZone } from './world/createMondstadtWorld';
 import {
   resolveBodyCollisions,
@@ -171,6 +173,13 @@ export interface Game {
   syncEnemies(rows: readonly Enemy[]): void;
   /** Reconciles the rendered goliath raiders against the server `goliath` table. */
   syncGoliaths(rows: readonly Goliath[]): void;
+  /**
+   * Re-anchors the cosmetic day/night clock on a server-micros timestamp (the
+   * worldTick reducer's start time, bridged from a live table callback — NEVER a
+   * render). Passthrough to serverClock.anchor; keeps all LAN clients on the same
+   * time of day. Cosmetic-only, never gates gameplay (threat T-09-01).
+   */
+  syncServerClock(serverMicros: bigint): void;
   /** Feeds `unit_attack` FSM rows to the ground-telegraph system (windup countdown). */
   syncUnitAttacks(rows: readonly UnitAttack[]): void;
   /** One `attack_strike` event: impact burst + rim flash + camera shake + SFX (ANIM-04), distance-attenuated from the local player. */
@@ -295,8 +304,8 @@ export function createGame(
   const scene = new THREE.Scene();
   const pixelRenderer = createPixelRenderer(canvas);
   // Perf bisect kill-switches: append ?nograss / ?nobend / ?noshadow / ?nofx
-  // / ?nowind / ?nosmoke to the URL to disable one ambiance system and find a
-  // frame-cost culprit.
+  // / ?nowind / ?nosmoke / ?nodaynight to the URL to disable one ambiance
+  // system and find a frame-cost culprit.
   const perfFlags = new URLSearchParams(window.location.search);
   if (perfFlags.has('noshadow')) pixelRenderer.renderer.shadowMap.enabled = false;
   // Ground influence map: everything that moves stamps into it, grass bends out.
@@ -310,6 +319,9 @@ export function createGame(
   // ?nowind zeroes the strength uniform (no recompile), base sway keeps running.
   const windEnabled = !perfFlags.has('nowind');
   const smokeEnabled = !perfFlags.has('nosmoke');
+  // ?nodaynight freezes the palette at a neutral day key (D-09) — a clean FPS
+  // bisection baseline, mirroring the ?nowind/?nosmoke convention.
+  const dayNightEnabled = !perfFlags.has('nodaynight');
   const wind = createWind(windEnabled);
   const world = createMondstadtWorld(scene, {
     grass: {
@@ -319,6 +331,11 @@ export function createGame(
     scorch: scorchMap,
     wind,
   });
+  // Server-anchored day/night: the clock (re-anchored off the worldTick reducer
+  // timestamp via the bridge tap) feeds the cycle — the ONE writer of the
+  // ambience handles. Constructed AFTER the world so world.ambience exists.
+  const serverClock = createServerClock();
+  const daynight = createDayNightCycle(dayNightEnabled, serverClock, world.ambience);
   // The overlay pass only draws sprites — skip walking the whole static world.
   pixelRenderer.setOverlayCullTarget(world.group);
   // Light pool must exist before the effect system (projectiles borrow lights).
@@ -1325,6 +1342,10 @@ export function createGame(
     // Advance the shared wind clock FIRST — every consumer (grass now, canopy/
     // flags/smoke later) reads this frame's phase. The ONLY clock advance.
     wind.update(deltaSeconds);
+    // Advance the day/night cycle from the shared server clock — pulled by the
+    // loop, NEVER derived per React render (Pitfall 6.1). The cycle reads
+    // serverClock.nowMicros() internally; no private accumulator.
+    daynight.update();
 
     // Combo drops if the next hit does not land inside the (shrinking) window.
     if (combo > 0 && elapsedSeconds - lastComboHitAt > comboWindowSeconds(combo)) {
@@ -1781,6 +1802,9 @@ export function createGame(
       // Re-gate telegraphs on the fresh alive flags (a death mid-windup must
       // drop the disc immediately, before the attack row itself updates).
       telegraphSystem.syncAttacks(attackViewClock.getAttackRows(), attackViewClock.isUnitAlive);
+    },
+    syncServerClock(serverMicros) {
+      serverClock.anchor(serverMicros);
     },
     syncUnitAttacks(rows) {
       // Stored in the view clock so the frame loop can re-derive attack views
