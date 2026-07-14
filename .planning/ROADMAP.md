@@ -137,9 +137,16 @@ rather than discard them.
 **Plans:** 3 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 09.1-01-PLAN.md — Pure-twin sun-arc math + vitest (sunDir/SUN_ARC/buildSunBasis; floor/continuity/asymmetry/noon-peak) [Wave 1]
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 09.1-02-PLAN.md — Renderer wiring: per-frame basis rebuild + setSunDirection channel + ?nomovingsun/reduce-motion freeze + comment rewrites [Wave 2]
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 09.1-03-PLAN.md — Golem-fight FPS gate + crawl/midday-A/B/LAN-sync human verification [Wave 3]
 
 ### Phase 10: Ambient Audio & Music
