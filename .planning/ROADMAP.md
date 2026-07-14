@@ -74,7 +74,7 @@ Plans:
 **Gap Closure** *(from 08-VERIFICATION.md — run with `/gsd-execute-phase 8 --gaps-only`)*
 
 - [x] 08-06-PLAN.md — wind-scoped flag/canopy material caches (CR-01/CR-02), tree-base height ramp (WR-02), flag test coverage (WR-03) [Wave 1]
-- [ ] 08-07-PLAN.md — smoke teardown wiring in createGame.dispose() + complete buffer release (WR-01) [Wave 1]
+- [x] 08-07-PLAN.md — smoke teardown wiring in createGame.dispose() + complete buffer release (WR-01) [Wave 1]
 
 ### Phase 9: Atmosphere & Day/Night
 
@@ -156,7 +156,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Wind Core | 6/7 | In Progress|  |
+| 8. Wind Core | 7/7 | Complete   | 2026-07-14 |
 | 9. Atmosphere & Day/Night | 0/TBD | Not started | - |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
