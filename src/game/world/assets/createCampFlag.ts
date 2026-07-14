@@ -2,7 +2,22 @@ import * as THREE from 'three';
 import type { WindUniforms } from '../../systems/createWind';
 import { FLAG, flagDrapeGlsl, flagSwingGlsl, gustGlsl } from '../../systems/windMath';
 import type { SeededRandom, WorldAsset } from './types';
+import type { FlagImpulse } from './flagImpulse';
 import { lambert, pickRandom } from './assetHelpers';
+
+/**
+ * Mesh name the world uses to collect flag cloths after the freeze (mirror of
+ * CAMPFIRE_LIGHT_NAME) — createMondstadtWorld gates projectile impulses to these.
+ */
+export const CAMP_FLAG_CLOTH_NAME = 'campFlagCloth';
+
+/**
+ * Peak local-space displacement of a projectile kick at the cloth's free end,
+ * BEFORE the along^2 free-end weighting and the (0..1) impulse magnitude. Pure
+ * ART constant — it shapes how hard a passing shot snaps the banner; the decay
+ * window + distance gate live in flagImpulse.ts (shared with the world loop).
+ */
+const IMPULSE_AMP = 0.7;
 
 const POLE_COLOR = 0x6b4a2f;
 const BANNER_RED = 0xb8433a;
@@ -40,6 +55,16 @@ const f = (n: number): string => n.toFixed(4);
 let flagWind: WindUniforms | null = null;
 let poleMaterial: THREE.MeshLambertMaterial | null = null;
 let clothMaterial: THREE.MeshLambertMaterial | null = null;
+
+// Projectile-impulse uniforms, ADDITIVE to the wind pose and shared by the ONE
+// pooled cloth material (the wind uniforms stay exactly uTime/uWindDir/
+// uWindStrength — these are separate). Each flag varies them per-mesh via its
+// onBeforeRender writer: three renders meshes sequentially, so a flag draws
+// with its own kick even though the material + 'campFlag' cache key are shared
+// (no new material, no churn). The Vector2 is reused via .set — no per-frame
+// alloc. An idle flag writes mag 0, so no flag inherits the previous flag's kick.
+const uImpulseDir = { value: new THREE.Vector2(0, 0) };
+const uImpulseMag = { value: 0 };
 
 /**
  * Wind-guarded lazy material pair, built with the shared wind uniforms on the
@@ -89,6 +114,10 @@ function getFlagMaterials(wind: WindUniforms): {
     shader.uniforms.uTime = wind.timeUniform;
     shader.uniforms.uWindDir = wind.directionUniform;
     shader.uniforms.uWindStrength = wind.strengthUniform;
+    // Additive projectile-impulse uniforms — shared objects, written per-flag
+    // by onBeforeRender (by reference, like the wind uniforms).
+    shader.uniforms.uImpulseDir = uImpulseDir;
+    shader.uniforms.uImpulseMag = uImpulseMag;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -97,6 +126,8 @@ function getFlagMaterials(wind: WindUniforms): {
         uniform float uTime;
         uniform vec2 uWindDir;
         uniform float uWindStrength;
+        uniform vec2 uImpulseDir;
+        uniform float uImpulseMag;
         `
       )
       .replace(
@@ -154,6 +185,19 @@ function getFlagMaterials(wind: WindUniforms): {
           transformed.x * yawCos + transformed.z * yawSin,
           -transformed.x * yawSin + transformed.z * yawCos
         );
+        // Projectile impulse (plan 08-11, Gap 2): a shot flying past kicks the
+        // cloth in its WORLD travel direction, then decays to rest (uImpulseMag
+        // relaxes to 0 in the world). Additive + transient, and INDEPENDENT of
+        // uWindStrength — a limp ?nowind flag still snaps. The world-space
+        // uImpulseDir is projected into the cloth's local frame with the SAME
+        // baked heading the yaw uses (local-x = along heading, local-z = the 2D
+        // cross), applied post-yaw so the kick reads as pure shot direction.
+        // The free end whips most (along^2).
+        float impulseLocalX = dot(uImpulseDir, heading);
+        float impulseLocalZ = heading.y * uImpulseDir.x - heading.x * uImpulseDir.y;
+        float impulseWeight = uImpulseMag * along * along * ${f(IMPULSE_AMP)};
+        transformed.x += impulseLocalX * impulseWeight;
+        transformed.z += impulseLocalZ * impulseWeight;
         `
       );
   };
@@ -200,6 +244,20 @@ export function createCampFlag(random: SeededRandom, wind: WindUniforms): WorldA
   );
   cloth.position.y = POLE_HEIGHT - FLAG.height / 2 - 0.06;
   cloth.castShadow = false; // the depth pass cannot follow the vertex patch
+  // Named + seeded per-flag impulse state: the world collects these cloths by
+  // name and drives userData.flagImpulse; onBeforeRender copies THIS flag's
+  // impulse into the shared uniforms right before it draws, then the next flag
+  // overwrites them for its own draw. Writes every frame (incl. mag 0) so an
+  // idle flag resets the shared uniform and never inherits a neighbour's kick.
+  // No per-frame alloc — the Vector2 is reused via .set (frozen-matrix rule
+  // holds: this writes uniforms only, never rotates the mesh).
+  cloth.name = CAMP_FLAG_CLOTH_NAME;
+  const flagImpulse: FlagImpulse = { dirX: 0, dirZ: 0, mag: 0 };
+  cloth.userData.flagImpulse = flagImpulse;
+  cloth.onBeforeRender = () => {
+    uImpulseDir.value.set(flagImpulse.dirX, flagImpulse.dirZ);
+    uImpulseMag.value = flagImpulse.mag;
+  };
   group.add(cloth);
 
   // Static build-time orientation — the cloth answers the wind in-shader,
