@@ -110,7 +110,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 09-03-PLAN.md — Plaza lanterns (build-time named PointLights collected into ambience.lanternLights)
-- [ ] 09-04-PLAN.md — Day/night runtime: server clock (Date.now fallback) + zero-alloc cycle factory
+- [x] 09-04-PLAN.md — Day/night runtime: server clock (Date.now fallback) + zero-alloc cycle factory
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -182,7 +182,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
-| 9. Atmosphere & Day/Night | 3/5 | In Progress|  |
+| 9. Atmosphere & Day/Night | 4/5 | In Progress|  |
 | 10. Ambient Audio & Music | 0/TBD | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |
