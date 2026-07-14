@@ -4,17 +4,17 @@ milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 9
 current_phase_name: Atmosphere & Day/Night
-status: executing
-stopped_at: Phase 9 context gathered
-last_updated: "2026-07-14T14:17:59.127Z"
+status: verifying
+stopped_at: Phase 9 Plan 05 — blocking human-verify checkpoint (two-client LAN playtest)
+last_updated: "2026-07-14T14:49:22.445Z"
 last_activity: 2026-07-14
 last_activity_desc: Phase 9 execution started
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 16
-  completed_plans: 15
-  percent: 17
+  completed_plans: 16
+  percent: 33
 ---
 
 # Project State
@@ -32,7 +32,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 
 Phase: 9 (Atmosphere & Day/Night) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-14 — Phase 9 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -80,6 +80,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 09 P02 | 12min | 2 tasks | 1 files |
 | Phase 09 P03 | 4min | 2 tasks | 3 files |
 | Phase 09 P04 | 6min | 2 tasks | 2 files |
+| Phase 9 P05 | 27min | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -121,6 +122,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: 09-02: Sky-dome fixed-origin with xyww far-plane vertex pin (not camera-tracking) — clipping-proof as the camera roams, keeps Plan 05 wiring to one daynight.update() line
 - [Phase ?]: 09-02: ATMO-02 single-source enforced by construction — sky-dome bottomColor uniform IS scene.fog.color, topColor uniform IS the setSkyTop scratch (same THREE.Color instances, zero-alloc drift)
 - [Phase 09]: 09-03: 6 plaza lanterns as named build-time PointLights collected into ambience.lanternLights (no runtime add/remove, plaza-only per D-07)
+- [Phase 9]: 09-05: daynight.update() is called with no arg — the shipped DayNightCycle reads clock.nowMicros() internally; wiring passes serverClock into the factory so one coherent server clock drives the phase (no private accumulator).
+- [Phase 9]: 09-05: LAN day/night sync re-anchors off the enemy/goliath worldTick reducer EventContext timestamp (tag==='Reducer'), tapped in useGameTableBridge; Date.now() fallback covers the non-Reducer case. Zero server publish, cosmetic-only.
+- [Phase 9]: 09-05: 'shadows follow the sun' request DEFERRED — reverses D-02 (frozen sun basis) and contradicts DAYNITE-01; routed separately, not implemented in this phase.
 
 ### Pending Todos
 
@@ -163,7 +167,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-14T14:17:48.695Z
-Stopped at: Phase 9 context gathered
+Last session: 2026-07-14T14:48:39.689Z
+Stopped at: Phase 9 Plan 05 — blocking human-verify checkpoint (two-client LAN playtest)
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
-Resume file: .planning/phases/09-atmosphere-day-night/09-CONTEXT.md
+Resume file: .planning/phases/09-atmosphere-day-night/09-05-PLAN.md
