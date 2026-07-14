@@ -13,6 +13,12 @@ const CANOPY_GREEN_LIGHT = 0x58a24f;
 /** GLSL float literal — raw ints break the shader compile (grass precedent). */
 const f = (n: number): string => n.toFixed(4);
 
+/**
+ * Cap flatten factor — single source for both the mesh scale.y and the
+ * aTreeHeight bake, so the baked heights match the rendered vertex heights.
+ */
+const CAP_SCALE_Y = 0.55;
+
 // The canopy factory is invoked through the world scatter table with only a
 // seeded random, so wind reaches the cap materials via module-level injection:
 // the world calls initCanopyWind(options.wind) once before scattering trees.
@@ -77,6 +83,7 @@ function getCanopyMaterial(color: number): THREE.MeshLambertMaterial {
         uniform float uTime;
         uniform vec2 uWindDir;
         uniform float uWindStrength;
+        attribute float aTreeHeight;
         `
       )
       .replace(
@@ -84,9 +91,13 @@ function getCanopyMaterial(color: number): THREE.MeshLambertMaterial {
         /* glsl */ `
         vec3 transformed = vec3(position);
         // modelMatrix is valid under the frozen-matrix rule: build-time
-        // matrices never change, so world height/position are constants here.
+        // matrices never change, so the world position is a constant here —
+        // used ONLY for the wind-direction projection feeding the gust front.
         vec4 canopyWorld = modelMatrix * vec4(position, 1.0);
-        float heightWeight = clamp((canopyWorld.y - ${f(CANOPY.swayBaseY)}) * ${f(CANOPY.invSwaySpan)}, 0.0, 1.0);
+        // Heights are TREE-LOCAL, baked per-vertex at build time (aTreeHeight
+        // = height above the tree's own base), so a hill tree and a valley
+        // tree get identical weights — cap bottoms move less than cap tops.
+        float heightWeight = clamp((aTreeHeight - ${f(CANOPY.swayBaseY)}) * ${f(CANOPY.invSwaySpan)}, 0.0, 1.0);
         float proj = dot(canopyWorld.xz, uWindDir);
         float gust = ${gustGlsl('uTime', 'proj')};
         float lean = sin(uTime * ${f(CANOPY.freq)} + proj * ${f(CANOPY.phase)}) * ${f(CANOPY.idleAmp)};
@@ -123,11 +134,24 @@ export function createCanopyTree(random: SeededRandom): WorldAsset {
   let layerHeight = trunkHeight * 0.9;
   let layerRadius = randomBetween(random, 2.2, 3);
   for (let index = 0; index < canopyLayers; index += 1) {
+    const geometry = new THREE.IcosahedronGeometry(layerRadius, 0);
+    // Bake each vertex's height above the TREE BASE (WR-02): the pooled
+    // material cannot take a per-mesh uniform, so the sway ramp reads this
+    // attribute instead of world Y. Rotation about Y never changes vertex
+    // height and the group carries no scale, so layerHeight + localY·scaleY
+    // IS the height above the base.
+    const position = geometry.getAttribute('position');
+    const treeHeights = new Float32Array(position.count);
+    for (let vertex = 0; vertex < position.count; vertex += 1) {
+      treeHeights[vertex] = layerHeight + position.getY(vertex) * CAP_SCALE_Y;
+    }
+    geometry.setAttribute('aTreeHeight', new THREE.BufferAttribute(treeHeights, 1));
+
     const cap = new THREE.Mesh(
-      new THREE.IcosahedronGeometry(layerRadius, 0),
+      geometry,
       getCanopyMaterial(canopyColors[index % canopyColors.length])
     );
-    cap.scale.y = 0.55;
+    cap.scale.y = CAP_SCALE_Y;
     cap.position.set(
       randomBetween(random, -0.2, 0.2),
       layerHeight,

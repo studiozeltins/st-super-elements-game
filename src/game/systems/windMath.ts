@@ -63,8 +63,10 @@ export const WANDER = {
 
 /**
  * Canopy character (WIND-03/D-07): slower than grass, near-still idle, gentle
- * gust lean. Trees stand 5-7u with caps from ~2.5u — height weight ramps from
- * swayBaseY over a 5u span (invSwaySpan = 1/5).
+ * gust lean. The height weight ramps on height above the TREE BASE (baked
+ * per-vertex into the aTreeHeight geometry attribute — terrain height never
+ * enters): trees stand 5-7u with caps starting ~2.5u above their base, so the
+ * ramp runs from swayBaseY over a 5u span (invSwaySpan = 1/5).
  */
 export const CANOPY = {
   freq: 0.4 * SWAY.f1,
@@ -152,8 +154,9 @@ export function swayGlsl(timeExpr: string, xExpr: string, zExpr: string): string
 /**
  * Gust envelope at retarded time as GLSL text: projExpr is the world-position
  * projection onto the wind direction (dot(worldPos.xz, uWindDir)); the time
- * argument is (timeExpr − projExpr / speed) — the traveling front, byte-for-byte
- * the same math gustAt computes on the CPU.
+ * argument is (timeExpr − projExpr / speed) — the traveling front, the same
+ * formula gustAt computes on the CPU with literals rounded to 4 decimals
+ * (phase drift < 0.2 rad/h — immaterial).
  */
 export function gustGlsl(timeExpr: string, projExpr: string): string {
   const tR = `(${timeExpr} - ${projExpr} / ${f(GUST.speed)})`;
