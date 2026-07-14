@@ -3,7 +3,7 @@ status: complete
 phase: 08-wind-core
 source: [08-VERIFICATION.md]
 started: 2026-07-14T08:15:00Z
-updated: 2026-07-14T06:04:37.888Z
+updated: 2026-07-14T06:09:03.775Z
 ---
 
 ## Current Test
@@ -76,33 +76,38 @@ blocked: 0
   reason: "User reported: regarding flag, fail it does not sway with wind gusts, like fireplace smoke! (ambiguous whether smoke also fails to respond to gusts — diagnose both flag gust response and smoke gust kink)"
   severity: major
   test: 4
-  artifacts: []  # Filled by diagnosis
-  missing: []    # Filled by diagnosis
+  root_cause: "uWindDir enters flag shader only as gust-front phase (dot in gustGlsl, createCampFlag.ts:86), never as displacement direction; displacement is zero-mean sine along cloth LOCAL z (line 90) on a random baked heading (line 139) — fixed-axis wiggle, no downwind lean/stream"
+  artifacts: [src/game/world/assets/createCampFlag.ts, src/game/systems/windMath.ts]
+  missing: ["in-shader yaw of vertex offsets about the pole hinge toward uWindDir using modelMatrix[0].xz baked heading (zero new uniforms)", "gust-scaled downwind swing/stream blended with uWindStrength and existing gust envelope"]
 - truth: "Grass blade coloring reads coherent (no out-of-place beige blades)"
   status: failed
   reason: "User reported: beige grass blades look out of place, should maybe be darker green with gradient (likely pre-existing art, not introduced by phase 8 — cosmetic)"
   severity: cosmetic
   test: 4
-  artifacts: []  # Filled by diagnosis
-  missing: []    # Filled by diagnosis
+  root_cause: "PRE-EXISTING (not phase 8): beige blades are flower blades — FLOWER_COLOR 0xfff0a8 in grassPlacement.ts:41, deliberately cream; they read as out-of-place grass instead of flowers"
+  artifacts: [src/game/world/grassPlacement.ts]
+  missing: ["tune FLOWER_COLOR toward the field palette or make flowers read as flowers (e.g. warmer head on green stem) — cosmetic art pass"]
 - truth: "Flag flap follows gust strength and wind direction from the shared clock (D-05/WIND-03) — smoke is the working reference"
   status: failed
   reason: "User reported (tests 5+9): flag wiggles on a fixed axis regardless of wind/gust direction — 'not flapping, wiggling in the same direction, does not obey wind gust direction'. Smoke reacts to gusts correctly (working reference)."
   severity: major
   test: 5
-  artifacts: []  # Filled by diagnosis
-  missing: []    # Filled by diagnosis
+  root_cause: "same as test-4 gap: direction never enters the displacement, only the gust-arrival phase"
+  artifacts: [src/game/world/assets/createCampFlag.ts, src/game/systems/windMath.ts]
+  missing: ["covered by test-4 gap fix — single shader change"]
 - truth: "Windless flag hangs down limp like cloth (?nowind or gust lull); wind lifts and ripples it"
   status: failed
   reason: "User reported (test 6): when no wind, flag should like cloth hang down — currently stays rigid horizontal with wiggle removed"
   severity: minor
   test: 6
-  artifacts: []  # Filled by diagnosis
-  missing: []    # Filled by diagnosis
+  root_cause: "rest geometry IS the strong-wind pose (createClothGeometry builds fully-stretched horizontal plane, createCampFlag.ts:103-115); all motion multiplied by uWindStrength (line 90) so strength 0 = rigid stretched quad; no drape/sag term exists"
+  artifacts: [src/game/world/assets/createCampFlag.ts, src/game/systems/windMath.ts]
+  missing: ["drape term weighted by (1 - windFactor): pitch vertices down about pole edge as function of along-distance with x foreshortening; strength 0 = limp hang with tiny residual micro-sway"]
 - truth: "Flag cloth has more visual detail (voxel-style cloth to match game aesthetic)"
   status: failed
   reason: "User request (test 8): I want more details for flag, make it maybe voxels also the cloth — enhancement, current cloth reads too plain"
   severity: cosmetic
   test: 8
-  artifacts: []  # Filled by diagnosis
-  missing: []    # Filled by diagnosis
+  root_cause: "design enhancement, not a defect: cloth is a smooth 8x5-segment plane; game aesthetic is voxel-styled"
+  artifacts: [src/game/world/assets/createCampFlag.ts]
+  missing: ["optional: chunkier voxel-look cloth (stepped quads / flat-shaded segments) — bundle with the flag shader rework"]
