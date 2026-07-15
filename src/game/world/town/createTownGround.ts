@@ -69,6 +69,10 @@ export function createTownGround(districts: District[]): THREE.Mesh {
         vec2 gStoneId = vec2(0.0);
         vec2 gStoneOutward = vec2(0.0);
         float gStoneDome = 0.0;
+        // Sun-facing edge line, applied POST-lighting (so it shows day AND night,
+        // like the silhouette outline — a pre-light brighten would vanish at night).
+        float gCobEdge = 0.0;
+        vec3 gCobEdgeCol = vec3(0.0);
         // Coarse cobble-cell id at a world point — used to discard whole stones.
         vec2 cobbleId(vec2 w) {
           float density = 1.35;
@@ -132,11 +136,11 @@ export function createTownGround(districts: District[]): THREE.Mesh {
             col = mix(col, ${vec3(0x40692b)}, crack * (0.5 + edginess * 0.45));
           }
           // Sun-facing EDGE LINE per stone: near the seam, on the side of the stone
-          // that faces the sun, brighten toward a lighter shade — a crisp rim line
-          // that sweeps as the sun moves (matches the object outline highlight).
-          float nearEdge = 1.0 - smoothstep(0.0, 0.13, border);
+          // that faces the sun. Stashed for the post-lighting pass below.
+          float nearEdge = 1.0 - smoothstep(0.0, 0.3, border);
           float sunAlign = max(0.0, dot(gStoneOutward, normalize(uSunDir.xz + vec2(1e-4))));
-          col = mix(col, min(col * 1.7 + 0.06, vec3(1.0)), nearEdge * pow(sunAlign, 2.0) * 0.75);
+          gCobEdge = nearEdge * sunAlign * 0.85;
+          gCobEdgeCol = min(col * 1.8 + 0.1, vec3(1.0));
           return col;
         }
         // Per-stone SLANT + ruggedness as a real world-space normal, so the sun
@@ -175,6 +179,13 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           }
           diffuseColor.rgb = cobble(w);
         }
+        `
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        /* glsl */ `
+        #include <opaque_fragment>
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, gCobEdgeCol, gCobEdge); // sun edge line, post-light
         `
       );
   };

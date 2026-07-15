@@ -150,6 +150,8 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
         varying vec3 vLocalNrm;
         varying vec3 vWorldNrm;
         uniform vec3 uSunDir;
+        float gRoofEdge = 0.0;
+        vec3 gRoofEdgeCol = vec3(0.0);
         ${PHASH}
         `
       )
@@ -172,13 +174,21 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
           float seam = abs(fract((uv.x + offset * COL) / COL) - 0.5);
           float grout = (courseEdge > 0.82 || seam > 0.45) ? 0.68 : 1.0;
           t *= grout;
-          // Sun-lit tile EDGE LINE: on the roof slope facing the sun, brighten the
-          // exposed lower lip of each tile course — a highlight that sweeps with sun.
-          float slopeSun = max(0.0, dot(normalize(vWorldNrm), normalize(uSunDir)));
-          float lip = smoothstep(0.16, 0.0, courseEdge);
-          t = mix(t, min(t * 1.6 + 0.06, vec3(1.0)), lip * slopeSun * 0.7);
           diffuseColor.rgb = t;
+          // Sun-lit tile EDGE LINE (stashed, applied POST-lighting so it shows day
+          // AND night): on the sun-facing slope, the exposed lower lip of each tile.
+          float slopeSun = max(0.0, dot(normalize(vWorldNrm), normalize(uSunDir)));
+          float lip = smoothstep(0.35, 0.0, courseEdge);
+          gRoofEdge = lip * slopeSun * 0.85;
+          gRoofEdgeCol = min(t * 1.8 + 0.1, vec3(1.0));
         }
+        `
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        /* glsl */ `
+        #include <opaque_fragment>
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, gRoofEdgeCol, gRoofEdge); // sun edge line, post-light
         `
       );
   };
