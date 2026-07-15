@@ -185,10 +185,10 @@ export function createTownGround(districts: District[]): THREE.Mesh {
         '#include <opaque_fragment>',
         /* glsl */ `
         #include <opaque_fragment>
-        // Sun edge line, post-light — scaled by the surface's own lit luminance so it
-        // reads by day but fades to a faint catch under blue moonlight (not a bright rim).
+        // Sun edge line, post-light — base floor keeps the highlight on the rocks at
+        // night, lit-luminance term adds more by day so it never blows out (0.2 + lum*0.5).
         float cobEdgeLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, gCobEdgeCol, gCobEdge * cobEdgeLum * 0.7);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, gCobEdgeCol, gCobEdge * (0.2 + cobEdgeLum * 0.5));
         `
       );
   };
