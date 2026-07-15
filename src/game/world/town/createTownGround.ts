@@ -74,11 +74,11 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           return id;
         }
         vec3 cobble(vec2 w) {
-          // World-space PIXEL SNAP: quantize to a chunky grid so the shading reads
-          // as hard pixel steps (keeps pixel-art crispness) instead of a smooth
-          // per-fragment gradient — the domed depth is preserved, just posterized.
-          w = (floor(w * 7.0) + 0.5) / 7.0;
-          float density = 1.35;
+          // Stones SHRINK toward the outskirts (density rises with distance from the
+          // center) so the pavement grows finer and blends into grass at the edge.
+          float maxc = max(abs(w.x), abs(w.y));
+          float edginess = smoothstep(${(townHalf * 0.4).toFixed(1)}, ${townHalf.toFixed(1)}, maxc);
+          float density = 1.3 + edginess * 1.8;
           vec2 p = w * density;
           vec2 ip = floor(p), fp = fract(p);
           float f1 = 8.0, f2 = 8.0; vec2 id = ip; vec2 nearR = vec2(0.0);
@@ -99,30 +99,34 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           float tone = phash(id + 3.1);
           vec3 dark = ${vec3(0x4f473b)}, mid = ${vec3(0x877c69)}, light = ${vec3(0xbfb39a)};
           vec3 stone = tone < 0.5 ? mix(dark, mid, tone * 2.0) : mix(mid, light, (tone - 0.5) * 2.0);
-          // Fine pixel-noise grunge texture across each stone.
-          vec2 px = floor(w * 7.0);
-          stone *= 0.85 + phash(px + id.x * 1.7) * 0.3;
+          // Fine noise grunge texture across each stone (the render pixel filter
+          // does the pixelation — no world-space snap, which just double-blurred).
+          stone *= 0.85 + phash(floor(w * 9.0) + id.x * 1.7) * 0.3;
           // Some stones mossy/stained.
           if (phash(id + 5.0) < 0.14) stone = mix(stone, ${vec3(0x6d7a46)}, 0.4);
-          // Crisp baked AO into the seams (posterized by the pixel snap → hard
-          // pixel bands, not a smooth falloff) on top of the domed-normal light.
-          stone *= 0.68 + smoothstep(0.0, 0.13, border) * 0.34;
-          // Hard-ish mortar seam.
-          float mortar = 1.0 - smoothstep(0.02, 0.07, border);
-          vec3 col = mix(stone, ${vec3(0x2c261d)}, mortar * 0.9);
+          // Baked AO into the seams (dome normal carries the rest of the depth).
+          stone *= 0.72 + smoothstep(0.0, 0.12, border) * 0.3;
+          // DISTINCT dark mortar border — a crisp defined gap between stones.
+          float mortar = 1.0 - smoothstep(0.012, 0.045, border);
+          vec3 col = mix(stone, ${vec3(0x241f18)}, mortar);
           // A few cobbles worn away to packed dirt.
           if (phash(id + 11.0) < 0.05) col = ${vec3(0x453626)} * (0.85 + phash(id + 2.0) * 0.3);
+          // Grass in the SEAMS, concentrated in the outer city (per-stone random,
+          // never a uniform line): mossy green filling some cracks, more at the edge.
+          float crack = 1.0 - smoothstep(0.0, 0.07, border);
+          if (crack > 0.0 && phash(id + 13.0) < 0.12 + edginess * 0.55) {
+            col = mix(col, ${vec3(0x40692b)}, crack * (0.5 + edginess * 0.45));
+          }
           return col;
         }
         // Per-stone SLANT + ruggedness as a real world-space normal, so the sun
         // lights each cobble at its own angle (3D relief, not flat baked shading).
         // Each Voronoi stone gets a random tilt; fine noise adds surface roughness.
         vec3 groundNormal(vec2 w) {
-          w = (floor(w * 7.0) + 0.5) / 7.0;              // same pixel snap as cobble()
           vec2 id = gStoneId;                            // set by cobble() this fragment
           vec2 slant = (hash2(id + 7.7) - 0.5) * 0.5;    // per-stone random tilt
           vec2 rug = (vec2(phash(floor(w * 11.0) + 1.0), phash(floor(w * 11.0) + 8.0)) - 0.5) * 0.35;
-          vec2 dome = gStoneOutward * gStoneDome * 0.9;  // gentler dome (snap posterizes it)
+          vec2 dome = gStoneOutward * gStoneDome * 1.1;  // rounded stone; distinct edges
           return normalize(vec3(slant.x + rug.x + dome.x, 1.0, slant.y + rug.y + dome.y));
         }
         `
