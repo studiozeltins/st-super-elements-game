@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { sunDirUniform } from '../../systems/sunUniform';
 import { DISTRICT_HALF, type District } from './townPlan';
 
 /**
@@ -35,6 +36,7 @@ export function createTownGround(districts: District[]): THREE.Mesh {
 
   const material = new THREE.MeshLambertMaterial({ color: 0xffffff });
   material.onBeforeCompile = shader => {
+    shader.uniforms.uSunDir = sunDirUniform; // by reference — game loop updates it
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\n varying vec2 vTownXZ;')
       .replace(
@@ -47,6 +49,7 @@ export function createTownGround(districts: District[]): THREE.Mesh {
         /* glsl */ `
         #include <common>
         varying vec2 vTownXZ;
+        uniform vec3 uSunDir;
         float phash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
         vec2 hash2(vec2 p) {
           return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.545);
@@ -128,6 +131,12 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           if (crack > 0.0 && phash(id + 13.0) < 0.12 + edginess * 0.55) {
             col = mix(col, ${vec3(0x40692b)}, crack * (0.5 + edginess * 0.45));
           }
+          // Sun-facing EDGE LINE per stone: near the seam, on the side of the stone
+          // that faces the sun, brighten toward a lighter shade — a crisp rim line
+          // that sweeps as the sun moves (matches the object outline highlight).
+          float nearEdge = 1.0 - smoothstep(0.0, 0.13, border);
+          float sunAlign = max(0.0, dot(gStoneOutward, normalize(uSunDir.xz + vec2(1e-4))));
+          col = mix(col, min(col * 1.7 + 0.06, vec3(1.0)), nearEdge * pow(sunAlign, 2.0) * 0.75);
           return col;
         }
         // Per-stone SLANT + ruggedness as a real world-space normal, so the sun

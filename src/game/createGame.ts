@@ -16,6 +16,7 @@ import { detectQualityProfile } from './engine/deviceProfile';
 import { createGroundInfluence } from './systems/createGroundInfluence';
 import { createScorchMap, SCORCH_PER_STRIKE } from './systems/createScorchMap';
 import { createWind } from './systems/createWind';
+import { sunDirUniform } from './systems/sunUniform';
 import { createDayNightCycle } from './systems/createDayNightCycle';
 import { createServerClock } from './net/createServerClock';
 import { createMondstadtWorld, isInsideSafeZone } from './world/createMondstadtWorld';
@@ -1413,6 +1414,8 @@ export function createGame(
     sunWorldDir.copy(world.ambience.sunLight.position).sub(world.ambience.sunLight.target.position);
     sunViewDir.copy(sunWorldDir).transformDirection(pixelRenderer.camera.matrixWorldInverse);
     pixelRenderer.setEdgeSunDir(sunViewDir.x, sunViewDir.y);
+    // Shared world sun-dir for the cobble/roof material edge highlights.
+    sunDirUniform.value.copy(sunWorldDir).normalize();
     pixelRenderer.render(scene);
   }
 

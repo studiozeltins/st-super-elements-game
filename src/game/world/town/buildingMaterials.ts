@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { sunDirUniform } from '../../systems/sunUniform';
 
 /**
  * Reusable pixel-art building materials — the ONE place wall/roof surfaces are
@@ -27,6 +28,7 @@ function patchVertexLocalSpace(shader: THREE.WebGLProgramParametersWithUniforms)
       #include <common>
       varying vec3 vLocalPos;
       varying vec3 vLocalNrm;
+      varying vec3 vWorldNrm;
       `
     )
     .replace(
@@ -34,6 +36,7 @@ function patchVertexLocalSpace(shader: THREE.WebGLProgramParametersWithUniforms)
       /* glsl */ `
       #include <beginnormal_vertex>
       vLocalNrm = objectNormal;
+      vWorldNrm = normalize(mat3(modelMatrix) * objectNormal);
       `
     )
     .replace(
@@ -137,6 +140,7 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
     patchVertexLocalSpace(shader);
+    shader.uniforms.uSunDir = sunDirUniform; // by reference — game loop updates it
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
@@ -144,6 +148,8 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
         #include <common>
         varying vec3 vLocalPos;
         varying vec3 vLocalNrm;
+        varying vec3 vWorldNrm;
+        uniform vec3 uSunDir;
         ${PHASH}
         `
       )
@@ -165,7 +171,13 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
           float courseEdge = fract(uv.y / ROW);
           float seam = abs(fract((uv.x + offset * COL) / COL) - 0.5);
           float grout = (courseEdge > 0.82 || seam > 0.45) ? 0.68 : 1.0;
-          diffuseColor.rgb = t * grout;
+          t *= grout;
+          // Sun-lit tile EDGE LINE: on the roof slope facing the sun, brighten the
+          // exposed lower lip of each tile course — a highlight that sweeps with sun.
+          float slopeSun = max(0.0, dot(normalize(vWorldNrm), normalize(uSunDir)));
+          float lip = smoothstep(0.16, 0.0, courseEdge);
+          t = mix(t, min(t * 1.6 + 0.06, vec3(1.0)), lip * slopeSun * 0.7);
+          diffuseColor.rgb = t;
         }
         `
       );
