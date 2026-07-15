@@ -13,7 +13,7 @@ import {
   createPlanter,
 } from '../assets';
 import { createCafeBuilding, createChurch, createHouse } from './createBuildings';
-import { createDistrictGround } from './createDistrictGround';
+import { createTownGround } from './createTownGround';
 import { TOWN_DISTRICTS, type District } from './townPlan';
 
 /**
@@ -37,8 +37,10 @@ export interface TownBuildContext {
 }
 
 export function buildTown(ctx: TownBuildContext): void {
+  // One unified ground mesh: district materials interlock along a jittered
+  // boundary (no straight tile seams). Then populate each district by kind.
+  ctx.group.add(createTownGround(TOWN_DISTRICTS));
   for (const district of TOWN_DISTRICTS) {
-    ctx.group.add(createDistrictGround(district));
     populate(ctx, district);
   }
 }
