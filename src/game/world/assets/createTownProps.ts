@@ -123,41 +123,46 @@ export function createCart(random: SeededRandom): WorldAsset {
   return { group };
 }
 
-/** A detailed park bench — light wood slats on a dark iron frame with armrests
- *  and a painted accent trim, so it pops against the grey cobble. */
+/** A large cozy park bench — wide wood slats on a dark iron frame with armrests,
+ *  a padded seat cushion and a back pillow, so it reads inviting and pops against
+ *  the grey cobble. */
 export function createBench(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
   const woodMat = lambert(0x9a6a38); // lighter warm wood — high contrast vs grey ground
   const ironMat = lambert(0x2c2824);
-  const accentMat = lambert(0x3d7a78); // teal painted trim
-  // Seat: three slats with gaps.
-  for (const sz of [-0.18, 0, 0.18]) {
-    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 0.14), woodMat);
-    slat.position.set(0, 0.46, sz);
+  const cushionMat = lambert(0xb5563e); // warm padded fabric
+  const W = 2.1; // wider, roomier bench
+  // Seat: four slats with gaps across a deeper seat.
+  for (const sz of [-0.27, -0.09, 0.09, 0.27]) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(W, 0.09, 0.15), woodMat);
+    slat.position.set(0, 0.5, sz);
     group.add(slat);
   }
-  // Backrest slats.
-  for (const by of [0.66, 0.84]) {
-    const slat = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.12, 0.06), woodMat);
-    slat.position.set(0, by, -0.22);
+  // Padded seat cushion.
+  const seatCushion = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, 0.14, 0.72), cushionMat);
+  seatCushion.position.set(0, 0.61, 0.02);
+  group.add(seatCushion);
+  // Backrest slats + a soft back pillow.
+  for (const by of [0.82, 1.04, 1.26]) {
+    const slat = new THREE.Mesh(new THREE.BoxGeometry(W, 0.14, 0.06), woodMat);
+    slat.position.set(0, by, -0.34);
     group.add(slat);
   }
-  // Iron end frames, armrests, back posts.
-  for (const sx of [-0.65, 0.65]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.5), ironMat);
-    leg.position.set(sx, 0.23, -0.02);
+  const backPillow = new THREE.Mesh(new THREE.BoxGeometry(W - 0.3, 0.5, 0.13), cushionMat);
+  backPillow.position.set(0, 1.0, -0.28);
+  group.add(backPillow);
+  // Iron end frames, chunky armrests, back posts.
+  for (const sx of [-0.92, 0.92]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.56, 0.72), ironMat);
+    leg.position.set(sx, 0.26, -0.02);
     group.add(leg);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.55), woodMat);
-    arm.position.set(sx, 0.62, 0.0);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.09, 0.78), woodMat);
+    arm.position.set(sx, 0.74, 0.0);
     group.add(arm);
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.52, 0.08), ironMat);
-    post.position.set(sx, 0.66, -0.22);
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.72, 0.1), ironMat);
+    post.position.set(sx, 0.88, -0.34);
     group.add(post);
   }
-  // Painted accent trim on the front edge.
-  const trim = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.05, 0.05), accentMat);
-  trim.position.set(0, 0.5, 0.27);
-  group.add(trim);
   group.rotation.y = random() * Math.PI * 2;
   return { group };
 }
