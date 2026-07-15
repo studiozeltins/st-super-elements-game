@@ -622,7 +622,10 @@ export function createMondstadtWorld(
         const cx = ax + segX * t + perpX * ROAD_LANTERN_OFFSET * sideFlip;
         const cz = az + segZ * t + perpZ * ROAD_LANTERN_OFFSET * sideFlip;
         if (!isOnLand(cx, cz)) continue;
-        placeAsset(createLantern(lanternRandom), cx, cz, 0.3);
+        // No PointLight on road lanterns — emissive lamp only. Every real light is
+        // looped per-fragment by every lit material scene-wide (forward renderer),
+        // so a dozen decorative road lights taxed terrain/grass FPS everywhere.
+        placeAsset(createLantern(lanternRandom, { withLight: false }), cx, cz, 0.3);
         sideFlip *= -1;
       }
     }
