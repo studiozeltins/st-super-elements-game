@@ -81,6 +81,9 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       uEdge: { value: new THREE.Color(0xffffff) },
       uEdgeStrength: { value: 1.6 },
       uThreshold: { value: 0.06 },
+      // ?edgedebug=1 → show the raw edge mask (white on black). If this is black
+      // too, the depth sample is broken; if it shows edges, it's just a tuning issue.
+      uDebug: { value: /edgedebug/.test(window.location.search) ? 1 : 0 },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -93,7 +96,7 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       uniform sampler2D tDiffuse;
       uniform sampler2D tDepth;
       uniform vec2 uTexel;
-      uniform float uNear, uFar, uThreshold, uEdgeStrength;
+      uniform float uNear, uFar, uThreshold, uEdgeStrength, uDebug;
       uniform vec3 uEdge;
       varying vec2 vUv;
       float lin(vec2 uv) {
@@ -109,6 +112,7 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
         );
         // Relative depth jump → silhouette edge. Skip the far sky (c huge).
         float edge = (c < uFar * 0.7) ? step(uThreshold, diff / c) : 0.0;
+        if (uDebug > 0.5) { gl_FragColor = vec4(vec3(edge), 1.0); return; }
         col += uEdge * (edge * uEdgeStrength); // additive light rim — visible day AND night
         gl_FragColor = vec4(col, 1.0);
       }
