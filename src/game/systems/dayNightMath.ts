@@ -22,7 +22,7 @@ export const CYCLE_MICROS = 1_200_000_000n;
  * least this fraction of the day peak — night is a blue-moonlight PALETTE, never
  * a dimmer. Combat telegraphs stay readable at every time of day (DAYNITE-03).
  */
-export const NIGHT_FLOOR = 0.45;
+export const NIGHT_FLOOR = 0.42;
 
 /**
  * One entry of the day/night palette curve, keyed on the normalized phase
@@ -72,13 +72,13 @@ export const KEYFRAMES: readonly Keyframe[] = [
   // Deep night — blue moonlight (identical to the 0.82 key: the wrap seam).
   {
     phase: 0.0,
-    skyTop: 0x0a1633,
-    horizon: 0x24304f,
+    skyTop: 0x081027,
+    horizon: 0x1c263f,
     sunColor: 0x9fb4de,
-    sunIntensity: 0.85,
-    hemiSky: 0x4a6a9c,
-    hemiGround: 0x2a3652,
-    hemiIntensity: 0.72,
+    sunIntensity: 0.55,
+    hemiSky: 0x3a557f,
+    hemiGround: 0x212b42,
+    hemiIntensity: 0.45,
     lanternLevel: 1,
     fireflyLevel: 1,
   },
@@ -137,13 +137,13 @@ export const KEYFRAMES: readonly Keyframe[] = [
   // Night — blue moonlight (same values as phase 0.00; wraps back to it).
   {
     phase: 0.82,
-    skyTop: 0x0a1633,
-    horizon: 0x24304f,
+    skyTop: 0x081027,
+    horizon: 0x1c263f,
     sunColor: 0x9fb4de,
-    sunIntensity: 0.85,
-    hemiSky: 0x4a6a9c,
-    hemiGround: 0x2a3652,
-    hemiIntensity: 0.72,
+    sunIntensity: 0.55,
+    hemiSky: 0x3a557f,
+    hemiGround: 0x212b42,
+    hemiIntensity: 0.45,
     lanternLevel: 1,
     fireflyLevel: 1,
   },

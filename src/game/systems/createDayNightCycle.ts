@@ -60,6 +60,33 @@ export function createDayNightCycle(
   // never `new` per frame (zero-alloc render path).
   const scratchLamp = new THREE.Color();
 
+  // The current lantern-on level (0 day, 1 night). Cached so the per-frame candle
+  // FLICKER keeps breathing even when the phase itself is frozen (?time / disabled).
+  let lanternLevel = 0;
+
+  /**
+   * Per-lantern candle FLICKER (two detuned sines → organic wobble) over the
+   * cached on-level. Runs EVERY frame — including when the day/night phase is
+   * frozen — so a ?time=0 night still shows the lanterns breathing. Modulates
+   * both the PointLight intensity and the emissive lamp-body glow: by day
+   * (level 0) the lamp reads as dark OFF glass, by night it glows + breathes.
+   */
+  function updateLanternFlicker(): void {
+    // Wrap the clock to keep the sine argument small (no bigint→float precision loss).
+    const tSec = Number(clock.nowMicros() % 1_000_000_000n) / 1_000_000;
+    for (let i = 0; i < ambience.lanternLights.length; i += 1) {
+      const flicker =
+        1 + 0.14 * Math.sin(tSec * 8.5 + i * 2.1) + 0.08 * Math.sin(tSec * 17.3 + i * 4.7);
+      const glow = Math.max(0, lanternLevel * flicker);
+      ambience.lanternLights[i].intensity = LANTERN_BASE_INTENSITY * glow;
+      const lamp = ambience.lanternLamps[i];
+      if (lamp) {
+        scratchLamp.setHex(LANTERN_LAMP_COLOR).multiplyScalar(Math.min(1, glow));
+        (lamp.material as THREE.MeshBasicMaterial).color.copy(scratchLamp);
+      }
+    }
+  }
+
   function apply(phase: number): void {
     const palette = samplePalette(phase);
 
@@ -104,24 +131,10 @@ export function createDayNightCycle(
     ambience.skyLight.intensity = palette.hemiIntensity;
 
     // Plaza lanterns fade by intensity only (no add/remove): base * lanternLevel
-    // (0 by day, 1 by night — DAYNITE-04). The subtree is matrix-frozen. On top of
-    // the level, a per-lantern candle FLICKER (two detuned sines → organic wobble)
-    // modulates both the PointLight intensity and the emissive lamp-body glow, so
-    // by day (level 0) the lamp reads as dark OFF glass, by night it glows + breathes.
-    const level = palette.lanternLevel;
-    // Wrap the clock to keep the sine argument small (no bigint→float precision loss).
-    const tSec = Number(clock.nowMicros() % 1_000_000_000n) / 1_000_000;
-    for (let i = 0; i < ambience.lanternLights.length; i += 1) {
-      const flicker =
-        1 + 0.1 * Math.sin(tSec * 8.5 + i * 2.1) + 0.06 * Math.sin(tSec * 17.3 + i * 4.7);
-      const glow = Math.max(0, level * flicker);
-      ambience.lanternLights[i].intensity = LANTERN_BASE_INTENSITY * glow;
-      const lamp = ambience.lanternLamps[i];
-      if (lamp) {
-        scratchLamp.setHex(LANTERN_LAMP_COLOR).multiplyScalar(Math.min(1, glow));
-        (lamp.material as THREE.MeshBasicMaterial).color.copy(scratchLamp);
-      }
-    }
+    // (0 by day, 1 by night — DAYNITE-04). Cache the level; the flicker is applied
+    // every frame by updateLanternFlicker (so it breathes even under a frozen phase).
+    lanternLevel = palette.lanternLevel;
+    updateLanternFlicker();
   }
 
   if (phaseOverride != null) {
@@ -139,7 +152,12 @@ export function createDayNightCycle(
 
   return {
     update() {
-      if (phaseOverride != null || !enabled) return; // frozen — keep the fixed phase
+      // Phase frozen (?time / ?nodaynight): keep the fixed colors + sun, but still
+      // tick the lantern flicker so a frozen night isn't a dead, static scene.
+      if (phaseOverride != null || !enabled) {
+        updateLanternFlicker();
+        return;
+      }
       apply(phase01(clock.nowMicros()));
     },
   };

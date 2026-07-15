@@ -167,6 +167,8 @@ export function terrainColorAt(x: number, z: number, height: number): THREE.Colo
  * decays on the regrow clock, so the ground heals by itself.
  */
 const SCORCH_CELLS_PER_UNIT = 3.0;
+/** Pixel-dirt clod size on the road — a touch chunkier than the scorch clods. */
+const ROAD_CELLS_PER_UNIT = 2.4;
 /** Band k needs scorch > 0.07 + k*0.2 — one SCORCH_PER_STRIKE per band. */
 const SCORCH_BAND_GLSL = /* glsl */ `
   float scorchBand(float scorch) {
@@ -189,6 +191,8 @@ function patchTerrainWithScorch(
         uniform sampler2D uScorchMap;
         uniform vec4 uScorchBounds;
         varying vec2 vScorchWorld;
+        attribute float aRoad;
+        varying float vRoad;
         ${SCORCH_BAND_GLSL}
         `
       )
@@ -198,6 +202,7 @@ function patchTerrainWithScorch(
         vec3 transformed = vec3(position);
         // Geometry is baked into world XZ (plane rotated, terrain at origin).
         vScorchWorld = position.xz;
+        vRoad = aRoad;
         vec2 scorchUv = (position.xz - uScorchBounds.xy) * uScorchBounds.zw;
         float dentBand = scorchBand(texture2D(uScorchMap, scorchUv).r);
         transformed.y -= (dentBand + 1.0) * 0.05; // stepped dent, deeper per stack
@@ -211,6 +216,7 @@ function patchTerrainWithScorch(
         uniform sampler2D uScorchMap;
         uniform vec4 uScorchBounds;
         varying vec2 vScorchWorld;
+        varying float vRoad;
         ${SCORCH_BAND_GLSL}
         float scorchHash(vec2 cell, vec2 basis) {
           return fract(sin(dot(cell, basis)) * 43758.5453);
@@ -221,6 +227,20 @@ function patchTerrainWithScorch(
         '#include <color_fragment>',
         /* glsl */ `
         #include <color_fragment>
+        // Pixel-art PACKED-DIRT ROAD: per world-space cell, pick one of a few brown
+        // clod shades + speckle so the path reads as chunky pixel dirt (matching the
+        // scorch clods), not the smooth per-vertex gradient. Applied FIRST so scorch
+        // craters below still win on top of it.
+        if (vRoad > 0.02) {
+          vec2 rcell = floor(vScorchWorld * ${ROAD_CELLS_PER_UNIT.toFixed(1)});
+          float rh = scorchHash(rcell, vec2(53.7, 21.3));
+          vec3 rd = rh < 0.38 ? vec3(0.63, 0.49, 0.31)
+            : rh < 0.72 ? vec3(0.55, 0.42, 0.26)
+            : vec3(0.46, 0.34, 0.20);
+          rd *= 0.86 + scorchHash(rcell, vec2(11.2, 91.5)) * 0.28;   // per-clod brightness
+          if (scorchHash(rcell + 3.0, vec2(7.1, 88.2)) < 0.13) rd *= 0.68; // dark gravel specks
+          diffuseColor.rgb = mix(diffuseColor.rgb, rd, vRoad);
+        }
         {
           // One sample per world-space cell = square pixel-art dirt clods.
           vec2 cell = floor(vScorchWorld * ${SCORCH_CELLS_PER_UNIT.toFixed(1)});
@@ -256,6 +276,9 @@ export function createTerrainMesh(scorch: ScorchMapUniforms | null): THREE.Mesh 
 
   const positions = geometry.getAttribute('position') as THREE.BufferAttribute;
   const colors = new Float32Array(positions.count * 3);
+  // Per-vertex road strength — a varying the shader reads to paint pixel-art dirt
+  // clods on the path (masking only; the chunky detail is hashed per-cell below).
+  const roadStrength = new Float32Array(positions.count);
   for (let vertexIndex = 0; vertexIndex < positions.count; vertexIndex++) {
     const x = positions.getX(vertexIndex);
     const z = positions.getZ(vertexIndex);
@@ -265,8 +288,10 @@ export function createTerrainMesh(scorch: ScorchMapUniforms | null): THREE.Mesh 
     colors[vertexIndex * 3] = color.r;
     colors[vertexIndex * 3 + 1] = color.g;
     colors[vertexIndex * 3 + 2] = color.b;
+    roadStrength[vertexIndex] = roadFactor(x, z);
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('aRoad', new THREE.BufferAttribute(roadStrength, 1));
   // No computeVertexNormals: flatShading derives face normals in the shader.
 
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
