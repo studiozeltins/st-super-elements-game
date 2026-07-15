@@ -105,6 +105,11 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       }
       void main() {
         vec3 col = texture2D(tDiffuse, vUv).rgb;
+        // The world target is LINEAR; encode to sRGB (the old MeshBasicMaterial blit
+        // did this via outputColorSpace — a raw ShaderMaterial does not, which made
+        // the whole scene render dark). Match it so day/night read correctly.
+        col = mix(col * 12.92, 1.055 * pow(max(col, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055,
+                  step(vec3(0.0031308), col));
         float c = lin(vUv);
         float diff = max(
           max(abs(c - lin(vUv - vec2(uTexel.x, 0.0))), abs(c - lin(vUv + vec2(uTexel.x, 0.0)))),
@@ -113,7 +118,9 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
         // Relative depth jump → silhouette edge. Skip the far sky (c huge).
         float edge = (c < uFar * 0.7) ? step(uThreshold, diff / c) : 0.0;
         if (uDebug > 0.5) { gl_FragColor = vec4(vec3(edge), 1.0); return; }
-        col += uEdge * (edge * uEdgeStrength); // additive light rim — visible day AND night
+        // Edge = a LIGHTER shade of the base color underneath (not white).
+        vec3 lit = clamp(col * (1.0 + uEdgeStrength) + 0.05, 0.0, 1.0);
+        col = mix(col, lit, edge);
         gl_FragColor = vec4(col, 1.0);
       }
     `,
