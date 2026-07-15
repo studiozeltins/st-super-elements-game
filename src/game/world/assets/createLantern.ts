@@ -7,8 +7,8 @@ const CAGE_COLOR = 0x2b2118;
 const LAMP_COLOR = 0xffd27a;
 const GLOW_COLOR = 0xffb04a;
 
-const POST_HEIGHT = 2.2;
-const LAMP_HEIGHT = 1.7;
+const POST_HEIGHT = 4.2;
+const LAMP_HEIGHT = 3.6;
 // The lantern hangs off the cross-arm end, offset from the post on +x.
 const HANG_X = 0.28;
 
@@ -85,7 +85,7 @@ export function createLantern(random: SeededRandom): WorldAsset {
 
   // Warm point light at the lamp. Modest distance/decay — a soft pool of light,
   // not a combat flare. Base intensity is the lit value; Plan 04 fades it.
-  const light = new THREE.PointLight(GLOW_COLOR, LANTERN_BASE_INTENSITY, 8, 2);
+  const light = new THREE.PointLight(GLOW_COLOR, LANTERN_BASE_INTENSITY, 12, 2);
   light.name = LANTERN_LIGHT_NAME;
   // Visible to all camera layers — a pass that culls lights flips the renderer's
   // lights-state hash and re-inits every lit material per frame (RESEARCH Pattern 6).
