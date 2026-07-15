@@ -48,19 +48,27 @@ function patchVertexLocalSpace(shader: THREE.WebGLProgramParametersWithUniforms)
 // Materials are memoized by their key so every house/roof doesn't compile its own
 // shader program — one program per (style,color) is shared across all buildings,
 // cutting draw-call state changes (a real FPS cost with a full district town).
-const wallCache = new Map<string, THREE.MeshLambertMaterial>();
-const roofCache = new Map<number, THREE.MeshLambertMaterial>();
+const wallCache = new Map<string, THREE.MeshPhongMaterial>();
+const roofCache = new Map<number, THREE.MeshPhongMaterial>();
 
 /**
  * Wall material. `style: 'timber'` paints half-timbered plaster panels (dark
  * beams framing per-panel-shaded plaster); `style: 'stone'` paints offset stone
  * brick courses with mortar seams — for the church and other masonry.
  */
-export function createWallMaterial(baseColor: number, style: 'timber' | 'stone'): THREE.MeshLambertMaterial {
+export function createWallMaterial(
+  baseColor: number,
+  style: 'timber' | 'stone'
+): THREE.MeshPhongMaterial {
   const cacheKey = `${style}_${baseColor}`;
   const cached = wallCache.get(cacheKey);
   if (cached) return cached;
-  const material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  const material = new THREE.MeshPhongMaterial({
+    color: 0xffffff,
+    flatShading: true,
+    specular: 0x222222,
+    shininess: 16,
+  });
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
     patchVertexLocalSpace(shader);
@@ -127,10 +135,15 @@ export function createWallMaterial(baseColor: number, style: 'timber' | 'stone')
  * row of per-tile-shaded pixels with a darker grout line and a scalloped lower
  * edge, so a pitched roof reads as laid tiles instead of a flat colored slab.
  */
-export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial {
+export function createRoofMaterial(baseColor: number): THREE.MeshPhongMaterial {
   const cached = roofCache.get(baseColor);
   if (cached) return cached;
-  const material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  const material = new THREE.MeshPhongMaterial({
+    color: 0xffffff,
+    flatShading: true,
+    specular: 0x222222,
+    shininess: 16,
+  });
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
     patchVertexLocalSpace(shader);

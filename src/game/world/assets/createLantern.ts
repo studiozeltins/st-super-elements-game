@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { SeededRandom, WorldAsset } from './types';
-import { lambert, randomBetween } from './assetHelpers';
+import { randomBetween, shiny } from './assetHelpers';
 
 const POST_COLOR = 0x6d4c2c; // lighter warm wood so the post reads against the ground
 const CAGE_COLOR = 0x2b2118;
@@ -35,10 +35,21 @@ export const LANTERN_LAMP_COLOR = LAMP_COLOR;
  * `layers.enableAll()` is mandatory: a light hidden from a pass flips the
  * renderer's lights-state hash and re-inits every lit material.
  */
-export function createLantern(random: SeededRandom): WorldAsset {
+/**
+ * `withLight: false` builds a lantern with NO PointLight — just the emissive
+ * glowing lamp body (which still fades day/night). Used for the many decorative
+ * road lanterns: every real light is looped per-fragment by EVERY lit material in
+ * the whole scene (three's forward renderer), so a dozen extra point lights tax
+ * the terrain/grass everywhere. Only the plaza lanterns carry actual light.
+ */
+export function createLantern(
+  random: SeededRandom,
+  opts: { withLight?: boolean } = {}
+): WorldAsset {
+  const withLight = opts.withLight ?? true;
   const group = new THREE.Group();
-  const postMat = lambert(POST_COLOR);
-  const cageMat = lambert(CAGE_COLOR);
+  const postMat = shiny(POST_COLOR, 22);
+  const cageMat = shiny(CAGE_COLOR, 45, 0x333333);
 
   // Wooden post.
   const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, POST_HEIGHT, 0.16), postMat);
@@ -47,7 +58,7 @@ export function createLantern(random: SeededRandom): WorldAsset {
   group.add(post);
 
   // Brass collars — a wider base + banding that catch light so the post pops.
-  const brassMat = lambert(BRASS_COLOR);
+  const brassMat = shiny(BRASS_COLOR, 70, 0x6a561e);
   const footing = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.34), brassMat);
   footing.position.y = 0.15;
   group.add(footing);
@@ -96,15 +107,18 @@ export function createLantern(random: SeededRandom): WorldAsset {
   lamp.position.set(HANG_X, LAMP_HEIGHT, 0);
   group.add(lamp);
 
-  // Warm point light at the lamp. Modest distance/decay — a soft pool of light,
-  // not a combat flare. Base intensity is the lit value; Plan 04 fades it.
-  const light = new THREE.PointLight(GLOW_COLOR, LANTERN_BASE_INTENSITY, 12, 2);
-  light.name = LANTERN_LIGHT_NAME;
-  // Visible to all camera layers — a pass that culls lights flips the renderer's
-  // lights-state hash and re-inits every lit material per frame (RESEARCH Pattern 6).
-  light.layers.enableAll();
-  light.position.set(HANG_X, LAMP_HEIGHT, 0);
-  group.add(light);
+  // Warm point light at the lamp — ONLY when withLight (plaza lanterns). Modest
+  // distance/decay: a soft pool, not a combat flare. Base intensity is the lit
+  // value; the day/night cycle fades it.
+  if (withLight) {
+    const light = new THREE.PointLight(GLOW_COLOR, LANTERN_BASE_INTENSITY, 12, 2);
+    light.name = LANTERN_LIGHT_NAME;
+    // Visible to all camera layers — a pass that culls lights flips the renderer's
+    // lights-state hash and re-inits every lit material per frame (RESEARCH Pattern 6).
+    light.layers.enableAll();
+    light.position.set(HANG_X, LAMP_HEIGHT, 0);
+    group.add(light);
+  }
 
   return { group };
 }

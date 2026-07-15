@@ -5,6 +5,16 @@ export function lambert(color: number): THREE.MeshLambertMaterial {
   return new THREE.MeshLambertMaterial({ color });
 }
 
+/**
+ * Glossy material — a MeshPhongMaterial with a modest specular highlight that
+ * tracks the moving sun (bright glint on the lit side, sweeping right→left across
+ * the day) and catches warm lantern glints at night. For wood/metal/fabric props
+ * that should not read dead-matte (benches, lantern posts, parasols, awnings).
+ */
+export function shiny(color: number, shininess = 24, specular = 0x2a2a2a): THREE.MeshPhongMaterial {
+  return new THREE.MeshPhongMaterial({ color, shininess, specular, flatShading: true });
+}
+
 export function randomBetween(random: SeededRandom, min: number, max: number): number {
   return min + random() * (max - min);
 }
