@@ -28,16 +28,19 @@ export const DISTRICT_HALF = 7.5;
 
 const STEP = DISTRICT_HALF * 2;
 
-/**
- * Square half-extent of the paved town (grid reach + tile half + a little for the
- * ragged jittered edge). The grass field suppresses blades inside this — the only
- * greenery on the pavement is the faked grass-in-seams painted by createTownGround.
- */
-export const TOWN_HALF_EXTENT = STEP + DISTRICT_HALF + 1.5;
+/** Square half-extent of the paved town (grid reach + tile half). */
+export const TOWN_HALF_EXTENT = STEP + DISTRICT_HALF;
 
-/** True where a world point sits on the paved town (grass must not grow here). */
+/**
+ * Grass is suppressed only in the SOLID interior — the outer ~4.5u is the edge
+ * transition where createTownGround scatters cobbles into the grass, so real
+ * grass blades are allowed to grow there and mix with the fading pavement.
+ */
+const TOWN_SOLID_HALF = TOWN_HALF_EXTENT - 4.5;
+
+/** True where a world point sits on solid pavement (grass must not grow here). */
 export function isInTown(x: number, z: number): boolean {
-  return Math.abs(x) <= TOWN_HALF_EXTENT && Math.abs(z) <= TOWN_HALF_EXTENT;
+  return Math.abs(x) <= TOWN_SOLID_HALF && Math.abs(z) <= TOWN_SOLID_HALF;
 }
 
 /**
