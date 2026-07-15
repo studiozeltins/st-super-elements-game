@@ -51,9 +51,14 @@ export function createTownGround(districts: District[]): THREE.Mesh {
         vec2 hash2(vec2 p) {
           return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.545);
         }
-        // Nearest cobble id, stashed by cobble() so groundNormal() reuses it
-        // instead of a second Voronoi lookup (color_fragment runs before normals).
+        // Per-fragment stone data stashed by cobble() so groundNormal() reuses it
+        // (one Voronoi; color_fragment runs before normals). gStoneOutward points
+        // from the stone center toward this fragment; gStoneDome is 0 at center → 1
+        // at the edge — together they slope each cobble into a rounded dome so its
+        // seams catch light and read as depth under the sun AND the lanterns.
         vec2 gStoneId = vec2(0.0);
+        vec2 gStoneOutward = vec2(0.0);
+        float gStoneDome = 0.0;
         // Coarse cobble-cell id at a world point — used to discard whole stones.
         vec2 cobbleId(vec2 w) {
           float density = 1.35;
@@ -72,15 +77,19 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           float density = 1.35;
           vec2 p = w * density;
           vec2 ip = floor(p), fp = fract(p);
-          float f1 = 8.0, f2 = 8.0; vec2 id = ip;
+          float f1 = 8.0, f2 = 8.0; vec2 id = ip; vec2 nearR = vec2(0.0);
           for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
             vec2 g = vec2(float(x), float(y));
             vec2 r = g + hash2(ip + g) - fp;
             float d = dot(r, r);
-            if (d < f1) { f2 = f1; f1 = d; id = ip + g; } else if (d < f2) { f2 = d; }
+            if (d < f1) { f2 = f1; f1 = d; id = ip + g; nearR = r; } else if (d < f2) { f2 = d; }
           }
           f1 = sqrt(f1); f2 = sqrt(f2);
           gStoneId = id;                                // reused by groundNormal()
+          // nearR points fragment→center; outward = center→fragment. Dome slopes
+          // the stone from a flat top down to its edges so seams read as recesses.
+          gStoneOutward = -normalize(nearR + 1e-4);
+          gStoneDome = clamp(f1 * 1.5, 0.0, 1.0);
           float border = f2 - f1;                       // ~0 at the mortar seam
           // Flat per-stone tone, wide dark→light spread (old, weathered stones).
           float tone = phash(id + 3.1);
@@ -91,8 +100,9 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           stone *= 0.85 + phash(px + id.x * 1.7) * 0.3;
           // Some stones mossy/stained.
           if (phash(id + 5.0) < 0.14) stone = mix(stone, ${vec3(0x6d7a46)}, 0.4);
-          // Crevice DEPTH: stones darken into the mortar gaps (baked AO relief).
-          stone *= 0.62 + smoothstep(0.0, 0.14, border) * 0.5;
+          // A little baked AO in the deepest crevices (the domed NORMAL does most
+          // of the depth now, so keep this subtle to avoid double-darkening).
+          stone *= 0.82 + smoothstep(0.0, 0.12, border) * 0.2;
           // Hard-ish mortar seam.
           float mortar = 1.0 - smoothstep(0.02, 0.07, border);
           vec3 col = mix(stone, ${vec3(0x2c261d)}, mortar * 0.9);
@@ -105,9 +115,10 @@ export function createTownGround(districts: District[]): THREE.Mesh {
         // Each Voronoi stone gets a random tilt; fine noise adds surface roughness.
         vec3 groundNormal(vec2 w) {
           vec2 id = gStoneId;                            // set by cobble() this fragment
-          vec2 slant = (hash2(id + 7.7) - 0.5) * 0.9;
-          vec2 rug = (vec2(phash(floor(w * 11.0) + 1.0), phash(floor(w * 11.0) + 8.0)) - 0.5) * 0.4;
-          return normalize(vec3(slant.x + rug.x, 1.0, slant.y + rug.y));
+          vec2 slant = (hash2(id + 7.7) - 0.5) * 0.6;    // per-stone random tilt
+          vec2 rug = (vec2(phash(floor(w * 11.0) + 1.0), phash(floor(w * 11.0) + 8.0)) - 0.5) * 0.3;
+          vec2 dome = gStoneOutward * gStoneDome * 1.7;  // edges slope outward → rounded stone
+          return normalize(vec3(slant.x + rug.x + dome.x, 1.0, slant.y + rug.y + dome.y));
         }
         `
       )
