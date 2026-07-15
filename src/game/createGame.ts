@@ -258,6 +258,9 @@ function drawHealthBar(bar: HealthBar, fraction: number) {
 
 const CAMERA_OFFSET = new THREE.Vector3(7, 15, 11);
 const CAMERA_YAW = Math.atan2(CAMERA_OFFSET.x, CAMERA_OFFSET.z);
+// Scratch for the edge-highlight sun-direction (world → screen), reused per frame.
+const sunWorldDir = new THREE.Vector3();
+const sunViewDir = new THREE.Vector3();
 const DASH_DISTANCE = 5;
 const DASH_SUBSTEPS = 4;
 /** Walkable step height; anything taller needs a jump (terrace = 1.8, jump apex ≈ 2.4). */
@@ -1405,6 +1408,11 @@ export function createGame(
       groundInfluence.update(pixelRenderer.renderer, deltaSeconds);
       scorchMap.update(pixelRenderer.renderer, deltaSeconds);
     }
+    // Edge highlight rims only the sun-facing side: project the sun's world
+    // direction into screen space (view-space xy) and hand it to the outline pass.
+    sunWorldDir.copy(world.ambience.sunLight.position).sub(world.ambience.sunLight.target.position);
+    sunViewDir.copy(sunWorldDir).transformDirection(pixelRenderer.camera.matrixWorldInverse);
+    pixelRenderer.setEdgeSunDir(sunViewDir.x, sunViewDir.y);
     pixelRenderer.render(scene);
   }
 

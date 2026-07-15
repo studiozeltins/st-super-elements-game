@@ -12,6 +12,8 @@ export interface PixelRenderer {
    * pass 3 does not walk thousands of prop nodes to find a few sprites.
    */
   setOverlayCullTarget(target: THREE.Object3D | null): void;
+  /** Screen-space direction toward the sun — the edge highlight rims only that side. */
+  setEdgeSunDir(x: number, y: number): void;
   dispose(): void;
 }
 
@@ -81,6 +83,7 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       uEdge: { value: new THREE.Color(0xd6dae6) },
       uEdgeStrength: { value: 0.95 },
       uThreshold: { value: 0.06 },
+      uSunScreen: { value: new THREE.Vector2(0, 1) }, // screen-space direction toward the sun
       // ?edgedebug=1 → show the raw edge mask (white on black). If this is black
       // too, the depth sample is broken; if it shows edges, it's just a tuning issue.
       uDebug: { value: /edgedebug/.test(window.location.search) ? 1 : 0 },
@@ -98,6 +101,7 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       uniform vec2 uTexel;
       uniform float uNear, uFar, uThreshold, uEdgeStrength, uDebug;
       uniform vec3 uEdge;
+      uniform vec2 uSunScreen;
       varying vec2 vUv;
       float lin(vec2 uv) {
         float z = texture2D(tDepth, uv).x * 2.0 - 1.0;
@@ -111,12 +115,13 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
         col = mix(col * 12.92, 1.055 * pow(max(col, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055,
                   step(vec3(0.0031308), col));
         float c = lin(vUv);
-        float diff = max(
-          max(abs(c - lin(vUv - vec2(uTexel.x, 0.0))), abs(c - lin(vUv + vec2(uTexel.x, 0.0)))),
-          max(abs(c - lin(vUv - vec2(0.0, uTexel.y))), abs(c - lin(vUv + vec2(0.0, uTexel.y))))
-        );
-        // Relative depth jump → silhouette edge. Skip the far sky (c huge).
-        float edge = (c < uFar * 0.7) ? step(uThreshold, diff / c) : 0.0;
+        // Sample only the neighbour TOWARD the sun: at the object's sun-facing edge
+        // that neighbour is background (farther), giving a positive depth jump — so
+        // the rim lands only on the side the sun shines on, not the whole silhouette.
+        vec2 sdir = normalize(uSunScreen + vec2(1e-5, 1e-5));
+        float fwd = lin(vUv + sdir * uTexel * 1.4);
+        float jump = (fwd - c) / c;
+        float edge = (c < uFar * 0.7) ? step(uThreshold, jump) : 0.0;
         if (uDebug > 0.5) { gl_FragColor = vec4(vec3(edge), 1.0); return; }
         // Edge = a LIGHTER shade of the base color underneath (not white).
         vec3 lit = clamp(col * (1.0 + uEdgeStrength) + 0.05, 0.0, 1.0);
@@ -207,6 +212,9 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
     },
     setOverlayCullTarget(target) {
       overlayCullTarget = target;
+    },
+    setEdgeSunDir(x, y) {
+      blitMaterial.uniforms.uSunScreen.value.set(x, y);
     },
     setPixelated(enabled) {
       if (pixelated === enabled) return;
