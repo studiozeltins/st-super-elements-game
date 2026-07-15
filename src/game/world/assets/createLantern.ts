@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import type { SeededRandom, WorldAsset } from './types';
 import { lambert, randomBetween } from './assetHelpers';
 
-const POST_COLOR = 0x4a3826;
+const POST_COLOR = 0x6d4c2c; // lighter warm wood so the post reads against the ground
 const CAGE_COLOR = 0x2b2118;
+const BRASS_COLOR = 0xb08a3c; // highlight collars — catch light, pop off the cobble
 const LAMP_COLOR = 0xffd27a;
 const GLOW_COLOR = 0xffb04a;
 
@@ -44,6 +45,18 @@ export function createLantern(random: SeededRandom): WorldAsset {
   post.position.y = POST_HEIGHT / 2;
   post.rotation.y = randomBetween(random, -0.08, 0.08);
   group.add(post);
+
+  // Brass collars — a wider base + banding that catch light so the post pops.
+  const brassMat = lambert(BRASS_COLOR);
+  const footing = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.34), brassMat);
+  footing.position.y = 0.15;
+  group.add(footing);
+  for (const y of [0.5, POST_HEIGHT - 0.5]) {
+    const band = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.22), brassMat);
+    band.position.y = y;
+    band.rotation.y = post.rotation.y;
+    group.add(band);
+  }
 
   // Cross-arm the lantern hangs from.
   const arm = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.1), postMat);
