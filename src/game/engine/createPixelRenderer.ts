@@ -78,8 +78,8 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       uTexel: { value: new THREE.Vector2(1 / 320, 1 / 240) },
       uNear: { value: camera.near },
       uFar: { value: camera.far },
-      uEdge: { value: new THREE.Color(0xffffff) },
-      uEdgeStrength: { value: 1.6 },
+      uEdge: { value: new THREE.Color(0xd6dae6) },
+      uEdgeStrength: { value: 0.95 },
       uThreshold: { value: 0.06 },
       // ?edgedebug=1 → show the raw edge mask (white on black). If this is black
       // too, the depth sample is broken; if it shows edges, it's just a tuning issue.
