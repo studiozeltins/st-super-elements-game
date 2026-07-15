@@ -45,12 +45,21 @@ function patchVertexLocalSpace(shader: THREE.WebGLProgramParametersWithUniforms)
     );
 }
 
+// Materials are memoized by their key so every house/roof doesn't compile its own
+// shader program — one program per (style,color) is shared across all buildings,
+// cutting draw-call state changes (a real FPS cost with a full district town).
+const wallCache = new Map<string, THREE.MeshLambertMaterial>();
+const roofCache = new Map<number, THREE.MeshLambertMaterial>();
+
 /**
  * Wall material. `style: 'timber'` paints half-timbered plaster panels (dark
  * beams framing per-panel-shaded plaster); `style: 'stone'` paints offset stone
  * brick courses with mortar seams — for the church and other masonry.
  */
 export function createWallMaterial(baseColor: number, style: 'timber' | 'stone'): THREE.MeshLambertMaterial {
+  const cacheKey = `${style}_${baseColor}`;
+  const cached = wallCache.get(cacheKey);
+  if (cached) return cached;
   const material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
@@ -109,6 +118,7 @@ export function createWallMaterial(baseColor: number, style: 'timber' | 'stone')
       );
   };
   material.customProgramCacheKey = () => `wall_${style}_${baseColor}`;
+  wallCache.set(cacheKey, material);
   return material;
 }
 
@@ -118,6 +128,8 @@ export function createWallMaterial(baseColor: number, style: 'timber' | 'stone')
  * edge, so a pitched roof reads as laid tiles instead of a flat colored slab.
  */
 export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial {
+  const cached = roofCache.get(baseColor);
+  if (cached) return cached;
   const material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
@@ -156,5 +168,6 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
       );
   };
   material.customProgramCacheKey = () => `roof_${baseColor}`;
+  roofCache.set(baseColor, material);
   return material;
 }
