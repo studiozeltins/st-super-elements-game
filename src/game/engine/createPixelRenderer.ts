@@ -78,9 +78,9 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       uTexel: { value: new THREE.Vector2(1 / 320, 1 / 240) },
       uNear: { value: camera.near },
       uFar: { value: camera.far },
-      uEdge: { value: new THREE.Color(0xaab6c8) },
-      uEdgeStrength: { value: 0.6 },
-      uThreshold: { value: 0.28 },
+      uEdge: { value: new THREE.Color(0xffffff) },
+      uEdgeStrength: { value: 1.6 },
+      uThreshold: { value: 0.06 },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
