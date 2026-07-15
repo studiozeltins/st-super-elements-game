@@ -95,6 +95,9 @@ export interface AmbienceHandles {
   /** Emissive lamp-body meshes, index-aligned with lanternLights. The cycle fades
    *  their glow color so a lantern reads OFF (dark glass) by day, lit by night. */
   lanternLamps: THREE.Mesh[];
+  /** Water shader materials whose uSkyTop/uHorizon the cycle drives so the fountain
+   *  reflects the current sky (bright by day, dark blue by night). */
+  waterMaterials: THREE.ShaderMaterial[];
   /** Copies `c` into the sky-dome topColor uniform in place (zero alloc). */
   setSkyTop(c: THREE.Color): void;
   /**
@@ -493,7 +496,8 @@ export function createMondstadtWorld(
 
   const { skyLight, sunLight } = createLighting(group);
   group.add(createTerrainMesh(options.scorch));
-  group.add(createFountain());
+  const fountain = createFountain(options.wind.timeUniform);
+  group.add(fountain.group);
   obstacles.push({ x: 0, y: 0, z: 0, radius: 3.0 }); // fountain basin, plaza is flat at y=0
   const grassField = createGrassField({
     ...options.grass,
@@ -694,6 +698,7 @@ export function createMondstadtWorld(
       background: scene.background as THREE.Color,
       lanternLights,
       lanternLamps,
+      waterMaterials: [fountain.waterMaterial],
       setSkyTop(c) {
         skyTopColor.copy(c);
       },

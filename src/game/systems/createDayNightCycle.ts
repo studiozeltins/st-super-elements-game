@@ -86,6 +86,14 @@ export function createDayNightCycle(
       ambience.setSunDirection(scratchSunDir.x, scratchSunDir.y, scratchSunDir.z);
     }
 
+    // Fountain water reflects the current sky — drive its uSkyTop/uHorizon so the
+    // pool is bright day water and dark blue by night (matches the sky dome).
+    for (let i = 0; i < ambience.waterMaterials.length; i += 1) {
+      const u = ambience.waterMaterials[i].uniforms;
+      (u.uSkyTop.value as THREE.Color).setHex(palette.skyTop);
+      (u.uHorizon.value as THREE.Color).setHex(palette.horizon);
+    }
+
     // Hemisphere fill: sky color, ground color, intensity.
     scratchHemiSky.setHex(palette.hemiSky);
     ambience.skyLight.color.copy(scratchHemiSky);

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createFountainWater } from './createFountainWater';
 
 /**
  * Plaza landmarks that are not part of the district town-build: the windmill
@@ -39,7 +40,13 @@ export function createWindmill(): { group: THREE.Group; blades: THREE.Group } {
   return { group: windmill, blades };
 }
 
-export function createFountain(): THREE.Group {
+export interface Fountain {
+  group: THREE.Group;
+  /** Water shader material — the day/night cycle drives its sky-reflection colors. */
+  waterMaterial: THREE.ShaderMaterial;
+}
+
+export function createFountain(timeUniform: { value: number }): Fountain {
   const fountain = new THREE.Group();
 
   // Octagon of basin blocks around the water disc.
@@ -55,12 +62,8 @@ export function createFountain(): THREE.Group {
     fountain.add(block);
   }
 
-  const water = new THREE.Mesh(
-    new THREE.CircleGeometry(2.3, 12),
-    new THREE.MeshBasicMaterial({ color: 0x3aa0ff })
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = 0.72;
-  fountain.add(water);
-  return fountain;
+  const water = createFountainWater(2.3, timeUniform);
+  water.mesh.position.y = 0.72;
+  fountain.add(water.mesh);
+  return { group: fountain, waterMaterial: water.material };
 }
