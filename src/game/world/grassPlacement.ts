@@ -9,6 +9,7 @@ import {
   terrainColorAt,
 } from './terrain';
 import { roadFactor } from './roads';
+import { isInTown } from './town/townPlan';
 
 /**
  * Deterministic grass placement, clustered into lush meadow patches instead of
@@ -68,6 +69,7 @@ export function generateGrassBlades(totalCount: number): GrassBladeSpec[][] {
         if (Math.hypot(x, z) < PLAZA_RADIUS) continue;
         if (getTerrainSlope(x, z) > MAX_GRASS_SLOPE) continue;
         if (roadFactor(x, z) > 0.5) continue; // keep the road surface clear
+        if (isInTown(x, z)) continue; // no grass on the pavement — only faked seam grass
         const y = getTerrainHeight(x, z);
         const isFlower = random() < FLOWER_FRACTION;
         blades.push({

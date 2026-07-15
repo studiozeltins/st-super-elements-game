@@ -29,6 +29,18 @@ export const DISTRICT_HALF = 7.5;
 const STEP = DISTRICT_HALF * 2;
 
 /**
+ * Square half-extent of the paved town (grid reach + tile half + a little for the
+ * ragged jittered edge). The grass field suppresses blades inside this — the only
+ * greenery on the pavement is the faked grass-in-seams painted by createTownGround.
+ */
+export const TOWN_HALF_EXTENT = STEP + DISTRICT_HALF + 1.5;
+
+/** True where a world point sits on the paved town (grass must not grow here). */
+export function isInTown(x: number, z: number): boolean {
+  return Math.abs(x) <= TOWN_HALF_EXTENT && Math.abs(z) <= TOWN_HALF_EXTENT;
+}
+
+/**
  * A 3×3 town: central plaza, a civic tile (church) to the north, two housing
  * tiles west, two market tiles east/north-east (by the road out), garden to the
  * south-west, cafe to the south-east.

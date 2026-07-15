@@ -69,41 +69,46 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
         }
         ${materialIdGlsl(districts)}
-        vec3 groundColor(float mat, vec2 w) {
-          float cells; vec3 p0, p1, p2; float seamW; vec3 seamC;
-          if (mat < 0.5) {          // cobble
-            cells = 1.7; seamW = 0.1;
-            p0 = ${vec3(0xccc1ab)}; p1 = ${vec3(0xb2a892)}; p2 = ${vec3(0x9c927d)};
-            seamC = ${vec3(0x565046)};
-          } else if (mat < 1.5) {   // flagstone
-            cells = 0.62; seamW = 0.06;
-            p0 = ${vec3(0xcfc7b3)}; p1 = ${vec3(0xc2b9a2)}; p2 = ${vec3(0xd6cdb8)};
-            seamC = ${vec3(0x8f8674)};
-          } else {                  // gravel
-            cells = 4.2; seamW = 0.0;
-            p0 = ${vec3(0x9c9384)}; p1 = ${vec3(0x8a8272)}; p2 = ${vec3(0x7c7466)};
-            seamC = ${vec3(0x6a6456)};
-          }
-          // Wobble the cell grid so mortar seams are not mechanically straight.
-          vec2 gp = w * cells + (vec2(vnoise(w * 1.3), vnoise(w * 1.3 + 9.0)) - 0.5) * 0.35;
+        // PIXEL-ART cobble: flat per-stone tone (no smooth gradient), hard 1-px
+        // seam + hard-step edge relief, and grunge — a wide tone spread, mossy
+        // stones, occasional MISSING cobble worn to dirt, and grass sprouting only
+        // in some seams. Deliberately NOT coordinate-wobbled (that read as liquid).
+        vec3 cobble(vec2 w) {
+          float cells = 1.7;
+          vec2 gp = w * cells;
           vec2 cell = floor(gp);
           vec2 f = fract(gp);
-          float rnd = phash(cell);
-          vec3 stone = rnd < 0.34 ? p0 : (rnd < 0.67 ? p1 : p2);
-          stone *= 0.92 + phash(cell + 3.1) * 0.16;
-          float edge = min(min(f.x, f.y), min(1.0 - f.x, 1.0 - f.y));
-          if (seamW > 0.0) {
-            stone = mix(seamC, stone, smoothstep(0.0, seamW, edge));
-          }
-          // Fake rounded-stone HEIGHT (baked, no real normals — survives the pixel
-          // filter): crevices between stones darken (AO), stone tops brighten, and a
-          // top-left rim light gives each cobble a domed, 3D read.
-          float relief = smoothstep(0.0, 0.3, edge);
-          stone *= 0.7 + relief * 0.42;
-          vec2 cc = f - 0.5;
-          float rim = dot(normalize(cc + 1e-4), vec2(-0.7071, -0.7071));
-          stone *= 1.0 + rim * (1.0 - relief) * 0.28;
-          return stone;
+          float rnd = phash(cell + 3.1);
+          vec3 dark = ${vec3(0x585044)};
+          vec3 mid = ${vec3(0x8f8674)};
+          vec3 light = ${vec3(0xc3b89f)};
+          vec3 stone = rnd < 0.5 ? mix(dark, mid, rnd * 2.0) : mix(mid, light, (rnd - 0.5) * 2.0);
+          stone *= 0.86 + phash(cell + 7.0) * 0.26;               // brightness grunge
+          if (phash(cell + 5.0) < 0.13) stone = mix(stone, ${vec3(0x6f7a4a)}, 0.4); // mossy stone
+          // Hard-step relief: a bright top/left inner rim, dark bottom/right rim.
+          if (min(f.x, f.y) < 0.14) stone *= 1.1;
+          if (min(1.0 - f.x, 1.0 - f.y) < 0.14) stone *= 0.86;
+          // Hard 1-px mortar seam.
+          float seam = min(min(f.x, f.y), min(1.0 - f.x, 1.0 - f.y));
+          float mortar = step(seam, 0.09);
+          vec3 col = mix(stone, ${vec3(0x30291f)}, mortar);
+          // Grunge: a few cobbles are worn away to packed dirt.
+          if (phash(cell + 11.0) < 0.06) col = ${vec3(0x453626)} * (0.85 + phash(cell + 2.0) * 0.3);
+          // Grass sprouts in SOME seams only.
+          if (mortar > 0.5 && phash(cell + 13.0) < 0.22) col = mix(col, ${vec3(0x3f6a2a)}, 0.6);
+          return col;
+        }
+        vec3 slab(vec2 w, float cells, vec3 a, vec3 b, vec3 seamC) {
+          vec2 gp = w * cells;
+          vec2 f = fract(gp);
+          vec3 s = mix(a, b, phash(floor(gp)));
+          float e = min(min(f.x, f.y), min(1.0 - f.x, 1.0 - f.y));
+          return mix(seamC, s, step(0.05, e));
+        }
+        vec3 groundColor(float mat, vec2 w) {
+          if (mat < 0.5) return cobble(w);
+          if (mat < 1.5) return slab(w, 0.62, ${vec3(0xcfc7b3)}, ${vec3(0xc2b9a2)}, ${vec3(0x8f8674)});
+          return slab(w, 4.2, ${vec3(0x9c9384)}, ${vec3(0x7c7466)}, ${vec3(0x6a6456)});
         }
         `
       )
