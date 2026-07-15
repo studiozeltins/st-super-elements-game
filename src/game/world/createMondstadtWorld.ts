@@ -37,7 +37,12 @@ import {
   withinDisturbRadius,
   type FlagImpulse,
 } from './assets/flagImpulse';
-import { createFountain, createHouse, createWindmill } from './createPlazaStructures';
+import {
+  createFountain,
+  createHouse,
+  createPlazaGround,
+  createWindmill,
+} from './createPlazaStructures';
 import { buildSunBasis } from '../systems/dayNightMath';
 import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
@@ -284,25 +289,6 @@ function createLighting(group: THREE.Group): {
   return { skyLight, sunLight };
 }
 
-function createPlaza(group: THREE.Group) {
-  const plaza = new THREE.Mesh(
-    new THREE.CircleGeometry(SAFE_ZONE_RADIUS, 32),
-    new THREE.MeshLambertMaterial({ color: 0xb9b2a4 })
-  );
-  plaza.rotation.x = -Math.PI / 2;
-  plaza.position.y = 0.02;
-  plaza.receiveShadow = true;
-  group.add(plaza);
-
-  const safeZoneRing = new THREE.Mesh(
-    new THREE.RingGeometry(SAFE_ZONE_RADIUS - 0.4, SAFE_ZONE_RADIUS, 48),
-    new THREE.MeshBasicMaterial({ color: 0x9fe86a, side: THREE.DoubleSide })
-  );
-  safeZoneRing.rotation.x = -Math.PI / 2;
-  safeZoneRing.position.y = 0.05;
-  group.add(safeZoneRing);
-}
-
 interface AssetScatterRule {
   create(random: SeededRandom): WorldAsset;
   count: number;
@@ -511,7 +497,7 @@ export function createMondstadtWorld(
 
   const { skyLight, sunLight } = createLighting(group);
   group.add(createTerrainMesh(options.scorch));
-  createPlaza(group);
+  group.add(createPlazaGround(SAFE_ZONE_RADIUS));
   group.add(createFountain());
   obstacles.push({ x: 0, y: 0, z: 0, radius: 3.0 }); // fountain basin, plaza is flat at y=0
   const grassField = createGrassField({
