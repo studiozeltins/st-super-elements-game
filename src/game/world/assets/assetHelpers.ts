@@ -6,13 +6,40 @@ export function lambert(color: number): THREE.MeshLambertMaterial {
 }
 
 /**
- * Glossy material — a MeshPhongMaterial with a modest specular highlight that
- * tracks the moving sun (bright glint on the lit side, sweeping right→left across
- * the day) and catches warm lantern glints at night. For wood/metal/fabric props
- * that should not read dead-matte (benches, lantern posts, parasols, awnings).
+ * Adds a fresnel EDGE HIGHLIGHT to a lit material's shader: silhouette-facing
+ * faces (normal grazing the view) get a bright rim, so the object pops off the
+ * ground regardless of sun angle (view-based, not specular). Uses the view-space
+ * normal's z — the camera looks down view -Z, so faces edge-on have normal.z≈0.
+ * Call from a material's onBeforeCompile.
  */
-export function shiny(color: number, shininess = 34, specular = 0x5a5a5a): THREE.MeshPhongMaterial {
-  return new THREE.MeshPhongMaterial({ color, shininess, specular, flatShading: true });
+export function addRimLight(
+  shader: THREE.WebGLProgramParametersWithUniforms,
+  strength = 0.45,
+  power = 3
+): void {
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <opaque_fragment>',
+    /* glsl */ `
+    #include <opaque_fragment>
+    {
+      float _rim = pow(1.0 - clamp(normal.z, 0.0, 1.0), ${power.toFixed(1)});
+      gl_FragColor.rgb += vec3(1.0) * _rim * ${strength.toFixed(2)};
+    }
+    `
+  );
+}
+
+/**
+ * Edge-lit material — a flat-shaded Lambert with the fresnel edge highlight above.
+ * The rim program is shared (color is a uniform), so all edge-lit props batch to
+ * one shader. For props that should read crisp against the ground (benches,
+ * lantern posts, parasols).
+ */
+export function edgeLit(color: number, strength = 0.45): THREE.MeshLambertMaterial {
+  const material = new THREE.MeshLambertMaterial({ color, flatShading: true });
+  material.onBeforeCompile = shader => addRimLight(shader, strength);
+  material.customProgramCacheKey = () => `edgeLit_${strength.toFixed(2)}`;
+  return material;
 }
 
 export function randomBetween(random: SeededRandom, min: number, max: number): number {

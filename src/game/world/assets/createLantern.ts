@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { SeededRandom, WorldAsset } from './types';
-import { randomBetween, shiny } from './assetHelpers';
+import { edgeLit, randomBetween } from './assetHelpers';
 
 /** A box geometry pre-translated to (x,y,z) — for merging same-material parts. */
 function box(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
@@ -69,7 +69,7 @@ export function createLantern(
         box(0.16, POST_HEIGHT, 0.16, 0, POST_HEIGHT / 2, 0),
         box(0.5, 0.1, 0.1, HANG_X / 2, POST_HEIGHT - 0.15, 0),
       ],
-      shiny(POST_COLOR, 22)
+      edgeLit(POST_COLOR)
     )
   );
 
@@ -81,7 +81,7 @@ export function createLantern(
         box(0.22, 0.1, 0.22, 0, 0.5, 0),
         box(0.22, 0.1, 0.22, 0, POST_HEIGHT - 0.5, 0),
       ],
-      shiny(BRASS_COLOR, 70, 0x6a561e)
+      edgeLit(BRASS_COLOR, 0.55)
     )
   );
 
@@ -96,7 +96,7 @@ export function createLantern(
     const cz = i % 2 === 0 ? -0.13 : 0.13;
     cageGeos.push(box(0.04, 0.44, 0.04, HANG_X + cx, LAMP_HEIGHT, cz));
   }
-  group.add(mergedMesh(cageGeos, shiny(CAGE_COLOR, 45, 0x333333)));
+  group.add(mergedMesh(cageGeos, edgeLit(CAGE_COLOR, 0.55)));
 
   // Warm glowing lamp body (unlit basic so it reads as emissive at any hour) —
   // the visible element exposed through the cage; kept separate + named so the

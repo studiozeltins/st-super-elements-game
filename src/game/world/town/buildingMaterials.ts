@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { addRimLight } from '../assets/assetHelpers';
 
 /**
  * Reusable pixel-art building materials — the ONE place wall/roof surfaces are
@@ -48,8 +49,8 @@ function patchVertexLocalSpace(shader: THREE.WebGLProgramParametersWithUniforms)
 // Materials are memoized by their key so every house/roof doesn't compile its own
 // shader program — one program per (style,color) is shared across all buildings,
 // cutting draw-call state changes (a real FPS cost with a full district town).
-const wallCache = new Map<string, THREE.MeshPhongMaterial>();
-const roofCache = new Map<number, THREE.MeshPhongMaterial>();
+const wallCache = new Map<string, THREE.MeshLambertMaterial>();
+const roofCache = new Map<number, THREE.MeshLambertMaterial>();
 
 /**
  * Wall material. `style: 'timber'` paints half-timbered plaster panels (dark
@@ -59,19 +60,15 @@ const roofCache = new Map<number, THREE.MeshPhongMaterial>();
 export function createWallMaterial(
   baseColor: number,
   style: 'timber' | 'stone'
-): THREE.MeshPhongMaterial {
+): THREE.MeshLambertMaterial {
   const cacheKey = `${style}_${baseColor}`;
   const cached = wallCache.get(cacheKey);
   if (cached) return cached;
-  const material = new THREE.MeshPhongMaterial({
-    color: 0xffffff,
-    flatShading: true,
-    specular: 0x6a6a6a,
-    shininess: 26,
-  });
+  const material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
     patchVertexLocalSpace(shader);
+    addRimLight(shader, 0.32); // edge highlight so walls read crisp against the sky/ground
 
     const pattern =
       style === 'timber'
@@ -135,18 +132,14 @@ export function createWallMaterial(
  * row of per-tile-shaded pixels with a darker grout line and a scalloped lower
  * edge, so a pitched roof reads as laid tiles instead of a flat colored slab.
  */
-export function createRoofMaterial(baseColor: number): THREE.MeshPhongMaterial {
+export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial {
   const cached = roofCache.get(baseColor);
   if (cached) return cached;
-  const material = new THREE.MeshPhongMaterial({
-    color: 0xffffff,
-    flatShading: true,
-    specular: 0x808080, // glossy tiles — the brightest specular of the buildings
-    shininess: 44,
-  });
+  const material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
     patchVertexLocalSpace(shader);
+    addRimLight(shader, 0.4); // stronger rim on the roof so slopes/ridges catch an edge
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',

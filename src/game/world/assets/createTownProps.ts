@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { SeededRandom, WorldAsset } from './types';
-import { lambert, pickRandom, randomBetween, shiny } from './assetHelpers';
+import { edgeLit, lambert, pickRandom, randomBetween } from './assetHelpers';
 
 /**
  * Lived-in plaza clutter — barrels, crate stacks, market stalls and handcarts —
@@ -129,8 +129,8 @@ export function createCart(random: SeededRandom): WorldAsset {
  *  the grey cobble. */
 export function createBench(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
-  const woodMat = shiny(0x9a6a38, 22); // lighter warm wood, catches the sun
-  const ironMat = shiny(0x2c2824, 48, 0x3a3a3a); // glossier iron
+  const woodMat = edgeLit(0x9a6a38); // lighter warm wood, catches the sun
+  const ironMat = edgeLit(0x2c2824, 0.5); // glossier iron
   const cushionMat = lambert(0xb5563e); // warm padded fabric (matte)
   const W = 4.2; // extra-wide, roomy seating
   const end = W / 2 - 0.18; // x of the end frames/armrests
@@ -189,7 +189,7 @@ export function createCafeTable(random: SeededRandom): WorldAsset {
   pole.position.y = 1.6;
   group.add(pole);
   const canopyColor = random() < 0.5 ? 0xcf4b3a : 0x3d8a78;
-  const canopy = new THREE.Mesh(new THREE.ConeGeometry(1.3, 0.6, 8), shiny(canopyColor, 28));
+  const canopy = new THREE.Mesh(new THREE.ConeGeometry(1.3, 0.6, 8), edgeLit(canopyColor));
   canopy.position.y = 3.2;
   group.add(canopy);
   group.rotation.y = random() * Math.PI * 2;
