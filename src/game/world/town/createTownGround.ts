@@ -74,11 +74,10 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           return id;
         }
         vec3 cobble(vec2 w) {
-          // Stones SHRINK toward the outskirts (density rises with distance from the
-          // center) so the pavement grows finer and blends into grass at the edge.
+          // Uniform cobble size everywhere; edginess only weights the seam grass.
           float maxc = max(abs(w.x), abs(w.y));
           float edginess = smoothstep(${(townHalf * 0.4).toFixed(1)}, ${townHalf.toFixed(1)}, maxc);
-          float density = 1.3 + edginess * 1.8;
+          float density = 1.35;
           vec2 p = w * density;
           vec2 ip = floor(p), fp = fract(p);
           float f1 = 8.0, f2 = 8.0; vec2 id = ip; vec2 nearR = vec2(0.0);
