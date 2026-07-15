@@ -74,6 +74,10 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           return id;
         }
         vec3 cobble(vec2 w) {
+          // World-space PIXEL SNAP: quantize to a chunky grid so the shading reads
+          // as hard pixel steps (keeps pixel-art crispness) instead of a smooth
+          // per-fragment gradient — the domed depth is preserved, just posterized.
+          w = (floor(w * 7.0) + 0.5) / 7.0;
           float density = 1.35;
           vec2 p = w * density;
           vec2 ip = floor(p), fp = fract(p);
@@ -100,9 +104,9 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           stone *= 0.85 + phash(px + id.x * 1.7) * 0.3;
           // Some stones mossy/stained.
           if (phash(id + 5.0) < 0.14) stone = mix(stone, ${vec3(0x6d7a46)}, 0.4);
-          // A little baked AO in the deepest crevices (the domed NORMAL does most
-          // of the depth now, so keep this subtle to avoid double-darkening).
-          stone *= 0.82 + smoothstep(0.0, 0.12, border) * 0.2;
+          // Crisp baked AO into the seams (posterized by the pixel snap → hard
+          // pixel bands, not a smooth falloff) on top of the domed-normal light.
+          stone *= 0.68 + smoothstep(0.0, 0.13, border) * 0.34;
           // Hard-ish mortar seam.
           float mortar = 1.0 - smoothstep(0.02, 0.07, border);
           vec3 col = mix(stone, ${vec3(0x2c261d)}, mortar * 0.9);
@@ -114,10 +118,11 @@ export function createTownGround(districts: District[]): THREE.Mesh {
         // lights each cobble at its own angle (3D relief, not flat baked shading).
         // Each Voronoi stone gets a random tilt; fine noise adds surface roughness.
         vec3 groundNormal(vec2 w) {
+          w = (floor(w * 7.0) + 0.5) / 7.0;              // same pixel snap as cobble()
           vec2 id = gStoneId;                            // set by cobble() this fragment
-          vec2 slant = (hash2(id + 7.7) - 0.5) * 0.6;    // per-stone random tilt
-          vec2 rug = (vec2(phash(floor(w * 11.0) + 1.0), phash(floor(w * 11.0) + 8.0)) - 0.5) * 0.3;
-          vec2 dome = gStoneOutward * gStoneDome * 1.7;  // edges slope outward → rounded stone
+          vec2 slant = (hash2(id + 7.7) - 0.5) * 0.5;    // per-stone random tilt
+          vec2 rug = (vec2(phash(floor(w * 11.0) + 1.0), phash(floor(w * 11.0) + 8.0)) - 0.5) * 0.35;
+          vec2 dome = gStoneOutward * gStoneDome * 0.9;  // gentler dome (snap posterizes it)
           return normalize(vec3(slant.x + rug.x + dome.x, 1.0, slant.y + rug.y + dome.y));
         }
         `
