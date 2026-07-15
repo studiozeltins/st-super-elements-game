@@ -127,3 +127,72 @@ export function createCart(random: SeededRandom): WorldAsset {
   group.rotation.y = random() * Math.PI * 2;
   return { group };
 }
+
+/** A slatted wooden park bench — garden/plaza seating. */
+export function createBench(random: SeededRandom): WorldAsset {
+  const group = new THREE.Group();
+  const woodMat = lambert(0x6e4a2c);
+  const legMat = lambert(WOOD_DARK);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 0.5), woodMat);
+  seat.position.y = 0.45;
+  seat.castShadow = true;
+  group.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 0.1), woodMat);
+  back.position.set(0, 0.72, -0.2);
+  group.add(back);
+  for (const sx of [-0.6, 0.6]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.45, 0.45), legMat);
+    leg.position.set(sx, 0.22, 0);
+    group.add(leg);
+  }
+  group.rotation.y = random() * Math.PI * 2;
+  return { group };
+}
+
+/** A round cafe table with a two-tone parasol above it. */
+export function createCafeTable(random: SeededRandom): WorldAsset {
+  const group = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.08, 10), lambert(0xdac6a4));
+  top.position.y = 0.72;
+  top.castShadow = true;
+  group.add(top);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.72, 6), lambert(WOOD_DARK));
+  post.position.y = 0.36;
+  group.add(post);
+  // Two chairs.
+  for (const angle of [0, Math.PI]) {
+    const chair = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.08, 0.4), lambert(0x6e4a2c));
+    chair.position.set(Math.cos(angle) * 0.8, 0.42, Math.sin(angle) * 0.8);
+    group.add(chair);
+  }
+  // Parasol pole + canopy.
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.0, 6), lambert(WOOD_DARK));
+  pole.position.y = 1.4;
+  group.add(pole);
+  const canopyColor = random() < 0.5 ? 0xcf4b3a : 0x3d8a78;
+  const canopy = new THREE.Mesh(new THREE.ConeGeometry(1.1, 0.5, 8), lambert(canopyColor));
+  canopy.position.y = 2.15;
+  canopy.castShadow = true;
+  group.add(canopy);
+  group.rotation.y = random() * Math.PI * 2;
+  return { group };
+}
+
+/** A planter box with a leafy shrub — garden/street greenery. */
+export function createPlanter(random: SeededRandom): WorldAsset {
+  const group = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.5, 0.6), lambert(0x6b4a2f));
+  box.position.y = 0.25;
+  box.castShadow = true;
+  group.add(box);
+  const leafMat = lambert(0x4f8a3f);
+  const clumps = 2 + Math.floor(random() * 2);
+  for (let i = 0; i < clumps; i += 1) {
+    const s = randomBetween(random, 0.35, 0.55);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), leafMat);
+    leaf.position.set(randomBetween(random, -0.3, 0.3), 0.5 + s / 2, randomBetween(random, -0.15, 0.15));
+    group.add(leaf);
+  }
+  group.rotation.y = random() * Math.PI * 2;
+  return { group };
+}

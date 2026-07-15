@@ -1,0 +1,133 @@
+import * as THREE from 'three';
+import type { SeededRandom, WorldAsset } from '../assets/types';
+import {
+  createBarrel,
+  createBench,
+  createBush,
+  createCafeTable,
+  createCanopyTree,
+  createCart,
+  createCrate,
+  createFlower,
+  createMarketStall,
+  createPlanter,
+} from '../assets';
+import { createCafeBuilding, createChurch, createHouse } from './createBuildings';
+import { createDistrictGround } from './createDistrictGround';
+import { TOWN_DISTRICTS, type District } from './townPlan';
+
+/**
+ * Assembles the whole town from the TOWN_DISTRICTS data: lays each district's
+ * paved ground, then populates it by kind (houses / market stalls / garden
+ * greenery / cafe / church). New districts added to townPlan.ts flow through here
+ * automatically; a new KIND just needs a branch in populate().
+ *
+ * All world mutation goes through the injected callbacks so this stays decoupled
+ * from createMondstadtWorld's internal obstacle/platform bookkeeping.
+ */
+export interface TownBuildContext {
+  group: THREE.Group;
+  random: SeededRandom;
+  /** Place a decor asset at (x,z) on the terrain, optional collision radius. */
+  placeAsset: (asset: WorldAsset, x: number, z: number, collisionRadius?: number) => void;
+  /** Add a self-positioned building object and register its footprint obstacle. */
+  addBuilding: (object: THREE.Object3D, x: number, z: number, radius: number) => void;
+  /** False where a prop/building must not go (e.g. on the road). */
+  isClear: (x: number, z: number) => boolean;
+}
+
+export function buildTown(ctx: TownBuildContext): void {
+  for (const district of TOWN_DISTRICTS) {
+    ctx.group.add(createDistrictGround(district));
+    populate(ctx, district);
+  }
+}
+
+/** Random point inside a district, inset from its edge. */
+function spot(random: SeededRandom, d: District, inset: number): { x: number; z: number } {
+  const range = d.half - inset;
+  return {
+    x: d.cx + (random() * 2 - 1) * range,
+    z: d.cz + (random() * 2 - 1) * range,
+  };
+}
+
+/** Scatter `count` assets in a district, skipping blocked/road spots. */
+function scatter(
+  ctx: TownBuildContext,
+  d: District,
+  count: number,
+  make: (r: SeededRandom) => WorldAsset,
+  inset: number,
+  collisionRadius?: number
+): void {
+  let placed = 0;
+  let attempts = 0;
+  while (placed < count && attempts < count * 8) {
+    attempts += 1;
+    const p = spot(ctx.random, d, inset);
+    if (!ctx.isClear(p.x, p.z)) continue;
+    ctx.placeAsset(make(ctx.random), p.x, p.z, collisionRadius);
+    placed += 1;
+  }
+}
+
+function populate(ctx: TownBuildContext, d: District): void {
+  const { random } = ctx;
+  switch (d.kind) {
+    case 'housing': {
+      // A 2×2 block of houses facing the town center, on the interior corners.
+      const off = d.half * 0.5;
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const x = d.cx + sx * off;
+          const z = d.cz + sz * off;
+          if (!ctx.isClear(x, z)) continue;
+          const scale = 0.9 + random() * 0.3;
+          const house = createHouse(random, x, z, 0, 0, scale);
+          ctx.addBuilding(house, x, z, 2.8 * scale);
+        }
+      }
+      break;
+    }
+    case 'market': {
+      scatter(ctx, d, 3, createMarketStall, 2.5);
+      scatter(ctx, d, 4, createCrate, 1.5);
+      scatter(ctx, d, 3, createBarrel, 1.5);
+      break;
+    }
+    case 'garden': {
+      scatter(ctx, d, 3, createCanopyTree, 2.5, 1.0);
+      scatter(ctx, d, 6, createBush, 1.5);
+      scatter(ctx, d, 10, createFlower, 1.0);
+      scatter(ctx, d, 3, createBench, 1.5);
+      scatter(ctx, d, 3, createPlanter, 1.5);
+      break;
+    }
+    case 'cafe': {
+      // One cafe building near the back, tables + planters out front.
+      const bx = d.cx;
+      const bz = d.cz - d.half * 0.45;
+      if (ctx.isClear(bx, bz)) {
+        const cafe = createCafeBuilding(random, bx, bz, d.cx, d.cz + 1);
+        ctx.addBuilding(cafe, bx, bz, 2.6);
+      }
+      scatter(ctx, d, 4, createCafeTable, 2.0);
+      scatter(ctx, d, 3, createPlanter, 1.5);
+      break;
+    }
+    case 'civic': {
+      const cx = d.cx;
+      const cz = d.cz;
+      const church = createChurch(random, cx, cz, 0, 0);
+      ctx.addBuilding(church, cx, cz, 4.0);
+      break;
+    }
+    case 'plaza': {
+      // Fountain is added by the world; dress the square with a little seating.
+      scatter(ctx, d, 3, createBench, 2.0);
+      scatter(ctx, d, 2, createPlanter, 2.0);
+      break;
+    }
+  }
+}
