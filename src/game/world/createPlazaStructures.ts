@@ -62,7 +62,9 @@ export function createFountain(): Fountain {
   ];
   const basin = new THREE.Mesh(
     new THREE.LatheGeometry(profile, 40),
-    new THREE.MeshLambertMaterial({ color: 0x9a9284 })
+    // DoubleSide: the revolved rim's near-camera wall is back-faced and would be
+    // culled (missing-wall look) — render both faces so the basin is solid.
+    new THREE.MeshLambertMaterial({ color: 0x9a9284, side: THREE.DoubleSide })
   );
   basin.castShadow = true;
   basin.receiveShadow = true;
