@@ -179,8 +179,8 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
           // AND night): on the sun-facing slope, the exposed lower lip of each tile.
           float slopeSun = max(0.0, dot(normalize(vWorldNrm), normalize(uSunDir)));
           float lip = smoothstep(0.35, 0.0, courseEdge);
-          gRoofEdge = lip * slopeSun * 0.85;
-          gRoofEdgeCol = min(t * 1.8 + 0.1, vec3(1.0));
+          gRoofEdge = lip * slopeSun;                              // scaled by lit luminance post-light
+          gRoofEdgeCol = min(t * 1.7 + 0.06, vec3(1.0));           // lighter tile, not white
         }
         `
       )
@@ -188,7 +188,10 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
         '#include <opaque_fragment>',
         /* glsl */ `
         #include <opaque_fragment>
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, gRoofEdgeCol, gRoofEdge); // sun edge line, post-light
+        // Sun edge line, post-light — scaled by lit luminance so it reads by day but
+        // fades to a faint catch under blue moonlight (not a bright rim at night).
+        float roofEdgeLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, gRoofEdgeCol, gRoofEdge * roofEdgeLum * 0.7);
         `
       );
   };

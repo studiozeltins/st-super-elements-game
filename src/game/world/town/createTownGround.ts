@@ -139,7 +139,7 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           // that faces the sun. Stashed for the post-lighting pass below.
           float nearEdge = 1.0 - smoothstep(0.0, 0.3, border);
           float sunAlign = max(0.0, dot(gStoneOutward, normalize(uSunDir.xz + vec2(1e-4))));
-          gCobEdge = nearEdge * sunAlign * 0.5;                 // subtler
+          gCobEdge = nearEdge * sunAlign;                       // scaled by lit luminance post-light
           gCobEdgeCol = mix(col, vec3(0.7, 0.71, 0.74), 0.6);  // lightened grey, not white
           return col;
         }
@@ -185,7 +185,10 @@ export function createTownGround(districts: District[]): THREE.Mesh {
         '#include <opaque_fragment>',
         /* glsl */ `
         #include <opaque_fragment>
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, gCobEdgeCol, gCobEdge); // sun edge line, post-light
+        // Sun edge line, post-light — scaled by the surface's own lit luminance so it
+        // reads by day but fades to a faint catch under blue moonlight (not a bright rim).
+        float cobEdgeLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, gCobEdgeCol, gCobEdge * cobEdgeLum * 0.7);
         `
       );
   };
