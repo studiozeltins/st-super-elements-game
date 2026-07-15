@@ -66,8 +66,8 @@ export function createWallMaterial(
   const material = new THREE.MeshPhongMaterial({
     color: 0xffffff,
     flatShading: true,
-    specular: 0x222222,
-    shininess: 16,
+    specular: 0x3a3a3a,
+    shininess: 24,
   });
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
