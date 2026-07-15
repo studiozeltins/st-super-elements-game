@@ -148,8 +148,18 @@ function populate(ctx: TownBuildContext, d: District): void {
       break;
     }
     case 'plaza': {
-      // Fountain is added by the world; dress the square with a little seating.
-      scatter(ctx, d, 3, createBench, 2.0);
+      // Four benches in a SQUARE around the fountain (at the district center),
+      // each facing the water — deliberate seating, not random scatter.
+      const benchRadius = 4.3;
+      for (let i = 0; i < 4; i += 1) {
+        const a = i * (Math.PI / 2);
+        const x = d.cx + Math.cos(a) * benchRadius;
+        const z = d.cz + Math.sin(a) * benchRadius;
+        if (!ctx.isClear(x, z)) continue; // skip a bench that would sit on the road
+        const bench = createBench(random);
+        bench.group.rotation.y = Math.atan2(-Math.cos(a), -Math.sin(a)); // face the fountain
+        ctx.placeAsset(bench, x, z);
+      }
       scatter(ctx, d, 2, createPlanter, 2.0);
       break;
     }
