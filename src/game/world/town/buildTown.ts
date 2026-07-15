@@ -9,12 +9,13 @@ import {
   createCart,
   createCrate,
   createFlower,
+  createGrassTuft,
   createMarketStall,
   createPlanter,
 } from '../assets';
 import { createCafeBuilding, createChurch, createHouse } from './createBuildings';
 import { createTownGround } from './createTownGround';
-import { TOWN_DISTRICTS, type District } from './townPlan';
+import { TOWN_DISTRICTS, TOWN_HALF_EXTENT, type District } from './townPlan';
 
 /**
  * Assembles the whole town from the TOWN_DISTRICTS data: lays each district's
@@ -37,11 +38,32 @@ export interface TownBuildContext {
 }
 
 export function buildTown(ctx: TownBuildContext): void {
-  // One unified ground mesh: district materials interlock along a jittered
-  // boundary (no straight tile seams). Then populate each district by kind.
+  // One unified cobble ground; then populate each district by kind.
   ctx.group.add(createTownGround(TOWN_DISTRICTS));
   for (const district of TOWN_DISTRICTS) {
     populate(ctx, district);
+  }
+  seedSeamGrass(ctx);
+}
+
+/**
+ * Grass tufts sprouting from cobble cracks — concentrated in the LESS-WALKED
+ * outer town (probability grows with distance from the center), sparse near the
+ * busy plaza. Skips the road. Small walk-through decor.
+ */
+function seedSeamGrass(ctx: TownBuildContext): void {
+  const half = TOWN_HALF_EXTENT;
+  let placed = 0;
+  let attempts = 0;
+  while (placed < 120 && attempts < 900) {
+    attempts += 1;
+    const x = (ctx.random() * 2 - 1) * half;
+    const z = (ctx.random() * 2 - 1) * half;
+    const edginess = Math.max(Math.abs(x), Math.abs(z)) / half; // 0 center → 1 edge
+    if (ctx.random() > edginess * edginess) continue; // denser toward the edge
+    if (!ctx.isClear(x, z)) continue;
+    ctx.placeAsset(createGrassTuft(ctx.random), x, z);
+    placed += 1;
   }
 }
 

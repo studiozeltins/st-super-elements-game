@@ -19,6 +19,7 @@ export {
   createBench,
   createCafeTable,
   createPlanter,
+  createGrassTuft,
 } from './createTownProps';
 export { createSpikes } from './createSpikes';
 export { createWoodenArch } from './createWoodenArch';

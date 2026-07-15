@@ -170,6 +170,23 @@ export function createCafeTable(random: SeededRandom): WorldAsset {
   return { group };
 }
 
+const TUFT_GREENS = [0x4a7a30, 0x568a38, 0x3f6a28];
+
+/** A small grass tuft — a few short leaning blades — for cobble cracks. */
+export function createGrassTuft(random: SeededRandom): WorldAsset {
+  const group = new THREE.Group();
+  const mat = lambert(pickRandom(random, TUFT_GREENS));
+  const blades = 3 + Math.floor(random() * 3);
+  for (let i = 0; i < blades; i += 1) {
+    const h = randomBetween(random, 0.18, 0.36);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.035, h, 0.035), mat);
+    blade.position.set(randomBetween(random, -0.09, 0.09), h / 2, randomBetween(random, -0.09, 0.09));
+    blade.rotation.set(randomBetween(random, -0.4, 0.4), random() * Math.PI, randomBetween(random, -0.4, 0.4));
+    group.add(blade);
+  }
+  return { group };
+}
+
 /** A planter box with a leafy shrub — garden/street greenery. */
 export function createPlanter(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();

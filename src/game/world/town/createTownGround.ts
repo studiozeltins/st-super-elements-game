@@ -51,6 +51,9 @@ export function createTownGround(districts: District[]): THREE.Mesh {
         vec2 hash2(vec2 p) {
           return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.545);
         }
+        // Nearest cobble id, stashed by cobble() so groundNormal() reuses it
+        // instead of a second Voronoi lookup (color_fragment runs before normals).
+        vec2 gStoneId = vec2(0.0);
         // Coarse cobble-cell id at a world point — used to discard whole stones.
         vec2 cobbleId(vec2 w) {
           float density = 1.35;
@@ -77,6 +80,7 @@ export function createTownGround(districts: District[]): THREE.Mesh {
             if (d < f1) { f2 = f1; f1 = d; id = ip + g; } else if (d < f2) { f2 = d; }
           }
           f1 = sqrt(f1); f2 = sqrt(f2);
+          gStoneId = id;                                // reused by groundNormal()
           float border = f2 - f1;                       // ~0 at the mortar seam
           // Flat per-stone tone, wide dark→light spread (old, weathered stones).
           float tone = phash(id + 3.1);
@@ -94,12 +98,24 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           vec3 col = mix(stone, ${vec3(0x2c261d)}, mortar * 0.9);
           // A few cobbles worn away to packed dirt.
           if (phash(id + 11.0) < 0.05) col = ${vec3(0x453626)} * (0.85 + phash(id + 2.0) * 0.3);
-          // Grass tufts in the cracks (many seams, clearly visible).
-          if (border < 0.11 && phash(id + 13.0) < 0.45) {
-            col = mix(col, ${vec3(0x3d6a28)}, (1.0 - smoothstep(0.0, 0.11, border)) * 0.85);
-          }
           return col;
         }
+        // Per-stone SLANT + ruggedness as a real world-space normal, so the sun
+        // lights each cobble at its own angle (3D relief, not flat baked shading).
+        // Each Voronoi stone gets a random tilt; fine noise adds surface roughness.
+        vec3 groundNormal(vec2 w) {
+          vec2 id = gStoneId;                            // set by cobble() this fragment
+          vec2 slant = (hash2(id + 7.7) - 0.5) * 0.9;
+          vec2 rug = (vec2(phash(floor(w * 11.0) + 1.0), phash(floor(w * 11.0) + 8.0)) - 0.5) * 0.4;
+          return normalize(vec3(slant.x + rug.x, 1.0, slant.y + rug.y));
+        }
+        `
+      )
+      .replace(
+        '#include <normal_fragment_begin>',
+        /* glsl */ `
+        #include <normal_fragment_begin>
+        normal = normalize((viewMatrix * vec4(groundNormal(vTownXZ), 0.0)).xyz);
         `
       )
       .replace(
