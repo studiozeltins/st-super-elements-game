@@ -1,6 +1,19 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { SeededRandom, WorldAsset } from './types';
 import { randomBetween, shiny } from './assetHelpers';
+
+/** A box geometry pre-translated to (x,y,z) — for merging same-material parts. */
+function box(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
+  return new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+}
+
+/** Merge same-material box parts into one mesh (one draw call). */
+function mergedMesh(geos: THREE.BufferGeometry[], material: THREE.Material): THREE.Mesh {
+  const merged = mergeGeometries(geos, false);
+  for (const g of geos) g.dispose();
+  return new THREE.Mesh(merged, material);
+}
 
 const POST_COLOR = 0x6d4c2c; // lighter warm wood so the post reads against the ground
 const CAGE_COLOR = 0x2b2118;
@@ -48,57 +61,46 @@ export function createLantern(
 ): WorldAsset {
   const withLight = opts.withLight ?? true;
   const group = new THREE.Group();
-  const postMat = shiny(POST_COLOR, 22);
-  const cageMat = shiny(CAGE_COLOR, 45, 0x333333);
 
-  // Wooden post.
-  const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, POST_HEIGHT, 0.16), postMat);
-  post.position.y = POST_HEIGHT / 2;
-  post.rotation.y = randomBetween(random, -0.08, 0.08);
-  group.add(post);
+  // Post + cross-arm (one shiny-wood mesh).
+  group.add(
+    mergedMesh(
+      [
+        box(0.16, POST_HEIGHT, 0.16, 0, POST_HEIGHT / 2, 0),
+        box(0.5, 0.1, 0.1, HANG_X / 2, POST_HEIGHT - 0.15, 0),
+      ],
+      shiny(POST_COLOR, 22)
+    )
+  );
 
-  // Brass collars — a wider base + banding that catch light so the post pops.
-  const brassMat = shiny(BRASS_COLOR, 70, 0x6a561e);
-  const footing = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.34), brassMat);
-  footing.position.y = 0.15;
-  group.add(footing);
-  for (const y of [0.5, POST_HEIGHT - 0.5]) {
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.1, 0.22), brassMat);
-    band.position.y = y;
-    band.rotation.y = post.rotation.y;
-    group.add(band);
-  }
+  // Brass footing + collars (one glossy-brass mesh) — catch light, pop off cobble.
+  group.add(
+    mergedMesh(
+      [
+        box(0.34, 0.3, 0.34, 0, 0.15, 0),
+        box(0.22, 0.1, 0.22, 0, 0.5, 0),
+        box(0.22, 0.1, 0.22, 0, POST_HEIGHT - 0.5, 0),
+      ],
+      shiny(BRASS_COLOR, 70, 0x6a561e)
+    )
+  );
 
-  // Cross-arm the lantern hangs from.
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.1), postMat);
-  arm.position.set(HANG_X / 2, POST_HEIGHT - 0.15, 0);
-  group.add(arm);
-
-  // Short chain link from the arm end to the roof cap (connects them visually).
-  const link = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.04), cageMat);
-  link.position.set(HANG_X, POST_HEIGHT - 0.28, 0);
-  group.add(link);
-
-  // Dark roof cap + base plate — bookend the glowing body top and bottom.
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.34), cageMat);
-  roof.position.set(HANG_X, LAMP_HEIGHT + 0.24, 0);
-  group.add(roof);
-  const base = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.3), cageMat);
-  base.position.set(HANG_X, LAMP_HEIGHT - 0.24, 0);
-  group.add(base);
-
-  // Four THIN corner bars — the cage. Warm body shows between them.
-  const barGeo = new THREE.BoxGeometry(0.04, 0.44, 0.04);
+  // Cage: chain link + roof cap + base plate + four corner bars (one dark mesh).
+  const cageGeos = [
+    box(0.04, 0.14, 0.04, HANG_X, POST_HEIGHT - 0.28, 0),
+    box(0.34, 0.08, 0.34, HANG_X, LAMP_HEIGHT + 0.24, 0),
+    box(0.3, 0.08, 0.3, HANG_X, LAMP_HEIGHT - 0.24, 0),
+  ];
   for (let i = 0; i < 4; i += 1) {
-    const bar = new THREE.Mesh(barGeo, cageMat);
     const cx = i < 2 ? -0.13 : 0.13;
     const cz = i % 2 === 0 ? -0.13 : 0.13;
-    bar.position.set(HANG_X + cx, LAMP_HEIGHT, cz);
-    group.add(bar);
+    cageGeos.push(box(0.04, 0.44, 0.04, HANG_X + cx, LAMP_HEIGHT, cz));
   }
+  group.add(mergedMesh(cageGeos, shiny(CAGE_COLOR, 45, 0x333333)));
 
   // Warm glowing lamp body (unlit basic so it reads as emissive at any hour) —
-  // now the LARGEST, most visible element, exposed through the cage.
+  // the visible element exposed through the cage; kept separate + named so the
+  // day/night cycle can fade its glow.
   const lamp = new THREE.Mesh(
     new THREE.BoxGeometry(0.24, 0.4, 0.24),
     new THREE.MeshBasicMaterial({ color: LAMP_COLOR })
@@ -106,6 +108,9 @@ export function createLantern(
   lamp.name = LANTERN_LAMP_NAME;
   lamp.position.set(HANG_X, LAMP_HEIGHT, 0);
   group.add(lamp);
+
+  // Slight whole-lantern yaw variety (cheap; keeps the seeded RNG in step).
+  group.rotation.y = randomBetween(random, -0.08, 0.08);
 
   // Warm point light at the lamp — ONLY when withLight (plaza lanterns). Modest
   // distance/decay: a soft pool, not a combat flare. Base intensity is the lit

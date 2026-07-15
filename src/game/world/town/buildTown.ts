@@ -55,7 +55,7 @@ function seedSeamGrass(ctx: TownBuildContext): void {
   const half = TOWN_HALF_EXTENT;
   let placed = 0;
   let attempts = 0;
-  while (placed < 50 && attempts < 400) {
+  while (placed < 30 && attempts < 250) {
     attempts += 1;
     const x = (ctx.random() * 2 - 1) * half;
     const z = (ctx.random() * 2 - 1) * half;

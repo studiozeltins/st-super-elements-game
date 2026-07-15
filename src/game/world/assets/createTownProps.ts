@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { SeededRandom, WorldAsset } from './types';
 import { lambert, pickRandom, randomBetween, shiny } from './assetHelpers';
 
@@ -197,18 +198,28 @@ export function createCafeTable(random: SeededRandom): WorldAsset {
 
 const TUFT_GREENS = [0x4a7a30, 0x568a38, 0x3f6a28];
 
-/** A small grass tuft — a few short leaning blades — for cobble cracks. */
+/** A small grass tuft — a few short leaning blades MERGED into a single mesh (one
+ *  draw call each; there are dozens across the town, so per-blade meshes were a
+ *  real draw-call cost). */
 export function createGrassTuft(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
-  const mat = lambert(pickRandom(random, TUFT_GREENS));
   const blades = 3 + Math.floor(random() * 3);
+  const geos: THREE.BufferGeometry[] = [];
+  const q = new THREE.Quaternion();
+  const scl = new THREE.Vector3(1, 1, 1);
   for (let i = 0; i < blades; i += 1) {
     const h = randomBetween(random, 0.18, 0.36);
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.035, h, 0.035), mat);
-    blade.position.set(randomBetween(random, -0.09, 0.09), h / 2, randomBetween(random, -0.09, 0.09));
-    blade.rotation.set(randomBetween(random, -0.4, 0.4), random() * Math.PI, randomBetween(random, -0.4, 0.4));
-    group.add(blade);
+    const g = new THREE.BoxGeometry(0.035, h, 0.035);
+    q.setFromEuler(
+      new THREE.Euler(randomBetween(random, -0.4, 0.4), random() * Math.PI, randomBetween(random, -0.4, 0.4))
+    );
+    const pos = new THREE.Vector3(randomBetween(random, -0.09, 0.09), h / 2, randomBetween(random, -0.09, 0.09));
+    g.applyMatrix4(new THREE.Matrix4().compose(pos, q, scl));
+    geos.push(g);
   }
+  const merged = mergeGeometries(geos, false);
+  for (const g of geos) g.dispose();
+  group.add(new THREE.Mesh(merged, lambert(pickRandom(random, TUFT_GREENS))));
   return { group };
 }
 
