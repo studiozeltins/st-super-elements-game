@@ -137,10 +137,11 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           }
           // Sun-facing EDGE LINE per stone: near the seam, on the side of the stone
           // that faces the sun. Stashed for the post-lighting pass below.
-          float nearEdge = 1.0 - smoothstep(0.0, 0.3, border);
+          float nearEdge = 1.0 - smoothstep(0.0, 0.22, border);              // tighter → crisp line
           float sunAlign = max(0.0, dot(gStoneOutward, normalize(uSunDir.xz + vec2(1e-4))));
+          sunAlign = pow(sunAlign, 1.6);                                     // only sharpest sun-facing edges
           gCobEdge = nearEdge * sunAlign;                       // scaled by lit luminance post-light
-          gCobEdgeCol = mix(col, vec3(0.7, 0.71, 0.74), 0.6);  // lightened grey, not white
+          gCobEdgeCol = mix(col, vec3(0.85, 0.86, 0.9), 0.55); // brighter cool highlight, still not pure white
           return col;
         }
         // Per-stone SLANT + ruggedness as a real world-space normal, so the sun
@@ -188,7 +189,7 @@ export function createTownGround(districts: District[]): THREE.Mesh {
         // Sun edge line, post-light — steep lit-luminance term (tiny floor) so it reads
         // crisp by day but stays a thin, dim catch at night, not a wide bright rim.
         float cobEdgeLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, gCobEdgeCol, gCobEdge * (0.03 + cobEdgeLum * 0.8));
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, gCobEdgeCol, gCobEdge * (0.03 + cobEdgeLum * 1.0));
         `
       );
   };
