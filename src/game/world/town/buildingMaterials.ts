@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { addRimLight } from '../assets/assetHelpers';
 
 /**
  * Reusable pixel-art building materials — the ONE place wall/roof surfaces are
@@ -68,7 +67,6 @@ export function createWallMaterial(
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
     patchVertexLocalSpace(shader);
-    addRimLight(shader, 0.32); // edge highlight so walls read crisp against the sky/ground
 
     const pattern =
       style === 'timber'
@@ -139,7 +137,6 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
     patchVertexLocalSpace(shader);
-    addRimLight(shader, 0.4); // stronger rim on the roof so slopes/ridges catch an edge
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',

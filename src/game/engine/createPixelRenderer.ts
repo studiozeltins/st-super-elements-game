@@ -56,16 +56,63 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
   let overlayCullTarget: THREE.Object3D | null = null;
 
   // Low-res world buffer. Nearest filtering is what upscales into visible pixels.
+  // A depth texture is attached so the blit can detect silhouette EDGES from depth
+  // discontinuities (the outline pass) — computed at the low internal resolution,
+  // so the outlines are chunky pixel edges that match the art.
+  const depthTexture = new THREE.DepthTexture(1, 1);
   const worldTarget = new THREE.WebGLRenderTarget(1, 1, {
     minFilter: THREE.NearestFilter,
     magFilter: THREE.NearestFilter,
+    depthTexture,
   });
 
-  // A screen-filling quad that draws the world target onto the canvas.
+  // A screen-filling quad that draws the world target onto the canvas AND draws a
+  // dark outline where depth jumps (object silhouettes) — an "edge highlight" that
+  // is only on the edges, not the whole face.
   const blitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const blitScene = new THREE.Scene();
-  const blitMaterial = new THREE.MeshBasicMaterial({
-    map: worldTarget.texture,
+  const blitMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      tDiffuse: { value: worldTarget.texture },
+      tDepth: { value: depthTexture },
+      uTexel: { value: new THREE.Vector2(1 / 320, 1 / 240) },
+      uNear: { value: camera.near },
+      uFar: { value: camera.far },
+      uEdge: { value: new THREE.Color(0x0e1017) },
+      uEdgeStrength: { value: 0.75 },
+      uThreshold: { value: 0.28 },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D tDiffuse;
+      uniform sampler2D tDepth;
+      uniform vec2 uTexel;
+      uniform float uNear, uFar, uThreshold, uEdgeStrength;
+      uniform vec3 uEdge;
+      varying vec2 vUv;
+      float lin(vec2 uv) {
+        float z = texture2D(tDepth, uv).x * 2.0 - 1.0;
+        return (2.0 * uNear * uFar) / (uFar + uNear - z * (uFar - uNear));
+      }
+      void main() {
+        vec3 col = texture2D(tDiffuse, vUv).rgb;
+        float c = lin(vUv);
+        float diff = max(
+          max(abs(c - lin(vUv - vec2(uTexel.x, 0.0))), abs(c - lin(vUv + vec2(uTexel.x, 0.0)))),
+          max(abs(c - lin(vUv - vec2(0.0, uTexel.y))), abs(c - lin(vUv + vec2(0.0, uTexel.y))))
+        );
+        // Relative depth jump → silhouette edge. Skip the far sky (c huge).
+        float edge = (c < uFar * 0.7) ? step(uThreshold, diff / c) : 0.0;
+        col = mix(col, uEdge, edge * uEdgeStrength);
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
     depthTest: false,
     depthWrite: false,
   });
@@ -88,7 +135,10 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
     // Canvas backing store renders at native (× DPR) resolution — the overlay
     // pass draws here directly and stays crisp. The world target stays small.
     renderer.setSize(displayWidth, displayHeight, false);
-    if (pixelated) worldTarget.setSize(internalWidth, internalHeight);
+    if (pixelated) {
+      worldTarget.setSize(internalWidth, internalHeight);
+      blitMaterial.uniforms.uTexel.value.set(1 / internalWidth, 1 / internalHeight);
+    }
     camera.aspect = displayWidth / displayHeight;
     camera.updateProjectionMatrix();
   }
@@ -156,6 +206,7 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
     },
     dispose() {
       window.removeEventListener('resize', resize);
+      depthTexture.dispose();
       worldTarget.dispose();
       blitMaterial.dispose();
       blitQuad.geometry.dispose();
