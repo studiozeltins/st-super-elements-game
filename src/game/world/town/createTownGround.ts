@@ -103,7 +103,7 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           float border = f2 - f1;                       // ~0 at the mortar seam
           // Flat per-stone tone, wide dark→light spread (old, weathered stones).
           float tone = phash(id + 3.1);
-          vec3 dark = ${vec3(0x4f473b)}, mid = ${vec3(0x877c69)}, light = ${vec3(0xbfb39a)};
+          vec3 dark = ${vec3(0x484a4c)}, mid = ${vec3(0x7c7d7e)}, light = ${vec3(0xacadae)};
           vec3 stone = tone < 0.5 ? mix(dark, mid, tone * 2.0) : mix(mid, light, (tone - 0.5) * 2.0);
           // Rocky SURFACE texture: multi-scale value-noise mottling + fine grit,
           // offset per stone so neighbours don't share a pattern. This is what
@@ -116,15 +116,15 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           // Some stones mossy/stained overall.
           if (phash(id + 5.0) < 0.14) stone = mix(stone, ${vec3(0x6d7a46)}, 0.4);
           // Baked AO into the seams (dome normal carries the rest of the depth).
-          stone *= 0.72 + smoothstep(0.0, 0.12, border) * 0.3;
-          // DISTINCT dark mortar border — a crisp defined gap between stones.
-          float mortar = 1.0 - smoothstep(0.012, 0.045, border);
-          vec3 col = mix(stone, ${vec3(0x241f18)}, mortar);
+          stone *= 0.72 + smoothstep(0.0, 0.16, border) * 0.3;
+          // DISTINCT dark mortar border — wider defined gap between stones.
+          float mortar = 1.0 - smoothstep(0.03, 0.09, border);
+          vec3 col = mix(stone, ${vec3(0x22201d)}, mortar);
           // A few cobbles worn away to packed dirt.
           if (phash(id + 11.0) < 0.05) col = ${vec3(0x453626)} * (0.85 + phash(id + 2.0) * 0.3);
           // Grass in the SEAMS, concentrated in the outer city (per-stone random,
           // never a uniform line): mossy green filling some cracks, more at the edge.
-          float crack = 1.0 - smoothstep(0.0, 0.07, border);
+          float crack = 1.0 - smoothstep(0.0, 0.1, border);
           if (crack > 0.0 && phash(id + 13.0) < 0.12 + edginess * 0.55) {
             col = mix(col, ${vec3(0x40692b)}, crack * (0.5 + edginess * 0.45));
           }

@@ -158,13 +158,13 @@ export function createCafeTable(random: SeededRandom): WorldAsset {
     chair.position.set(Math.cos(angle) * 0.8, 0.42, Math.sin(angle) * 0.8);
     group.add(chair);
   }
-  // Parasol pole + canopy.
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.0, 6), lambert(WOOD_DARK));
-  pole.position.y = 1.4;
+  // Parasol pole + canopy — tall enough to stand well above a player.
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 3.0, 6), lambert(WOOD_DARK));
+  pole.position.y = 1.6;
   group.add(pole);
   const canopyColor = random() < 0.5 ? 0xcf4b3a : 0x3d8a78;
-  const canopy = new THREE.Mesh(new THREE.ConeGeometry(1.1, 0.5, 8), lambert(canopyColor));
-  canopy.position.y = 2.15;
+  const canopy = new THREE.Mesh(new THREE.ConeGeometry(1.3, 0.6, 8), lambert(canopyColor));
+  canopy.position.y = 3.2;
   group.add(canopy);
   group.rotation.y = random() * Math.PI * 2;
   return { group };
