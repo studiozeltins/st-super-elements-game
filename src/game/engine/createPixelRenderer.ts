@@ -78,8 +78,8 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
       uTexel: { value: new THREE.Vector2(1 / 320, 1 / 240) },
       uNear: { value: camera.near },
       uFar: { value: camera.far },
-      uEdge: { value: new THREE.Color(0x0e1017) },
-      uEdgeStrength: { value: 0.75 },
+      uEdge: { value: new THREE.Color(0xaab6c8) },
+      uEdgeStrength: { value: 0.6 },
       uThreshold: { value: 0.28 },
     },
     vertexShader: /* glsl */ `
@@ -109,7 +109,7 @@ export function createPixelRenderer(canvas: HTMLCanvasElement): PixelRenderer {
         );
         // Relative depth jump → silhouette edge. Skip the far sky (c huge).
         float edge = (c < uFar * 0.7) ? step(uThreshold, diff / c) : 0.0;
-        col = mix(col, uEdge, edge * uEdgeStrength);
+        col += uEdge * (edge * uEdgeStrength); // additive light rim — visible day AND night
         gl_FragColor = vec4(col, 1.0);
       }
     `,
