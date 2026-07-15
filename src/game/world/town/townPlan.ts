@@ -33,14 +33,17 @@ const STEP = DISTRICT_HALF * 2;
  * tiles west, two market tiles east/north-east (by the road out), garden to the
  * south-west, cafe to the south-east.
  */
+// NOTE: ground is 'cobble' everywhere for now — larger flagstone/gravel tiles read
+// badly under the nearest-neighbour pixel filter. The flagstone/gravel materials
+// stay wired in createTownGround so a future district can opt back in.
 export const TOWN_DISTRICTS: District[] = [
   { id: 'plaza', kind: 'plaza', cx: 0, cz: 0, half: DISTRICT_HALF, ground: 'cobble' },
   { id: 'civic-n', kind: 'civic', cx: 0, cz: -STEP, half: DISTRICT_HALF, ground: 'cobble' },
-  { id: 'housing-w', kind: 'housing', cx: -STEP, cz: 0, half: DISTRICT_HALF, ground: 'flagstone' },
-  { id: 'housing-nw', kind: 'housing', cx: -STEP, cz: -STEP, half: DISTRICT_HALF, ground: 'flagstone' },
+  { id: 'housing-w', kind: 'housing', cx: -STEP, cz: 0, half: DISTRICT_HALF, ground: 'cobble' },
+  { id: 'housing-nw', kind: 'housing', cx: -STEP, cz: -STEP, half: DISTRICT_HALF, ground: 'cobble' },
   { id: 'market-e', kind: 'market', cx: STEP, cz: 0, half: DISTRICT_HALF, ground: 'cobble' },
   { id: 'market-ne', kind: 'market', cx: STEP, cz: -STEP, half: DISTRICT_HALF, ground: 'cobble' },
-  { id: 'garden-sw', kind: 'garden', cx: -STEP, cz: STEP, half: DISTRICT_HALF, ground: 'gravel' },
-  { id: 'cafe-s', kind: 'cafe', cx: 0, cz: STEP, half: DISTRICT_HALF, ground: 'flagstone' },
-  { id: 'cafe-se', kind: 'cafe', cx: STEP, cz: STEP, half: DISTRICT_HALF, ground: 'flagstone' },
+  { id: 'garden-sw', kind: 'garden', cx: -STEP, cz: STEP, half: DISTRICT_HALF, ground: 'cobble' },
+  { id: 'cafe-s', kind: 'cafe', cx: 0, cz: STEP, half: DISTRICT_HALF, ground: 'cobble' },
+  { id: 'cafe-se', kind: 'cafe', cx: STEP, cz: STEP, half: DISTRICT_HALF, ground: 'cobble' },
 ];

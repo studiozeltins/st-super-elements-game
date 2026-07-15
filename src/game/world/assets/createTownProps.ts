@@ -19,7 +19,6 @@ export function createBarrel(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.82, 8), lambert(WOOD));
   body.position.y = 0.41;
-  body.castShadow = true;
   group.add(body);
   const hoopMat = lambert(HOOP);
   for (const y of [0.16, 0.66]) {
@@ -43,7 +42,6 @@ export function createCrate(random: SeededRandom): WorldAsset {
     const crate = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), crateMat);
     crate.position.y = y + size / 2;
     crate.rotation.y = randomBetween(random, -0.25, 0.25);
-    crate.castShadow = true;
     group.add(crate);
     const lid = new THREE.Mesh(new THREE.BoxGeometry(size + 0.04, 0.06, size + 0.04), trimMat);
     lid.position.set(0, y + size, 0);
@@ -71,7 +69,6 @@ export function createMarketStall(random: SeededRandom): WorldAsset {
   }
   const table = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.14, 1.3), lambert(WOOD));
   table.position.y = 0.92;
-  table.castShadow = true;
   group.add(table);
   // Produce boxes on the table.
   const produceCount = 3 + Math.floor(random() * 3);
@@ -103,7 +100,6 @@ export function createCart(random: SeededRandom): WorldAsset {
   const woodMat = lambert(WOOD);
   const bed = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.22, 0.95), woodMat);
   bed.position.y = 0.62;
-  bed.castShadow = true;
   group.add(bed);
   // Low side rails.
   for (const sz of [-1, 1]) {
@@ -116,7 +112,6 @@ export function createCart(random: SeededRandom): WorldAsset {
     const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 8), wheelMat);
     wheel.rotation.z = Math.PI / 2;
     wheel.position.set(sx * 0.5, 0.42, 0);
-    wheel.castShadow = true;
     group.add(wheel);
   }
   // Raised pull handle at one end.
@@ -135,7 +130,6 @@ export function createBench(random: SeededRandom): WorldAsset {
   const legMat = lambert(WOOD_DARK);
   const seat = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 0.5), woodMat);
   seat.position.y = 0.45;
-  seat.castShadow = true;
   group.add(seat);
   const back = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 0.1), woodMat);
   back.position.set(0, 0.72, -0.2);
@@ -154,7 +148,6 @@ export function createCafeTable(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
   const top = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.08, 10), lambert(0xdac6a4));
   top.position.y = 0.72;
-  top.castShadow = true;
   group.add(top);
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.72, 6), lambert(WOOD_DARK));
   post.position.y = 0.36;
@@ -172,7 +165,6 @@ export function createCafeTable(random: SeededRandom): WorldAsset {
   const canopyColor = random() < 0.5 ? 0xcf4b3a : 0x3d8a78;
   const canopy = new THREE.Mesh(new THREE.ConeGeometry(1.1, 0.5, 8), lambert(canopyColor));
   canopy.position.y = 2.15;
-  canopy.castShadow = true;
   group.add(canopy);
   group.rotation.y = random() * Math.PI * 2;
   return { group };
@@ -183,7 +175,6 @@ export function createPlanter(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
   const box = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.5, 0.6), lambert(0x6b4a2f));
   box.position.y = 0.25;
-  box.castShadow = true;
   group.add(box);
   const leafMat = lambert(0x4f8a3f);
   const clumps = 2 + Math.floor(random() * 2);

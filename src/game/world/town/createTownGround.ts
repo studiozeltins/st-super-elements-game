@@ -91,10 +91,18 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           float rnd = phash(cell);
           vec3 stone = rnd < 0.34 ? p0 : (rnd < 0.67 ? p1 : p2);
           stone *= 0.92 + phash(cell + 3.1) * 0.16;
+          float edge = min(min(f.x, f.y), min(1.0 - f.x, 1.0 - f.y));
           if (seamW > 0.0) {
-            float edge = min(min(f.x, f.y), min(1.0 - f.x, 1.0 - f.y));
             stone = mix(seamC, stone, smoothstep(0.0, seamW, edge));
           }
+          // Fake rounded-stone HEIGHT (baked, no real normals — survives the pixel
+          // filter): crevices between stones darken (AO), stone tops brighten, and a
+          // top-left rim light gives each cobble a domed, 3D read.
+          float relief = smoothstep(0.0, 0.3, edge);
+          stone *= 0.7 + relief * 0.42;
+          vec2 cc = f - 0.5;
+          float rim = dot(normalize(cc + 1e-4), vec2(-0.7071, -0.7071));
+          stone *= 1.0 + rim * (1.0 - relief) * 0.28;
           return stone;
         }
         `

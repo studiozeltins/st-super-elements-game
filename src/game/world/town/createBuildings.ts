@@ -59,7 +59,6 @@ export function createHouse(
     new THREE.MeshLambertMaterial({ color: PLINTH })
   );
   plinth.position.y = 0.25;
-  plinth.castShadow = true;
   house.add(plinth);
 
   const walls = new THREE.Mesh(new THREE.BoxGeometry(width, wallHeight, depth), wallMat);
@@ -105,7 +104,6 @@ export function createHouse(
       new THREE.MeshLambertMaterial({ color: 0x7a5a48 })
     );
     chimney.position.set(width * 0.28, roofY + 1.0, depth * 0.28);
-    chimney.castShadow = true;
     house.add(chimney);
   } else {
     const roof = createFlatRoof(width, depth, roofColor);
@@ -143,7 +141,6 @@ export function createChurch(
     new THREE.MeshLambertMaterial({ color: PLINTH })
   );
   plinth.position.y = 0.3;
-  plinth.castShadow = true;
   church.add(plinth);
 
   const nave = new THREE.Mesh(new THREE.BoxGeometry(naveW, naveH, naveD), stoneMat);
