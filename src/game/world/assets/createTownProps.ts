@@ -131,7 +131,8 @@ export function createBench(random: SeededRandom): WorldAsset {
   const woodMat = lambert(0x9a6a38); // lighter warm wood — high contrast vs grey ground
   const ironMat = lambert(0x2c2824);
   const cushionMat = lambert(0xb5563e); // warm padded fabric
-  const W = 2.1; // wider, roomier bench
+  const W = 4.2; // extra-wide, roomy seating
+  const end = W / 2 - 0.18; // x of the end frames/armrests
   // Seat: four slats with gaps across a deeper seat.
   for (const sz of [-0.27, -0.09, 0.09, 0.27]) {
     const slat = new THREE.Mesh(new THREE.BoxGeometry(W, 0.09, 0.15), woodMat);
@@ -152,7 +153,7 @@ export function createBench(random: SeededRandom): WorldAsset {
   backPillow.position.set(0, 1.0, -0.28);
   group.add(backPillow);
   // Iron end frames, chunky armrests, back posts.
-  for (const sx of [-0.92, 0.92]) {
+  for (const sx of [-end, end]) {
     const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.56, 0.72), ironMat);
     leg.position.set(sx, 0.26, -0.02);
     group.add(leg);
