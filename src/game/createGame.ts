@@ -344,7 +344,17 @@ export function createGame(
   // timestamp via the bridge tap) feeds the cycle — the ONE writer of the
   // ambience handles. Constructed AFTER the world so world.ambience exists.
   const serverClock = createServerClock();
-  const daynight = createDayNightCycle(dayNightEnabled, movingSunEnabled, serverClock, world.ambience);
+  // ?time=<0..1> freezes the day/night cycle at a fixed phase (0 night, 0.5 noon)
+  // for testing — e.g. ?time=0.5 for midday, ?time=0.66 for dusk.
+  const timeParam = perfFlags.get('time');
+  const phaseOverride = timeParam != null ? Number(timeParam) : undefined;
+  const daynight = createDayNightCycle(
+    dayNightEnabled,
+    movingSunEnabled,
+    serverClock,
+    world.ambience,
+    phaseOverride != null && Number.isFinite(phaseOverride) ? phaseOverride : undefined,
+  );
   // The overlay pass only draws sprites — skip walking the whole static world.
   pixelRenderer.setOverlayCullTarget(world.group);
   // Light pool must exist before the effect system (projectiles borrow lights).

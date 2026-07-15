@@ -42,6 +42,8 @@ export function createDayNightCycle(
   movingSunEnabled: boolean,
   clock: ServerClock,
   ambience: AmbienceHandles,
+  /** ?time=<0..1> testing override — freeze the cycle at this phase (0 night, 0.5 noon). */
+  phaseOverride?: number,
 ): DayNightCycle {
   // Scratch Colors constructed ONCE at factory scope. apply() only setHex()s the
   // blended palette hex into these and .copy()s into the live objects — never
@@ -122,7 +124,10 @@ export function createDayNightCycle(
     }
   }
 
-  if (enabled) {
+  if (phaseOverride != null) {
+    // ?time=<0..1>: freeze the whole cycle at a fixed phase for testing.
+    apply(((phaseOverride % 1) + 1) % 1);
+  } else if (enabled) {
     // Snap to the current time of day on load — no 30s sunrise ramp from a cold
     // neutral start (Pitfall 6).
     apply(phase01(clock.nowMicros()));
@@ -134,7 +139,7 @@ export function createDayNightCycle(
 
   return {
     update() {
-      if (!enabled) return;
+      if (phaseOverride != null || !enabled) return; // frozen — keep the fixed phase
       apply(phase01(clock.nowMicros()));
     },
   };
