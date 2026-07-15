@@ -12,18 +12,19 @@ import type { SeededRandom } from './assets';
 const TIMBER = 0x4a3524;
 
 /**
- * Pixel-cobblestone plaza ground. A disc whose fragment shader paints square
- * stones per world cell (3-tone warm-grey palette + per-cell speckle + dark
- * mortar seams), darkens a border course of pavers, inlays a lighter marker
- * ring, and DISCARDS past a per-cell jittered radius so the rim is a ragged
- * cobbled edge, not a clean circle. Receives shadows + drifts with day/night
- * (Lambert), like the terrain it sits on.
+ * Pixel-cobblestone plaza ground — a SQUARE town square whose fragment shader
+ * paints square stones per world cell (3-tone warm-grey palette + per-cell
+ * speckle + dark mortar seams), darkens a border course of pavers, inlays a
+ * lighter marker frame, and DISCARDS past a per-cell jittered square boundary so
+ * the rim is a ragged cobbled edge, not a clean line. Receives shadows + drifts
+ * with day/night (Lambert), like the terrain it sits on.
  */
-export function createPlazaGround(radius: number): THREE.Mesh {
-  // A little larger than the gameplay radius so the ragged edge has room.
-  const geometry = new THREE.CircleGeometry(radius + 1.5, 48);
+export function createPlazaGround(halfExtent: number): THREE.Mesh {
+  // A little larger than the town footprint so the ragged edge has room.
+  const side = (halfExtent + 1.5) * 2;
+  const geometry = new THREE.PlaneGeometry(side, side);
   const material = new THREE.MeshLambertMaterial({ color: 0xffffff });
-  const r = radius.toFixed(1);
+  const r = halfExtent.toFixed(1);
   material.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -55,13 +56,14 @@ export function createPlazaGround(radius: number): THREE.Mesh {
         #include <color_fragment>
         {
           vec2 world = vPlazaXZ;
-          float R = length(world);
+          // Square "distance" (Chebyshev) so the plaza + its border are square.
+          float R = max(abs(world.x), abs(world.z));
           float CELLS = 1.7;
           vec2 gp = world * CELLS;
           vec2 cell = floor(gp);
           vec2 f = fract(gp);
           float rnd = phash(cell);
-          // Ragged cobbled rim: discard past a per-cell jittered radius.
+          // Ragged cobbled edge: discard past a per-cell jittered square boundary.
           float rim = ${r} + (rnd - 0.5) * 1.4;
           if (R > rim) discard;
           // 3-tone warm stone, chosen per cell, plus a brightness speckle.
@@ -76,7 +78,7 @@ export function createPlazaGround(radius: number): THREE.Mesh {
           stone = mix(vec3(0.34, 0.31, 0.26), stone, seam);
           // Darker paver course around the border.
           stone *= mix(0.78, 1.0, smoothstep(rim - 2.0, rim - 3.5, R));
-          // Lighter inlaid marker ring, painted only on the stone faces (not seams).
+          // Lighter inlaid marker frame, painted only on the stone faces (not seams).
           float ringDist = abs(R - (${r} - 4.0));
           stone = mix(stone, vec3(0.87, 0.81, 0.63), (1.0 - smoothstep(0.0, 0.45, ringDist)) * seam * 0.6);
           diffuseColor.rgb = stone;
@@ -95,8 +97,11 @@ export function createPlazaGround(radius: number): THREE.Mesh {
 
 export function createHouse(
   random: SeededRandom,
-  angleRadians: number,
-  distanceFromCenter: number
+  x: number,
+  z: number,
+  faceTargetX: number,
+  faceTargetZ: number,
+  scale = 1
 ): THREE.Group {
   const house = new THREE.Group();
   const wallColors = [0xe8dcc0, 0xdccfb4, 0xf0e6d0];
@@ -175,12 +180,12 @@ export function createHouse(
   chimneyCap.position.set(1.2, 5.5, 1.2);
   house.add(chimneyCap);
 
-  house.position.set(
-    Math.cos(angleRadians) * distanceFromCenter,
-    0,
-    Math.sin(angleRadians) * distanceFromCenter
-  );
-  house.lookAt(0, 0, 0);
+  house.position.set(x, 0, z);
+  // Front (local -Z) faces the street target; a tiny yaw jitter + size variance
+  // keeps the grid from looking machine-stamped.
+  house.lookAt(faceTargetX, 0, faceTargetZ);
+  house.rotation.y += (random() - 0.5) * 0.12;
+  house.scale.setScalar(scale);
   return house;
 }
 

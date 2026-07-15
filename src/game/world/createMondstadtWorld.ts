@@ -4,17 +4,21 @@ import { SAFE_ZONE_RADIUS, WORLD_BOUND } from '../data/constants';
 import { createSeededRandom } from './rng';
 import { createTerrainMesh, getTerrainHeight, getTerrainSlope, isOnLand } from './terrain';
 import { getBridges, type BridgeSpec } from './bridges';
-import { getRoads, ROAD_HALF_WIDTH } from './roads';
+import { getRoads, ROAD_HALF_WIDTH, roadFactor } from './roads';
 import { getCampSites } from './camps';
 import type { ObstacleCircle } from '../physics/resolveCollisions';
 import {
+  createBarrel,
   createBoulder,
   createBush,
   createCampfire,
   createCampFlag,
   createCanopyTree,
+  createCart,
+  createCrate,
   createFlower,
   createLantern,
+  createMarketStall,
   createMushroom,
   createPalmTree,
   createRockSpire,
@@ -497,7 +501,7 @@ export function createMondstadtWorld(
 
   const { skyLight, sunLight } = createLighting(group);
   group.add(createTerrainMesh(options.scorch));
-  group.add(createPlazaGround(SAFE_ZONE_RADIUS));
+  group.add(createPlazaGround(16.5));
   group.add(createFountain());
   obstacles.push({ x: 0, y: 0, z: 0, radius: 3.0 }); // fountain basin, plaza is flat at y=0
   const grassField = createGrassField({
@@ -509,17 +513,28 @@ export function createMondstadtWorld(
   buildBridges();
   buildPillarStairs();
 
-  const houseCount = 6;
-  for (let houseIndex = 0; houseIndex < houseCount; houseIndex++) {
-    const angle = (houseIndex / houseCount) * Math.PI * 2 + 0.4;
-    const house = createHouse(random, angle, 12);
-    group.add(house);
-    obstacles.push({
-      x: house.position.x,
-      y: getTerrainHeight(house.position.x, house.position.z),
-      z: house.position.z,
-      radius: 2.8,
-    });
+  // Houses laid out on a GRID — rows and columns lining a central avenue — so
+  // the town reads as streets, not a ring. Two rows (north/south of the plaza)
+  // of four columns each; every house faces the central avenue (z=0). The x=0
+  // column is left open as the street that the road leaves through. House world
+  // centers are captured for the town-prop scatter to avoid.
+  const HOUSE_COLS = [-14, -5, 5, 14];
+  const HOUSE_ROWS = [-12, 12];
+  const houseCenters: { x: number; z: number }[] = [];
+  for (const rowZ of HOUSE_ROWS) {
+    for (const colX of HOUSE_COLS) {
+      const scale = 0.9 + random() * 0.3;
+      // Face the central avenue: same column, z=0.
+      const house = createHouse(random, colX, rowZ, colX, 0, scale);
+      group.add(house);
+      houseCenters.push({ x: colX, z: rowZ });
+      obstacles.push({
+        x: colX,
+        y: getTerrainHeight(colX, rowZ),
+        z: rowZ,
+        radius: 2.8 * scale,
+      });
+    }
   }
   const { group: windmill, blades } = createWindmill();
   group.add(windmill);
@@ -529,6 +544,27 @@ export function createMondstadtWorld(
     z: windmill.position.z,
     radius: 2.1,
   });
+
+  // Lived-in clutter (barrels, crates, market stalls, handcarts) scattered
+  // between the houses — walk-through decor, so the plaza stays clear for
+  // movement. Keeps off the fountain, the road/street, and every house footprint.
+  const propRandom = createSeededRandom(WORLD_DECOR_SEED ^ 0x707);
+  const townPropFactories = [createBarrel, createCrate, createMarketStall, createCart];
+  let propsPlaced = 0;
+  let propAttempts = 0;
+  while (propsPlaced < 14 && propAttempts < 240) {
+    propAttempts += 1;
+    const angle = propRandom() * Math.PI * 2;
+    const radius = 6 + propRandom() * 9.5;
+    const px = Math.cos(angle) * radius;
+    const pz = Math.sin(angle) * radius;
+    if (Math.hypot(px, pz) < 4) continue; // clear the fountain
+    if (roadFactor(px, pz) > 0.2) continue; // keep the street clear
+    if (houseCenters.some(h => Math.hypot(h.x - px, h.z - pz) < 3.2)) continue;
+    const factory = townPropFactories[Math.floor(propRandom() * townPropFactories.length)];
+    placeAsset(factory(propRandom), px, pz);
+    propsPlaced += 1;
+  }
 
   // Canopy caps sway in-shader on the shared wind clock — the factory only
   // receives a seeded random through the scatter table, so inject wind first.

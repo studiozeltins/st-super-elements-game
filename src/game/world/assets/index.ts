@@ -11,5 +11,6 @@ export { createTotem } from './createTotem';
 export { createCampfire } from './createCampfire';
 export { createLantern, LANTERN_LIGHT_NAME } from './createLantern';
 export { createCampFlag } from './createCampFlag';
+export { createBarrel, createCrate, createMarketStall, createCart } from './createTownProps';
 export { createSpikes } from './createSpikes';
 export { createWoodenArch } from './createWoodenArch';
