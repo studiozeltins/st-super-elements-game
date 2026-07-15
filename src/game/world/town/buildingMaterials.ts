@@ -188,10 +188,10 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
         '#include <opaque_fragment>',
         /* glsl */ `
         #include <opaque_fragment>
-        // Sun edge line, post-light — base floor keeps the highlight on the tiles at
-        // night, lit-luminance term adds more by day so it never blows out (0.2 + lum*0.5).
+        // Sun edge line, post-light — steep lit-luminance term (tiny floor) so it reads
+        // crisp by day but stays a thin, dim catch at night, not a wide bright rim.
         float roofEdgeLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, gRoofEdgeCol, gRoofEdge * (0.2 + roofEdgeLum * 0.5));
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, gRoofEdgeCol, gRoofEdge * (0.03 + roofEdgeLum * 0.8));
         `
       );
   };
