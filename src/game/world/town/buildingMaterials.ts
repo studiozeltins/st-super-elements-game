@@ -66,8 +66,8 @@ export function createWallMaterial(
   const material = new THREE.MeshPhongMaterial({
     color: 0xffffff,
     flatShading: true,
-    specular: 0x3a3a3a,
-    shininess: 24,
+    specular: 0x6a6a6a,
+    shininess: 26,
   });
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
@@ -141,8 +141,8 @@ export function createRoofMaterial(baseColor: number): THREE.MeshPhongMaterial {
   const material = new THREE.MeshPhongMaterial({
     color: 0xffffff,
     flatShading: true,
-    specular: 0x222222,
-    shininess: 16,
+    specular: 0x808080, // glossy tiles — the brightest specular of the buildings
+    shininess: 44,
   });
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {

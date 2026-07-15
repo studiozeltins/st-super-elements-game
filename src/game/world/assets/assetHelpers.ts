@@ -11,7 +11,7 @@ export function lambert(color: number): THREE.MeshLambertMaterial {
  * the day) and catches warm lantern glints at night. For wood/metal/fabric props
  * that should not read dead-matte (benches, lantern posts, parasols, awnings).
  */
-export function shiny(color: number, shininess = 24, specular = 0x2a2a2a): THREE.MeshPhongMaterial {
+export function shiny(color: number, shininess = 34, specular = 0x5a5a5a): THREE.MeshPhongMaterial {
   return new THREE.MeshPhongMaterial({ color, shininess, specular, flatShading: true });
 }
 
