@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { phase01, samplePalette, sunDir } from './dayNightMath';
 import type { ServerClock } from '../net/createServerClock';
 import type { AmbienceHandles } from '../world/createMondstadtWorld';
-import { LANTERN_BASE_INTENSITY } from '../world/assets/createLantern';
+import { LANTERN_BASE_INTENSITY, LANTERN_LAMP_COLOR } from '../world/assets/createLantern';
 
 /**
  * The day/night cycle — the ONE writer of the ambience handles (the sibling of
@@ -54,6 +54,9 @@ export function createDayNightCycle(
   // Persistent sun-direction scratch — sunDir() mutates this in place each frame,
   // so the moving-sun path heap-allocates nothing (zero-alloc render rule, D-13).
   const scratchSunDir = { x: 0, y: 0, z: 0 };
+  // One scratch Color for the lamp-glow fade — setHex + multiplyScalar per lamp,
+  // never `new` per frame (zero-alloc render path).
+  const scratchLamp = new THREE.Color();
 
   function apply(phase: number): void {
     const palette = samplePalette(phase);
@@ -91,10 +94,23 @@ export function createDayNightCycle(
     ambience.skyLight.intensity = palette.hemiIntensity;
 
     // Plaza lanterns fade by intensity only (no add/remove): base * lanternLevel
-    // (0 by day, 1 by night — DAYNITE-04). The subtree is matrix-frozen.
-    const lanternIntensity = LANTERN_BASE_INTENSITY * palette.lanternLevel;
+    // (0 by day, 1 by night — DAYNITE-04). The subtree is matrix-frozen. On top of
+    // the level, a per-lantern candle FLICKER (two detuned sines → organic wobble)
+    // modulates both the PointLight intensity and the emissive lamp-body glow, so
+    // by day (level 0) the lamp reads as dark OFF glass, by night it glows + breathes.
+    const level = palette.lanternLevel;
+    // Wrap the clock to keep the sine argument small (no bigint→float precision loss).
+    const tSec = Number(clock.nowMicros() % 1_000_000_000n) / 1_000_000;
     for (let i = 0; i < ambience.lanternLights.length; i += 1) {
-      ambience.lanternLights[i].intensity = lanternIntensity;
+      const flicker =
+        1 + 0.1 * Math.sin(tSec * 8.5 + i * 2.1) + 0.06 * Math.sin(tSec * 17.3 + i * 4.7);
+      const glow = Math.max(0, level * flicker);
+      ambience.lanternLights[i].intensity = LANTERN_BASE_INTENSITY * glow;
+      const lamp = ambience.lanternLamps[i];
+      if (lamp) {
+        scratchLamp.setHex(LANTERN_LAMP_COLOR).multiplyScalar(Math.min(1, glow));
+        (lamp.material as THREE.MeshBasicMaterial).color.copy(scratchLamp);
+      }
     }
   }
 

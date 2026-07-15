@@ -4,6 +4,7 @@ import { SAFE_ZONE_RADIUS, WORLD_BOUND } from '../data/constants';
 import { createSeededRandom } from './rng';
 import { createTerrainMesh, getTerrainHeight, getTerrainSlope, isOnLand } from './terrain';
 import { getBridges, type BridgeSpec } from './bridges';
+import { getRoads, ROAD_HALF_WIDTH } from './roads';
 import { getCampSites } from './camps';
 import type { ObstacleCircle } from '../physics/resolveCollisions';
 import {
@@ -27,7 +28,7 @@ import {
 } from './assets';
 import { createGrassField } from './createGrassField';
 import { CAMPFIRE_LIGHT_NAME } from './assets/createCampfire';
-import { LANTERN_LIGHT_NAME } from './assets/createLantern';
+import { LANTERN_LIGHT_NAME, LANTERN_LAMP_NAME } from './assets/createLantern';
 import { CAMP_FLAG_CLOTH_NAME } from './assets/createCampFlag';
 import {
   FLAG_DISTURB_RADIUS,
@@ -90,6 +91,9 @@ export interface AmbienceHandles {
   background: THREE.Color;
   /** Plaza lanterns — Plan 03 populates this; empty until then. */
   lanternLights: THREE.PointLight[];
+  /** Emissive lamp-body meshes, index-aligned with lanternLights. The cycle fades
+   *  their glow color so a lantern reads OFF (dark glass) by day, lit by night. */
+  lanternLamps: THREE.Mesh[];
   /** Copies `c` into the sky-dome topColor uniform in place (zero alloc). */
   setSkyTop(c: THREE.Color): void;
   /**
@@ -594,14 +598,46 @@ export function createMondstadtWorld(
   const lanternRandom = createSeededRandom(WORLD_DECOR_SEED ^ 0x1a27);
   const LANTERN_COUNT = 6;
   const LANTERN_RING_RADIUS = 14;
+  // BISECT the house gaps: houses sit at (i/6)*2π + 0.4 (radius 12). Adding a
+  // half-step (π/LANTERN_COUNT) drops each lantern exactly BETWEEN two houses so
+  // they line the plaza edge instead of clipping into a house wall.
   for (let index = 0; index < LANTERN_COUNT; index += 1) {
-    const angle = (index / LANTERN_COUNT) * Math.PI * 2 + 0.3;
+    const angle = (index / LANTERN_COUNT) * Math.PI * 2 + 0.4 + Math.PI / LANTERN_COUNT;
     placeAsset(
       createLantern(lanternRandom),
       Math.cos(angle) * LANTERN_RING_RADIUS,
       Math.sin(angle) * LANTERN_RING_RADIUS,
       0.3
     );
+  }
+
+  // Road lanterns: line each road (the top-island avenue) with lanterns stepped
+  // along its centerline, offset just off the road edge on ALTERNATING sides so
+  // they flank the path instead of standing on it. Spacing is fixed in world
+  // units so longer roads simply get more lamps.
+  const ROAD_LANTERN_SPACING = 7;
+  const ROAD_LANTERN_OFFSET = ROAD_HALF_WIDTH + 0.8;
+  for (const road of getRoads()) {
+    let sideFlip = 1;
+    for (let i = 0; i < road.length - 1; i += 1) {
+      const ax = road[i].x;
+      const az = road[i].z;
+      const segX = road[i + 1].x - ax;
+      const segZ = road[i + 1].z - az;
+      const segLength = Math.hypot(segX, segZ) || 1;
+      // Unit perpendicular to the segment — the side offset direction.
+      const perpX = -segZ / segLength;
+      const perpZ = segX / segLength;
+      const steps = Math.max(1, Math.round(segLength / ROAD_LANTERN_SPACING));
+      for (let step = 0; step < steps; step += 1) {
+        const t = (step + 0.5) / steps;
+        const cx = ax + segX * t + perpX * ROAD_LANTERN_OFFSET * sideFlip;
+        const cz = az + segZ * t + perpZ * ROAD_LANTERN_OFFSET * sideFlip;
+        if (!isOnLand(cx, cz)) continue;
+        placeAsset(createLantern(lanternRandom), cx, cz, 0.3);
+        sideFlip *= -1;
+      }
+    }
   }
 
   scene.add(group);
@@ -628,9 +664,11 @@ export function createMondstadtWorld(
   // Plaza lanterns: collected by name in this SAME frozen-world traverse (no
   // second walk). The day/night cycle (Plan 04) fades these via ambience.
   const lanternLights: THREE.PointLight[] = [];
+  const lanternLamps: THREE.Mesh[] = [];
   group.traverse(node => {
     if (node.name === CAMPFIRE_LIGHT_NAME) campfireLights.push(node as THREE.PointLight);
     if (node.name === LANTERN_LIGHT_NAME) lanternLights.push(node as THREE.PointLight);
+    if (node.name === LANTERN_LAMP_NAME) lanternLamps.push(node as THREE.Mesh);
     if (node.name === CAMP_FLAG_CLOTH_NAME) {
       node.getWorldPosition(flagWorldScratch);
       campFlags.push({
@@ -671,6 +709,7 @@ export function createMondstadtWorld(
       fog: scene.fog,
       background: scene.background as THREE.Color,
       lanternLights,
+      lanternLamps,
       setSkyTop(c) {
         skyTopColor.copy(c);
       },

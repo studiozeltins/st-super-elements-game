@@ -3,12 +3,14 @@ import type { SeededRandom, WorldAsset } from './types';
 import { lambert, randomBetween } from './assetHelpers';
 
 const POST_COLOR = 0x4a3826;
-const FRAME_COLOR = 0x2b2118;
+const CAGE_COLOR = 0x2b2118;
 const LAMP_COLOR = 0xffd27a;
 const GLOW_COLOR = 0xffb04a;
 
 const POST_HEIGHT = 2.2;
 const LAMP_HEIGHT = 1.7;
+// The lantern hangs off the cross-arm end, offset from the post on +x.
+const HANG_X = 0.28;
 
 /** Base intensity of a fully-lit lantern. Plan 04 scales this by lanternLevel. */
 export const LANTERN_BASE_INTENSITY = 1.8;
@@ -16,38 +18,69 @@ export const LANTERN_BASE_INTENSITY = 1.8;
 /** Name of the lantern PointLight — the day/night cycle fades these by intensity. */
 export const LANTERN_LIGHT_NAME = 'lanternLight';
 
+/** Name of the emissive lamp-body mesh — the cycle fades its glow so the lantern
+ *  reads as OFF (dark glass) by day and lit by night, in step with the light. */
+export const LANTERN_LAMP_NAME = 'lanternLamp';
+
+/** The lamp's fully-lit warm glow hex. The cycle scales toward black by day. */
+export const LANTERN_LAMP_COLOR = LAMP_COLOR;
+
 /**
- * Simple voxel lantern post: a wooden pole capped by a warm lamp box and one
- * named warm PointLight. The light is added ONCE at build (campfire pattern) and
- * only ever drifts via `.intensity` — never added/removed at runtime (D-07 /
- * recompile ban). `layers.enableAll()` is mandatory: a light hidden from a pass
- * flips the renderer's lights-state hash and re-inits every lit material.
+ * Voxel lantern post: a wooden pole with a cross-arm, and a hanging CAGED lantern
+ * — a warm emissive glowing body left VISIBLE inside a thin dark cage (4 corner
+ * bars + a dark roof cap + base plate), not sealed inside a solid dark box. The
+ * warm PointLight is added ONCE at build (campfire pattern) and only ever drifts
+ * via `.intensity` — never added/removed at runtime (D-07 / recompile ban).
+ * `layers.enableAll()` is mandatory: a light hidden from a pass flips the
+ * renderer's lights-state hash and re-inits every lit material.
  */
 export function createLantern(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
+  const postMat = lambert(POST_COLOR);
+  const cageMat = lambert(CAGE_COLOR);
 
   // Wooden post.
-  const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, POST_HEIGHT, 0.16), lambert(POST_COLOR));
+  const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, POST_HEIGHT, 0.16), postMat);
   post.position.y = POST_HEIGHT / 2;
   post.rotation.y = randomBetween(random, -0.08, 0.08);
   group.add(post);
 
-  // Small cross-arm the lamp hangs from.
-  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.1), lambert(POST_COLOR));
-  arm.position.set(0.14, POST_HEIGHT - 0.15, 0);
+  // Cross-arm the lantern hangs from.
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.1, 0.1), postMat);
+  arm.position.set(HANG_X / 2, POST_HEIGHT - 0.15, 0);
   group.add(arm);
 
-  // Dark lantern frame.
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.5, 0.36), lambert(FRAME_COLOR));
-  frame.position.set(0.28, LAMP_HEIGHT, 0);
-  group.add(frame);
+  // Short chain link from the arm end to the roof cap (connects them visually).
+  const link = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.04), cageMat);
+  link.position.set(HANG_X, POST_HEIGHT - 0.28, 0);
+  group.add(link);
 
-  // Warm glowing lamp box (unlit basic so it reads as emissive at any hour).
+  // Dark roof cap + base plate — bookend the glowing body top and bottom.
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.34), cageMat);
+  roof.position.set(HANG_X, LAMP_HEIGHT + 0.24, 0);
+  group.add(roof);
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.3), cageMat);
+  base.position.set(HANG_X, LAMP_HEIGHT - 0.24, 0);
+  group.add(base);
+
+  // Four THIN corner bars — the cage. Warm body shows between them.
+  const barGeo = new THREE.BoxGeometry(0.04, 0.44, 0.04);
+  for (let i = 0; i < 4; i += 1) {
+    const bar = new THREE.Mesh(barGeo, cageMat);
+    const cx = i < 2 ? -0.13 : 0.13;
+    const cz = i % 2 === 0 ? -0.13 : 0.13;
+    bar.position.set(HANG_X + cx, LAMP_HEIGHT, cz);
+    group.add(bar);
+  }
+
+  // Warm glowing lamp body (unlit basic so it reads as emissive at any hour) —
+  // now the LARGEST, most visible element, exposed through the cage.
   const lamp = new THREE.Mesh(
-    new THREE.BoxGeometry(0.24, 0.34, 0.24),
+    new THREE.BoxGeometry(0.24, 0.4, 0.24),
     new THREE.MeshBasicMaterial({ color: LAMP_COLOR })
   );
-  lamp.position.set(0.28, LAMP_HEIGHT, 0);
+  lamp.name = LANTERN_LAMP_NAME;
+  lamp.position.set(HANG_X, LAMP_HEIGHT, 0);
   group.add(lamp);
 
   // Warm point light at the lamp. Modest distance/decay — a soft pool of light,
@@ -57,7 +90,7 @@ export function createLantern(random: SeededRandom): WorldAsset {
   // Visible to all camera layers — a pass that culls lights flips the renderer's
   // lights-state hash and re-inits every lit material per frame (RESEARCH Pattern 6).
   light.layers.enableAll();
-  light.position.set(0.28, LAMP_HEIGHT, 0);
+  light.position.set(HANG_X, LAMP_HEIGHT, 0);
   group.add(light);
 
   return { group };

@@ -8,6 +8,7 @@ import {
   meadowLushness,
   terrainColorAt,
 } from './terrain';
+import { roadFactor } from './roads';
 
 /**
  * Deterministic grass placement, clustered into lush meadow patches instead of
@@ -66,6 +67,7 @@ export function generateGrassBlades(totalCount: number): GrassBladeSpec[][] {
         if (!isOnLand(x, z)) continue;
         if (Math.hypot(x, z) < PLAZA_RADIUS) continue;
         if (getTerrainSlope(x, z) > MAX_GRASS_SLOPE) continue;
+        if (roadFactor(x, z) > 0.5) continue; // keep the road surface clear
         const y = getTerrainHeight(x, z);
         const isFlower = random() < FLOWER_FRACTION;
         blades.push({

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { hashGridPoint } from './rng';
 import { WORLD_BOUND } from '../data/constants';
+import { roadFactor } from './roads';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
 
 const TERRAIN_SEED = 20260703;
@@ -127,6 +128,8 @@ const ABYSS_COLOR = new THREE.Color(0x232833);
 // blond-green highs and darker moss lows, blended by low-frequency noise.
 const MEADOW_DRY = new THREE.Color(0x84a851);
 const MEADOW_MOSS = new THREE.Color(0x3f7d40);
+// Packed-dirt road tint — the terrain reads as a worn path where roadFactor > 0.
+const ROAD_DIRT = new THREE.Color(0x9a7a4e);
 
 /**
  * Low-frequency meadow mask, 0..1. High values = lush moss patches: the ground
@@ -148,6 +151,9 @@ export function terrainColorAt(x: number, z: number, height: number): THREE.Colo
   const lushness = meadowLushness(x, z);
   grassColor.lerp(MEADOW_DRY, smoothstep(0.6, 0.85, 1 - lushness) * 0.5);
   grassColor.lerp(MEADOW_MOSS, smoothstep(0.55, 0.8, lushness) * 0.45);
+  // Worn dirt road on top of the grass — the road mask wins where it is strong.
+  const road = roadFactor(x, z);
+  if (road > 0) grassColor.lerp(ROAD_DIRT, road * 0.9);
   return grassColor;
 }
 
