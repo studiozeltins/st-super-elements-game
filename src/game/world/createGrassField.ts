@@ -3,6 +3,7 @@ import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
 import type { WindUniforms } from '../systems/createWind';
 import { GUST, SWAY, gustGlsl, swayGlsl } from '../systems/windMath';
+import { sunDirUniform } from '../systems/sunUniform';
 import { ISLANDS } from './terrain';
 import { generateGrassBlades } from './grassPlacement';
 
@@ -78,12 +79,16 @@ function createGrassMaterial(
     );
     // Blades over scorched soil dry out to brown instead of staying green on
     // a burnt patch — tint tracks the scorch map, so it heals back with it.
+    shader.uniforms.uSunDir = sunDirUniform; // by reference — game loop updates it
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
         /* glsl */ `
         #include <common>
         varying float vScorch;
+        varying float vHeightFactor;
+        varying vec3 vWorldPosG;
+        uniform vec3 uSunDir;
         `
       )
       .replace(
@@ -91,6 +96,24 @@ function createGrassMaterial(
         /* glsl */ `
         #include <color_fragment>
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.42, 0.30, 0.16), min(vScorch * 1.5, 0.85));
+        `
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        /* glsl */ `
+        #include <opaque_fragment>
+        // Sun GLISTEN: a Blinn-style sheen off the blade tips (Lambert has none),
+        // so lit grass catches the light instead of reading as flat fake turf.
+        // Blades are +Y-normalled; the half-vector highlight concentrates toward
+        // the tip (vHeightFactor) and on non-scorched blades. Scaled by the
+        // fragment's own lit luminance so it's a bright day glint but fades at
+        // night — never a glow in the dark.
+        vec3 sheenV = normalize(cameraPosition - vWorldPosG);
+        vec3 sheenH = normalize(normalize(uSunDir) + sheenV);
+        float sheen = pow(max(dot(vec3(0.0, 1.0, 0.0), sheenH), 0.0), 22.0);
+        float sheenLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
+        sheen *= vHeightFactor * (1.0 - min(vScorch * 1.5, 0.85)) * sheenLum;
+        gl_FragColor.rgb += sheen * vec3(0.55, 0.62, 0.42);
         `
       );
     // Wind uniforms wired by OBJECT reference (the shared-clock contract):
@@ -115,6 +138,8 @@ function createGrassMaterial(
         uniform sampler2D uScorchMap;
         uniform vec4 uScorchBounds;
         varying float vScorch;
+        varying float vHeightFactor;
+        varying vec3 vWorldPosG;
         `
       )
       .replace(
@@ -142,6 +167,9 @@ function createGrassMaterial(
         transformed.y *= (1.0 - influence.b * 0.9 * heightFactor) * (1.0 - influence.a * 0.92);
         vec2 scorchUv = (bladeOrigin.xz - uScorchBounds.xy) * uScorchBounds.zw;
         vScorch = texture2D(uScorchMap, scorchUv).r;
+        // Tip factor + final world position for the fragment sun-glisten.
+        vHeightFactor = heightFactor;
+        vWorldPosG = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
         `
       );
   };
@@ -188,7 +216,7 @@ export function createGrassField(options: {
       island.radius + BLADE_HEIGHT + 8
     );
     mesh.castShadow = false; // thousands of casters would rebuild the sun map every frame
-    mesh.receiveShadow = false; // skip per-fragment shadow sampling over the whole field
+    mesh.receiveShadow = true; // grass darkens under building/tree shadows (not flat-lit fake turf)
     group.add(mesh);
   });
 
