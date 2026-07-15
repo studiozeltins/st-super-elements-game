@@ -46,23 +46,38 @@ export interface Fountain {
   waterMaterial: THREE.ShaderMaterial;
 }
 
-export function createFountain(timeUniform: { value: number }): Fountain {
+export function createFountain(): Fountain {
   const fountain = new THREE.Group();
 
-  // Octagon of basin blocks around the water disc.
-  const basinMaterial = new THREE.MeshLambertMaterial({ color: 0x9a9284 });
-  const basinSegments = 8;
-  const basinRadius = 2.55;
-  for (let index = 0; index < basinSegments; index += 1) {
-    const angle = (index / basinSegments) * Math.PI * 2;
-    const block = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.8, 0.7), basinMaterial);
-    block.position.set(Math.cos(angle) * basinRadius, 0.4, Math.sin(angle) * basinRadius);
-    block.rotation.y = -angle + Math.PI / 2;
-    block.castShadow = true;
-    fountain.add(block);
-  }
+  // Solid revolved stone basin — a smooth round rim with NO gaps (LatheGeometry
+  // over a cross-section profile), not a ring of voxel blocks. Profile runs from
+  // the outer base up the outer wall, over a rounded lip, down the inner wall.
+  const profile = [
+    new THREE.Vector2(2.2, 0.15),
+    new THREE.Vector2(2.42, 0.22),
+    new THREE.Vector2(2.42, 0.72),
+    new THREE.Vector2(2.62, 0.9),
+    new THREE.Vector2(2.82, 0.86),
+    new THREE.Vector2(2.82, 0.0),
+  ];
+  const basin = new THREE.Mesh(
+    new THREE.LatheGeometry(profile, 40),
+    new THREE.MeshLambertMaterial({ color: 0x9a9284 })
+  );
+  basin.castShadow = true;
+  basin.receiveShadow = true;
+  fountain.add(basin);
 
-  const water = createFountainWater(2.3, timeUniform);
+  // Inner floor disc so the basin isn't see-through below the water.
+  const floor = new THREE.Mesh(
+    new THREE.CircleGeometry(2.42, 40),
+    new THREE.MeshLambertMaterial({ color: 0x6f6a5e })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = 0.16;
+  fountain.add(floor);
+
+  const water = createFountainWater(2.35);
   water.mesh.position.y = 0.72;
   fountain.add(water.mesh);
   return { group: fountain, waterMaterial: water.material };

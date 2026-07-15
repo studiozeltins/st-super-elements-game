@@ -496,7 +496,7 @@ export function createMondstadtWorld(
 
   const { skyLight, sunLight } = createLighting(group);
   group.add(createTerrainMesh(options.scorch));
-  const fountain = createFountain(options.wind.timeUniform);
+  const fountain = createFountain();
   group.add(fountain.group);
   obstacles.push({ x: 0, y: 0, z: 0, radius: 3.0 }); // fountain basin, plaza is flat at y=0
   const grassField = createGrassField({
