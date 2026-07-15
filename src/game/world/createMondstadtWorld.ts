@@ -27,6 +27,7 @@ import {
   type WorldAsset,
 } from './assets';
 import { createGrassField } from './createGrassField';
+import { createBridgePlankMaterial } from './town/buildingMaterials';
 import { CAMPFIRE_LIGHT_NAME } from './assets/createCampfire';
 import { LANTERN_LIGHT_NAME, LANTERN_LAMP_NAME } from './assets/createLantern';
 import { CAMP_FLAG_CLOTH_NAME } from './assets/createCampFlag';
@@ -442,7 +443,7 @@ export function createMondstadtWorld(
 
     addInstancedMatrices(
       new THREE.BoxGeometry(BRIDGE_WIDTH, 0.25, BRIDGE_SEGMENT_LENGTH * 1.1),
-      new THREE.MeshLambertMaterial({ color: 0x8a5a3a }),
+      createBridgePlankMaterial(0x8a5a3a),
       plankMatrices
     );
     addInstancedMatrices(

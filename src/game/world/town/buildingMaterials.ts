@@ -128,6 +128,87 @@ export function createWallMaterial(
   return material;
 }
 
+let plankMaterial: THREE.MeshLambertMaterial | null = null;
+
+/**
+ * Bridge-plank wood material (shared by the ONE instanced plank mesh). Paints
+ * pixel-art wooden boards: the plank width is split into board slats with dark
+ * seams, each board + world cell hash-shaded, plus a per-pixel grain speckle — so
+ * the deck reads as pixelated wood slabs instead of one flat brown box. Per-plank
+ * tone varies by the instance world position (instanceMatrix), so no two planks
+ * are identically colored. THREE-only, no uniforms.
+ */
+export function createBridgePlankMaterial(baseColor: number): THREE.MeshLambertMaterial {
+  if (plankMaterial) return plankMaterial;
+  const material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  const base = colorToVec3(baseColor);
+  material.onBeforeCompile = shader => {
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        varying vec3 vLocalPos;
+        varying vec3 vLocalNrm;
+        varying vec3 vPlankWorld;
+        `
+      )
+      .replace(
+        '#include <beginnormal_vertex>',
+        /* glsl */ `
+        #include <beginnormal_vertex>
+        vLocalNrm = objectNormal;
+        `
+      )
+      .replace(
+        '#include <begin_vertex>',
+        /* glsl */ `
+        #include <begin_vertex>
+        vLocalPos = position;
+        // Instanced deck: instanceMatrix[3].xyz is this plank's world origin — a
+        // stable per-plank seed for its wood tone.
+        vPlankWorld = (modelMatrix * instanceMatrix[3]).xyz;
+        `
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `
+        #include <common>
+        varying vec3 vLocalPos;
+        varying vec3 vLocalNrm;
+        varying vec3 vPlankWorld;
+        ${PHASH}
+        `
+      )
+      .replace(
+        '#include <color_fragment>',
+        /* glsl */ `
+        #include <color_fragment>
+        {
+          // In-plane axes from the dominant face: top/bottom use xz, sides use the
+          // matching pair. uv.x runs ACROSS the plank (boards), uv.y ALONG it.
+          vec3 n = abs(normalize(vLocalNrm));
+          vec2 uv = n.y > 0.5 ? vLocalPos.xz : (n.x > 0.5 ? vLocalPos.zy : vLocalPos.xy);
+          float BOARD = 0.72;                       // slat width across the plank
+          float board = floor(uv.x / BOARD);
+          vec3 wood = ${base} * (0.82 + phash(vec2(board, 3.0)) * 0.30);   // per-board tone
+          vec2 pcell = floor(vPlankWorld.xz / 2.0);
+          wood *= 0.9 + phash(pcell + 2.0) * 0.18;                         // per-plank tone
+          vec2 grain = floor(uv * vec2(3.0, 7.0));
+          wood *= 0.9 + phash(grain + 5.0) * 0.16;                         // pixel grain speckle
+          float seam = abs(fract(uv.x / BOARD) - 0.5);
+          wood *= seam > 0.44 ? 0.55 : 1.0;                                // dark board seam
+          diffuseColor.rgb = wood;
+        }
+        `
+      );
+  };
+  material.customProgramCacheKey = () => `bridgePlank_${baseColor}`;
+  plankMaterial = material;
+  return material;
+}
+
 /**
  * Tiled roof material — horizontal tile courses climbing the slope, each course a
  * row of per-tile-shaded pixels with a darker grout line and a scalloped lower
