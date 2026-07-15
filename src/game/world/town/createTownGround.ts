@@ -139,8 +139,8 @@ export function createTownGround(districts: District[]): THREE.Mesh {
           // that faces the sun. Stashed for the post-lighting pass below.
           float nearEdge = 1.0 - smoothstep(0.0, 0.3, border);
           float sunAlign = max(0.0, dot(gStoneOutward, normalize(uSunDir.xz + vec2(1e-4))));
-          gCobEdge = nearEdge * sunAlign * 0.85;
-          gCobEdgeCol = min(col * 1.8 + 0.1, vec3(1.0));
+          gCobEdge = nearEdge * sunAlign * 0.5;                 // subtler
+          gCobEdgeCol = mix(col, vec3(0.7, 0.71, 0.74), 0.6);  // lightened grey, not white
           return col;
         }
         // Per-stone SLANT + ruggedness as a real world-space normal, so the sun
