@@ -88,6 +88,8 @@ function createGrassMaterial(
         varying float vScorch;
         varying float vHeightFactor;
         varying vec3 vWorldPosG;
+        varying vec3 vSparkleN;
+        varying float vTwinkle;
         uniform vec3 uSunDir;
         `
       )
@@ -102,18 +104,17 @@ function createGrassMaterial(
         '#include <opaque_fragment>',
         /* glsl */ `
         #include <opaque_fragment>
-        // Sun GLISTEN: a Blinn-style sheen off the blade tips (Lambert has none),
-        // so lit grass catches the light instead of reading as flat fake turf.
-        // Blades are +Y-normalled; the half-vector highlight concentrates toward
-        // the tip (vHeightFactor) and on non-scorched blades. Scaled by the
-        // fragment's own lit luminance so it's a bright day glint but fades at
-        // night — never a glow in the dark.
+        // Sun SPARKLE: a sharp Blinn glint off each blade's own randomly-tilted
+        // normal (Lambert has none), concentrated at the tip and twinkling over
+        // time, so lit grass catches the light as a shimmer of individual points
+        // instead of flat fake turf. Scaled by the fragment's own lit luminance so
+        // it glints by day and stays calm at night — never a glow in the dark.
         vec3 sheenV = normalize(cameraPosition - vWorldPosG);
         vec3 sheenH = normalize(normalize(uSunDir) + sheenV);
-        float sheen = pow(max(dot(vec3(0.0, 1.0, 0.0), sheenH), 0.0), 22.0);
+        float sheen = pow(max(dot(normalize(vSparkleN), sheenH), 0.0), 34.0);
         float sheenLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
-        sheen *= vHeightFactor * (1.0 - min(vScorch * 1.5, 0.85)) * sheenLum;
-        gl_FragColor.rgb += sheen * vec3(0.55, 0.62, 0.42);
+        sheen *= vTwinkle * vHeightFactor * (1.0 - min(vScorch * 1.5, 0.85)) * sheenLum;
+        gl_FragColor.rgb += sheen * vec3(0.75, 0.82, 0.55);
         `
       );
     // Wind uniforms wired by OBJECT reference (the shared-clock contract):
@@ -140,6 +141,8 @@ function createGrassMaterial(
         varying float vScorch;
         varying float vHeightFactor;
         varying vec3 vWorldPosG;
+        varying vec3 vSparkleN;
+        varying float vTwinkle;
         `
       )
       .replace(
@@ -170,6 +173,13 @@ function createGrassMaterial(
         // Tip factor + final world position for the fragment sun-glisten.
         vHeightFactor = heightFactor;
         vWorldPosG = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+        // Per-blade SPARKLE: a random tilted normal (per blade) + a time twinkle,
+        // so only some blades hit the sun specular at once and the set shimmers as
+        // the wind/camera moves — a real catch-light glint, not a flat sheen band.
+        float sSeed = fract(sin(dot(bladeOrigin.xz, vec2(12.9898, 78.233))) * 43758.5453);
+        vTwinkle = 0.5 + 0.5 * sin(uTime * 3.5 + sSeed * 6.2831);
+        vec3 tiltN = normalize(vec3((sSeed - 0.5) * 1.2, 1.0, (fract(sSeed * 7.3) - 0.5) * 1.2));
+        vSparkleN = normalize(mat3(modelMatrix * instanceMatrix) * tiltN);
         `
       );
   };
