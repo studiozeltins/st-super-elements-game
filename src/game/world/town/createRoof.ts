@@ -47,6 +47,23 @@ export function createPitchedRoof(
   slopeMesh.castShadow = true;
   group.add(slopeMesh);
 
+  // Eave fascia: a thin board hanging under each long (±X) eave edge so the roof
+  // reads as a solid slab with real thickness instead of a paper-thin plane. A
+  // darker shade of the roof tone, the only part of the roof edge the low camera
+  // actually sees. Two boxes per roof — negligible cost.
+  const fasciaColor = new THREE.Color(roofColor).multiplyScalar(0.62);
+  const fasciaMaterial = new THREE.MeshLambertMaterial({ color: fasciaColor, flatShading: true });
+  const fasciaDrop = 0.34;
+  for (const sx of [-w, w]) {
+    const board = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, fasciaDrop, depth + overhang * 2),
+      fasciaMaterial
+    );
+    board.position.set(sx, 0.02 - fasciaDrop / 2, 0);
+    board.castShadow = true;
+    group.add(board);
+  }
+
   // Plaster gable-end triangles (front/back), so the roof caps the wall cleanly.
   const gable = new THREE.BufferGeometry();
   gable.setAttribute(
