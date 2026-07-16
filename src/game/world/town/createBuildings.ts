@@ -33,7 +33,7 @@ function addWindow(parent: THREE.Group, x: number, y: number, z: number, axis: '
 }
 
 /**
- * A textured, 1–2 story village house: half-timbered plaster walls (never a flat
+ * A textured, 1–2 story village house: varied-tone brick walls (never a flat
  * monolith color), a stone plinth, a door + randomized windows on EVERY face
  * (so no blank back), a chimney, and a tiled pitched roof (occasionally a flat
  * modern roof for variety). Front (local −Z) faces the given street target.
@@ -52,7 +52,7 @@ export function createHouse(
   const depth = 3.8 + random() * 0.6;
   const wallHeight = stories * STORY_HEIGHT + 0.3;
   const wallColor = pick(random, WALL_WOOD);
-  const wallMat = createWallMaterial(wallColor, 'timber');
+  const wallMat = createWallMaterial(wallColor, 'brick');
 
   const plinth = new THREE.Mesh(
     new THREE.BoxGeometry(width + 0.3, 0.5, depth + 0.3),
@@ -204,7 +204,7 @@ export function createCafeBuilding(
   faceTargetZ: number
 ): THREE.Group {
   const cafe = new THREE.Group();
-  const wallMat = createWallMaterial(0xe4d2b0, 'timber');
+  const wallMat = createWallMaterial(0xe4d2b0, 'brick');
   const width = 4.5;
   const depth = 4;
   const height = 3.2;

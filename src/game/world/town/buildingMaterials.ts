@@ -58,67 +58,50 @@ const wallCache = new Map<string, THREE.MeshLambertMaterial>();
 const roofCache = new Map<number, THREE.MeshLambertMaterial>();
 
 /**
- * Wall material. `style: 'timber'` paints half-timbered plaster panels (dark
- * beams framing per-panel-shaded plaster); `style: 'stone'` paints offset stone
- * brick courses with mortar seams — for the church and other masonry.
+ * Wall material — offset running-bond brick courses with mortar seams, a per-cell
+ * bevel, and the sun-facing edge line. `style` only sets how much each brick's
+ * tone varies: `'stone'` is near-uniform (the church — every brick the same
+ * color); `'brick'` gives a wide random dark↔light spread so house walls read as
+ * a patchy, weathered masonry mix rather than one flat color.
  */
 export function createWallMaterial(
   baseColor: number,
-  style: 'timber' | 'stone'
+  style: 'stone' | 'brick'
 ): THREE.MeshLambertMaterial {
   const cacheKey = `${style}_${baseColor}`;
   const cached = wallCache.get(cacheKey);
   if (cached) return cached;
   const material = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
   const base = colorToVec3(baseColor);
+  // Per-brick tone: base * [LO..HI] by a per-brick hash, plus a ±JITTER speckle.
+  // Church ('stone') = tight around base (uniform); houses ('brick') = wide.
+  const [lo, hi, jitter] = style === 'brick' ? [0.62, 1.14, 0.22] : [0.84, 1.0, 0.1];
   material.onBeforeCompile = shader => {
     patchVertexLocalSpace(shader);
     shader.uniforms.uSunDir = sunDirUniform; // by reference — game loop updates it
 
-    // Per-style GLSL that establishes `uv` (in-plane surface coords) and `tCell`
-    // (position within the current brick/panel, 0 at center → ±0.5 at the seam).
-    // Shared by the color pattern, the bevel normal, and the edge line so the
-    // three stay in register. BEVEL/START tune how domed each cell reads — walls
-    // are vertical flat faces where relief reads weakly, so keep it subtle.
-    const uvCell =
-      style === 'timber'
-        ? /* glsl */ `
-          vec3 nrm = abs(normalize(vLocalNrm));
-          vec2 uv = nrm.x > 0.5 ? vLocalPos.zy : (nrm.z > 0.5 ? vLocalPos.xy : vLocalPos.xz);
-          float POST = 1.15, FLOOR = 1.35;
-          vec2 tCell = fract(vec2(uv.x / POST + 0.5, uv.y / FLOOR + 0.5)) - 0.5;
-          float BEVEL = 0.30, START = 0.30;
-        `
-        : /* glsl */ `
-          vec3 nrm = abs(normalize(vLocalNrm));
-          vec2 uv = nrm.x > 0.5 ? vLocalPos.zy : (nrm.z > 0.5 ? vLocalPos.xy : vLocalPos.xz);
-          float ROW = 0.5, BRICK = 1.0;
-          float row = floor(uv.y / ROW);
-          float rbOffset = mod(row, 2.0) * 0.5;   // running bond
-          vec2 tCell = fract(vec2((uv.x + rbOffset) / BRICK, uv.y / ROW)) - 0.5;
-          float BEVEL = 0.40, START = 0.26;
-        `;
+    // Establishes `uv` (in-plane surface coords) and `tCell` (position within the
+    // current brick, 0 at center → ±0.5 at the seam). Shared by the color pattern,
+    // the bevel normal, and the edge line so the three stay in register. BEVEL/
+    // START tune how domed each brick reads — walls are vertical flat faces where
+    // relief reads weakly, so keep it subtle.
+    const uvCell = /* glsl */ `
+      vec3 nrm = abs(normalize(vLocalNrm));
+      vec2 uv = nrm.x > 0.5 ? vLocalPos.zy : (nrm.z > 0.5 ? vLocalPos.xy : vLocalPos.xz);
+      float ROW = 0.5, BRICK = 1.0;
+      float row = floor(uv.y / ROW);
+      float rbOffset = mod(row, 2.0) * 0.5;   // running bond
+      vec2 tCell = fract(vec2((uv.x + rbOffset) / BRICK, uv.y / ROW)) - 0.5;
+      float BEVEL = 0.40, START = 0.26;
+    `;
 
-    const pattern =
-      style === 'timber'
-        ? /* glsl */ `
-          float beamW = 0.13;
-          float vx = abs(fract(uv.x / POST + 0.5) - 0.5) * POST;
-          float hy = abs(fract(uv.y / FLOOR + 0.5) - 0.5) * FLOOR;
-          float beam = (vx < beamW || hy < beamW) ? 1.0 : 0.0;
-          vec2 panel = floor(vec2(uv.x / POST, uv.y / FLOOR));
-          vec3 plaster = ${base} * (0.9 + phash(panel) * 0.16);
-          vec2 speck = floor(uv * 4.0);
-          plaster *= 0.95 + phash(speck + 7.0) * 0.1;
-          diffuseColor.rgb = mix(plaster, vec3(0.28, 0.19, 0.12), beam);
-        `
-        : /* glsl */ `
-          vec2 bcell = vec2(floor((uv.x + rbOffset) / BRICK), row);
-          vec3 stone = mix(${base}, ${base} * 0.82, phash(bcell));
-          stone *= 0.95 + phash(bcell + 3.0) * 0.12;
-          float mortar = (abs(tCell.x) > 0.46 || abs(tCell.y) > 0.4) ? 0.0 : 1.0;
-          diffuseColor.rgb = mix(vec3(0.4, 0.39, 0.37), stone, mortar);
-        `;
+    const pattern = /* glsl */ `
+      vec2 bcell = vec2(floor((uv.x + rbOffset) / BRICK), row);
+      vec3 stone = ${base} * mix(${lo.toFixed(2)}, ${hi.toFixed(2)}, phash(bcell));
+      stone *= 1.0 + (phash(bcell + 3.0) - 0.5) * ${jitter.toFixed(2)};
+      float mortar = (abs(tCell.x) > 0.46 || abs(tCell.y) > 0.4) ? 0.0 : 1.0;
+      diffuseColor.rgb = mix(vec3(0.4, 0.39, 0.37), stone, mortar);
+    `;
 
     shader.fragmentShader = shader.fragmentShader
       .replace(
