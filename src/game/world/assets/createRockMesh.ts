@@ -47,12 +47,15 @@ function seedOffset(random: SeededRandom): THREE.Vector3 {
   return new THREE.Vector3(random() * 100, random() * 100, random() * 100);
 }
 
-// One material for every rock. Object-space triplanar so the texture sticks as
-// the rock rotates; a multi-octave value-noise field drives BOTH the tone mottle
-// and a sampled-gradient normal bump (the irregular "depth map").
-let rockMaterialSingleton: THREE.MeshLambertMaterial | null = null;
-function rockMaterial(): THREE.MeshLambertMaterial {
-  if (rockMaterialSingleton) return rockMaterialSingleton;
+// Rock materials, cached by bump strength. Object-space triplanar so the texture
+// sticks as the rock rotates; a multi-octave value-noise field drives BOTH the
+// tone mottle and a sampled-gradient normal bump (the irregular "depth map").
+// `bumpZ` is the tangent-normal Z: HIGHER = flatter bump (crisp facets survive),
+// lower = deeper crags. Faceted rock wants a high value so its flat facets read.
+const rockMaterialCache = new Map<number, THREE.MeshLambertMaterial>();
+function rockMaterial(bumpZ: number): THREE.MeshLambertMaterial {
+  const cached = rockMaterialCache.get(bumpZ);
+  if (cached) return cached;
   const material = new THREE.MeshLambertMaterial({ vertexColors: true });
   material.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader
@@ -109,7 +112,7 @@ function rockMaterial(): THREE.MeshLambertMaterial {
           float e = 0.05;
           float hx = rockH(uv + vec2(e, 0.0)) - rockH(uv - vec2(e, 0.0));
           float hy = rockH(uv + vec2(0.0, e)) - rockH(uv - vec2(0.0, e));
-          vec3 mapN = normalize(vec3(-hx, -hy, e * 3.0));
+          vec3 mapN = normalize(vec3(-hx, -hy, e * ${bumpZ.toFixed(2)}));
           vec3 wn = bevelWorldNormal(mapN, vWorldNrm, uv);
           normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
         }
@@ -130,8 +133,8 @@ function rockMaterial(): THREE.MeshLambertMaterial {
         `
       );
   };
-  material.customProgramCacheKey = () => 'rockOrganic';
-  rockMaterialSingleton = material;
+  material.customProgramCacheKey = () => `rock_${bumpZ}`;
+  rockMaterialCache.set(bumpZ, material);
   return material;
 }
 
@@ -170,12 +173,12 @@ function shapeRock(
   pos.needsUpdate = true;
 }
 
-function finish(geometry: THREE.BufferGeometry, random: SeededRandom): RockBuild {
+function finish(geometry: THREE.BufferGeometry, random: SeededRandom, bumpZ: number): RockBuild {
   geometry.computeVertexNormals();
   paintSlate(geometry, random);
   geometry.computeBoundingBox();
   const bb = geometry.boundingBox!;
-  const mesh = new THREE.Mesh(geometry, rockMaterial());
+  const mesh = new THREE.Mesh(geometry, rockMaterial(bumpZ));
   mesh.castShadow = true;
   return {
     mesh,
@@ -184,7 +187,11 @@ function finish(geometry: THREE.BufferGeometry, random: SeededRandom): RockBuild
   };
 }
 
-/** Angular chiseled rock — stepped per-region displacement, flat facets. */
+/**
+ * Angular chiseled rock — a chunky low-poly icosahedron (20 big faces) with
+ * strong per-corner displacement, so it reads as an unmistakably faceted gem of
+ * stone. Weak normal bump (high bumpZ) keeps the flat facets crisp.
+ */
 export function facetedRock(
   random: SeededRandom,
   rx: number,
@@ -192,14 +199,14 @@ export function facetedRock(
   rz: number
 ): RockBuild {
   const s = seedOffset(random);
-  const geometry = new THREE.IcosahedronGeometry(1, 1); // non-indexed → flat facets
-  const amp = 0.24;
+  const geometry = new THREE.IcosahedronGeometry(1, 0); // 20 flat faces → chunky
+  const amp = 0.34;
   // Stepped hash per coarse cell → hard facet jumps, watertight (fn of position).
   shapeRock(geometry, rx, ry, rz, (nx, ny, nz) => {
     const h = hash3(Math.round((nx + s.x) * 3), Math.round((ny + s.y) * 3), Math.round((nz + s.z) * 3));
     return (h - 0.5) * 2 * amp;
   });
-  return finish(geometry, random);
+  return finish(geometry, random, 9.0);
 }
 
 /** Rounded weathered boulder — smooth low-frequency lumps, welded smooth normals. */
@@ -221,7 +228,7 @@ export function smoothRock(
       Math.sin((nx + nz) * 4.3 + s.z) * 0.2;
     return l * amp;
   });
-  return finish(geometry, random);
+  return finish(geometry, random, 3.0);
 }
 
 /** Dispatch to the currently-selected rock style. */
