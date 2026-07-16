@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { sunDirUniform } from '../../systems/sunUniform';
+import { PIXEL_SURFACE_COMMON, sunEdgeApply } from './pixelSurfaceShaders';
 
 /**
  * Reusable pixel-art building materials — the ONE place wall/roof surfaces are
@@ -29,6 +30,7 @@ function patchVertexLocalSpace(shader: THREE.WebGLProgramParametersWithUniforms)
       varying vec3 vLocalPos;
       varying vec3 vLocalNrm;
       varying vec3 vWorldNrm;
+      varying vec3 vWorldPos;
       `
     )
     .replace(
@@ -44,6 +46,7 @@ function patchVertexLocalSpace(shader: THREE.WebGLProgramParametersWithUniforms)
       /* glsl */ `
       #include <begin_vertex>
       vLocalPos = position;
+      vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
       `
     );
 }
@@ -70,15 +73,35 @@ export function createWallMaterial(
   const base = colorToVec3(baseColor);
   material.onBeforeCompile = shader => {
     patchVertexLocalSpace(shader);
+    shader.uniforms.uSunDir = sunDirUniform; // by reference — game loop updates it
+
+    // Per-style GLSL that establishes `uv` (in-plane surface coords) and `tCell`
+    // (position within the current brick/panel, 0 at center → ±0.5 at the seam).
+    // Shared by the color pattern, the bevel normal, and the edge line so the
+    // three stay in register. BEVEL/START tune how domed each cell reads — walls
+    // are vertical flat faces where relief reads weakly, so keep it subtle.
+    const uvCell =
+      style === 'timber'
+        ? /* glsl */ `
+          vec3 nrm = abs(normalize(vLocalNrm));
+          vec2 uv = nrm.x > 0.5 ? vLocalPos.zy : (nrm.z > 0.5 ? vLocalPos.xy : vLocalPos.xz);
+          float POST = 1.15, FLOOR = 1.35;
+          vec2 tCell = fract(vec2(uv.x / POST + 0.5, uv.y / FLOOR + 0.5)) - 0.5;
+          float BEVEL = 0.30, START = 0.30;
+        `
+        : /* glsl */ `
+          vec3 nrm = abs(normalize(vLocalNrm));
+          vec2 uv = nrm.x > 0.5 ? vLocalPos.zy : (nrm.z > 0.5 ? vLocalPos.xy : vLocalPos.xz);
+          float ROW = 0.5, BRICK = 1.0;
+          float row = floor(uv.y / ROW);
+          float rbOffset = mod(row, 2.0) * 0.5;   // running bond
+          vec2 tCell = fract(vec2((uv.x + rbOffset) / BRICK, uv.y / ROW)) - 0.5;
+          float BEVEL = 0.40, START = 0.26;
+        `;
 
     const pattern =
       style === 'timber'
         ? /* glsl */ `
-          // Choose the two in-plane axes from the dominant face normal.
-          vec3 n = abs(normalize(vLocalNrm));
-          vec2 uv = n.x > 0.5 ? vLocalPos.zy : (n.z > 0.5 ? vLocalPos.xy : vLocalPos.xz);
-          float POST = 1.15;   // vertical post spacing
-          float FLOOR = 1.35;  // horizontal beam spacing
           float beamW = 0.13;
           float vx = abs(fract(uv.x / POST + 0.5) - 0.5) * POST;
           float hy = abs(fract(uv.y / FLOOR + 0.5) - 0.5) * FLOOR;
@@ -90,18 +113,10 @@ export function createWallMaterial(
           diffuseColor.rgb = mix(plaster, vec3(0.28, 0.19, 0.12), beam);
         `
         : /* glsl */ `
-          vec3 n = abs(normalize(vLocalNrm));
-          vec2 uv = n.x > 0.5 ? vLocalPos.zy : (n.z > 0.5 ? vLocalPos.xy : vLocalPos.xz);
-          float ROW = 0.5;
-          float BRICK = 1.0;
-          float row = floor(uv.y / ROW);
-          float offset = mod(row, 2.0) * 0.5;   // running bond
-          vec2 bcell = vec2(floor((uv.x + offset) / BRICK), row);
+          vec2 bcell = vec2(floor((uv.x + rbOffset) / BRICK), row);
           vec3 stone = mix(${base}, ${base} * 0.82, phash(bcell));
           stone *= 0.95 + phash(bcell + 3.0) * 0.12;
-          float mx = abs(fract((uv.x + offset) / BRICK) - 0.5);
-          float my = abs(fract(uv.y / ROW) - 0.5);
-          float mortar = (mx > 0.46 || my > 0.4) ? 0.0 : 1.0;
+          float mortar = (abs(tCell.x) > 0.46 || abs(tCell.y) > 0.4) ? 0.0 : 1.0;
           diffuseColor.rgb = mix(vec3(0.4, 0.39, 0.37), stone, mortar);
         `;
 
@@ -112,16 +127,41 @@ export function createWallMaterial(
         #include <common>
         varying vec3 vLocalPos;
         varying vec3 vLocalNrm;
-        ${PHASH}
+        varying vec3 vWorldNrm;
+        uniform vec3 uSunDir;
+        ${PIXEL_SURFACE_COMMON}
+        `
+      )
+      .replace(
+        '#include <normal_fragment_begin>',
+        /* glsl */ `
+        #include <normal_fragment_begin>
+        {
+          ${uvCell}
+          vec3 mapN = gridBevelMapN(tCell, BEVEL, START);
+          vec3 wn = bevelWorldNormal(mapN, vWorldNrm, uv);
+          normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
+        }
         `
       )
       .replace(
         '#include <color_fragment>',
         /* glsl */ `
         #include <color_fragment>
-        { ${pattern} }
+        {
+          ${uvCell}
+          ${pattern}
+          // Sun-facing tile edge line: crisp near the seam, only on faces the sun
+          // hits (back-facing walls stay dark). Applied post-lighting below.
+          float faceSun = max(0.0, dot(normalize(vWorldNrm), normalize(uSunDir)));
+          float seam = 0.5 - max(abs(tCell.x), abs(tCell.y));
+          float nearSeam = 1.0 - smoothstep(0.0, 0.13, seam);
+          gEdge = nearSeam * faceSun;
+          gEdgeCol = min(diffuseColor.rgb * 1.6 + 0.05, vec3(1.0));
+        }
         `
-      );
+      )
+      .replace('#include <opaque_fragment>', sunEdgeApply(0.8));
   };
   material.customProgramCacheKey = () => `wall_${style}_${baseColor}`;
   wallCache.set(cacheKey, material);
@@ -231,9 +271,23 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
         varying vec3 vLocalNrm;
         varying vec3 vWorldNrm;
         uniform vec3 uSunDir;
-        float gRoofEdge = 0.0;
-        vec3 gRoofEdgeCol = vec3(0.0);
-        ${PHASH}
+        ${PIXEL_SURFACE_COMMON}
+        `
+      )
+      .replace(
+        '#include <normal_fragment_begin>',
+        /* glsl */ `
+        #include <normal_fragment_begin>
+        {
+          // Dome each tile: flat top sloping to its seams so the sun lights every
+          // tile at its own angle — the pitched roof reads as laid 3D tiles.
+          vec2 uv = vec2(vLocalPos.z, vLocalPos.y);
+          float ROW = 0.34, COL = 0.42;
+          float offset = mod(floor(uv.y / ROW), 2.0) * 0.5;
+          vec2 tCell = fract(vec2((uv.x + offset * COL) / COL, uv.y / ROW)) - 0.5;
+          vec3 wn = bevelWorldNormal(gridBevelMapN(tCell, 0.6, 0.2), vWorldNrm, uv);
+          normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
+        }
         `
       )
       .replace(
@@ -260,21 +314,12 @@ export function createRoofMaterial(baseColor: number): THREE.MeshLambertMaterial
           // AND night): on the sun-facing slope, the exposed lower lip of each tile.
           float slopeSun = max(0.0, dot(normalize(vWorldNrm), normalize(uSunDir)));
           float lip = smoothstep(0.35, 0.0, courseEdge);
-          gRoofEdge = lip * slopeSun;                              // scaled by lit luminance post-light
-          gRoofEdgeCol = min(t * 1.7 + 0.06, vec3(1.0));           // lighter tile, not white
+          gEdge = lip * slopeSun;                              // scaled by lit luminance post-light
+          gEdgeCol = min(t * 1.7 + 0.06, vec3(1.0));           // lighter tile, not white
         }
         `
       )
-      .replace(
-        '#include <opaque_fragment>',
-        /* glsl */ `
-        #include <opaque_fragment>
-        // Sun edge line, post-light — steep lit-luminance term (tiny floor) so it reads
-        // crisp by day but stays a thin, dim catch at night, not a wide bright rim.
-        float roofEdgeLum = dot(gl_FragColor.rgb, vec3(0.299, 0.587, 0.114));
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, gRoofEdgeCol, gRoofEdge * (0.03 + roofEdgeLum * 0.8));
-        `
-      );
+      .replace('#include <opaque_fragment>', sunEdgeApply(0.8));
   };
   material.customProgramCacheKey = () => `roof_${baseColor}`;
   roofCache.set(baseColor, material);
