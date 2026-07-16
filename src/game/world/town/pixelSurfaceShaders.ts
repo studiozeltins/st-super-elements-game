@@ -21,6 +21,17 @@
 export const PIXEL_SURFACE_COMMON = /* glsl */ `
   varying vec3 vWorldPos;
   float phash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+  vec2 phash2(vec2 p) {
+    return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.545);
+  }
+  // Value noise (smooth) — used for the rock surface mottling.
+  float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    float a = phash(i), b = phash(i + vec2(1.0, 0.0));
+    float c = phash(i + vec2(0.0, 1.0)), d = phash(i + vec2(1.0, 1.0));
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+  }
 
   // Tangent-space normal for one grid cell. tCell = fract(cell) - 0.5 (0 at the
   // cell center, ±0.5 at its seams). Flat until |t| passes startEdge, then slopes

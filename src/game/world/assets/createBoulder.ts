@@ -1,11 +1,7 @@
 import * as THREE from 'three';
 import type { AssetObstacle, AssetPlatform, SeededRandom, WorldAsset } from './types';
 import { randomBetween, randomIntBetween } from './assetHelpers';
-import { buildVoxelCluster, sphereVoxelCells, voxelClusterTopY, voxelSizeFor } from './voxelHelpers';
-
-const SLATE_DARK = 0x3d4654;
-const SLATE_MID = 0x5a6678;
-const SLATE_LIGHT = 0x8a94a4;
+import { buildRock } from './createRockMesh';
 
 const BOULDER_Y_SCALE = 0.7;
 /**
@@ -15,6 +11,11 @@ const BOULDER_Y_SCALE = 0.7;
  */
 const BOULDER_MAX_WALL_HEIGHT = 2.2;
 
+/**
+ * A stack of 1–3 irregular rock chunks (see createRockMesh — faceted or smooth
+ * per ?rock). Each chunk is its own standable platform; the base chunk is a
+ * solid wall up to (near) its top so you can't walk through it but a jump lands.
+ */
 export function createBoulder(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
   const chunkCount = randomIntBetween(random, 1, 3);
@@ -25,39 +26,27 @@ export function createBoulder(random: SeededRandom): WorldAsset {
   const platforms: AssetPlatform[] = [];
   const obstacles: AssetObstacle[] = [];
   for (let index = 0; index < chunkCount; index += 1) {
-    const isTopChunk = index === chunkCount - 1;
-    const shades = isTopChunk ? [SLATE_LIGHT, SLATE_MID] : [SLATE_DARK, SLATE_MID, SLATE_LIGHT];
-    const voxelSize = voxelSizeFor(radius * 2);
-    const cells = sphereVoxelCells(radius, voxelSize, BOULDER_Y_SCALE);
-    const chunk = buildVoxelCluster(cells, voxelSize, shades, random);
     const halfHeight = radius * BOULDER_Y_SCALE;
-    chunk.position.set(
+    const { mesh, topY, radiusXZ } = buildRock(random, radius, halfHeight, radius);
+    mesh.position.set(
       randomBetween(random, -0.15, 0.15) * baseRadius,
       stackTopHeight + halfHeight * 0.75,
       randomBetween(random, -0.15, 0.15) * baseRadius
     );
-    chunk.rotation.y = random() * Math.PI * 2;
-    chunk.castShadow = true;
-    group.add(chunk);
+    mesh.rotation.y = random() * Math.PI * 2;
+    group.add(mesh);
 
-    // Standing height = the actual top voxel face, so players rest flush.
-    stackTopHeight = chunk.position.y + voxelClusterTopY(cells, voxelSize);
-    // EVERY chunk is standable at its own top, centered where the chunk
-    // actually sits — landing on the wide base of a stacked boulder used to
-    // fall through to the terrain (only the summit was registered).
-    platforms.push({
-      x: chunk.position.x,
-      z: chunk.position.z,
-      radius: radius * 0.8,
-      topHeight: stackTopHeight,
-    });
-    // The base chunk is a solid wall up to (near) its own top: walking into a
-    // boulder no longer clips inside it, but a jump still lands on the platform.
+    // Standing height = the actual top of this chunk, so players rest flush.
+    stackTopHeight = mesh.position.y + topY;
+    const footprint = radiusXZ * 0.8;
+    // EVERY chunk is standable at its own top, centered where it actually sits.
+    platforms.push({ x: mesh.position.x, z: mesh.position.z, radius: footprint, topHeight: stackTopHeight });
+    // The base chunk is a solid wall up to (near) its own top.
     if (index === 0) {
       obstacles.push({
-        x: chunk.position.x,
-        z: chunk.position.z,
-        radius: radius * 0.8,
+        x: mesh.position.x,
+        z: mesh.position.z,
+        radius: footprint,
         height: Math.min(stackTopHeight, BOULDER_MAX_WALL_HEIGHT),
       });
     }
