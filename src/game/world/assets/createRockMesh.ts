@@ -31,11 +31,12 @@ export interface RockBuild {
   radiusXZ: number;
 }
 
-export type RockStyle = 'faceted' | 'smooth';
+export type RockStyle = 'faceted' | 'smooth' | 'shard';
 
-/** ?rock=smooth flips every rock to the smooth builder for side-by-side compare. */
+/** ?rock=faceted|smooth|shard picks the builder for side-by-side compare. */
 export function rockStyle(): RockStyle {
-  return /rock=smooth/.test(window.location.search) ? 'smooth' : 'faceted';
+  const m = /rock=(faceted|smooth|shard)/.exec(window.location.search);
+  return (m?.[1] as RockStyle) ?? 'shard';
 }
 
 function hash3(x: number, y: number, z: number): number {
@@ -209,6 +210,30 @@ export function facetedRock(
   return finish(geometry, random, 9.0);
 }
 
+/**
+ * ŠĶEMBAS / shard rock — the middle ground: a mid-poly (80-face) flat-shaded
+ * icosahedron with GENTLE, coarse-cell displacement. Faces stay large and
+ * straight (planar panes) meeting at sharp edges, but the silhouette is clean
+ * instead of the base icosahedron's chaotic spikes. This is the default.
+ */
+export function shardRock(
+  random: SeededRandom,
+  rx: number,
+  ry: number,
+  rz: number
+): RockBuild {
+  const s = seedOffset(random);
+  const geometry = new THREE.IcosahedronGeometry(1, 1); // 80 flat facets → panes
+  const amp = 0.16;
+  // Coarse rounding (÷2.4) → neighbouring verts share a cell and stay coplanar,
+  // giving flat straight panes rather than per-vertex spikes.
+  shapeRock(geometry, rx, ry, rz, (nx, ny, nz) => {
+    const h = hash3(Math.round((nx + s.x) * 2.4), Math.round((ny + s.y) * 2.4), Math.round((nz + s.z) * 2.4));
+    return (h - 0.5) * 2 * amp;
+  });
+  return finish(geometry, random, 6.0);
+}
+
 /** Rounded weathered boulder — smooth low-frequency lumps, welded smooth normals. */
 export function smoothRock(
   random: SeededRandom,
@@ -231,12 +256,15 @@ export function smoothRock(
   return finish(geometry, random, 3.0);
 }
 
-/** Dispatch to the currently-selected rock style. */
+/** Dispatch to the currently-selected rock style (default: shard). */
 export function buildRock(
   random: SeededRandom,
   rx: number,
   ry: number,
   rz: number
 ): RockBuild {
-  return rockStyle() === 'smooth' ? smoothRock(random, rx, ry, rz) : facetedRock(random, rx, ry, rz);
+  const style = rockStyle();
+  if (style === 'smooth') return smoothRock(random, rx, ry, rz);
+  if (style === 'faceted') return facetedRock(random, rx, ry, rz);
+  return shardRock(random, rx, ry, rz);
 }
