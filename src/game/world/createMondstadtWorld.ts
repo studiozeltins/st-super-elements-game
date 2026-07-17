@@ -28,6 +28,7 @@ import {
 } from './assets';
 import { createGrassField } from './createGrassField';
 import { createBridgePlankMaterial } from './town/buildingMaterials';
+import { rockPillarMaterial } from './assets/createRockMesh';
 import { CAMPFIRE_LIGHT_NAME } from './assets/createCampfire';
 import { LANTERN_LIGHT_NAME, LANTERN_LAMP_NAME } from './assets/createLantern';
 import { CAMP_FLAG_CLOTH_NAME } from './assets/createCampFlag';
@@ -396,11 +397,13 @@ export function createMondstadtWorld(
   function addInstancedMatrices(
     geometry: THREE.BufferGeometry,
     material: THREE.Material,
-    matrices: THREE.Matrix4[]
+    matrices: THREE.Matrix4[],
+    colors?: THREE.Color[]
   ) {
     const instancedMesh = new THREE.InstancedMesh(geometry, material, matrices.length);
     instancedMesh.castShadow = true;
     matrices.forEach((matrix, index) => instancedMesh.setMatrixAt(index, matrix));
+    if (colors) colors.forEach((color, index) => instancedMesh.setColorAt(index, color));
     group.add(instancedMesh);
   }
 
@@ -456,6 +459,7 @@ export function createMondstadtWorld(
   function buildPillarStairs() {
     const dummy = new THREE.Object3D();
     const pillarMatrices: THREE.Matrix4[] = [];
+    const pillarColors: THREE.Color[] = [];
 
     for (let clusterIndex = 0; clusterIndex < PILLAR_STAIR_CLUSTER_COUNT; clusterIndex++) {
       const clusterCenter = findRandomLandPosition(random, SAFE_ZONE_RADIUS + 6);
@@ -482,16 +486,19 @@ export function createMondstadtWorld(
         dummy.scale.set(1, pillarHeight, 1);
         dummy.updateMatrix();
         pillarMatrices.push(dummy.matrix.clone());
+        // Per-pillar brightness so the cluster isn't one flat shade.
+        pillarColors.push(new THREE.Color().setScalar(0.72 + random() * 0.5));
         platforms.push({ x, z, radius: 1.2, topY });
       }
     }
 
-    // A plain cuboid pillar: reads voxel natively and tolerates per-pillar
-    // y-stretch (voxel cells would deform under the non-uniform scale).
+    // Cuboid pillars textured with the shared world-space rock material (chiseled
+    // stone mottle + crag relief), per-instance tinted — no longer flat blocks.
     addInstancedMatrices(
       new THREE.BoxGeometry(2.2, 1, 2.2),
-      new THREE.MeshLambertMaterial({ color: 0x5a6678 }),
-      pillarMatrices
+      rockPillarMaterial(),
+      pillarMatrices,
+      pillarColors
     );
   }
 

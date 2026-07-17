@@ -53,11 +53,19 @@ function seedOffset(random: SeededRandom): THREE.Vector3 {
 // tone mottle and a sampled-gradient normal bump (the irregular "depth map").
 // `bumpZ` is the tangent-normal Z: HIGHER = flatter bump (crisp facets survive),
 // lower = deeper crags. Faceted rock wants a high value so its flat facets read.
-const rockMaterialCache = new Map<number, THREE.MeshLambertMaterial>();
-function rockMaterial(bumpZ: number): THREE.MeshLambertMaterial {
-  const cached = rockMaterialCache.get(bumpZ);
+const rockMaterialCache = new Map<string, THREE.MeshLambertMaterial>();
+// `worldSpace` samples the triplanar texture in WORLD coords instead of object
+// coords — needed for the static, non-uniformly Y-stretched bridge pillars, where
+// object-space would smear the texture vertically. Only safe for meshes that
+// don't move/rotate. vWorldPos is instancing-aware so one material serves the
+// InstancedMesh pillars too.
+function rockMaterial(bumpZ: number, worldSpace = false, vertexColors = true): THREE.MeshLambertMaterial {
+  const key = `${bumpZ}_${worldSpace}_${vertexColors}`;
+  const cached = rockMaterialCache.get(key);
   if (cached) return cached;
-  const material = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const P = worldSpace ? 'vWorldPos' : 'vObjPos';
+  const N = worldSpace ? 'vWorldNrm' : 'vObjNrm';
+  const material = new THREE.MeshLambertMaterial({ vertexColors });
   material.onBeforeCompile = shader => {
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -83,7 +91,11 @@ function rockMaterial(bumpZ: number): THREE.MeshLambertMaterial {
         /* glsl */ `
         #include <begin_vertex>
         vObjPos = position;
-        vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+        #ifdef USE_INSTANCING
+          vWorldPos = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;
+        #else
+          vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+        #endif
         `
       );
     shader.fragmentShader = shader.fragmentShader
@@ -106,9 +118,9 @@ function rockMaterial(bumpZ: number): THREE.MeshLambertMaterial {
         /* glsl */ `
         #include <normal_fragment_begin>
         {
-          // Triplanar face coords from the object-space normal.
-          vec3 an = abs(normalize(vObjNrm));
-          vec2 uv = an.y > 0.5 ? vObjPos.xz : (an.x > 0.5 ? vObjPos.zy : vObjPos.xy);
+          // Triplanar face coords from the dominant normal axis.
+          vec3 an = abs(normalize(${N}));
+          vec2 uv = an.y > 0.5 ? ${P}.xz : (an.x > 0.5 ? ${P}.zy : ${P}.xy);
           // Sample the height field around this point → irregular crag normal.
           float e = 0.05;
           float hx = rockH(uv + vec2(e, 0.0)) - rockH(uv - vec2(e, 0.0));
@@ -124,8 +136,8 @@ function rockMaterial(bumpZ: number): THREE.MeshLambertMaterial {
         /* glsl */ `
         #include <color_fragment>
         {
-          vec3 an = abs(normalize(vObjNrm));
-          vec2 uv = an.y > 0.5 ? vObjPos.xz : (an.x > 0.5 ? vObjPos.zy : vObjPos.xy);
+          vec3 an = abs(normalize(${N}));
+          vec2 uv = an.y > 0.5 ? ${P}.xz : (an.x > 0.5 ? ${P}.zy : ${P}.xy);
           float rk = rockH(uv);
           vec3 col = diffuseColor.rgb * (0.72 + rk * 0.6);
           if (vnoise(uv * 6.5 + 3.0) < 0.2) col *= 0.8;   // dark mineral pits
@@ -134,8 +146,21 @@ function rockMaterial(bumpZ: number): THREE.MeshLambertMaterial {
         `
       );
   };
-  material.customProgramCacheKey = () => `rock_${bumpZ}`;
-  rockMaterialCache.set(bumpZ, material);
+  material.customProgramCacheKey = () => `rock_${bumpZ}_${worldSpace}_${vertexColors}`;
+  rockMaterialCache.set(key, material);
+  return material;
+}
+
+/**
+ * Shared rock material for the bridge-stair pillars: world-space triplanar (so
+ * the Y-stretch doesn't smear it) + instancing-aware. Base color is slate (the
+ * safe fallback if instance colors are absent); per-instance color is a
+ * brightness multiplier so pillars vary. The rock mottle guarantees within-pillar
+ * tone variation regardless.
+ */
+export function rockPillarMaterial(): THREE.MeshLambertMaterial {
+  const material = rockMaterial(6.0, true, false);
+  material.color.setHex(0x5a6678);
   return material;
 }
 
