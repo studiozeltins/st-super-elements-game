@@ -297,6 +297,8 @@ interface AssetScatterRule {
   maxSlope: number;
   /** Solid trunk/base radius; omitted means entities can walk through. */
   collisionRadius?: number;
+  /** Keep this far clear of every enemy camp — big rocks must not block spawns. */
+  avoidCamps?: number;
 }
 
 /** Uniform sample across the whole map, rejected until it lands on an island. */
@@ -381,6 +383,12 @@ export function createMondstadtWorld(
     }
   }
 
+  const campSites = getCampSites();
+
+  function nearCamp(x: number, z: number, clearance: number): boolean {
+    return campSites.some(camp => Math.hypot(camp.x - x, camp.z - z) < clearance);
+  }
+
   function scatterAssets(rule: AssetScatterRule) {
     let placed = 0;
     let attempts = 0;
@@ -389,6 +397,8 @@ export function createMondstadtWorld(
       const landPosition = findRandomLandPosition(random, rule.minRadius);
       if (!landPosition) continue;
       if (getTerrainSlope(landPosition.x, landPosition.z) > rule.maxSlope) continue;
+      // Big rocks must not smother a camp's enemy spawn ring.
+      if (rule.avoidCamps && nearCamp(landPosition.x, landPosition.z, rule.avoidCamps)) continue;
       placeAsset(rule.create(random), landPosition.x, landPosition.z, rule.collisionRadius);
       placed++;
     }
@@ -551,8 +561,8 @@ export function createMondstadtWorld(
   const scatterRules: AssetScatterRule[] = [
     // Boulders and spires declare their own per-piece footprints (asset.obstacles):
     // boulders block their base but stay jump-climbable; spires block full height.
-    { create: createBoulder, count: 26, minRadius: SAFE_ZONE_RADIUS + 8, maxSlope: 0.9 },
-    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2 },
+    { create: createBoulder, count: 26, minRadius: SAFE_ZONE_RADIUS + 8, maxSlope: 0.9, avoidCamps: 16 },
+    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2, avoidCamps: 16 },
     { create: createCanopyTree, count: 8, minRadius: 30, maxSlope: 0.45, collisionRadius: 0.7 },
     {
       create: createPalmTree,
@@ -567,7 +577,7 @@ export function createMondstadtWorld(
   ];
   for (const rule of scatterRules) scatterAssets(rule);
 
-  for (const campSite of getCampSites()) {
+  for (const campSite of campSites) {
     const campRandom = createSeededRandom(
       WORLD_DECOR_SEED ^ (Math.round(campSite.x * 31 + campSite.z * 17) | 0)
     );
