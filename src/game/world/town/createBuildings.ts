@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { SeededRandom } from '../assets/types';
 import { createWallMaterial } from './buildingMaterials';
 import { createFlatRoof, createPitchedRoof } from './createRoof';
+import { createDoor } from './createDoor';
 
 const TIMBER = 0x4a3524;
 const GLASS = 0x33507a;
@@ -72,12 +73,9 @@ export function createHouse(
   const rightX = width / 2 + 0.02;
   const leftX = -width / 2 - 0.02;
 
-  // Door on the front, ground floor.
-  const door = new THREE.Mesh(
-    new THREE.BoxGeometry(0.95, 1.7, 0.16),
-    new THREE.MeshLambertMaterial({ color: TIMBER })
-  );
-  door.position.set(random() < 0.5 ? -0.7 : 0.7, 1.35, frontZ);
+  // Planked, iron-braced door on the front, ground floor.
+  const door = createDoor(random, { width: 1.0, height: 1.9, woodColor: 0x6b4a2f });
+  door.position.set(random() < 0.5 ? -0.7 : 0.7, 0.5, frontZ);
   house.add(door);
 
   // Windows on every story and face, each face independently randomized so the
@@ -185,6 +183,19 @@ export function createChurch(
   const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.14, 0.14), crossMat);
   crossH.position.set(0, 0.6 + towerH + 2.75, tower.position.z);
   church.add(crossH);
+
+  // Grand arched double door on the bell-tower front.
+  const towerFrontZ = tower.position.z - towerW / 2 - 0.02;
+  const churchDoor = createDoor(random, {
+    width: 1.8,
+    height: 3.0,
+    arched: true,
+    doubleLeaf: true,
+    woodColor: 0x5a3d28,
+    frameColor: 0x6a6258,
+  });
+  churchDoor.position.set(0, 0.6, towerFrontZ);
+  church.add(churchDoor);
 
   church.position.set(x, 0, z);
   church.lookAt(faceTargetX, 0, faceTargetZ);
