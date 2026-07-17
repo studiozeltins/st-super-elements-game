@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { hashGridPoint } from './rng';
 import { WORLD_BOUND } from '../data/constants';
-import { roadFactor } from './roads';
+import { roadFactor, roadAcross } from './roads';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
 
 const TERRAIN_SEED = 20260703;
@@ -194,7 +194,9 @@ function patchTerrainWithScorch(
         uniform vec4 uScorchBounds;
         varying vec2 vScorchWorld;
         attribute float aRoad;
+        attribute float aRoadCross;
         varying float vRoad;
+        varying float vRoadCross;
         ${SCORCH_BAND_GLSL}
         `
       )
@@ -205,6 +207,7 @@ function patchTerrainWithScorch(
         // Geometry is baked into world XZ (plane rotated, terrain at origin).
         vScorchWorld = position.xz;
         vRoad = aRoad;
+        vRoadCross = aRoadCross;
         vec2 scorchUv = (position.xz - uScorchBounds.xy) * uScorchBounds.zw;
         float dentBand = scorchBand(texture2D(uScorchMap, scorchUv).r);
         transformed.y -= (dentBand + 1.0) * 0.05; // stepped dent, deeper per stack
@@ -219,9 +222,24 @@ function patchTerrainWithScorch(
         uniform vec4 uScorchBounds;
         varying vec2 vScorchWorld;
         varying float vRoad;
+        varying float vRoadCross;
         ${SCORCH_BAND_GLSL}
         float scorchHash(vec2 cell, vec2 basis) {
           return fract(sin(dot(cell, basis)) * 43758.5453);
+        }
+        // Smooth value noise + fbm — gives the grass STRUCTURE (soft clumps and
+        // bare patches) instead of per-cell random blocks.
+        float tNoise(vec2 p) {
+          vec2 i = floor(p), f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          float a = scorchHash(i, vec2(127.1, 311.7));
+          float b = scorchHash(i + vec2(1.0, 0.0), vec2(127.1, 311.7));
+          float c = scorchHash(i + vec2(0.0, 1.0), vec2(127.1, 311.7));
+          float d = scorchHash(i + vec2(1.0, 1.0), vec2(127.1, 311.7));
+          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+        float tFbm(vec2 p) {
+          return tNoise(p) * 0.6 + tNoise(p * 2.1 + 5.0) * 0.3 + tNoise(p * 4.3 + 9.0) * 0.1;
         }
         `
       )
@@ -230,16 +248,22 @@ function patchTerrainWithScorch(
         /* glsl */ `
         #include <color_fragment>
         {
-          // Pixel-art grass mottle: per world cell, jitter the ground shade so the
-          // meadow reads as chunky textured pixels instead of a smooth per-vertex
-          // gradient. Road + scorch overwrite this below where they apply.
-          vec2 gcell = floor(vScorchWorld * ${GRASS_CELLS_PER_UNIT.toFixed(1)});
-          float g1 = scorchHash(gcell, vec2(75.3, 12.9));
-          float g2 = scorchHash(gcell + 5.0, vec2(33.1, 61.4));
-          diffuseColor.rgb *= 0.82 + g1 * 0.34;                       // per-cell brightness
-          diffuseColor.rgb = mix(diffuseColor.rgb,
-            diffuseColor.rgb * vec3(0.9, 1.06, 0.82), g2 * 0.5);      // lush/dry green variance
-          if (scorchHash(gcell + 9.0, vec2(51.7, 8.3)) < 0.12) diffuseColor.rgb *= 0.86; // dark tufts
+          // STRUCTURED pixel-art grass: sample smooth fbm at the pixel-CELL centre,
+          // so the ground reads as soft clumps of lush and dry grass with occasional
+          // worn bare-dirt patches (a lived-in meadow), still snapped to chunky
+          // pixels. Only tints actual grass — grey cliffs/abyss pass through.
+          vec2 gp = floor(vScorchWorld * ${GRASS_CELLS_PER_UNIT.toFixed(1)}) / ${GRASS_CELLS_PER_UNIT.toFixed(1)};
+          float isGrass = step(diffuseColor.r + 0.015, diffuseColor.g)
+            * step(diffuseColor.b, diffuseColor.g);
+          float clump = tFbm(gp * 0.14);           // big lush/dry clumps
+          float fine = tNoise(gp * 0.75 + 3.0);    // medium break-up
+          float tone = clamp(clump * 0.72 + fine * 0.28, 0.0, 1.0);
+          vec3 lush = diffuseColor.rgb * vec3(0.84, 1.10, 0.78);
+          vec3 dry = diffuseColor.rgb * vec3(1.10, 1.00, 0.74);
+          vec3 grass = mix(dry, lush, smoothstep(0.34, 0.72, tone)) * (0.9 + fine * 0.18);
+          float bare = tFbm(gp * 0.1 + 17.0);      // worn dirt patches, "a path was trodden"
+          grass = mix(grass, vec3(0.44, 0.35, 0.23), smoothstep(0.76, 0.9, bare) * 0.6);
+          diffuseColor.rgb = mix(diffuseColor.rgb, grass, isGrass);
         }
         // Pixel-art PACKED-DIRT ROAD: per world-space cell, pick one of a few brown
         // clod shades + speckle so the path reads as chunky pixel dirt (matching the
@@ -253,6 +277,16 @@ function patchTerrainWithScorch(
             : vec3(0.46, 0.34, 0.20);
           rd *= 0.86 + scorchHash(rcell, vec2(11.2, 91.5)) * 0.28;   // per-clod brightness
           if (scorchHash(rcell + 3.0, vec2(7.1, 88.2)) < 0.13) rd *= 0.68; // dark gravel specks
+          // CART-WHEEL RUTS: two grooves at ±gauge across the road (from the signed
+          // cross-road coord). Dark packed-earth trough with a lit lip = fake depth,
+          // and a faint worn centre strip where the cart belly dragged.
+          float ar = abs(vRoadCross);
+          float rutDist = abs(ar - 0.85);                          // 0 at a rut centreline
+          float trough = 1.0 - smoothstep(0.0, 0.24, rutDist);     // inside the groove
+          float lip = smoothstep(0.24, 0.32, rutDist) * (1.0 - smoothstep(0.32, 0.46, rutDist));
+          rd *= 1.0 - trough * 0.4;                                // darker packed trough
+          rd += lip * 0.05;                                        // sunlit lip on the ridge
+          rd *= 1.0 - (1.0 - smoothstep(0.0, 0.5, ar)) * 0.12;     // worn centre drag strip
           diffuseColor.rgb = mix(diffuseColor.rgb, rd, vRoad);
         }
         {
@@ -293,6 +327,8 @@ export function createTerrainMesh(scorch: ScorchMapUniforms | null): THREE.Mesh 
   // Per-vertex road strength — a varying the shader reads to paint pixel-art dirt
   // clods on the path (masking only; the chunky detail is hashed per-cell below).
   const roadStrength = new Float32Array(positions.count);
+  // Signed cross-road offset, so the shader can draw two cart-wheel ruts.
+  const roadCross = new Float32Array(positions.count);
   for (let vertexIndex = 0; vertexIndex < positions.count; vertexIndex++) {
     const x = positions.getX(vertexIndex);
     const z = positions.getZ(vertexIndex);
@@ -303,9 +339,11 @@ export function createTerrainMesh(scorch: ScorchMapUniforms | null): THREE.Mesh 
     colors[vertexIndex * 3 + 1] = color.g;
     colors[vertexIndex * 3 + 2] = color.b;
     roadStrength[vertexIndex] = roadFactor(x, z);
+    roadCross[vertexIndex] = roadAcross(x, z);
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.setAttribute('aRoad', new THREE.BufferAttribute(roadStrength, 1));
+  geometry.setAttribute('aRoadCross', new THREE.BufferAttribute(roadCross, 1));
   // No computeVertexNormals: flatShading derives face normals in the shader.
 
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });

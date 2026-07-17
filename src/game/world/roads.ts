@@ -103,3 +103,31 @@ export function roadFactor(x: number, z: number): number {
   }
   return best;
 }
+
+/**
+ * Signed perpendicular offset (world units) from the nearest road centerline —
+ * the cross-road coordinate the terrain shader needs to place two cart-wheel ruts
+ * at a fixed gauge either side of centre. 0 off the road; only meaningful where
+ * roadFactor > 0.
+ */
+export function roadAcross(x: number, z: number): number {
+  let best = 0;
+  let across = 0;
+  for (const road of getRoads()) {
+    for (let i = 0; i < road.length - 1; i += 1) {
+      const ax = road[i].x;
+      const az = road[i].z;
+      const abx = road[i + 1].x - ax;
+      const abz = road[i + 1].z - az;
+      const distance = distanceToSegment(x, z, ax, az, road[i + 1].x, road[i + 1].z);
+      const factor = smoothstep(ROAD_HALF_WIDTH + ROAD_BLEND, ROAD_HALF_WIDTH, distance);
+      if (factor > best) {
+        best = factor;
+        const length = Math.hypot(abx, abz) || 1;
+        // z-component of AB × AP = signed distance to the infinite centerline.
+        across = (abx * (z - az) - abz * (x - ax)) / length;
+      }
+    }
+  }
+  return across;
+}
