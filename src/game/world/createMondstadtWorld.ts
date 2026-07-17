@@ -488,6 +488,10 @@ export function createMondstadtWorld(
         pillarMatrices.push(dummy.matrix.clone());
         // Per-pillar brightness so the cluster isn't one flat shade.
         pillarColors.push(new THREE.Color().setScalar(0.72 + random() * 0.5));
+        // Solid wall to the pillar's own top so you can't walk INTO it; the
+        // top-clearance in resolveObstacleCollisions still lets a jumper land on
+        // the summit, and the 1.5u step between pillars stays jumpable.
+        obstacles.push({ x, y: groundY, z, radius: 1.1, height: pillarHeight });
         platforms.push({ x, z, radius: 1.2, topY });
       }
     }
