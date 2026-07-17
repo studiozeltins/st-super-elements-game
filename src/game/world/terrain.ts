@@ -167,6 +167,8 @@ export function terrainColorAt(x: number, z: number, height: number): THREE.Colo
  * decays on the regrow clock, so the ground heals by itself.
  */
 const SCORCH_CELLS_PER_UNIT = 3.0;
+/** Pixel grass-clod size — chunky world cells so the meadow reads as pixels. */
+const GRASS_CELLS_PER_UNIT = 2.2;
 /** Pixel-dirt clod size on the road — a touch chunkier than the scorch clods. */
 const ROAD_CELLS_PER_UNIT = 2.4;
 /** Band k needs scorch > 0.07 + k*0.2 — one SCORCH_PER_STRIKE per band. */
@@ -227,6 +229,18 @@ function patchTerrainWithScorch(
         '#include <color_fragment>',
         /* glsl */ `
         #include <color_fragment>
+        {
+          // Pixel-art grass mottle: per world cell, jitter the ground shade so the
+          // meadow reads as chunky textured pixels instead of a smooth per-vertex
+          // gradient. Road + scorch overwrite this below where they apply.
+          vec2 gcell = floor(vScorchWorld * ${GRASS_CELLS_PER_UNIT.toFixed(1)});
+          float g1 = scorchHash(gcell, vec2(75.3, 12.9));
+          float g2 = scorchHash(gcell + 5.0, vec2(33.1, 61.4));
+          diffuseColor.rgb *= 0.82 + g1 * 0.34;                       // per-cell brightness
+          diffuseColor.rgb = mix(diffuseColor.rgb,
+            diffuseColor.rgb * vec3(0.9, 1.06, 0.82), g2 * 0.5);      // lush/dry green variance
+          if (scorchHash(gcell + 9.0, vec2(51.7, 8.3)) < 0.12) diffuseColor.rgb *= 0.86; // dark tufts
+        }
         // Pixel-art PACKED-DIRT ROAD: per world-space cell, pick one of a few brown
         // clod shades + speckle so the path reads as chunky pixel dirt (matching the
         // scorch clods), not the smooth per-vertex gradient. Applied FIRST so scorch

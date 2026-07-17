@@ -36,8 +36,8 @@ const PLAZA_RADIUS = SAFE_ZONE_RADIUS + 1;
 /** Blades per tuft anchor; clumping is what makes patches read as lush. */
 const BLADES_PER_TUFT = 8;
 const TUFT_SPREAD = 0.6;
-/** Lushness below this grows nothing; acceptance ramps up above it. */
-const LUSHNESS_FLOOR = 0.4;
+/** Baseline blade acceptance on non-meadow grass (hills, outer islands). */
+const BASE_ACCEPT = 0.35;
 /** Fraction of blades tinted as tiny meadow flowers (replaces the old yellow bed). */
 const FLOWER_FRACTION = 0.01;
 const FLOWER_COLOR = { r: 1, g: 0.94, b: 0.66 }; // 0xfff0a8
@@ -58,9 +58,12 @@ export function generateGrassBlades(totalCount: number): GrassBladeSpec[][] {
       const angle = random() * Math.PI * 2;
       const anchorX = island.centerX + Math.cos(angle) * distance;
       const anchorZ = island.centerZ + Math.sin(angle) * distance;
-      // Meadow mask: dense acceptance in lush patches, none outside them.
+      // Dense in lush meadows, but keep a sparse base EVERYWHERE grass grows so
+      // hills and the outer islands' higher ground aren't bare. Acceptance ramps
+      // from BASE_ACCEPT (bare hillside) up to ~1 in the lushest patches.
       const lushness = meadowLushness(anchorX, anchorZ);
-      if (lushness < LUSHNESS_FLOOR + random() * 0.3) continue;
+      const acceptance = BASE_ACCEPT + Math.min(1, lushness / 0.9) * (1 - BASE_ACCEPT);
+      if (random() > acceptance) continue;
 
       for (let blade = 0; blade < BLADES_PER_TUFT && blades.length < islandBudget; blade += 1) {
         const x = anchorX + (random() - 0.5) * TUFT_SPREAD;
