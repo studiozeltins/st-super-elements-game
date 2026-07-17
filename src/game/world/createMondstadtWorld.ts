@@ -547,16 +547,14 @@ export function createMondstadtWorld(
     isClear: (cx, cz) => roadFactor(cx, cz) < 0.25,
   });
 
-  // Windmill landmark on the grassy western edge, clear of the paved districts.
+  // Windmill landmark, pushed further onto the open grassy western edge so its
+  // tower + sweeping sails clear the district houses.
+  const windmillX = -28;
+  const windmillZ = 6;
   const { group: windmill, blades } = createWindmill();
-  windmill.position.set(-23, getTerrainHeight(-23, 4), 4);
+  windmill.position.set(windmillX, getTerrainHeight(windmillX, windmillZ), windmillZ);
   group.add(windmill);
-  obstacles.push({
-    x: windmill.position.x,
-    y: windmill.position.y,
-    z: windmill.position.z,
-    radius: 2.1,
-  });
+  obstacles.push({ x: windmillX, y: windmill.position.y, z: windmillZ, radius: 2.3 });
 
   const scatterRules: AssetScatterRule[] = [
     // Boulders and spires declare their own per-piece footprints (asset.obstacles):

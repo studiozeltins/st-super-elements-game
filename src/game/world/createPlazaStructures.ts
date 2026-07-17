@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createFountainWater } from './createFountainWater';
+import { rockPillarMaterial } from './assets/createRockMesh';
 
 /**
  * Plaza landmarks that are not part of the district town-build: the windmill
@@ -7,33 +8,56 @@ import { createFountainWater } from './createFountainWater';
  * paved district grounds now live under ./town (see buildTown).
  */
 
+const TOWER_HEIGHT = 11;
+
 export function createWindmill(): { group: THREE.Group; blades: THREE.Group } {
   const windmill = new THREE.Group();
 
-  // Tapering box tiers instead of the old 8-sided cylinder tower.
-  const towerMaterial = new THREE.MeshLambertMaterial({ color: 0xd8cfc0 });
-  const towerTiers = 4;
-  const towerHeight = 10;
-  for (let index = 0; index < towerTiers; index += 1) {
-    const width = 3.6 - (index * 2) / towerTiers;
-    const tierHeight = towerHeight / towerTiers;
-    const tier = new THREE.Mesh(new THREE.BoxGeometry(width, tierHeight, width), towerMaterial);
-    tier.position.y = tierHeight * (index + 0.5);
-    tier.castShadow = true;
-    windmill.add(tier);
-  }
+  // Round tapered stone tower with the shared ROCK surface (pixel stone mottle +
+  // gravel bevel depth) so it reads as a real chiseled-stone mill, not flat boxes.
+  const tower = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.35, 2.1, TOWER_HEIGHT, 12),
+    rockPillarMaterial()
+  );
+  tower.position.y = TOWER_HEIGHT / 2;
+  tower.castShadow = true;
+  windmill.add(tower);
 
+  // Conical shingled cap.
+  const cap = new THREE.Mesh(
+    new THREE.ConeGeometry(1.85, 2.4, 12),
+    new THREE.MeshLambertMaterial({ color: 0x5a3d28, flatShading: true })
+  );
+  cap.position.y = TOWER_HEIGHT + 1.0;
+  cap.castShadow = true;
+  windmill.add(cap);
+
+  // Four lattice sails: a wooden spar with an offset cloth panel and cross slats,
+  // spun as one group. Sits proud of the tower front (+Z) so it faces the plaza.
   const blades = new THREE.Group();
-  const bladeMaterial = new THREE.MeshLambertMaterial({ color: 0xf5efe0 });
-  for (let bladeIndex = 0; bladeIndex < 4; bladeIndex++) {
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5.4, 0.12), bladeMaterial);
-    blade.position.y = 2.7;
-    const bladeArm = new THREE.Group();
-    bladeArm.add(blade);
-    bladeArm.rotation.z = (bladeIndex * Math.PI) / 2;
-    blades.add(bladeArm);
+  const sparMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2f });
+  const sailMat = new THREE.MeshLambertMaterial({ color: 0xf0e6d0, side: THREE.DoubleSide });
+  const sailLength = 5.2;
+  for (let armIndex = 0; armIndex < 4; armIndex++) {
+    const arm = new THREE.Group();
+    const spar = new THREE.Mesh(new THREE.BoxGeometry(0.16, sailLength, 0.16), sparMat);
+    spar.position.y = sailLength / 2;
+    arm.add(spar);
+    const sail = new THREE.Mesh(new THREE.BoxGeometry(0.85, sailLength * 0.86, 0.04), sailMat);
+    sail.position.set(0.55, sailLength * 0.48, 0);
+    arm.add(sail);
+    for (let slat = 1; slat <= 4; slat++) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.07), sparMat);
+      bar.position.set(0.55, (sailLength * 0.9 * slat) / 5, 0);
+      arm.add(bar);
+    }
+    arm.rotation.z = (armIndex * Math.PI) / 2;
+    blades.add(arm);
   }
-  blades.position.set(0, 9, 2.1);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.5, 8), sparMat);
+  hub.rotation.x = Math.PI / 2;
+  blades.add(hub);
+  blades.position.set(0, TOWER_HEIGHT - 0.6, 2.0);
   windmill.add(blades);
 
   windmill.position.set(0, 0, -10);
