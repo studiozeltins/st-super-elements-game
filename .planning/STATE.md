@@ -5,15 +5,15 @@ milestone_name: Living World
 current_phase: 11
 current_phase_name: lived-in-props-wear
 status: executing
-stopped_at: Phase 11 context gathered
-last_updated: "2026-07-18T11:36:08.608Z"
+stopped_at: Completed 11-03-PLAN.md
+last_updated: "2026-07-18T11:45:23.358Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 11 execution started
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 33
-  completed_plans: 27
+  completed_plans: 28
   percent: 57
 ---
 
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 11 (lived-in-props-wear) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-07-18 — Phase 11 execution started
 
@@ -92,6 +92,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 10 P06 | 15 min | 4 tasks | 2 files |
 | Phase 11 P01 | 6m | 1 tasks | 2 files |
 | Phase 11 P02 | 6min | 2 tasks | 2 files |
+| Phase 11 P03 | 12 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -149,6 +150,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: Music crossfade re-ramps only on a combat-state flip; steady-state setCombat is a cheap ensure/build check — zero per-frame AudioParam churn
 - [Phase ?]: Bend trail decay 0.985->0.980 for ~2s springy fade (WEAR-04/D-04/D-05)
 - [Phase ?]: Wear/scorch regrow time constant 25s->75s: reads at 1min, heals <10% by ~2.88min (WEAR-03/D-06)
+- [Phase ?]: [Phase 11] 11-03: createCrate/createBarrel pre-existed in createTownProps.ts as walk-through decor; moved to dedicated files + upgraded to merged-box voxel + collision + lightless spec (CLAUDE.md no-legacy). buildTown market crates/barrels now carry a collision footprint.
 
 ### Pending Todos
 
@@ -195,7 +197,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-18T11:35:44.622Z
-Stopped at: Phase 11 context gathered
+Last session: 2026-07-18T11:45:23.326Z
+Stopped at: Completed 11-03-PLAN.md
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
-Resume file: .planning/phases/11-lived-in-props-wear/11-CONTEXT.md
+Resume file: None

@@ -116,7 +116,7 @@ zero server publish.
   static bake: grass placement thinned along path splines + ground tint strip (never the
   decaying influence channels)
 
-- [ ] **WEAR-02**: Plaza has lived-in props — crates, fences, lanterns arranged to answer
+- [x] **WEAR-02**: Plaza has lived-in props — crates, fences, lanterns arranged to answer
   "who put this here" (market edge, path gaps), frozen-matrix static meshes
 
 - [x] **WEAR-03**: Scorch marks regrow — existing scorch decay tuned so battle wear heals
@@ -206,7 +206,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MUSIC-02 | Phase 10 | Complete |
 | MUSIC-03 | Phase 10 | Complete |
 | WEAR-01 | Phase 11 | Complete |
-| WEAR-02 | Phase 11 | Pending |
+| WEAR-02 | Phase 11 | Complete |
 | WEAR-03 | Phase 11 | Complete |
 | WEAR-04 | Phase 11 | Complete |
 | WEAR-05 | Phase 11 | Pending |
