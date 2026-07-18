@@ -42,6 +42,19 @@ const INITIAL_HUD_STATE: HudState = {
   combo: 0,
 };
 
+/**
+ * Read a persisted [0,1] audio gain, rejecting a corrupt/edited localStorage
+ * value: a non-finite or out-of-range number falls back to the default so no
+ * garbage reaches the bus setter (V5; the bus setter clamps again — defense in
+ * depth). Absent key = default.
+ */
+function readVolume(key: string, fallback: number): number {
+  const raw = localStorage.getItem(key);
+  if (raw === null) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 && value <= 1 ? value : fallback;
+}
+
 export default function App() {
   const { isActive, identity, getConnection } = useSpacetimeDB();
   const connection = getConnection() as DbConnection | null;
@@ -80,6 +93,15 @@ export default function App() {
   const [pixelFilter, setPixelFilter] = useState(
     () => localStorage.getItem('settings.pixelFilter') !== '0'
   );
+  // Audio mix (D-13): Music/SFX gains + independent mute flags, persisted per
+  // device and applied live through the imperative Game bus setters. Defaults:
+  // music 0.7 (loop rides under SFX), sfx 1.0. Absent mute key = unmuted.
+  const [musicVolume, setMusicVolume] = useState(() => readVolume('settings.musicVolume', 0.7));
+  const [sfxVolume, setSfxVolume] = useState(() => readVolume('settings.sfxVolume', 1));
+  const [musicMuted, setMusicMuted] = useState(
+    () => localStorage.getItem('settings.musicMuted') === '1'
+  );
+  const [sfxMuted, setSfxMuted] = useState(() => localStorage.getItem('settings.sfxMuted') === '1');
   // Which gameplay-HUD skin is active. Drives `data-hud-theme` on the .app root;
   // the CSS in src/styles/hud/ reskins the HUD accordingly. Persisted per device.
   const [hudTheme, setHudTheme] = useState(() => {
@@ -798,6 +820,12 @@ export default function App() {
     // The [pixelFilter] effect only fires on toggle changes; new games read the
     // persisted value directly so a reconnect keeps the chosen render path.
     game.setPixelFilter(localStorage.getItem('settings.pixelFilter') !== '0');
+    // Seed the persisted audio mix directly (the [state] effects only fire on
+    // later changes), so a fresh game / reconnect starts at the chosen levels.
+    game.setMusicVolume(readVolume('settings.musicVolume', 0.7));
+    game.setSfxVolume(readVolume('settings.sfxVolume', 1));
+    game.setMusicMuted(localStorage.getItem('settings.musicMuted') === '1');
+    game.setSfxMuted(localStorage.getItem('settings.sfxMuted') === '1');
     game.start();
     gameRef.current = game;
     // Seed the world state that arrived before this game instance existed.
@@ -890,6 +918,24 @@ export default function App() {
     localStorage.setItem('settings.pixelFilter', pixelFilter ? '1' : '0');
     gameRef.current?.setPixelFilter(pixelFilter);
   }, [pixelFilter]);
+  // Audio: persist + live-apply through the Game bus setters. Volume and mute are
+  // independent (D-13) — muting keeps the stored gain, unmute re-applies it.
+  useEffect(() => {
+    localStorage.setItem('settings.musicVolume', String(musicVolume));
+    gameRef.current?.setMusicVolume(musicVolume);
+  }, [musicVolume]);
+  useEffect(() => {
+    localStorage.setItem('settings.sfxVolume', String(sfxVolume));
+    gameRef.current?.setSfxVolume(sfxVolume);
+  }, [sfxVolume]);
+  useEffect(() => {
+    localStorage.setItem('settings.musicMuted', musicMuted ? '1' : '0');
+    gameRef.current?.setMusicMuted(musicMuted);
+  }, [musicMuted]);
+  useEffect(() => {
+    localStorage.setItem('settings.sfxMuted', sfxMuted ? '1' : '0');
+    gameRef.current?.setSfxMuted(sfxMuted);
+  }, [sfxMuted]);
 
   // ESC opens settings (closes the gacha screen first if it's open). The Radix
   // dialog handles ESC-to-close itself, so here we only need the open path.
@@ -1056,6 +1102,14 @@ export default function App() {
         onTogglePixelFilter={setPixelFilter}
         hudTheme={hudTheme}
         onHudThemeChange={setHudTheme}
+        musicVolume={musicVolume}
+        sfxVolume={sfxVolume}
+        musicMuted={musicMuted}
+        sfxMuted={sfxMuted}
+        onMusicVolumeChange={setMusicVolume}
+        onSfxVolumeChange={setSfxVolume}
+        onToggleMusicMuted={setMusicMuted}
+        onToggleSfxMuted={setSfxMuted}
         missedInvites={invitesWithNames.map(invite => ({
           id: invite.id,
           message: invite.message,
