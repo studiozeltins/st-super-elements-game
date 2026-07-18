@@ -230,7 +230,22 @@ Wave 3 *(integration + phase gate)*
   3. Fireflies pulse at dusk/night as emissive instanced quads — the combat light pool is never touched
   4. Frame rate holds through a golem-class fight with ALL ambiance systems enabled (`scripts/fps_playtest.py` run as the milestone-wide perf gate)
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+**Wave 0**
+
+- [ ] 12-01-PLAN.md — wildlifeMath pure THREE-free twin + vitest (wander/pulse/arc/day-dusk gate/spawn-ring/flush debounce), test-first (WILD-01/02/03) [Wave 0]
+
+**Wave 1** *(parallel, disjoint files — blocked on Wave 0)*
+
+- [ ] 12-02-PLAN.md — createButterflies sparse day-gated InstancedMesh pool, spawn/cull over grass, wind-clock wander (WILD-01) [Wave 1]
+- [ ] 12-03-PLAN.md — createBirdFlush externally-spawned rising-arc pool + createWildlifeSfx wing one-shot on the sfx bus (WILD-02) [Wave 1]
+- [ ] 12-04-PLAN.md — createFireflies dusk/night unlit-quad swarm, instanceColor pulse, no lights (WILD-03) [Wave 1]
+
+**Wave 2** *(wiring + phase gate — blocked on Wave 1)*
+
+- [ ] 12-05-PLAN.md — wire 3 pools + wing sfx into createGame, ?nobugs/?nobirds/?nofireflies flags, grass-stamp flush hook, perceptual UAT + SC4 milestone FPS gate (WILD-01/02/03) [Wave 2]
 
 ### Phase 13: Camera Feel
 
@@ -258,7 +273,7 @@ Wave 3 *(integration + phase gate)*
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
 | 11. Lived-in Props & Wear | 8/8 | Complete    | 2026-07-18 |
-| 12. Wildlife | 0/TBD | Not started | - |
+| 12. Wildlife | 0/5 | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |
 
 ---
