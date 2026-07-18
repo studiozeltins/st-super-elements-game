@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   BED_BASE_GAIN,
+  BED_CUTOFF_CALM_HZ,
+  BED_CUTOFF_GUST_HZ,
   BED_SWELL_GAIN,
   BIRD_MAX_S,
   BIRD_MIN_S,
@@ -10,6 +12,7 @@ import {
   GRUNT_MIN_S,
   GRUNT_NEAR_RADIUS,
   NIGHT_START_PHASE,
+  bedCutoff,
   bedGainTarget,
   gruntProximityGain,
   isBirdTime,
@@ -69,6 +72,32 @@ describe('bedGainTarget continuous audible bed swelling with gust (AMBI-02, D-05
     expect(bedGainTarget(1)).toBeCloseTo(BED_BASE_GAIN + BED_SWELL_GAIN, 12);
     // Swell is a real bonus on top of the continuous bed, not the whole bed.
     expect(BED_SWELL_GAIN).toBeGreaterThan(0);
+  });
+
+  it('base is a faint floor well under the swell — near-silent between gusts, not a constant hiss', () => {
+    // The gust-gated redesign: quiet at rest, the swell dominates when a swirl passes.
+    expect(BED_BASE_GAIN).toBeLessThan(BED_SWELL_GAIN);
+    expect(bedGainTarget(0)).toBeLessThan(bedGainTarget(1) / 2);
+  });
+});
+
+describe('bedCutoff brightens the bed with the gust (AMBI-02 — airy whoosh, not static hiss)', () => {
+  it('is the calm cutoff at gust=0 and the gust cutoff at gust=1', () => {
+    expect(bedCutoff(0)).toBeCloseTo(BED_CUTOFF_CALM_HZ, 9);
+    expect(bedCutoff(1)).toBeCloseTo(BED_CUTOFF_GUST_HZ, 9);
+  });
+
+  it('opens the lowpass — gust cutoff is brighter than calm', () => {
+    expect(BED_CUTOFF_GUST_HZ).toBeGreaterThan(BED_CUTOFF_CALM_HZ);
+  });
+
+  it('is monotonic non-decreasing across the gust envelope [0,1]', () => {
+    let prev = -Infinity;
+    for (const gust of [0, 0.25, 0.5, 0.75, 1]) {
+      const value = bedCutoff(gust);
+      expect(value).toBeGreaterThanOrEqual(prev);
+      prev = value;
+    }
   });
 });
 

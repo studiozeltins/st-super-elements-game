@@ -1432,7 +1432,25 @@ export function createGame(
     // restore ~2-3s, the AMBI-06 bed-duck half), and the region↔combat music
     // crossfade (MUSIC-02). All three read the SAME `inCombat` — never re-derived.
     const inCombat = isInCombat(elapsedSeconds, lastCombatAt);
-    ambience.update(deltaSeconds, wind.getGustEnvelope(), phase01(serverClock.nowMicros()), inCombat);
+    // Wind audio tracks the VISIBLE swirl: sample the gust AT THE PLAYER (same
+    // traveling front the grass bends to) so the bed swells as the wave reaches
+    // you, and pan it to the wind's on-screen direction (fixed-yaw basis, matching
+    // hitAudioPan) so the swirl is 3D. Zero-alloc: direction is a live ref, no new
+    // vectors.
+    const windDir = wind.directionUniform.value;
+    const windPan =
+      THREE.MathUtils.clamp(
+        windDir.x * Math.cos(CAMERA_YAW) - windDir.y * Math.sin(CAMERA_YAW),
+        -1,
+        1
+      ) * 0.8;
+    ambience.update(
+      deltaSeconds,
+      wind.sampleGust(playerPosition.x, playerPosition.z),
+      phase01(serverClock.nowMicros()),
+      inCombat,
+      windPan
+    );
     buses.duck(inCombat);
     music.setCombat(inCombat);
 

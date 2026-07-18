@@ -1,8 +1,10 @@
 // The living-world ambience layer (AMBI-02/03/05/07, D-05/D-06/D-10/D-11): a
-// continuous PROCEDURAL wind bed whose loudness swells with the live gust
-// envelope, plus ONE reusable randomized one-shot scheduler driving three
-// creature layers — day birds, night crickets/owl, and a distant goliath grunt
-// scaled by camp proximity. All timing/gain math lives in ambienceMath.ts (pure,
+// PROCEDURAL wind bed that is near-silent between gusts and swells, brightens,
+// and pans as a gust passes — driven by the PLAYER-LOCAL gust (windMath.gustAt)
+// so the sound tracks the VISIBLE swirl in 3D rather than a constant hiss — plus
+// ONE reusable randomized one-shot scheduler driving three creature layers — day
+// birds, night crickets/owl, and a distant goliath grunt scaled by camp
+// proximity. All timing/gain/timbre math lives in ambienceMath.ts (pure,
 // vitest-twinned); this wrapper only turns those numbers into WebAudio nodes.
 //
 // Recordings are the default (D-04): each creature layer plays a decoded `.ogg`
@@ -12,8 +14,9 @@
 // real recordings later transparently overrides the synth with zero code change.
 //
 // Per-frame discipline (Client Performance Rules): `update()` allocates NOTHING —
-// it only stores the latest phase/combat, builds the bed once, and writes ONE
-// AudioParam (the bed swell) via setTargetAtTime. All node creation happens in
+// it only stores the latest phase/combat, builds the bed once, and writes three
+// AudioParams (bed swell gain, lowpass cutoff, stereo pan) via setTargetAtTime.
+// All node creation happens in
 // `fire()`, which runs off self-rescheduling setTimeout timers (NOT the frame
 // loop), so a gated-off layer (wrong time of day / in combat) costs nothing but a
 // sleeping timer. The gust swell lives on the bed's OWN inner gain, kept separate
@@ -25,6 +28,7 @@ import {
   BIRD_MAX_S,
   GRUNT_MIN_S,
   GRUNT_MAX_S,
+  bedCutoff,
   bedGainTarget,
   gruntProximityGain,
   isBirdTime,
@@ -35,8 +39,12 @@ import {
 import type { SampleCache } from './createSampleCache';
 
 export interface Ambience {
-  /** Called once per frame after daynight.update(): stores phase/combat + swells the bed to the gust. Zero-alloc. */
-  update(deltaSeconds: number, gust: number, phase01: number, inCombat: boolean): void;
+  /**
+   * Called once per frame after daynight.update(): stores phase/combat and drives the
+   * wind bed from the PLAYER-LOCAL gust — gain swells, lowpass brightens, and stereo
+   * `pan` (−1..1, wind's on-screen direction) places the swirl in 3D. Zero-alloc.
+   */
+  update(deltaSeconds: number, gust: number, phase01: number, inCombat: boolean, pan: number): void;
   dispose(): void;
 }
 
@@ -46,13 +54,13 @@ const BIRD_URLS = [`${CREATURES}bird-chirp-1.ogg`, `${CREATURES}bird-chirp-2.ogg
 const NIGHT_URLS = [`${CREATURES}cricket-1.ogg`, `${CREATURES}cricket-2.ogg`, `${CREATURES}owl-hoot.ogg`];
 const GRUNT_URLS = [`${CREATURES}goliath-grunt.ogg`];
 
-// ── Wind bed (procedural, D-05) ──────────────────────────────────────────────
+// ── Wind bed (procedural, gust-gated + spatial, D-05) ────────────────────────
 /** Looping noise buffer length — long enough that the loop seam is inaudible. */
 const BED_NOISE_SECONDS = 3;
-/** Lowpass cutoff — filtered noise reads as soft wind, not hiss. */
-const BED_LOWPASS_HZ = 480;
-/** Bed-swell smoothing τ (~0.15s) so the gust swell never zippers (Pitfall 4). */
+/** Bed-swell / cutoff smoothing τ (~0.15s) so the gust swell never zippers (Pitfall 4). */
 const BED_SMOOTH_TAU = 0.15;
+/** Pan smoothing τ — slower so the 3D wind drifts across the field, never snaps. */
+const BED_PAN_TAU = 0.4;
 
 // ── Per-shot jitter seeds (AMBI-03: pitch ±10-20%, plus gain + pan variation) ─
 const PITCH_SPREAD = 0.15;
@@ -95,6 +103,8 @@ export function createAmbience(
   let bedContext: AudioContext | null = null;
   let bedSource: AudioBufferSourceNode | null = null;
   let bedInnerGain: GainNode | null = null;
+  let bedFilter: BiquadFilterNode | null = null; // cutoff brightens with the gust (airy whoosh, not static hiss)
+  let bedPanner: StereoPannerNode | null = null; // 3D: places the swirl on the wind's on-screen side
 
   function ready(): AudioContext | null {
     const context = getContext();
@@ -292,25 +302,31 @@ export function createAmbience(
       }
       bedSource.disconnect();
     }
+    bedFilter?.disconnect();
+    bedPanner?.disconnect();
     bedInnerGain?.disconnect();
 
     const noise = createNoiseSource(ctx, BED_NOISE_SECONDS);
     noise.loop = true;
-    const filter = ctx.createBiquadFilter();
+    const filter = ctx.createBiquadFilter(); // cutoff opens with the gust (dynamic timbre, not static hiss)
     filter.type = 'lowpass';
-    filter.frequency.value = BED_LOWPASS_HZ;
+    filter.frequency.value = bedCutoff(0);
+    const panner = ctx.createStereoPanner(); // 3D: swirl sits on the wind's on-screen side
+    panner.pan.value = 0;
     const innerGain = ctx.createGain(); // the SWELL node — separate from the bus duck (Pitfall 5)
     innerGain.gain.value = bedGainTarget(0);
-    noise.connect(filter).connect(innerGain).connect(bus);
+    noise.connect(filter).connect(panner).connect(innerGain).connect(bus);
     noise.start();
 
     bedSource = noise;
+    bedFilter = filter;
+    bedPanner = panner;
     bedInnerGain = innerGain;
     bedContext = ctx;
   }
 
   return {
-    update(deltaSeconds, gust, phase01, inCombat) {
+    update(deltaSeconds, gust, phase01, inCombat, pan) {
       void deltaSeconds; // scheduler is timer-driven; delta unused (kept for API symmetry)
       lastPhase = phase01;
       lastInCombat = inCombat;
@@ -319,8 +335,14 @@ export function createAmbience(
       const bus = getAmbientBus();
       if (!bus) return;
       if (bedContext !== ctx) buildBed(ctx, bus);
-      // ONE AudioParam write per frame: swell the bed toward the live gust (D-05).
-      bedInnerGain?.gain.setTargetAtTime(bedGainTarget(gust), ctx.currentTime, BED_SMOOTH_TAU);
+      // Three AudioParam writes per frame, zero-alloc: swell the bed toward the
+      // PLAYER-LOCAL gust (loud only while the visible swirl is on you), open the
+      // lowpass with it (airy whoosh, not static hiss), and pan to the wind's
+      // on-screen direction (3D). Pan smooths slower so the wind drifts, not snaps.
+      const now = ctx.currentTime;
+      bedInnerGain?.gain.setTargetAtTime(bedGainTarget(gust), now, BED_SMOOTH_TAU);
+      bedFilter?.frequency.setTargetAtTime(bedCutoff(gust), now, BED_SMOOTH_TAU);
+      bedPanner?.pan.setTargetAtTime(pan, now, BED_PAN_TAU);
     },
 
     dispose() {
@@ -337,8 +359,12 @@ export function createAmbience(
         }
         bedSource.disconnect();
       }
+      bedFilter?.disconnect();
+      bedPanner?.disconnect();
       bedInnerGain?.disconnect();
       bedSource = null;
+      bedFilter = null;
+      bedPanner = null;
       bedInnerGain = null;
       bedContext = null;
     },

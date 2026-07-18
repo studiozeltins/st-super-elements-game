@@ -50,26 +50,52 @@ export function jitterFactor(spread: number, rand: number): number {
   return 1 + (rand * 2 - 1) * spread;
 }
 
-// ── Continuous wind bed gain (AMBI-02, D-05) ────────────────────────────────
+// ── Gust-gated wind bed gain (AMBI-02, D-05) ────────────────────────────────
+// Playtest revision (2026-07-18): the bed is NOT a loud continuous hiss. It is
+// near-silent between gusts and only becomes clearly hearable as a gust passes —
+// and the caller feeds the gust sampled AT THE PLAYER (windMath.gustAt), so the
+// audio swell coincides with the VISIBLE gust front sweeping past, not a
+// world-wide temporal peak that's off-screen.
 
 /**
- * Base bed loudness with NO gust passing. Audible on its own — the gust envelope
- * rests near 0 between events (gusts are ~30-60s apart per windMath), so the bed
- * must sustain a continuous presence and the swell is a bonus on top (D-05).
+ * Bed loudness with NO gust passing — a faint floor, not a presence. Kept just
+ * above 0 so the wind never cuts to dead silence, but low enough that between
+ * gusts it reads as "still air", not the old constant hiss.
  */
-export const BED_BASE_GAIN = 0.25;
+export const BED_BASE_GAIN = 0.03;
 
-/** Extra loudness added at a full gust — the swell that sidechains getGustEnvelope(). */
-export const BED_SWELL_GAIN = 0.35;
+/** Extra loudness at a full LOCAL gust — the swell you hear when the swirl is on you. */
+export const BED_SWELL_GAIN = 0.5;
 
 /**
- * Target bed gain for a given gust envelope value (0..1): base + swell·gust.
- * Monotonic non-decreasing, strictly > 0 at gust=0 (continuous bed), and
- * base+swell at a full gust (AMBI-02 sidechain map). The wrapper smooths this
- * onto the bed's inner GainNode via setTargetAtTime so it never zippers.
+ * Target bed gain for a gust value (0..1): base + swell·gust. Monotonic
+ * non-decreasing, strictly > 0 at gust=0 (never a hard cut), base+swell at a
+ * full gust. Because the caller passes the PLAYER-LOCAL gust (mostly ~0, brief
+ * peaks as a front crosses), the bed sits near BED_BASE_GAIN and swells only
+ * while the visible gust is present. Smoothed onto the inner GainNode via
+ * setTargetAtTime so it never zippers.
  */
 export function bedGainTarget(gust: number): number {
   return BED_BASE_GAIN + BED_SWELL_GAIN * gust;
+}
+
+// ── Gust-brightened bed timbre (AMBI-02) ────────────────────────────────────
+// A fixed lowpass makes the noise read as STATIC hiss. Opening the cutoff with
+// the gust turns a passing swirl into moving AIR (dull between gusts → airy
+// whoosh at the peak), so the bed sounds alive, not like tape hiss.
+
+/** Lowpass cutoff between gusts — dull/muffled so still air barely registers. */
+export const BED_CUTOFF_CALM_HZ = 180;
+/** Lowpass cutoff at a full local gust — brighter, airy "whoosh" of moving wind. */
+export const BED_CUTOFF_GUST_HZ = 750;
+
+/**
+ * Target lowpass cutoff (Hz) for a gust value (0..1): calm + (gust−calm)·gust.
+ * Monotonic, calm at gust=0, gust-bright at gust=1. Written each frame via
+ * setTargetAtTime alongside the gain so the timbre opens up with the swell.
+ */
+export function bedCutoff(gust: number): number {
+  return BED_CUTOFF_CALM_HZ + (BED_CUTOFF_GUST_HZ - BED_CUTOFF_CALM_HZ) * gust;
 }
 
 // ── Goliath grunt proximity falloff (AMBI-05) ───────────────────────────────
