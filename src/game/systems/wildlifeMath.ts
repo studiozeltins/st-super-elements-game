@@ -40,6 +40,9 @@ export const SPAWN = { inner: 8, outer: 22, cull: 30 } as const;
 /** Bird flush arc (WILD-02): peak `rise` height, lateral `spread`, `life` seconds. */
 export const BIRD = { climb: 5.5, life: 3.2, fadeStart: 0.9 } as const;
 
+/** Grounded pecking rhythm (WILD-02): rest height, peck dip depth, pecks/sec-ish. */
+export const PECK = { rate: 0.85, depth: 0.16, rest: 0.18 } as const;
+
 /** Flush debounce (WILD-02): a burst is an EVENT, not a stream — one per cooldown. */
 export const FLUSH_COOLDOWN_SEC = 6;
 
@@ -93,6 +96,17 @@ export function birdFlight(t01: number, out: { travel: number; height: number; v
   out.travel = 1 - Math.pow(1 - t01, 2);
   out.height = BIRD.climb * Math.sin(Math.PI * t01);
   out.visible = t01 < BIRD.fadeStart ? 1 : Math.max(0, 1 - (t01 - BIRD.fadeStart) / (1 - BIRD.fadeStart));
+}
+
+/**
+ * Grounded-bird peck dip in [0,1] (WILD-02): a quick downward jab for the first
+ * quarter of each ~1/PECK.rate cycle, resting (0) the rest of the time; a per-bird
+ * `seed` decorrelates the flock. Deterministic, allocation-free.
+ */
+export function peckDip(t: number, seed: number): number {
+  const cyclePhase = ((t * PECK.rate + seed) % 1 + 1) % 1;
+  if (cyclePhase >= 0.25) return 0;
+  return Math.sin((cyclePhase / 0.25) * Math.PI);
 }
 
 /** True when (dx,dz) falls in the [inner, outer] spawn annulus (WILD-01). Squared-distance compare. */

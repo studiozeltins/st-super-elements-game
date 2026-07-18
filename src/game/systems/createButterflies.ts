@@ -8,7 +8,7 @@ import {
   SPAWN,
 } from './wildlifeMath';
 import { surfaceAt } from './surfaceAt';
-import { createWingedGeometry, createFlapMaterial, attachFlapPhases } from './wingedCreature';
+import { createWingedGeometry, createFlapMaterial, attachFlapAttrs } from './wingedCreature';
 
 /**
  * Daytime butterflies: ONE sparse, self-managing InstancedMesh pool that spawns
@@ -40,12 +40,13 @@ const RECHECK_INTERVAL = 0.5;
 const MAX_SPAWNS_PER_RECHECK = 2;
 /** Ring-point candidate attempts per recheck before giving up (avoids an infinite grass hunt). */
 const SPAWN_ATTEMPTS = 6;
-/** Overall butterfly size (world units). */
-const BUTTERFLY_SIZE = 0.9;
+/** Overall butterfly size (world units) — big enough to read as wings, not a dot. */
+const BUTTERFLY_SIZE = 1.3;
 /** Small hover above the ground so a butterfly floats, never clips the grass. */
 const HOVER = 1.1;
-/** Warm butterfly tint — reads under the daytime scene light (Lambert). */
-const BUTTERFLY_TINT = 0xf2d16b;
+/** Warm butterfly wing tint + a dark body, baked as vertex colors. */
+const BUTTERFLY_WING = 0xf2b53a;
+const BUTTERFLY_BODY = 0x2a2018;
 const TAU = Math.PI * 2;
 
 interface Butterfly {
@@ -68,26 +69,32 @@ export function createButterflies(
     active: false,
   }));
 
-  // Winged body+2-wings geometry with a GPU wing-flap (createFlapMaterial) — real
-  // depth + flapping, not a jiggling billboard. Lambert so it reads under the day
-  // scene light; one InstancedMesh, one draw call. Wings beat on the shared clock.
-  const flap = createFlapMaterial({ flapSpeed: 11, flapAmp: 1.0 });
+  // Winged body+2-wings geometry with a wide GPU wing-flap (createFlapMaterial) —
+  // real depth + flapping wings with a warm wing / dark body two-tone (baked vertex
+  // colors), not a jiggling billboard. One InstancedMesh, one draw call.
+  const flap = createFlapMaterial({ flapSpeed: 11, flapAmp: 1.35 });
   const mesh = new THREE.InstancedMesh(
-    createWingedGeometry({ wingSpan: 0.32, wingChord: 0.34, bodyLength: 0.4, bodyWidth: 0.05 }),
+    createWingedGeometry({
+      wingSpan: 0.55,
+      wingChord: 0.5,
+      bodyLength: 0.42,
+      bodyWidth: 0.06,
+      wingColor: BUTTERFLY_WING,
+      bodyColor: BUTTERFLY_BODY,
+    }),
     flap.material,
     BUTTERFLY_POOL_SIZE
   );
-  const flapPhases = attachFlapPhases(mesh, BUTTERFLY_POOL_SIZE);
-  const flapAttr = mesh.geometry.getAttribute('aFlapPhase') as THREE.InstancedBufferAttribute;
+  const { phases: flapPhases, amps: flapAmps, phaseAttr, ampAttr } = attachFlapAttrs(mesh, BUTTERFLY_POOL_SIZE);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
   mesh.castShadow = false;
   mesh.receiveShadow = false;
-  const baseColor = new THREE.Color(BUTTERFLY_TINT);
   const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
+  const white = new THREE.Color(0xffffff); // instanceColor is neutral — vertex colors carry the tint
   for (let index = 0; index < BUTTERFLY_POOL_SIZE; index += 1) {
     mesh.setMatrixAt(index, zeroMatrix);
-    mesh.setColorAt(index, baseColor);
+    mesh.setColorAt(index, white);
   }
   mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
   // Scene root, never the frozen world group — no updateMatrixWorld bookkeeping.
@@ -119,7 +126,9 @@ export function createButterflies(
     b.seed = Math.random() * TAU; // cosmetic RNG is fine (dust precedent)
     b.active = true;
     flapPhases[slot] = Math.random() * TAU; // decorrelate the flock's wing-beat
-    flapAttr.needsUpdate = true;
+    flapAmps[slot] = 1; // butterflies always flap at full
+    phaseAttr.needsUpdate = true;
+    ampAttr.needsUpdate = true;
     return true;
   }
 

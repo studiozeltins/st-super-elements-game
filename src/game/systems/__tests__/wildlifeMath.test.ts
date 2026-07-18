@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   BIRD,
+  PECK,
+  peckDip,
   FLUSH_COOLDOWN_SEC,
   PULSE,
   SPAWN,
@@ -36,6 +38,8 @@ describe('tunable bundles (verbatim researcher values, single-sourced)', () => {
     expect(BIRD.climb).toBe(5.5);
     expect(BIRD.life).toBe(3.2);
     expect(BIRD.fadeStart).toBe(0.9);
+    expect(PECK.depth).toBeGreaterThan(0);
+    expect(PECK.rate).toBeGreaterThan(0);
     expect(FLUSH_COOLDOWN_SEC).toBe(6);
   });
 });
@@ -183,6 +187,32 @@ describe('birdFlight (WILD-02 fly-to-a-different-spot takeoff + landing)', () =>
     birdFlight(1.0, end);
     expect(early.visible).toBe(1);
     expect(end.visible).toBe(0);
+  });
+});
+
+describe('peckDip (WILD-02 grounded pecking rhythm)', () => {
+  it('stays within [0,1] across a long window and any seed', () => {
+    for (const seed of [0, 0.3, 1.7, 4.2]) {
+      for (let t = 0; t < 20; t += 0.03) {
+        const d = peckDip(t, seed);
+        expect(d).toBeGreaterThanOrEqual(0);
+        expect(d).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('rests at 0 for most of each cycle and jabs down within it', () => {
+    // Over one full cycle at seed 0: a peak jab early, rest (0) in the back 75%.
+    let sawJab = false;
+    let sawRest = false;
+    const period = 1 / PECK.rate;
+    for (let t = 0; t < period; t += period / 200) {
+      const d = peckDip(t, 0);
+      if (d > 0.9) sawJab = true;
+      if (t > period * 0.4 && d === 0) sawRest = true;
+    }
+    expect(sawJab).toBe(true);
+    expect(sawRest).toBe(true);
   });
 });
 

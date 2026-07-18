@@ -1568,7 +1568,14 @@ export function createGame(
       dayNightPhase,
       wind.timeUniform.value
     );
-    birdFlush?.update(deltaSeconds, pixelRenderer.camera);
+    birdFlush?.update(
+      deltaSeconds,
+      pixelRenderer.camera,
+      playerPosition.x,
+      playerPosition.z,
+      dayNightPhase,
+      wind.timeUniform.value
+    );
     // Enemies/goliaths are drawn straight from the server tables and interpolated;
     // the server tick owns their combat and damages players (reflected through
     // syncMyServerRow), so there is no local contact-damage path here anymore.
