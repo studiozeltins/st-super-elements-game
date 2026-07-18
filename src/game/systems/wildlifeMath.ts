@@ -1,8 +1,9 @@
 /**
  * Pure wildlife math — the single source of truth for every Wave-1 creature
  * factory (butterflies, flush birds, fireflies). The ONLY import is
- * `samplePalette` from ./dayNightMath (the one shipped time-of-day channel that
- * gates day vs dusk/night); no THREE, no RNG, no I/O — so the wander, pulse,
+ * `fireflyLevelForPhase` from ./dayNightMath (the one shipped time-of-day channel
+ * that gates day vs dusk/night, sampled ALLOCATION-FREE for the per-frame gate);
+ * no THREE, no RNG, no I/O — so the wander, pulse,
  * arc, spawn/cull ring, day gate, and flush debounce are all unit-testable
  * without a renderer, mirroring windMath.ts / dayNightMath.ts.
  *
@@ -14,7 +15,7 @@
  * single-sources them and CPU math can never drift from the tuning.
  */
 
-import { samplePalette } from './dayNightMath';
+import { fireflyLevelForPhase } from './dayNightMath';
 
 /**
  * Butterfly flutter (WILD-01): two incommensurate summed sines per axis
@@ -48,12 +49,12 @@ export const FLUSH_COOLDOWN_SEC = 6;
  * the ONE shipped fireflyLevel channel so day/dusk can never disagree.
  */
 export function isDayTime(phase: number): boolean {
-  return samplePalette(phase).fireflyLevel < 0.01;
+  return fireflyLevelForPhase(phase) < 0.01;
 }
 
 /** The dusk/night firefly density scalar 0..1 at a normalized phase (WILD-03 gate). */
 export function fireflyLevelAt(phase: number): number {
-  return samplePalette(phase).fireflyLevel;
+  return fireflyLevelForPhase(phase);
 }
 
 /**

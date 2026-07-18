@@ -235,6 +235,32 @@ export function samplePalette(phase: number): DayNightPalette {
 }
 
 /**
+ * The `fireflyLevel` channel alone, ZERO allocation — the wildlife day/dusk gate
+ * calls this per frame and must not allocate a whole DayNightPalette object each
+ * time (WR-01). Mirrors samplePalette's bracketing scan but blends only the one
+ * scalar; kept in lockstep with it by construction.
+ */
+export function fireflyLevelForPhase(phase: number): number {
+  const p = ((phase % 1) + 1) % 1;
+  const n = KEYFRAMES.length;
+  let a: Keyframe = KEYFRAMES[n - 1];
+  let b: Keyframe = KEYFRAMES[0];
+  let segStart = a.phase;
+  let segEnd = b.phase + 1;
+  for (let i = 0; i < n - 1; i += 1) {
+    if (p >= KEYFRAMES[i].phase && p < KEYFRAMES[i + 1].phase) {
+      a = KEYFRAMES[i];
+      b = KEYFRAMES[i + 1];
+      segStart = a.phase;
+      segEnd = b.phase;
+      break;
+    }
+  }
+  const localT = segEnd === segStart ? 0 : (p - segStart) / (segEnd - segStart);
+  return lerp(a.fireflyLevel, b.fireflyLevel, smoothstep(0, 1, localT));
+}
+
+/**
  * Sun-arc envelope (Phase 09.1). The moving sun rides a CAPPED dome — azimuth
  * sweeps with phase (dawn east, dusk west) while elevation stays above a
  * readability floor so telegraph/enemy/gem shadows never graze the horizon
