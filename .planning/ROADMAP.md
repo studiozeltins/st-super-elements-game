@@ -162,8 +162,30 @@ Plans:
   4. Combat ducks the ambience (birds stop, bed drops −6..−12dB over ~1s) and crossfades combat music in and back out on the same combat signal — never a hard cut
   5. Player can mute/adjust music independently of SFX, persisted locally
 
-**Plans**: TBD
+**Plans**: 6 plans
 **UI hint**: yes
+
+Plans:
+**Wave 0**
+
+- [ ] 10-01-PLAN.md — Pure helpers test-first: combatState (isInCombat hysteresis) + ambienceMath (one-shot timing, bed-gain, proximity, day/night gates) [Wave 0]
+
+**Wave 1** *(blocked on Wave 0)*
+
+- [ ] 10-02-PLAN.md — createAudioBuses (master→compressor→dest + ambient/music/sfx) + migrate all 5 SFX off destination + Game volume/mute setters (AMBI-01) [Wave 1]
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 10-03-PLAN.md — createSampleCache + createAmbience (gust-reactive bed + day/night creature one-shots) + combat-state stamp + frame update (AMBI-02/03/05/06/07) [Wave 2]
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 10-04-PLAN.md — Grass rustle on player grass-movement, on the sfx bus (AMBI-04) [Wave 3]
+- [ ] 10-05-PLAN.md — MUSIC-03 settings UI: music/SFX volume sliders + mute toggles, persisted (MUSIC-03) [Wave 3]
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 10-06-PLAN.md — createMusic region+combat equal-power crossfade + bed/music duck on the combat signal + music-asset + final FPS/playtest checkpoints (AMBI-06/MUSIC-01/02) [Wave 4]
 
 ### Phase 11: Lived-in Props & Wear
 
@@ -217,7 +239,7 @@ Plans:
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
-| 10. Ambient Audio & Music | 0/TBD | Not started | - |
+| 10. Ambient Audio & Music | 0/6 | Not started | - |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |
