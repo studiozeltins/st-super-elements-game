@@ -172,7 +172,7 @@ Plans:
 
 **Wave 1** *(blocked on Wave 0)*
 
-- [ ] 10-02-PLAN.md — createAudioBuses (master→compressor→dest + ambient/music/sfx) + migrate all 5 SFX off destination + Game volume/mute setters (AMBI-01) [Wave 1]
+- [x] 10-02-PLAN.md — createAudioBuses (master→compressor→dest + ambient/music/sfx) + migrate all 5 SFX off destination + Game volume/mute setters (AMBI-01) [Wave 1]
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -239,7 +239,7 @@ Plans:
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
-| 10. Ambient Audio & Music | 1/6 | In Progress|  |
+| 10. Ambient Audio & Music | 2/6 | In Progress|  |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |

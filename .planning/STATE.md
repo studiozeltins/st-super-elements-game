@@ -6,14 +6,14 @@ current_phase: 10
 current_phase_name: ambient-audio-music
 status: executing
 stopped_at: Phase 10 UI-SPEC approved
-last_updated: "2026-07-18T01:33:31.325Z"
+last_updated: "2026-07-18T01:51:38.024Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 25
-  completed_plans: 20
+  completed_plans: 21
   percent: 43
 ---
 
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 10 (ambient-audio-music) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-07-18 — Phase 10 execution started
 
@@ -85,6 +85,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 09.1 P01 | 9min | 2 tasks | 2 files |
 | Phase 09.1 P02 | 4min | 3 tasks | 4 files |
 | Phase 10 P01 | 12min | 2 tasks | 4 files |
+| Phase 10 P02 | 15min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -132,6 +133,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 09.1]: 09.1-01: sun-arc math is pure-twin-first — sunDir(phase) raised-cosine dome + sine azimuth in zero-THREE dayNightMath.ts, ELEV_PEAK pinned to SUN_OFFSET 54.204deg (NOT CONTEXT prose 75deg, RESEARCH A1); buildSunBasis reproduces frozen basis renderer-free (SHADOW-04)
 - [Phase ?]: Phase 09.1-02: sun direction is a single day/night-owned channel (setSunDirection); setShadowFocus rebuilds the shadow basis per-frame from it with zero alloc
 - [Phase ?]: Phase 09.1-02: ?nomovingsun/reduce-motion/?nodaynight pin the sun byte-exact to the literal SUN_OFFSET while colors keep drifting; 30Hz shadow throttle left unchanged
+- [Phase ?]: [Phase 10]: 10-02: ONE createAudioBuses routing owner (master->DynamicsCompressor->destination + sfx/music/ambient sub-buses); music/ambient are HEAD->DUCK in series so user-volume/bed-swell x combat-duck never stomp one AudioParam (RESEARCH Pitfall 5)
+- [Phase ?]: [Phase 10]: 10-02: all 5 SFX modules migrated off context.destination onto the injected sfx bus (D-02/D-03); createAudioSystem owns the context and late-binds the sfx closure to break the createAudioSystem<->createAudioBuses circularity
 
 ### Pending Todos
 
@@ -178,7 +181,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-18T01:33:18.170Z
+Last session: 2026-07-18T01:50:42.951Z
 Stopped at: Phase 10 UI-SPEC approved
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/10-ambient-audio-music/10-UI-SPEC.md

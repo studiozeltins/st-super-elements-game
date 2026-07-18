@@ -14,3 +14,6 @@ Discovered during execution; NOT fixed here (scope boundary — unrelated to thi
   the recent grass/windmill world commits — see `42c178b feat(world): pixel-art grass texture`).
 - **Action required:** Investigate separately (world/grass subsystem owner), outside Phase 10.
   Do NOT block ambient-audio work on it.
+- **Re-confirmed in 10-02:** still failing, and confirmed pre-existing by re-running the test at
+  commit `1bad15d` (the tip before this plan) where it also fails. The 10-02 bus refactor touches
+  only `src/game/audio/**` + the audio wiring in `createGame.ts`; grassPlacement is not in the diff.

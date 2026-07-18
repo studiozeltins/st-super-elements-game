@@ -66,7 +66,7 @@ zero server publish.
 
 ### Ambient Audio Bed (AMBI)
 
-- [ ] **AMBI-01**: Audio routes through a master/ambient/sfx bus with a compressor —
+- [x] **AMBI-01**: Audio routes through a master/ambient/sfx bus with a compressor —
   existing SFX migrated off direct `context.destination`; single shared AudioContext
 
 - [x] **AMBI-02**: Player hears a continuous procedural wind bed (filtered noise, slowly
@@ -94,7 +94,7 @@ zero server publish.
 - [x] **MUSIC-02**: Combat music crossfades in when combat starts and back out when combat
   ends (same combat-state signal as AMBI-06) — horizontal crossfade, no hard cuts
 
-- [ ] **MUSIC-03**: Player can mute/adjust music independently of SFX (music vs sfx bus
+- [x] **MUSIC-03**: Player can mute/adjust music independently of SFX (music vs sfx bus
   gain), persisted locally
 
 ### Wildlife (WILD)
@@ -195,7 +195,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SHADOW-02 | Phase 9.1 | Complete |
 | SHADOW-03 | Phase 9.1 | Complete |
 | SHADOW-04 | Phase 9.1 | Complete |
-| AMBI-01 | Phase 10 | Pending |
+| AMBI-01 | Phase 10 | Complete |
 | AMBI-02 | Phase 10 | Complete |
 | AMBI-03 | Phase 10 | Complete |
 | AMBI-04 | Phase 10 | Pending |
@@ -204,7 +204,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AMBI-07 | Phase 10 | Complete |
 | MUSIC-01 | Phase 10 | Pending |
 | MUSIC-02 | Phase 10 | Complete |
-| MUSIC-03 | Phase 10 | Pending |
+| MUSIC-03 | Phase 10 | Complete |
 | WEAR-01 | Phase 11 | Pending |
 | WEAR-02 | Phase 11 | Pending |
 | WEAR-03 | Phase 11 | Pending |
