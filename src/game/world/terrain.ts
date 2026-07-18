@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { hashGridPoint } from './rng';
 import { WORLD_BOUND } from '../data/constants';
-import { roadFactor, roadAcross } from './roads';
+import { roadFactor, roadAcross, footpathFactor } from './roads';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
 
 const TERRAIN_SEED = 20260703;
@@ -130,6 +130,11 @@ const MEADOW_DRY = new THREE.Color(0x84a851);
 const MEADOW_MOSS = new THREE.Color(0x3f7d40);
 // Packed-dirt road tint — the terrain reads as a worn path where roadFactor > 0.
 const ROAD_DIRT = new THREE.Color(0x9a7a4e);
+// Trampled-footpath tint — a desaturated worn-grass tone, LIGHTER/greener than
+// ROAD_DIRT so footpaths read as trodden-but-not-bare routes, distinct from the
+// packed-dirt roads (D-03). Baked into the vertex color only — never the aRoad
+// cart-rut fragment path (footpaths have no wheel ruts).
+const FOOTPATH_TINT = new THREE.Color(0x7d8a54);
 
 /**
  * Low-frequency meadow mask, 0..1. High values = lush moss patches: the ground
@@ -151,6 +156,11 @@ export function terrainColorAt(x: number, z: number, height: number): THREE.Colo
   const lushness = meadowLushness(x, z);
   grassColor.lerp(MEADOW_DRY, smoothstep(0.6, 0.85, 1 - lushness) * 0.5);
   grassColor.lerp(MEADOW_MOSS, smoothstep(0.55, 0.8, lushness) * 0.45);
+  // Trampled footpath: a light worn tint baked BEFORE the road blend so the road
+  // wins on overlap. Partial by construction (footpathFactor <= FOOTPATH_MAX 0.6),
+  // so the ground reads worn-but-not-bare along the traffic graph.
+  const foot = footpathFactor(x, z);
+  if (foot > 0) grassColor.lerp(FOOTPATH_TINT, foot * 0.5);
   // Worn dirt road on top of the grass — the road mask wins where it is strong.
   const road = roadFactor(x, z);
   if (road > 0) grassColor.lerp(ROAD_DIRT, road * 0.9);
