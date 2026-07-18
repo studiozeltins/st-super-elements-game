@@ -526,18 +526,18 @@ butterflies?.dispose(); fireflies?.dispose(); birdFlush?.dispose(); wildlifeSfx?
 
 **No assumption carries compliance/security/retention/performance-contract risk.** All are cosmetic tuning values pinned by perceptual UAT + the FPS gate.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Wing one-shot home — new module vs `AudioSystem` method?**
+1. **Wing one-shot home — new module vs `AudioSystem` method?** — RESOLVED
    - What we know: `createAudioSystem` owns the sfx-bus procedural-synth pattern; `createCombatAudio`/`createWeaponAudio`/`createMovementAudio` are siblings taking `(getContext, buses.sfx)`.
-   - Recommendation: a small dedicated `createWildlifeSfx.ts` sibling (SRP + no-monolith; `createAudioSystem` is attack SFX). Trivial to fold into `AudioSystem` if the planner prefers fewer files.
+   - RESOLVED: dedicated `createWildlifeSfx.ts` sibling (SRP + no-monolith). Adopted in Plan 12-03.
 
-2. **Billboard vs voxel quads per creature type.**
+2. **Billboard vs voxel quads per creature type.** — RESOLVED
    - What we know: fixed-yaw cam makes billboarding nearly free; voxel cubes (smoke/dust) need no billboard and match the art.
-   - Recommendation: billboard butterflies + birds (silhouette matters), voxel/no-billboard fireflies (tiny points). Discretion — perceptual UAT decides.
+   - RESOLVED: billboard butterflies + birds, voxel/no-billboard fireflies. Remaining fine-tuning is perceptual UAT discretion.
 
-3. **Firefly gate: hard on/off at `fireflyLevel>0` vs scaling swarm size by `fireflyLevel`.**
-   - Recommendation: scale the count of lit fireflies by `fireflyLevel` for a dusk fade-in (nicer), hard-collapse to zeroMatrix in full day. Discretion.
+3. **Firefly gate: hard on/off vs scaling swarm size by `fireflyLevel`.** — RESOLVED
+   - RESOLVED: scale lit firefly count by `fireflyLevel` (dusk fade-in), hard-collapse to zero in full day. Adopted in Plan 12-04.
 
 ## Environment Availability
 
