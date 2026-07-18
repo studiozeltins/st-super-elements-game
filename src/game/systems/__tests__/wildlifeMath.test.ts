@@ -6,7 +6,7 @@ import {
   SPAWN,
   WANDER,
   beyondCull,
-  birdArc,
+  birdFlight,
   butterflyBob,
   butterflyWander,
   fireflyLevelAt,
@@ -33,9 +33,9 @@ describe('tunable bundles (verbatim researcher values, single-sourced)', () => {
     expect(SPAWN.inner).toBe(8);
     expect(SPAWN.outer).toBe(22);
     expect(SPAWN.cull).toBe(30);
-    expect(BIRD.rise).toBe(6);
-    expect(BIRD.spread).toBe(3);
-    expect(BIRD.life).toBe(1.4);
+    expect(BIRD.climb).toBe(5.5);
+    expect(BIRD.life).toBe(3.2);
+    expect(BIRD.fadeStart).toBe(0.9);
     expect(FLUSH_COOLDOWN_SEC).toBe(6);
   });
 });
@@ -145,38 +145,42 @@ describe('inSpawnRing / beyondCull (WILD-01 spawn-cull annulus)', () => {
   });
 });
 
-describe('birdArc (WILD-02 scripted rising arc + fade)', () => {
-  it('starts at ground (y === 0) and its lateral spread starts at 0', () => {
-    const out = { y: -1, spread: -1, visible: -1 };
-    birdArc(0, out);
-    expect(out.y).toBe(0);
-    expect(out.spread).toBe(0);
+describe('birdFlight (WILD-02 fly-to-a-different-spot takeoff + landing)', () => {
+  it('starts grounded (height 0, travel 0) and lands grounded (height ~0, travel 1)', () => {
+    const start = { travel: -1, height: -1, visible: -1 };
+    const end = { travel: -1, height: -1, visible: -1 };
+    birdFlight(0, start);
+    birdFlight(1, end);
+    expect(start.height).toBeCloseTo(0);
+    expect(start.travel).toBe(0);
+    expect(end.height).toBeCloseTo(0);
+    expect(end.travel).toBeCloseTo(1);
   });
 
-  it('rises strictly monotonically and eases out toward the apex', () => {
-    const out = { y: 0, spread: 0, visible: 0 };
-    let prevY = -Infinity;
-    let prevSpread = -Infinity;
+  it('travel advances monotonically 0→1 (fast take-off, gliding arrival)', () => {
+    const out = { travel: 0, height: 0, visible: 0 };
+    let prev = -Infinity;
     for (let t = 0; t <= 1; t += 0.02) {
-      birdArc(t, out);
-      expect(out.y).toBeGreaterThan(prevY - 1e-9);
-      expect(out.spread).toBeGreaterThan(prevSpread - 1e-9);
-      prevY = out.y;
-      prevSpread = out.spread;
+      birdFlight(t, out);
+      expect(out.travel).toBeGreaterThan(prev - 1e-9);
+      expect(out.travel).toBeGreaterThanOrEqual(-1e-9);
+      expect(out.travel).toBeLessThanOrEqual(1 + 1e-9);
+      prev = out.travel;
     }
-    // Ease-OUT: the first half of the flight covers more altitude than the last half.
-    const first = { y: 0, spread: 0, visible: 0 };
-    const second = { y: 0, spread: 0, visible: 0 };
-    birdArc(0.5, first);
-    birdArc(1.0, second);
-    expect(first.y - 0).toBeGreaterThan(second.y - first.y);
   });
 
-  it('is visible early and fades to 0 by the end of the arc', () => {
-    const early = { y: 0, spread: 0, visible: 0 };
-    const end = { y: 0, spread: 0, visible: 0 };
-    birdArc(0.2, early);
-    birdArc(1.0, end);
+  it('height is a takeoff-and-land arch that peaks in the air mid-flight', () => {
+    const mid = { travel: 0, height: 0, visible: 0 };
+    birdFlight(0.5, mid);
+    expect(mid.height).toBeGreaterThan(1); // well off the ground at mid-flight
+    expect(mid.height).toBeCloseTo(BIRD.climb); // sin(pi/2) peak
+  });
+
+  it('holds visible then fades to 0 by the destination', () => {
+    const early = { travel: 0, height: 0, visible: 0 };
+    const end = { travel: 0, height: 0, visible: 0 };
+    birdFlight(0.2, early);
+    birdFlight(1.0, end);
     expect(early.visible).toBe(1);
     expect(end.visible).toBe(0);
   });

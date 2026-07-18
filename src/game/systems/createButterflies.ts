@@ -8,6 +8,7 @@ import {
   SPAWN,
 } from './wildlifeMath';
 import { surfaceAt } from './surfaceAt';
+import { createWingedGeometry, createFlapMaterial, attachFlapPhases } from './wingedCreature';
 
 /**
  * Daytime butterflies: ONE sparse, self-managing InstancedMesh pool that spawns
@@ -39,8 +40,8 @@ const RECHECK_INTERVAL = 0.5;
 const MAX_SPAWNS_PER_RECHECK = 2;
 /** Ring-point candidate attempts per recheck before giving up (avoids an infinite grass hunt). */
 const SPAWN_ATTEMPTS = 6;
-/** Billboard silhouette size (world units). */
-const BUTTERFLY_SIZE = 0.45;
+/** Overall butterfly size (world units). */
+const BUTTERFLY_SIZE = 0.9;
 /** Small hover above the ground so a butterfly floats, never clips the grass. */
 const HOVER = 1.1;
 /** Warm butterfly tint — reads under the daytime scene light (Lambert). */
@@ -67,13 +68,17 @@ export function createButterflies(
     active: false,
   }));
 
-  // Lambert (not Basic) — butterflies are a DAY creature and should read with the
-  // daytime scene light like dust does; PlaneGeometry billboarded to the camera.
+  // Winged body+2-wings geometry with a GPU wing-flap (createFlapMaterial) — real
+  // depth + flapping, not a jiggling billboard. Lambert so it reads under the day
+  // scene light; one InstancedMesh, one draw call. Wings beat on the shared clock.
+  const flap = createFlapMaterial({ flapSpeed: 11, flapAmp: 1.0 });
   const mesh = new THREE.InstancedMesh(
-    new THREE.PlaneGeometry(1, 1),
-    new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }),
+    createWingedGeometry({ wingSpan: 0.32, wingChord: 0.34, bodyLength: 0.4, bodyWidth: 0.05 }),
+    flap.material,
     BUTTERFLY_POOL_SIZE
   );
+  const flapPhases = attachFlapPhases(mesh, BUTTERFLY_POOL_SIZE);
+  const flapAttr = mesh.geometry.getAttribute('aFlapPhase') as THREE.InstancedBufferAttribute;
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
   mesh.castShadow = false;
@@ -92,7 +97,8 @@ export function createButterflies(
   const scratchMatrix = new THREE.Matrix4();
   const scratchPosition = new THREE.Vector3();
   const scratchScale = new THREE.Vector3(BUTTERFLY_SIZE, BUTTERFLY_SIZE, BUTTERFLY_SIZE);
-  const billboardQuat = new THREE.Quaternion();
+  const orientQuat = new THREE.Quaternion();
+  const orientEuler = new THREE.Euler();
   const wanderScratch = { x: 0, z: 0 }; // wildlifeMath out-param, built ONCE
   let recheckTimer = RECHECK_INTERVAL; // force a top-up/cull pass on frame 1
 
@@ -112,6 +118,8 @@ export function createButterflies(
     b.groundY = getGroundHeight(x, z) + HOVER;
     b.seed = Math.random() * TAU; // cosmetic RNG is fine (dust precedent)
     b.active = true;
+    flapPhases[slot] = Math.random() * TAU; // decorrelate the flock's wing-beat
+    flapAttr.needsUpdate = true;
     return true;
   }
 
@@ -164,9 +172,13 @@ export function createButterflies(
         }
       }
 
-      // Per-frame drift — read the billboard quaternion once, then flutter each
-      // live butterfly on the shared wind clock. No per-instance lookAt, no alloc.
-      billboardQuat.copy(camera.quaternion);
+      // Advance the shared GPU wing-beat once per frame (camera unused now — the
+      // creature orients by its own heading, not a flat billboard).
+      void camera;
+      flap.setTime(t);
+
+      // Per-frame drift — flutter each live butterfly on the shared wind clock,
+      // orienting to its slow wander heading with gentle bank. No alloc.
       for (let index = 0; index < BUTTERFLY_POOL_SIZE; index += 1) {
         const b = pool[index];
         if (!b.active) continue;
@@ -176,7 +188,11 @@ export function createButterflies(
           b.groundY + butterflyBob(t, b.seed),
           b.anchorZ + wanderScratch.z
         );
-        scratchMatrix.compose(scratchPosition, billboardQuat, scratchScale);
+        // Slowly turning yaw + a little pitch bob → a living flight path; wings
+        // (horizontal, flapping about the forward spine) read from the 3/4 cam.
+        orientEuler.set(Math.sin(t * 0.9 + b.seed) * 0.25, b.seed + t * 0.35, 0);
+        orientQuat.setFromEuler(orientEuler);
+        scratchMatrix.compose(scratchPosition, orientQuat, scratchScale);
         mesh.setMatrixAt(index, scratchMatrix);
         matrixDirty = true;
       }

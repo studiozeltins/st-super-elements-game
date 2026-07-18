@@ -38,7 +38,7 @@ export const PULSE = { rate: 1.6, floor: 0.15 } as const;
 export const SPAWN = { inner: 8, outer: 22, cull: 30 } as const;
 
 /** Bird flush arc (WILD-02): peak `rise` height, lateral `spread`, `life` seconds. */
-export const BIRD = { rise: 6, spread: 3, life: 1.4 } as const;
+export const BIRD = { climb: 5.5, life: 3.2, fadeStart: 0.9 } as const;
 
 /** Flush debounce (WILD-02): a burst is an EVENT, not a stream — one per cooldown. */
 export const FLUSH_COOLDOWN_SEC = 6;
@@ -83,15 +83,16 @@ export function fireflyPulse(t: number, phaseOffset: number): number {
 }
 
 /**
- * Scripted bird flight over its life [0..1] (WILD-02): a fast ease-out rise
- * (1-(1-t)^2), lateral spread growing linearly, and visibility held at 1 until
- * the last 15% then fading to 0 by t01=1. OUT-PARAM into caller scratch.
+ * Scripted bird flight over its life [0..1] (WILD-02): a startled bird bolts from
+ * the flush point and flies to a DIFFERENT resting spot. `travel` eases the
+ * horizontal 0→1 (fast take-off, gliding arrival); `height` is a takeoff-and-land
+ * arch (0 at both ends, peak mid); `visible` holds at 1 until fadeStart then fades
+ * so the despawn at the destination is soft. OUT-PARAM into caller scratch.
  */
-export function birdArc(t01: number, out: { y: number; spread: number; visible: number }): void {
-  const e = 1 - Math.pow(1 - t01, 2);
-  out.y = BIRD.rise * e;
-  out.spread = BIRD.spread * t01;
-  out.visible = t01 < 0.85 ? 1 : Math.max(0, 1 - (t01 - 0.85) / 0.15);
+export function birdFlight(t01: number, out: { travel: number; height: number; visible: number }): void {
+  out.travel = 1 - Math.pow(1 - t01, 2);
+  out.height = BIRD.climb * Math.sin(Math.PI * t01);
+  out.visible = t01 < BIRD.fadeStart ? 1 : Math.max(0, 1 - (t01 - BIRD.fadeStart) / (1 - BIRD.fadeStart));
 }
 
 /** True when (dx,dz) falls in the [inner, outer] spawn annulus (WILD-01). Squared-distance compare. */

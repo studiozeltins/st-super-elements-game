@@ -74,7 +74,8 @@ describe('createButterflies', () => {
 
     const mesh = findMesh(scene);
     expect(mesh.count).toBe(BUTTERFLY_POOL_SIZE);
-    expect(mesh.geometry).toBeInstanceOf(THREE.PlaneGeometry);
+    expect(mesh.geometry).toBeInstanceOf(THREE.BufferGeometry);
+    expect(mesh.geometry.getAttribute('aWing')).toBeDefined(); // winged geometry, not a flat quad
     expect(mesh.material).toBeInstanceOf(THREE.MeshLambertMaterial);
     expect(mesh.frustumCulled).toBe(false);
     expect(mesh.castShadow).toBe(false);
