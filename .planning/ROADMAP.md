@@ -199,7 +199,24 @@ Plans:
   3. Scorch marks regrow over minutes, and the player leaves a lingering ~2s grass-bend trail
   4. Sprint steps on dirt/path puff small pooled dust sprites
 
-**Plans**: TBD
+**Plans**: 8 plans
+
+Wave 1 *(parallel — no dependencies)*
+
+- [ ] 11-01-PLAN.md — Retune bend (~2s) + scorch/wear (~75s) decay constants + re-pin groundInfluenceMath tests (WEAR-03/04) [Wave 1]
+- [ ] 11-02-PLAN.md — Footpath route graph + footpathFactor() worn-path tier in roads.ts + roads.test.ts (WEAR-01) [Wave 1]
+- [ ] 11-03-PLAN.md — createCrate/createBarrel/createFence voxel prop factories + assets test (WEAR-02) [Wave 1]
+- [ ] 11-04-PLAN.md — createDustPuffs ground-hugging pooled system (hard-capped, zero-alloc) + pool test (WEAR-05) [Wave 1]
+
+Wave 2 *(footpath bake + classifier + prop placement)*
+
+- [ ] 11-05-PLAN.md — Footpath terrain tint + partial grass thinning (baked, off aRoad) (WEAR-01) [Wave 2, depends 11-02]
+- [ ] 11-06-PLAN.md — surfaceAt(x,z) pure classifier + boundary test (WEAR-05) [Wave 2, depends 11-02]
+- [ ] 11-07-PLAN.md — Deterministic plaza prop placement before world freeze (WEAR-02) [Wave 2, depends 11-03]
+
+Wave 3 *(integration + phase gate)*
+
+- [ ] 11-08-PLAN.md — Wire dust + surfaceAt + footstep surface + ?nodust flag into createGame; human perceptual + FPS gate (WEAR-05) [Wave 3, depends 11-04, 11-06]
 
 ### Phase 12: Wildlife
 
