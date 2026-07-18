@@ -5,15 +5,15 @@ milestone_name: Living World
 current_phase: 11
 current_phase_name: lived-in-props-wear
 status: executing
-stopped_at: Completed 11-03-PLAN.md
-last_updated: "2026-07-18T11:52:53.466Z"
+stopped_at: Completed 11-05-PLAN.md
+last_updated: "2026-07-18T12:00:49.385Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 11 execution started
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 33
-  completed_plans: 29
+  completed_plans: 30
   percent: 57
 ---
 
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 11 (lived-in-props-wear) — EXECUTING
-Plan: 4 of 8
+Plan: 5 of 8
 Status: Ready to execute
 Last activity: 2026-07-18 — Phase 11 execution started
 
@@ -94,6 +94,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 11 P02 | 6min | 2 tasks | 2 files |
 | Phase 11 P03 | 12 min | 2 tasks | 6 files |
 | Phase 11 P04 | 4min | 1 tasks | 2 files |
+| Phase 11 P05 | 5min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -154,6 +155,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: [Phase 11] 11-03: createCrate/createBarrel pre-existed in createTownProps.ts as walk-through decor; moved to dedicated files + upgraded to merged-box voxel + collision + lightless spec (CLAUDE.md no-legacy). buildTown market crates/barrels now carry a collision footprint.
 - [Phase ?]: createDustPuffs caches per-puff groundY at spawn so update() stays zero-alloc (no per-frame getGroundHeight)
 - [Phase ?]: Dust is externally player-spawned: spawn(x,z,dirX,dirZ) claims a slot; update(dt) only ages the live pool (unlike self-emitting smoke)
+- [Phase 11]: Footpath tint 0x7d8a54 (green-dominant) baked into terrainColorAt vertex color, lighter/greener than ROAD_DIRT and off the aRoad cart-rut path (11-05)
+- [Phase 11]: Footpath grass thinning is probabilistic (continue with prob footpathFactor, capped 0.6) — trampled not cleared (11-05)
 
 ### Pending Todos
 
@@ -200,7 +203,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-18T11:52:53.448Z
-Stopped at: Completed 11-03-PLAN.md
+Last session: 2026-07-18T12:00:49.364Z
+Stopped at: Completed 11-05-PLAN.md
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: None
