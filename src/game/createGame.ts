@@ -45,6 +45,8 @@ import { createPickupAudio } from './audio/createPickupAudio';
 import { createEffectSystem, type DamageApplier, PROJECTILE_LIFETIME_SECONDS } from './systems/createEffectSystem';
 import { createDebrisSystem } from './systems/createDebrisSystem';
 import { createSmokeColumns } from './systems/createSmokeColumns';
+import { createDustPuffs } from './systems/createDustPuffs';
+import { surfaceAt, type Surface } from './systems/surfaceAt';
 import { createLightPool } from './systems/createLightPool';
 import { createAttackViewClock } from './systems/createAttackViewClock';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
@@ -328,8 +330,8 @@ export function createGame(
   const scene = new THREE.Scene();
   const pixelRenderer = createPixelRenderer(canvas);
   // Perf bisect kill-switches: append ?nograss / ?nobend / ?noshadow / ?nofx
-  // / ?nowind / ?nosmoke / ?nodaynight / ?nomovingsun to the URL to disable one
-  // ambiance system and find a frame-cost culprit.
+  // / ?nowind / ?nosmoke / ?nodust / ?nodaynight / ?nomovingsun to the URL to
+  // disable one ambiance system and find a frame-cost culprit.
   const perfFlags = new URLSearchParams(window.location.search);
   if (perfFlags.has('noshadow')) pixelRenderer.renderer.shadowMap.enabled = false;
   // Ground influence map: everything that moves stamps into it, grass bends out.
@@ -343,6 +345,9 @@ export function createGame(
   // ?nowind zeroes the strength uniform (no recompile), base sway keeps running.
   const windEnabled = !perfFlags.has('nowind');
   const smokeEnabled = !perfFlags.has('nosmoke');
+  // ?nodust skips the dust-pool construction entirely (zero objects, zero draw
+  // calls) — the clean FPS bisect for the phase's only new per-frame emitter (D-14).
+  const dustEnabled = !perfFlags.has('nodust');
   // ?nodaynight freezes the palette at a neutral day key (D-09) — a clean FPS
   // bisection baseline, mirroring the ?nowind/?nosmoke convention.
   const dayNightEnabled = !perfFlags.has('nodaynight');
@@ -415,6 +420,11 @@ export function createGame(
   // (smoke is this phase's only new draw-call source; the clean FPS bisect).
   const smokeColumns = smokeEnabled
     ? createSmokeColumns(scene, wind, (x, z) => world.getGroundHeight(x, z))
+    : undefined;
+  // Ground-hug footstep dust, externally spawned by the moving player on trodden
+  // ground (dirt/path/town, never grass). ?nodust skips construction entirely.
+  const dustPuffs = dustEnabled
+    ? createDustPuffs(scene, (x, z) => world.getGroundHeight(x, z))
     : undefined;
   const damageNumbers = createDamageNumbers(scene);
   // Enemies and goliaths are now server-authoritative: these renderers only draw
@@ -989,6 +999,12 @@ export function createGame(
   let lastStrike: { attackId: string; x: number; z: number; radius: number; atMs: number } | null =
     null;
 
+  // The ground surface under the local player, classified ONCE per frame at the
+  // grounded player step (updateLocalPlayer) and shared with the footstep audio
+  // (updateFootsteps, runs later same frame) — dust spawn + audio never disagree
+  // and surfaceAt is called at most once per frame (D-12).
+  let playerSurface: Surface = 'grass';
+
   function updateLocalPlayer(deltaSeconds: number) {
     const isStunned = performance.now() < stunActiveUntilPerfMs;
     const moveVector = inputSystem.getMoveVector();
@@ -1014,6 +1030,14 @@ export function createGame(
           worldMoveZ,
           0.03
         );
+        // ONE surface classify per frame (post-move position), shared with the
+        // footstep audio below (D-12). Dust puffs kick up only on trodden ground
+        // (dirt/path/town) — never grass (D-11). No sprint state exists: moving +
+        // grounded is the whole gate. Pool is hard-capped + skipped under ?nodust.
+        playerSurface = surfaceAt(playerPosition.x, playerPosition.z);
+        if (playerSurface !== 'grass') {
+          dustPuffs?.spawn(playerPosition.x, playerPosition.z, worldMoveX, worldMoveZ);
+        }
       }
     }
 
@@ -1299,9 +1323,9 @@ export function createGame(
     }
     // Airborne frames feed nothing: the prune-and-reinsert cycle restarts the
     // stride on landing, so a jump's horizontal drift never clicks out steps.
-    // Grounded on the walkable island = grass underfoot → flag a rustle layer
-    // (AMBI-04, D-06). Cheap: reuses isGrounded(), no terrain texture read, no
-    // alloc; the rustle only actually fires when a step does (i.e. when moving).
+    // Grounded → feed the REAL surface classified this frame in updateLocalPlayer
+    // (playerSurface, D-13); the grass-rustle layer fires only when it is 'grass',
+    // so dirt/path/town steps naturally skip it. No extra surfaceAt call here.
     if (isGrounded()) {
       movementAudio.updateUnit(
         'me',
@@ -1310,7 +1334,7 @@ export function createGame(
         playerPosition.z,
         OWN_STEP_GAIN,
         0,
-        'grass'
+        playerSurface
       );
     }
     movementAudio.endFrame();
@@ -1482,6 +1506,9 @@ export function createGame(
     debrisSystem?.update(deltaSeconds);
     // After wind.update above — puffs must read this frame's wind phase.
     smokeColumns?.update(deltaSeconds, playerPosition.x, playerPosition.z);
+    // Ages/settles the already-spawned dust pool (spawning happens in
+    // updateLocalPlayer); no-op cost when the pool is empty.
+    dustPuffs?.update(deltaSeconds);
     // Enemies/goliaths are drawn straight from the server tables and interpolated;
     // the server tick owns their combat and damages players (reflected through
     // syncMyServerRow), so there is no local contact-damage path here anymore.
@@ -1650,6 +1677,7 @@ export function createGame(
       boostOrbit.dispose();
       debrisSystem?.dispose();
       smokeColumns?.dispose();
+      dustPuffs?.dispose();
       lightPool?.dispose();
       gemGeometry.dispose();
       shardGeometry.dispose();
