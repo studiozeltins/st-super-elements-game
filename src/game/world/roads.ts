@@ -1,5 +1,7 @@
 import { ISLANDS } from './terrain';
 import { getBridges } from './bridges';
+import { getCampSites } from './camps';
+import type { CampSite } from './camps';
 
 /**
  * Pixel-art roads baked into the terrain (NOT a separate mesh — a road mask the
@@ -23,7 +25,19 @@ const PLAZA_EXIT_RADIUS = 16;
 /** The outer island the road leads to: ISLANDS[4], the NE (top-right) island. */
 const DESTINATION_ISLAND_INDEX = 4;
 
+/**
+ * Half-width of a worn footpath — narrower than the cart road (people-worn, not
+ * cart-worn) — and the maximum mask value a footpath ever reaches. Unlike a road
+ * (which fully clears the ground to dirt at factor 1), a footpath only PARTIALLY
+ * wears the ground: `footpathFactor` is capped at FOOTPATH_MAX so the tint/grass
+ * thinning it drives stays a hint of use, never a bare track. Discretion values,
+ * tuned in UAT.
+ */
+export const FOOTPATH_HALF_WIDTH = 1.1;
+export const FOOTPATH_MAX = 0.6;
+
 let cachedRoads: RoadPoint[][] | null = null;
+let cachedFootpaths: RoadPoint[][] | null = null;
 
 /**
  * The road polylines that make a continuous dirt path from the CITY out to the
@@ -102,6 +116,104 @@ export function roadFactor(x: number, z: number): number {
     }
   }
   return best;
+}
+
+/**
+ * The footpath polylines — worn desire-lines along the REAL traffic the world
+ * already has, built from the same data-driven anchors as everything else (camps,
+ * bridges, plaza), never magic coordinates. Every segment joins two endpoints on
+ * the SAME island so `distanceToSegment` can never bake a path across the water
+ * gap — the wooden bridge already carries each crossing, and outer islands are
+ * reached plaza → bridge → camp, one same-island segment at a time:
+ *   - City side of each bridge  — plaza edge → the bridge's city landing.
+ *   - Outer side of each bridge — the bridge's outer landing → that island's camp.
+ *   - Plaza origin → each city-island camp.
+ *   - City camp ↔ city camp (the trodden line between neighbouring outskirts camps).
+ * Lazily memoized like `getRoads`; reads camp/bridge geometry inside the function
+ * only (no module-top-level world read, so no import cycle).
+ */
+export function getFootpaths(): RoadPoint[][] {
+  if (cachedFootpaths) return cachedFootpaths;
+  const footpaths: RoadPoint[][] = [];
+
+  const cityIsland = ISLANDS[0];
+  const camps = getCampSites();
+  // City-island camps sit within the city island's radius of its centre; the rest
+  // are the outer-island camps. Data-driven split — no reliance on archetype ids.
+  const isCityCamp = (camp: CampSite): boolean =>
+    Math.hypot(camp.x - cityIsland.centerX, camp.z - cityIsland.centerZ) <= cityIsland.radius;
+  const cityCamps = camps.filter(isCityCamp);
+  const outerCamps = camps.filter(camp => !isCityCamp(camp));
+
+  for (const bridge of getBridges()) {
+    // City side: emerge from the plaza edge, run to the bridge's city landing
+    // (both endpoints on the city island).
+    const bearingLength = Math.hypot(bridge.startX, bridge.startZ) || 1;
+    footpaths.push([
+      { x: (bridge.startX / bearingLength) * PLAZA_EXIT_RADIUS, z: (bridge.startZ / bearingLength) * PLAZA_EXIT_RADIUS },
+      { x: bridge.startX, z: bridge.startZ },
+    ]);
+
+    // Outer side: the bridge's outer landing in to that island's camp. The nearest
+    // camp to the landing is that same island's camp, so both endpoints share it.
+    let nearestOuterCamp: CampSite | null = null;
+    let nearestDistance = Infinity;
+    for (const camp of outerCamps) {
+      const distance = Math.hypot(camp.x - bridge.endX, camp.z - bridge.endZ);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestOuterCamp = camp;
+      }
+    }
+    if (nearestOuterCamp) {
+      footpaths.push([
+        { x: bridge.endX, z: bridge.endZ },
+        { x: nearestOuterCamp.x, z: nearestOuterCamp.z },
+      ]);
+    }
+  }
+
+  // Plaza origin out to each city-island camp (both endpoints on the city island).
+  for (const camp of cityCamps) {
+    footpaths.push([
+      { x: 0, z: 0 },
+      { x: camp.x, z: camp.z },
+    ]);
+  }
+
+  // The trodden line directly between neighbouring city-island camps.
+  for (let i = 0; i < cityCamps.length; i += 1) {
+    for (let j = i + 1; j < cityCamps.length; j += 1) {
+      footpaths.push([
+        { x: cityCamps[i].x, z: cityCamps[i].z },
+        { x: cityCamps[j].x, z: cityCamps[j].z },
+      ]);
+    }
+  }
+
+  cachedFootpaths = footpaths;
+  return footpaths;
+}
+
+/**
+ * Footpath mask at a world point — a narrower, PARTIAL sibling of `roadFactor`.
+ * Same spline machinery (reuses `smoothstep` + `distanceToSegment`, no duplication)
+ * over `getFootpaths()`, but at `FOOTPATH_HALF_WIDTH` and scaled by `FOOTPATH_MAX`
+ * so the result is capped in [0, FOOTPATH_MAX]: a worn hint, never a full clear
+ * like a road. The single source the terrain tint, grass thinning, and surface
+ * classifier all read for "is this trodden here". Deliberately kept off the
+ * `roadAcross` cart-rut path — footpaths have no wheel ruts.
+ */
+export function footpathFactor(x: number, z: number): number {
+  let best = 0;
+  for (const footpath of getFootpaths()) {
+    for (let i = 0; i < footpath.length - 1; i += 1) {
+      const distance = distanceToSegment(x, z, footpath[i].x, footpath[i].z, footpath[i + 1].x, footpath[i + 1].z);
+      const factor = smoothstep(FOOTPATH_HALF_WIDTH + ROAD_BLEND, FOOTPATH_HALF_WIDTH, distance);
+      if (factor > best) best = factor;
+    }
+  }
+  return best * FOOTPATH_MAX;
 }
 
 /**
