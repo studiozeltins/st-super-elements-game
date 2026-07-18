@@ -241,7 +241,7 @@ Plans:
 
 - [x] 12-02-PLAN.md — createButterflies sparse day-gated InstancedMesh pool, spawn/cull over grass, wind-clock wander (WILD-01) [Wave 1]
 - [x] 12-03-PLAN.md — createBirdFlush externally-spawned rising-arc pool + createWildlifeSfx wing one-shot on the sfx bus (WILD-02) [Wave 1]
-- [ ] 12-04-PLAN.md — createFireflies dusk/night unlit-quad swarm, instanceColor pulse, no lights (WILD-03) [Wave 1]
+- [x] 12-04-PLAN.md — createFireflies dusk/night unlit-quad swarm, instanceColor pulse, no lights (WILD-03) [Wave 1]
 
 **Wave 2** *(wiring + phase gate — blocked on Wave 1)*
 
@@ -273,7 +273,7 @@ Plans:
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
 | 11. Lived-in Props & Wear | 8/8 | Complete    | 2026-07-18 |
-| 12. Wildlife | 3/5 | In Progress|  |
+| 12. Wildlife | 4/5 | In Progress|  |
 | 13. Camera Feel | 0/TBD | Not started | - |
 
 ---
