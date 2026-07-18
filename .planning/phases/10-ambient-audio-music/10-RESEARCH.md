@@ -525,22 +525,22 @@ existing `Toggle`/`onToggle*` prop idiom). Sliders live in the existing settings
 **All WebAudio API facts (loop, decodeAudioData, DynamicsCompressor, setTargetAtTime) are stable,
 long-standing browser APIs [CITED: MDN] and already in use in this codebase — not assumptions.**
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Browser matrix for `.ogg` (A3)**
    - What we know: game is LAN/desktop-first (CLAUDE.md); Chromium/Firefox decode `.ogg` fine.
    - What's unclear: whether Safari/iOS is a supported target.
-   - Recommendation: default `.ogg`-only (D-14); if Safari matters, add per-asset `.m4a` fallback later. Not a blocker.
+   - **RESOLVED:** default `.ogg`-only (D-14); Safari not a current target. If it becomes one, add per-asset `.m4a` fallback later. Not a blocker — plans use `.ogg`.
 
 2. **Combat music trigger scope (A4)**
    - What we know: the three damage callbacks distinguish `isMine`.
    - What's unclear: should a nearby *other players'* fight duck my ambience / start combat music?
-   - Recommendation: MY combat only for the music crossfade; revisit at playtest. Cheap to change (one boolean in the stamp condition).
+   - **RESOLVED:** MY combat only for the duck + music crossfade (one boolean in the stamp condition; adopted in 10-03 Task 3). Revisit at playtest if desired — cheap to change.
 
 3. **`?nowind` audio behavior**
    - What we know: `getGustEnvelope()` ignores `strengthUniform`.
    - What's unclear: should the bed go calm under `?nowind`?
-   - Recommendation: multiply swell by `wind.strengthUniform.value` if calm-under-nowind is desired; otherwise leave. Minor.
+   - **RESOLVED:** leave the bed swell driven by the gust envelope as-is under `?nowind` (minor; no calm-coupling this phase). Multiply swell by `wind.strengthUniform.value` later only if calm-under-nowind is wanted.
 
 ## Environment Availability
 

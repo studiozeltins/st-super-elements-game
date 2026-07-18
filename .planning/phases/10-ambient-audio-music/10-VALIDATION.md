@@ -1,8 +1,8 @@
 ---
 phase: 10
 slug: ambient-audio-music
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-18
 ---
@@ -38,14 +38,14 @@ created: 2026-07-18
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 10-01-01 | 01 | 0 | AMBI-06 | — | N/A | unit | `npx vitest run src/game/audio/__tests__/combatState.test.ts` | ❌ W0 | ⬜ pending |
-| 10-01-02 | 01 | 0 | AMBI-03/05/07 | — | N/A | unit | `npx vitest run src/game/audio/__tests__/ambienceMath.test.ts` | ❌ W0 | ⬜ pending |
-| 10-02-01 | 02 | 1 | AMBI-01 | — | dense fights never clip (compressor on master) | unit+manual | `npx vitest run src/game/audio` | ❌ W0 | ⬜ pending |
-| 10-03-01 | 03 | 2 | AMBI-02/04 | — | N/A | manual | golem-fight playtest | — | ⬜ pending |
-| 10-04-01 | 04 | 2 | AMBI-03/05/07 | — | N/A | manual | day/night playtest | — | ⬜ pending |
-| 10-05-01 | 05 | 3 | AMBI-06/MUSIC-01/02/03 | — | N/A | manual | combat crossfade + duck playtest | — | ⬜ pending |
+| 10-01 | 01 | 0 | AMBI-02/03/05/06/07, MUSIC-02 | — | N/A (pure fns) | unit | `npx vitest run src/game/audio/__tests__/combatState.test.ts src/game/audio/__tests__/ambienceMath.test.ts` | ❌ W0 | ⬜ pending |
+| 10-02 | 02 | 1 | AMBI-01, MUSIC-03 (backend setters) | localStorage clamp | dense fights never clip (compressor on master); volume×duck compose on series nodes | unit+manual | `npx vitest run src/game/audio` | ❌ W0 | ⬜ pending |
+| 10-03 | 03 | 2 | AMBI-02/03/05/06/07 | — | N/A | unit+manual | `npx vitest run src/game/audio` + golem/day-night playtest | ❌ W0 | ⬜ pending |
+| 10-04 | 04 | 3 | AMBI-04 | — | N/A | unit+manual | `npx vitest run src/game/audio` + sprint-rustle playtest | ❌ W0 | ⬜ pending |
+| 10-05 | 05 | 3 | MUSIC-03 (settings UI) | localStorage clamp | corrupt persisted value falls back to default (music 0.7 / sfx 1.0) | manual | slider persist + reload + independent-mute playtest | — | ⬜ pending |
+| 10-06 | 06 | 4 | AMBI-06, MUSIC-01/02 | — | N/A | unit+manual | `npx vitest run src/game/audio` + combat crossfade/duck + FPS gate (`scripts/fps_playtest.py`) | ❌ W0 | ⬜ pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky · exact task IDs finalized by the planner.*
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky · one row per plan; the planner's per-task IDs live in each PLAN.md.*
 
 ---
 
@@ -73,11 +73,11 @@ created: 2026-07-18
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 20s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (combatState + ambienceMath twins in 10-01)
+- [x] No watch-mode flags
+- [x] Feedback latency < 20s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-07-18
