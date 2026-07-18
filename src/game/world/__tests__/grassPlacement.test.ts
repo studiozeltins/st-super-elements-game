@@ -29,11 +29,17 @@ describe('generateGrassBlades', () => {
     }
   });
 
-  it('clusters blades into lush meadow patches only', () => {
-    for (const blade of allBlades) {
-      // Tuft spread can drift slightly off the anchor; mask varies slowly.
-      expect(meadowLushness(blade.x, blade.z)).toBeGreaterThan(0.3);
-    }
+  it('clusters most blades into lush meadow patches, keeping only a sparse base elsewhere', () => {
+    // Acceptance ramps from BASE_ACCEPT (a deliberate sparse base on bare hills
+    // and outer islands — the grass-on-hills change) up to ~1 in the lushest
+    // patches, so the invariant is CLUSTERING, not "meadow only": the vast
+    // majority of blades land in lush ground and the mean lushness sits well
+    // above a uniform sprinkle. A scatter-everywhere regression sinks both.
+    const lush = allBlades.map(blade => meadowLushness(blade.x, blade.z));
+    const mean = lush.reduce((sum, value) => sum + value, 0) / lush.length;
+    const fractionLush = lush.filter(value => value > 0.3).length / lush.length;
+    expect(mean).toBeGreaterThan(0.5);
+    expect(fractionLush).toBeGreaterThan(0.85);
   });
 
   it('budgets blades roughly by island area', () => {
