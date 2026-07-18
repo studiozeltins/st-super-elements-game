@@ -74,16 +74,22 @@ export function createHouse(
   const leftX = -width / 2 - 0.02;
 
   // Planked, iron-braced door on the front, ground floor.
+  const doorX = random() < 0.5 ? -0.7 : 0.7;
   const door = createDoor(random, { width: 1.0, height: 1.9, woodColor: 0x6b4a2f });
-  door.position.set(random() < 0.5 ? -0.7 : 0.7, 0.5, frontZ);
+  door.position.set(doorX, 0.5, frontZ);
   house.add(door);
 
   // Windows on every story and face, each face independently randomized so the
   // house is detailed all round — never a blank monolith wall.
   for (let story = 0; story < stories; story += 1) {
     const wy = 0.5 + 1.9 + story * STORY_HEIGHT;
-    // Front: 1–2 windows flanking the door line.
-    for (const wx of [-1.1, 1.1]) if (story > 0 || random() < 0.7) addWindow(house, wx, wy, frontZ, 'z');
+    // Front: windows flanking the door line. On the ground floor, skip the window
+    // on the door's own side — the door + its frame reaches ~1.36 and would clip
+    // the flanking window at 1.1. Upper stories have no door, so both windows go.
+    for (const wx of [-1.1, 1.1]) {
+      if (story === 0 && Math.sign(wx) === Math.sign(doorX)) continue;
+      if (story > 0 || random() < 0.7) addWindow(house, wx, wy, frontZ, 'z');
+    }
     if (random() < 0.8) addWindow(house, random() < 0.5 ? -1.0 : 1.0, wy, backZ, 'z');
     if (random() < 0.7) addWindow(house, rightX, wy, (random() - 0.5) * depth * 0.6, 'x');
     if (random() < 0.7) addWindow(house, leftX, wy, (random() - 0.5) * depth * 0.6, 'x');
