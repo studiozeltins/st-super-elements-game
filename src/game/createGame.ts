@@ -31,6 +31,7 @@ import { createCharacterModel, createNameSprite, type CharacterModel } from './e
 import { createBoostOrbit } from './entities/createBoostOrbit';
 import { createInputSystem } from './systems/createInputSystem';
 import { createAudioSystem } from './audio/createAudioSystem';
+import { createAudioBuses, type AudioBuses } from './audio/createAudioBuses';
 import { createCombatAudio } from './audio/createCombatAudio';
 import { createMovementAudio, type FootstepKind } from './audio/createMovementAudio';
 import { createWeaponAudio } from './audio/createWeaponAudio';
@@ -143,6 +144,14 @@ export interface Game {
   dispose(): void;
   /** Switches between the chunky-pixel render path and native resolution. */
   setPixelFilter(enabled: boolean): void;
+  /** Sets the music-bus volume [0,1] (clamped in the bus module). MUSIC-03 backend, D-13. */
+  setMusicVolume(volume: number): void;
+  /** Sets the SFX-bus volume [0,1] (clamped in the bus module). MUSIC-03 backend, D-13. */
+  setSfxVolume(volume: number): void;
+  /** Mutes/unmutes music independently of its volume (MUSIC-03, D-13). */
+  setMusicMuted(muted: boolean): void;
+  /** Mutes/unmutes SFX independently of its volume (MUSIC-03, D-13). */
+  setSfxMuted(muted: boolean): void;
   setActiveCharacter(characterId: string): void;
   /** Active character's constellation level, scaling its damage. */
   setActiveConstellation(constellation: number): void;
@@ -416,15 +425,23 @@ export function createGame(
   const telegraphSystem = createTelegraphSystem(scene, (x, z) => world.getGroundHeight(x, z));
   const inputSystem = createInputSystem(canvas);
   // Hand-rolled WebAudio slam SFX (D4-15) — zero assets, zero dependencies.
-  const audioSystem = createAudioSystem();
+  // Late-binding resolves the createAudioSystem ↔ createAudioBuses circularity
+  // (AMBI-01, D-01): the system must exist first (it yields getContext, which the
+  // buses need), yet its own attack plays route to the sfx bus that only exists
+  // once the buses are built. The `() => buses.sfx()` closure defers that read
+  // until a gesture-unlocked play — long after `buses` is assigned below.
+  let buses: AudioBuses;
+  const audioSystem = createAudioSystem(() => buses.sfx());
+  // THE routing owner: master → compressor → destination + sfx/music/ambient buses.
+  buses = createAudioBuses(audioSystem.getContext);
   // Combat feedback SFX (hits/crits/hurt/stun/heal) on the same unlocked context.
-  const combatAudio = createCombatAudio(audioSystem.getContext);
+  const combatAudio = createCombatAudio(audioSystem.getContext, buses.sfx);
   // Per-weapon swing/shot flavors + the goliath windup riser.
-  const weaponAudio = createWeaponAudio(audioSystem.getContext);
+  const weaponAudio = createWeaponAudio(audioSystem.getContext, buses.sfx);
   // Footstep ambience for every visible walker (distance-driven stride cadence).
-  const movementAudio = createMovementAudio(audioSystem.getContext);
+  const movementAudio = createMovementAudio(audioSystem.getContext, buses.sfx);
   // Pickup chimes (gem streak ladder, shard gain/loss) + the death knell.
-  const pickupAudio = createPickupAudio(audioSystem.getContext);
+  const pickupAudio = createPickupAudio(audioSystem.getContext, buses.sfx);
   // Same linear falloff shape the strike juice uses — a far fight is a faint
   // tick, my own hit is full volume.
   function hitAudioGain(x: number, z: number): number {
@@ -1564,6 +1581,20 @@ export function createGame(
     },
     setPixelFilter(enabled) {
       pixelRenderer.setPixelated(enabled);
+    },
+    // MUSIC-03 backend: App drives these imperatively (never React-derived, CLAUDE.md);
+    // the clamp/mute logic lives in the bus module (D-13).
+    setMusicVolume(volume) {
+      buses.setMusicGain(volume);
+    },
+    setSfxVolume(volume) {
+      buses.setSfxGain(volume);
+    },
+    setMusicMuted(muted) {
+      buses.setMusicMuted(muted);
+    },
+    setSfxMuted(muted) {
+      buses.setSfxMuted(muted);
     },
     setPartyAllies(identityHexes) {
       partyAllyHexes = new Set(identityHexes);
