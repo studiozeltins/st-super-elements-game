@@ -1610,6 +1610,7 @@ export function createGame(
       ambience.dispose();
       music.dispose();
       sampleCache.dispose();
+      buses.dispose(); // disconnect + null the routing graph before closing the context
       audioSystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
