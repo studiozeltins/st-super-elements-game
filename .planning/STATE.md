@@ -4,17 +4,17 @@ milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 10
 current_phase_name: ambient-audio-music
-status: executing
+status: verifying
 stopped_at: Completed 10-05-PLAN.md
-last_updated: "2026-07-18T02:21:08.796Z"
+last_updated: "2026-07-18T02:29:57.580Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 7
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 25
-  completed_plans: 24
-  percent: 43
+  completed_plans: 25
+  percent: 57
 ---
 
 # Project State
@@ -32,7 +32,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 
 Phase: 10 (ambient-audio-music) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-18 — Phase 10 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -89,6 +89,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 10 P03 | 12min | 4 tasks | 7 files |
 | Phase 10 P05 | ~20 min | 2 tasks | 3 files |
 | Phase 10 P04 | 12 min | 1 tasks | 2 files |
+| Phase 10 P06 | 15 min | 4 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -142,6 +143,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 10]: 10-05: audio settings UI (SKAŅA) — native range sliders + affirmative mute Toggles, App state to persist to imperative Game bus setters, readVolume V5 clamp (music 0.7/sfx 1.0 defaults)
 - [Phase ?]: Grass rustle (AMBI-04): procedural bandpass noise wash (2.6kHz, peak 0.05 under the 0.12 step tap) layered on the player footstep via updateUnit surface?:'grass', routed through getSfxBus, sharing underSpamBudget
 - [Phase ?]: onGrass derived cheaply from isGrounded() (walkable island = grass) — no GPU texture read, no per-frame alloc; road-exclusion deferred per client-perf rules
+- [Phase ?]: Music loudness on the music bus HEAD (0.7); crossfade gains stay pure equal-power cos/sin so perceived loudness is constant through the region<->combat transition
+- [Phase ?]: Music crossfade re-ramps only on a combat-state flip; steady-state setCombat is a cheap ensure/build check — zero per-frame AudioParam churn
 
 ### Pending Todos
 
@@ -188,7 +191,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-18T02:20:39.679Z
+Last session: 2026-07-18T02:29:31.821Z
 Stopped at: Completed 10-05-PLAN.md
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/10-ambient-audio-music/10-UI-SPEC.md

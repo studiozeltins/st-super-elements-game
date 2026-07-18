@@ -185,7 +185,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 10-06-PLAN.md — createMusic region+combat equal-power crossfade + bed/music duck on the combat signal + music-asset + final FPS/playtest checkpoints (AMBI-06/MUSIC-01/02) [Wave 4]
+- [x] 10-06-PLAN.md — createMusic region+combat equal-power crossfade + bed/music duck on the combat signal + music-asset + final FPS/playtest checkpoints (AMBI-06/MUSIC-01/02) [Wave 4]
 
 ### Phase 11: Lived-in Props & Wear
 
@@ -239,7 +239,7 @@ Plans:
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
-| 10. Ambient Audio & Music | 5/6 | In Progress|  |
+| 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |

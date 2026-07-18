@@ -88,7 +88,7 @@ zero server publish.
 
 ### Music (MUSIC)
 
-- [ ] **MUSIC-01**: Player hears a region exploration music loop (CC0/properly-licensed
+- [x] **MUSIC-01**: Player hears a region exploration music loop (CC0/properly-licensed
   track, seamless loop) on the music bus at ambient-friendly volume
 
 - [x] **MUSIC-02**: Combat music crossfades in when combat starts and back out when combat
@@ -202,7 +202,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AMBI-05 | Phase 10 | Complete |
 | AMBI-06 | Phase 10 | Complete |
 | AMBI-07 | Phase 10 | Complete |
-| MUSIC-01 | Phase 10 | Pending |
+| MUSIC-01 | Phase 10 | Complete |
 | MUSIC-02 | Phase 10 | Complete |
 | MUSIC-03 | Phase 10 | Complete |
 | WEAR-01 | Phase 11 | Pending |
