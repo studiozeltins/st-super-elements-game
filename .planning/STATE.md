@@ -6,14 +6,14 @@ current_phase: 12
 current_phase_name: wildlife
 status: executing
 stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-07-18T19:56:14.441Z"
+last_updated: "2026-07-18T20:03:06.616Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 12 execution started
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 38
-  completed_plans: 35
+  completed_plans: 36
   percent: 71
 ---
 
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 12 (wildlife) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-07-18 — Phase 12 execution started
 
@@ -101,6 +101,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 11 P08 | 3min | 2 tasks | 2 files |
 | Phase 12 P01 | 6min | 2 tasks | 2 files |
 | Phase 12 P02 | 4min | 1 tasks | 2 files |
+| Phase 12 P03 | 3min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -171,6 +172,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 11]: 11-08: ?nodust skips dust-pool construction entirely (zero objects, clean FPS bisect); createGame stays wire-only
 - [Phase ?]: wildlifeMath twin: isDayTime is the strict inverse of the lit firefly gate (fireflyLevel<0.01), reusing the one shipped day/night channel
 - [Phase 12]: 12-02 butterflies: self-managing pooled InstancedMesh; night force-empties the pool (hard despawn), gentle bounded top-up over grass, all motion delegated to wildlifeMath
+- [Phase ?]: [Phase 12] 12-03 bird flush: externally-spawned pooled InstancedMesh (createDustPuffs spine); spawn(x,z) bursts 2-4 birds, update() ages wildlifeMath.birdArc + recycles at t01>=1; fade = instance shrink not alpha; BIRD_POOL_SIZE=12
+- [Phase ?]: [Phase 12] 12-03 wing sfx: createWildlifeSfx procedural one-shot (3 staggered bandpass-noise wingbeats) on sfx bus, gesture-guarded + .onended cleanup; debounce stays at the 12-05 grass-stamp call site (no GPU readback)
 
 ### Pending Todos
 
@@ -217,7 +220,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-18T19:56:14.422Z
+Last session: 2026-07-18T20:02:37.597Z
 Stopped at: Completed 12-02-PLAN.md
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: None
