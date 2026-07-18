@@ -99,15 +99,15 @@ zero server publish.
 
 ### Wildlife (WILD)
 
-- [ ] **WILD-01**: Player sees butterflies wandering over grass patches by day — instanced
+- [x] **WILD-01**: Player sees butterflies wandering over grass patches by day — instanced
   quads, summed-sine/noise wander, sparse population (encounter = event, not wallpaper),
   spawn/despawn near player
 
-- [ ] **WILD-02**: Birds flush — sprinting through grass makes 2–4 birds burst up on a
+- [x] **WILD-02**: Birds flush — sprinting through grass makes 2–4 birds burst up on a
   scripted rising arc with a wing one-shot, then despawn (hooked at the CPU groundInfluence
   stamp site, never reading the GPU texture)
 
-- [ ] **WILD-03**: Player sees fireflies at dusk/night — emissive instanced quads with
+- [x] **WILD-03**: Player sees fireflies at dusk/night — emissive instanced quads with
   randomized glow pulse phase; NO pooled runtime lights (lightPool stays combat-owned)
 
 ### Lived-in Wear (WEAR)
@@ -210,9 +210,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WEAR-03 | Phase 11 | Complete |
 | WEAR-04 | Phase 11 | Complete |
 | WEAR-05 | Phase 11 | Complete |
-| WILD-01 | Phase 12 | Pending |
-| WILD-02 | Phase 12 | Pending |
-| WILD-03 | Phase 12 | Pending |
+| WILD-01 | Phase 12 | Complete |
+| WILD-02 | Phase 12 | Complete |
+| WILD-03 | Phase 12 | Complete |
 | CAM-01 | Phase 13 | Pending |
 | CAM-02 | Phase 13 | Pending |
 | CAM-03 | Phase 13 | Pending |

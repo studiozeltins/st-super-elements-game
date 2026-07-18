@@ -235,7 +235,7 @@ Wave 3 *(integration + phase gate)*
 Plans:
 **Wave 0**
 
-- [ ] 12-01-PLAN.md — wildlifeMath pure THREE-free twin + vitest (wander/pulse/arc/day-dusk gate/spawn-ring/flush debounce), test-first (WILD-01/02/03) [Wave 0]
+- [x] 12-01-PLAN.md — wildlifeMath pure THREE-free twin + vitest (wander/pulse/arc/day-dusk gate/spawn-ring/flush debounce), test-first (WILD-01/02/03) [Wave 0]
 
 **Wave 1** *(parallel, disjoint files — blocked on Wave 0)*
 
@@ -273,7 +273,7 @@ Plans:
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
 | 11. Lived-in Props & Wear | 8/8 | Complete    | 2026-07-18 |
-| 12. Wildlife | 0/5 | Not started | - |
+| 12. Wildlife | 1/5 | In Progress|  |
 | 13. Camera Feel | 0/TBD | Not started | - |
 
 ---

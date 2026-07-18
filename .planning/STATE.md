@@ -3,17 +3,17 @@ gsd_state_version: 1.0
 milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 12
-current_phase_name: Wildlife
+current_phase_name: wildlife
 status: executing
 stopped_at: Completed 11-05-PLAN.md
-last_updated: "2026-07-18T19:06:05.645Z"
+last_updated: "2026-07-18T19:48:52.742Z"
 last_activity: 2026-07-18
-last_activity_desc: Phase 11 complete, transitioned to Phase 12
+last_activity_desc: Phase 12 execution started
 progress:
   total_phases: 7
   completed_phases: 5
-  total_plans: 33
-  completed_plans: 33
+  total_plans: 38
+  completed_plans: 34
   percent: 71
 ---
 
@@ -26,14 +26,14 @@ See: .planning/PROJECT.md (updated 2026-07-13)
 **Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
 C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
 floor). This milestone makes the world BETWEEN fights worth living in.
-**Current focus:** Phase 11 — lived-in-props-wear
+**Current focus:** Phase 12 — wildlife
 
 ## Current Position
 
-Phase: 12 — Wildlife
-Plan: Not started
+Phase: 12 (wildlife) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-07-18 — Phase 11 complete, transitioned to Phase 12
+Last activity: 2026-07-18 — Phase 12 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -99,6 +99,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 11 P06 | 4min | 1 tasks | 2 files |
 | Phase 11 P07 | ~8 min | 1 tasks | 1 files |
 | Phase 11 P08 | 3min | 2 tasks | 2 files |
+| Phase 12 P01 | 6min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -167,6 +168,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase 11]: 11-08: FootstepSurface re-exported from surfaceAt.Surface (one tag set for dust+audio, no-legacy)
 - [Phase 11]: 11-08: surfaceAt classified ONCE/frame at the grounded player step, shared via playerSurface closure var to the footstep audio (no second call); dust gate = moving && grounded && surface!=='grass' (no sprint state)
 - [Phase 11]: 11-08: ?nodust skips dust-pool construction entirely (zero objects, clean FPS bisect); createGame stays wire-only
+- [Phase ?]: wildlifeMath twin: isDayTime is the strict inverse of the lit firefly gate (fireflyLevel<0.01), reusing the one shipped day/night channel
 
 ### Pending Todos
 
@@ -213,7 +215,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-18T12:18:26.905Z
+Last session: 2026-07-18T19:48:22.366Z
 Stopped at: Completed 11-05-PLAN.md
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: None
