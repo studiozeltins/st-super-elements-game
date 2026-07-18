@@ -535,16 +535,16 @@ Run: `pnpm exec vitest run src/game/systems/__tests__/groundInfluenceMath.test.t
 
 **No assumptions carry compliance/security/retention/performance-contract risk.** All are cosmetic tuning values pinned by perceptual UAT, plus two behavior-pinned constants (A-log excludes those — they are VERIFIED by arithmetic + tests).
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Camp↔camp pairing across islands**
+1. **Camp↔camp pairing across islands** — RESOLVED
    - What we know: outer islands have exactly 1 camp each; camps on different islands are separated by water (crossed by bridges).
    - What's unclear: whether "camp↔camp" should route outer-island camps to each other (via the bridge/plaza, effectively plaza↔camp segments) or only same-island camp pairs get a direct footpath.
-   - Recommendation: same-island direct footpaths only (city island's 2 camps to each other + to plaza); outer camps reached via plaza→bridge→camp segments. No path drawn across water. Confirm in discuss/planning.
+   - RESOLVED: same-island direct footpaths only (city island's 2 camps to each other + to plaza); outer camps reached via plaza→bridge→camp segments. No path drawn across water. Adopted verbatim in Plan 11-02.
 
-2. **Barrel inclusion (D — Claude's discretion)**
+2. **Barrel inclusion (D — Claude's discretion)** — RESOLVED
    - What we know: crate + fence may suffice for the lived-in read.
-   - Recommendation: ship all three (barrel is a trivial variant of crate); drop barrel only if plan LOC budget is tight.
+   - RESOLVED: ship all three (barrel is a trivial variant of crate). Adopted in Plan 11-03.
 
 ## Environment Availability
 

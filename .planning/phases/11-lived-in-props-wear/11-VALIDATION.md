@@ -1,9 +1,9 @@
 ---
 phase: 11
 slug: lived-in-props-wear
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-07-18
 ---
 
@@ -81,4 +81,4 @@ created: 2026-07-18
 - [ ] Feedback latency < 40s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-07-18 (plan-checker verified: each requirement's test created test-first within its own plan; no unresolved automated:MISSING references)
