@@ -548,7 +548,18 @@ export function createMondstadtWorld(
       group.add(object);
       obstacles.push({ x: bx, y: getTerrainHeight(bx, bz), z: bz, radius });
     },
-    isClear: (cx, cz) => roadFactor(cx, cz) < 0.25,
+    // Clear = off the road AND not overlapping any already-placed building/prop.
+    // The obstacle check keeps scattered furniture (parasols, stalls, benches)
+    // from nesting into each other or into a house — scatter places one at a
+    // time, so each new prop sees the ones before it. The +1.3 margin budgets the
+    // incoming prop's own footprint (widest is the market stall / parasol ~1.2).
+    isClear: (cx, cz) => {
+      if (roadFactor(cx, cz) >= 0.25) return false;
+      for (const o of obstacles) {
+        if (Math.hypot(o.x - cx, o.z - cz) < o.radius + 1.3) return false;
+      }
+      return true;
+    },
   });
 
   // Windmill landmark, pushed further onto the open grassy western edge so its

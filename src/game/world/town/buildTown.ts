@@ -115,12 +115,16 @@ function populate(ctx: TownBuildContext, d: District): void {
       break;
     }
     case 'market': {
+      // Stalls/crates/barrels each self-declare their collision footprint
+      // (asset.obstacles) — passing collisionRadius here would double-register it.
       scatter(ctx, d, 3, createMarketStall, 2.5);
       scatter(ctx, d, 4, createCrate, 1.5);
       scatter(ctx, d, 3, createBarrel, 1.5);
       break;
     }
     case 'garden': {
+      // Canopy trees take an explicit radius (no self-footprint); bushes/flowers
+      // stay walk-through decor; benches/planters self-declare their footprint.
       scatter(ctx, d, 3, createCanopyTree, 2.5, 1.0);
       scatter(ctx, d, 6, createBush, 1.5);
       scatter(ctx, d, 10, createFlower, 1.0);

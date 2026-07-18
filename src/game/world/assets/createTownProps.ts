@@ -17,14 +17,17 @@ const WOOD_DARK = 0x3a2a1a;
 const PRODUCE = [0xd8623a, 0xe0a53a, 0x6ea24a, 0xc23a4a];
 const AWNING = [0xcf4b3a, 0xdcc9a8];
 
-/** A market stall: four posts, a plank table with produce, and a striped awning. */
+/** A market stall: four posts, a plank table with produce, and a striped awning.
+ *  Posts + awning ride well ABOVE player head height (~2.1) so a character standing
+ *  at the stall never pokes through the awning, and the whole stall is a solid
+ *  obstacle so players path around it rather than through the goods. */
 export function createMarketStall(random: SeededRandom): WorldAsset {
   const group = new THREE.Group();
   const postMat = lambert(WOOD_DARK);
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.9, 0.12), postMat);
-      post.position.set(sx * 0.95, 0.95, sz * 0.6);
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.6, 0.12), postMat);
+      post.position.set(sx * 0.95, 1.3, sz * 0.6);
       group.add(post);
     }
   }
@@ -39,20 +42,22 @@ export function createMarketStall(random: SeededRandom): WorldAsset {
     item.position.set(randomBetween(random, -0.85, 0.85), 1.02 + s / 2, randomBetween(random, -0.45, 0.45));
     group.add(item);
   }
-  // Two-tone striped awning, tilted forward over the table.
+  // Two-tone striped awning, tilted forward over the table — raised clear of the
+  // player so no character silhouette shines through it.
   const stripeWidth = 2.2 / 5;
   for (let i = 0; i < 5; i += 1) {
     const stripe = new THREE.Mesh(
       new THREE.BoxGeometry(stripeWidth, 0.08, 1.5),
       lambert(AWNING[i % 2])
     );
-    stripe.position.set(-1.1 + stripeWidth * (i + 0.5), 1.95, 0.15);
+    stripe.position.set(-1.1 + stripeWidth * (i + 0.5), 2.7, 0.15);
     group.add(stripe);
   }
   const awning = group.children.slice(-5);
   for (const s of awning) s.rotation.x = -0.25;
   group.rotation.y = random() * Math.PI * 2;
-  return { group };
+  // Centered footprint (rotation-safe — placeAsset does not rotate obstacles).
+  return { group, obstacles: [{ x: 0, z: 0, radius: 1.2, height: 2.7 }] };
 }
 
 /** A wooden handcart: a bed on two spoked-looking wheels with a raised handle. */
@@ -81,7 +86,7 @@ export function createCart(random: SeededRandom): WorldAsset {
   handle.rotation.x = 0.5;
   group.add(handle);
   group.rotation.y = random() * Math.PI * 2;
-  return { group };
+  return { group, obstacles: [{ x: 0, z: 0, radius: 1.0, height: 0.9 }] };
 }
 
 /** A large cozy park bench — wide wood slats on a dark iron frame with armrests,
@@ -126,7 +131,9 @@ export function createBench(random: SeededRandom): WorldAsset {
     group.add(post);
   }
   group.rotation.y = random() * Math.PI * 2;
-  return { group };
+  // Centered footprint covering the seat mass (rotation-safe); the wide ends read
+  // as sit-on-able edges rather than hard walls.
+  return { group, obstacles: [{ x: 0, z: 0, radius: 1.4, height: 1.3 }] };
 }
 
 /** A round cafe table with a two-tone parasol above it. */
@@ -153,7 +160,10 @@ export function createCafeTable(random: SeededRandom): WorldAsset {
   canopy.position.y = 3.2;
   group.add(canopy);
   group.rotation.y = random() * Math.PI * 2;
-  return { group };
+  // Solid footprint covering the table + its two stools (radius reaches the seats
+  // at 0.8); the parasol rides at y≈3.2, well above the player, so it stays purely
+  // visual. Centered => rotation-safe.
+  return { group, obstacles: [{ x: 0, z: 0, radius: 1.1, height: 0.8 }] };
 }
 
 const TUFT_GREENS = [0x4a7a30, 0x568a38, 0x3f6a28];
@@ -198,5 +208,5 @@ export function createPlanter(random: SeededRandom): WorldAsset {
     group.add(leaf);
   }
   group.rotation.y = random() * Math.PI * 2;
-  return { group };
+  return { group, obstacles: [{ x: 0, z: 0, radius: 0.6, height: 0.75 }] };
 }

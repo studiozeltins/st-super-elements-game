@@ -1,8 +1,28 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { SeededRandom } from './types';
 
 export function lambert(color: number): THREE.MeshLambertMaterial {
   return new THREE.MeshLambertMaterial({ color });
+}
+
+/** A box geometry pre-translated to (x,y,z) — for merging same-material parts. */
+export function box(
+  w: number,
+  h: number,
+  d: number,
+  x: number,
+  y: number,
+  z: number
+): THREE.BufferGeometry {
+  return new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+}
+
+/** Merge same-material box parts into one mesh (one draw call). */
+export function mergedMesh(geos: THREE.BufferGeometry[], material: THREE.Material): THREE.Mesh {
+  const merged = mergeGeometries(geos, false);
+  for (const g of geos) g.dispose();
+  return new THREE.Mesh(merged, material);
 }
 
 /**

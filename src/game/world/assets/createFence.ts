@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { AssetObstacle, SeededRandom, WorldAsset } from './types';
-import { edgeLit, randomBetween, randomIntBetween } from './assetHelpers';
+import { box, edgeLit, mergedMesh, randomBetween, randomIntBetween } from './assetHelpers';
 
 /**
  * Voxel fence RUN — the WHOLE run (N posts + two horizontal rails between them)
@@ -14,18 +13,6 @@ import { edgeLit, randomBetween, randomIntBetween } from './assetHelpers';
  */
 
 const FENCE_WOOD = 0x6d4c2c; // warm weathered fence wood
-
-/** A box geometry pre-translated to (x,y,z) — for merging same-material parts. */
-function box(w: number, h: number, d: number, x: number, y: number, z: number): THREE.BufferGeometry {
-  return new THREE.BoxGeometry(w, h, d).translate(x, y, z);
-}
-
-/** Merge same-material box parts into one mesh (one draw call). */
-function mergedMesh(geos: THREE.BufferGeometry[], material: THREE.Material): THREE.Mesh {
-  const merged = mergeGeometries(geos, false);
-  for (const g of geos) g.dispose();
-  return new THREE.Mesh(merged, material);
-}
 
 export function createFence(random: SeededRandom): WorldAsset {
   const postCount = randomIntBetween(random, 3, 5);
