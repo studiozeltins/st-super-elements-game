@@ -61,3 +61,105 @@
   letter-spacing: 0.02em;
   color: var(--muted);
 }
+
+/* ============================================================
+   AUDIO SLIDERS — the SKAŅA volume rows in the settings modal.
+   Styled native <input type="range"> (smallest surface, native
+   keyboard). Token-only colours; theme-agnostic base tokens like
+   the select above (renders in the same portal). `--fill` (an inline
+   percent from the component) drives the webkit filled-track gradient;
+   Firefox uses its native ::-moz-range-progress for the same fill.
+   ============================================================ */
+
+/* Live % readout — display-font numerals in accent, mirrors the select. */
+.settings__value {
+  min-width: 42px;
+  text-align: right;
+  font: 700 12px var(--font-display);
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.settings__slider {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 1;
+  min-width: 120px;
+  height: 22px; /* row target — same rhythm as the toggle switch */
+  background: transparent;
+  cursor: pointer;
+}
+
+/* Muted bus: dim the slider as a visual cue but keep it keyboard-operable
+   (mute is independent of volume, D-13 — dragging does NOT auto-unmute). */
+.settings__slider--muted {
+  opacity: 0.55;
+}
+
+/* --- Track (webkit): accent fill 0→thumb, --line remainder over --panel --- */
+.settings__slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(to right, var(--accent) 0 var(--fill, 0%), var(--line) var(--fill, 0%) 100%)
+      no-repeat,
+    var(--panel);
+  transition: border-color 0.14s;
+}
+
+.settings__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px; /* centre the 16px thumb box on the 8px track box */
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--accent);
+  transition: transform 0.14s, border-color 0.14s, box-shadow 0.14s;
+}
+
+/* --- Track (Firefox): groove + native progress fill --- */
+.settings__slider::-moz-range-track {
+  height: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--line);
+  transition: border-color 0.14s;
+}
+
+.settings__slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 8px;
+  background: var(--accent);
+}
+
+.settings__slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--accent);
+  transition: transform 0.14s, border-color 0.14s, box-shadow 0.14s;
+}
+
+/* Hover — border shifts to accent, mirrors .settings__select:hover. */
+.settings__slider:hover::-webkit-slider-thumb,
+.settings__slider:hover::-webkit-slider-runnable-track {
+  border-color: var(--accent);
+}
+.settings__slider:hover::-moz-range-thumb,
+.settings__slider:hover::-moz-range-track {
+  border-color: var(--accent);
+}
+
+/* Focus-visible — accent ring on the thumb, mirrors .settings__select. */
+.settings__slider:focus-visible {
+  outline: none;
+}
+.settings__slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.settings__slider:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
+}

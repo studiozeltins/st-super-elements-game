@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { Modal } from './Modal';
 import { Toggle } from './Toggle';
 import { Button } from './Button';
@@ -22,11 +23,58 @@ interface SettingsScreenProps {
   onTogglePixelFilter(next: boolean): void;
   hudTheme: string;
   onHudThemeChange(next: string): void;
+  /** Audio bus levels as stored gains [0,1]; the slider maps ↔ integer percent. */
+  musicVolume: number;
+  sfxVolume: number;
+  /** Mute flags (independent of volume, D-13); a muted bus keeps its stored level. */
+  musicMuted: boolean;
+  sfxMuted: boolean;
+  onMusicVolumeChange(next: number): void;
+  onSfxVolumeChange(next: number): void;
+  onToggleMusicMuted(next: boolean): void;
+  onToggleSfxMuted(next: boolean): void;
   onLogout(): void;
   /** All pending party invites for the viewer (incl. dismissed/expired toasts). */
   missedInvites: readonly MissedInvite[];
   onAcceptInvite(inviteId: bigint): void;
   onDeclineInvite(inviteId: bigint): void;
+}
+
+/**
+ * One volume row: label · native range slider (accent-filled) · live % readout.
+ * The slider stays keyboard-operable while its bus is muted (dims only) — mute is
+ * independent of volume (D-13), so dragging a muted slider updates the stored gain
+ * without auto-unmuting. `--fill` drives the webkit filled-track gradient.
+ */
+function VolumeField({
+  label,
+  volume,
+  muted,
+  onChange,
+}: {
+  label: string;
+  volume: number;
+  muted: boolean;
+  onChange(next: number): void;
+}) {
+  const pct = Math.round(volume * 100);
+  return (
+    <label className="settings__field">
+      <span>{label}</span>
+      <input
+        type="range"
+        className={muted ? 'settings__slider settings__slider--muted' : 'settings__slider'}
+        min={0}
+        max={100}
+        step={1}
+        value={pct}
+        aria-label={label}
+        onChange={event => onChange(Number(event.target.value) / 100)}
+        style={{ '--fill': `${pct}%` } as CSSProperties}
+      />
+      <span className="settings__value">{pct}%</span>
+    </label>
+  );
 }
 
 export function SettingsScreen({
@@ -40,6 +88,14 @@ export function SettingsScreen({
   onTogglePixelFilter,
   hudTheme,
   onHudThemeChange,
+  musicVolume,
+  sfxVolume,
+  musicMuted,
+  sfxMuted,
+  onMusicVolumeChange,
+  onSfxVolumeChange,
+  onToggleMusicMuted,
+  onToggleSfxMuted,
   onLogout,
   missedInvites,
   onAcceptInvite,
@@ -99,6 +155,29 @@ export function SettingsScreen({
           ⛶ Pilnekrāns
         </Button>
       )}
+
+      {/* Audio — Music/SFX volume + mute, live-apply through the Game bus setters
+          (D-13). Toggles are affirmative (checked = audible); App persists the
+          inverse as the mute flag. Order: volume then its mute, per bus. */}
+      <p className="settings__section">SKAŅA</p>
+      <VolumeField
+        label="Mūzikas skaļums"
+        volume={musicVolume}
+        muted={musicMuted}
+        onChange={onMusicVolumeChange}
+      />
+      <Toggle label="Mūzika" checked={!musicMuted} onChange={next => onToggleMusicMuted(!next)} />
+      <VolumeField
+        label="Efektu skaļums"
+        volume={sfxVolume}
+        muted={sfxMuted}
+        onChange={onSfxVolumeChange}
+      />
+      <Toggle
+        label="Skaņas efekti"
+        checked={!sfxMuted}
+        onChange={next => onToggleSfxMuted(!next)}
+      />
 
       <p className="settings__section">KONTS</p>
       <Button variant="danger" block onClick={onLogout}>
