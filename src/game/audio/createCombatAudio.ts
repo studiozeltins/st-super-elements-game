@@ -3,8 +3,9 @@
 // high-DPS audio rewarding instead of grating:
 //  - every instance is pitch/gain-jittered (no two hits identical),
 //  - per-sound throttles MERGE bursts into one slightly fatter play,
-//  - generic hits live on a duckable bus; hurt/crit briefly duck it so danger
-//    and reward always cut through the spam,
+//  - generic hits live on a private duckable bus (hitBus) that feeds the shared
+//    sfx bus; hurt/crit play straight to the sfx bus and briefly duck the hitBus
+//    so danger and reward always cut through the spam,
 //  - consecutive crits climb a small pitch ladder (Hades-style escalation).
 // Frequency slots: hits mid (~2kHz), crit crack above ~2.4kHz with the ping
 // under 1kHz, hurt low (50–130Hz), stun a detuned midrange wobble — nothing
@@ -48,9 +49,13 @@ const CRIT_PING_END_HZ = 480;
 const CRIT_SPARKLE_HZ = 1700;
 const CRIT_CRACK_HIGHPASS_HZ = 2400;
 
-export function createCombatAudio(getContext: () => AudioContext | null): CombatAudio {
-  // Duckable bus for the spammy layer (hit ticks). Hurt/crit go straight to
-  // the destination and momentarily duck this bus.
+export function createCombatAudio(
+  getContext: () => AudioContext | null,
+  getSfxBus: () => GainNode | null
+): CombatAudio {
+  // Private duckable bus for the spammy layer (hit ticks) — it feeds the shared
+  // sfx bus (D-03), not the raw destination. Hurt/crit play straight to the sfx
+  // bus and momentarily duck this hitBus so they own the mix.
   let hitBus: GainNode | null = null;
   let busContext: AudioContext | null = null;
   const throttles = new Map<string, { nextAt: number; merged: number }>();
@@ -63,10 +68,11 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     return context && context.state === 'running' ? context : null;
   }
 
-  function bus(context: AudioContext): GainNode {
+  /** The private hit-tick bus, (re)built per context and wired INTO the sfx bus (D-03). */
+  function ensureHitBus(context: AudioContext, sfxBus: GainNode): GainNode {
     if (!hitBus || busContext !== context) {
       hitBus = context.createGain();
-      hitBus.connect(context.destination);
+      hitBus.connect(sfxBus);
       busContext = context;
     }
     return hitBus;
@@ -94,8 +100,8 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
   }
 
   /** Briefly pulls the hit bus down so an important sound owns the mix. */
-  function duckHits(context: AudioContext, depth: number, seconds: number) {
-    const gain = bus(context).gain;
+  function duckHits(hitBusNode: GainNode, context: AudioContext, depth: number, seconds: number) {
+    const gain = hitBusNode.gain;
     const now = context.currentTime;
     gain.cancelScheduledValues(now);
     gain.setValueAtTime(Math.min(gain.value, 1), now);
@@ -106,13 +112,15 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
   function playEnemyHit(gainFactor = 1, pan = 0) {
     const context = ready();
     if (!context) return;
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
     const level = clampGain(gainFactor);
     if (level === 0) return;
     const boost = throttle('hit', HIT_INTERVAL, context.currentTime);
     if (boost === null) return;
     const now = context.currentTime;
     const rate = jitter(0.14);
-    const out = panned(context, pan, bus(context));
+    const out = panned(context, pan, ensureHitBus(context, sfxBus));
 
     // Mid "tick": short bandpass noise — the connect layer, quiet by design.
     const tick = createNoiseSource(context, 0.05);
@@ -146,10 +154,12 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     if (!context) return;
     const level = clampGain(gainFactor);
     if (level === 0) return;
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
     const boost = throttle('crit', CRIT_INTERVAL, context.currentTime);
     if (boost === null) return;
     const now = context.currentTime;
-    const out = panned(context, pan, context.destination);
+    const out = panned(context, pan, sfxBus);
 
     // Escalation ladder: crits inside the streak window pitch up step by step.
     critStreak = now - lastCritAt < CRIT_STREAK_WINDOW_SECONDS ? critStreak + 1 : 0;
@@ -193,12 +203,14 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     sparkle.start(now);
     sparkle.stop(now + 0.1);
 
-    duckHits(context, 0.35, 0.18);
+    duckHits(ensureHitBus(context, sfxBus), context, 0.35, 0.18);
   }
 
   function playPlayerHurt(isCrit: boolean) {
     const context = ready();
     if (!context) return;
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
     const boost = throttle('hurt', HURT_INTERVAL, context.currentTime);
     if (boost === null) return;
     const now = context.currentTime;
@@ -214,7 +226,7 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     thudGain.gain.setValueAtTime(0.0001, now);
     thudGain.gain.exponentialRampToValueAtTime((isCrit ? 0.85 : 0.7) * boost, now + 0.012);
     thudGain.gain.exponentialRampToValueAtTime(0.0001, now + thudSeconds + 0.08);
-    thud.connect(thudGain).connect(context.destination);
+    thud.connect(thudGain).connect(sfxBus);
     thud.start(now);
     thud.stop(now + thudSeconds + 0.12);
 
@@ -226,7 +238,7 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     const bodyGain = context.createGain();
     bodyGain.gain.setValueAtTime(0.35 * boost, now);
     bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
-    body.connect(bodyLow).connect(bodyGain).connect(context.destination);
+    body.connect(bodyLow).connect(bodyGain).connect(sfxBus);
     body.start(now);
     body.stop(now + 0.12);
 
@@ -241,17 +253,19 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
       const snapGain = context.createGain();
       snapGain.gain.setValueAtTime(0.5, now);
       snapGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
-      snap.connect(snapBand).connect(snapGain).connect(context.destination);
+      snap.connect(snapBand).connect(snapGain).connect(sfxBus);
       snap.start(now);
       snap.stop(now + 0.06);
     }
 
-    duckHits(context, isCrit ? 0.25 : 0.4, isCrit ? 0.35 : 0.2);
+    duckHits(ensureHitBus(context, sfxBus), context, isCrit ? 0.25 : 0.4, isCrit ? 0.35 : 0.2);
   }
 
   function playStun(durationSeconds: number, intensity: number) {
     const context = ready();
     if (!context) return;
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
     const level = clampGain(Math.max(0.25, intensity));
     if (level === 0 || durationSeconds <= 0) return;
     stopActiveStun?.();
@@ -266,7 +280,7 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     const popGain = context.createGain();
     popGain.gain.setValueAtTime(0.5 * level, now);
     popGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
-    pop.connect(popBand).connect(popGain).connect(context.destination);
+    pop.connect(popBand).connect(popGain).connect(sfxBus);
     pop.start(now);
     pop.stop(now + 0.06);
 
@@ -277,7 +291,7 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     const chirpGain = context.createGain();
     chirpGain.gain.setValueAtTime(0.22 * level, now);
     chirpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
-    chirp.connect(chirpGain).connect(context.destination);
+    chirp.connect(chirpGain).connect(sfxBus);
     chirp.start(now);
     chirp.stop(now + 0.1);
 
@@ -287,7 +301,7 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     const wobbleGain = context.createGain();
     wobbleGain.gain.setValueAtTime(0.28 * level, now + 0.05);
     wobbleGain.gain.exponentialRampToValueAtTime(0.0001, end);
-    wobbleGain.connect(context.destination);
+    wobbleGain.connect(sfxBus);
     const lfo = context.createOscillator();
     lfo.frequency.setValueAtTime(6, now);
     lfo.frequency.linearRampToValueAtTime(2.5, end);
@@ -319,7 +333,7 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
     blipGain.gain.setValueAtTime(0.0001, end - 0.06);
     blipGain.gain.exponentialRampToValueAtTime(0.16 * level, end - 0.03);
     blipGain.gain.exponentialRampToValueAtTime(0.0001, end + 0.05);
-    blip.connect(blipGain).connect(context.destination);
+    blip.connect(blipGain).connect(sfxBus);
     blip.start(end - 0.06);
     blip.stop(end + 0.06);
     voices.push(blip);
@@ -344,6 +358,8 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
   function playHeal() {
     const context = ready();
     if (!context) return;
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
     const boost = throttle('heal', HEAL_INTERVAL, context.currentTime);
     if (boost === null) return;
     const now = context.currentTime;
@@ -357,7 +373,7 @@ export function createCombatAudio(getContext: () => AudioContext | null): Combat
       noteGain.gain.setValueAtTime(0.0001, start);
       noteGain.gain.exponentialRampToValueAtTime(0.15, start + 0.02);
       noteGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.28);
-      note.connect(noteGain).connect(context.destination);
+      note.connect(noteGain).connect(sfxBus);
       note.start(start);
       note.stop(start + 0.3);
     });

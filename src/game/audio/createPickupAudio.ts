@@ -112,7 +112,10 @@ const DEATH_SWELL_SECONDS = 1.1;
 const DEATH_SWELL_LOWPASS_HZ = 220;
 const DEATH_SWELL_PEAK = 0.4;
 
-export function createPickupAudio(getContext: () => AudioContext | null): PickupAudio {
+export function createPickupAudio(
+  getContext: () => AudioContext | null,
+  getSfxBus: () => GainNode | null
+): PickupAudio {
   let gemStep = 0;
   let lastGemAt = -Infinity;
   let gemMergeNextAt = -Infinity;
@@ -132,7 +135,7 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
     return context && context.state === 'running' ? context : null;
   }
 
-  /** One melodic note: fast attack, exponential decay, straight to the destination. */
+  /** One melodic note: fast attack, exponential decay, through the sfx bus. */
   function playNote(
     context: AudioContext,
     type: OscillatorType,
@@ -141,6 +144,8 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
     startAt: number,
     decaySeconds: number
   ) {
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
     const note = context.createOscillator();
     note.type = type;
     note.frequency.value = frequency;
@@ -148,7 +153,7 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
     gain.gain.setValueAtTime(0.0001, startAt);
     gain.gain.exponentialRampToValueAtTime(peak, startAt + 0.012);
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + decaySeconds);
-    note.connect(gain).connect(context.destination);
+    note.connect(gain).connect(sfxBus);
     note.start(startAt);
     note.stop(startAt + decaySeconds + 0.02);
   }
@@ -227,6 +232,8 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
   function playShardGain() {
     const context = ready();
     if (!context) return;
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
     const now = context.currentTime;
     SHARD_GAIN_NOTES_HZ.forEach((frequency, index) => {
       playNote(
@@ -247,7 +254,7 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
     sparkleGain.gain.setValueAtTime(0.0001, now + 0.08);
     sparkleGain.gain.exponentialRampToValueAtTime(0.06, now + 0.14);
     sparkleGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.38);
-    sparkle.connect(high).connect(sparkleGain).connect(context.destination);
+    sparkle.connect(high).connect(sparkleGain).connect(sfxBus);
     sparkle.start(now + 0.08);
     sparkle.stop(now + 0.38);
   }
@@ -273,6 +280,8 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
   function playDeath() {
     const context = ready();
     if (!context) return;
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
     const now = context.currentTime;
     // Deep falling tone — the "everything drains out" read.
     const fall = context.createOscillator();
@@ -283,7 +292,7 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
     fallGain.gain.setValueAtTime(0.0001, now);
     fallGain.gain.exponentialRampToValueAtTime(DEATH_TONE_PEAK, now + 0.04);
     fallGain.gain.exponentialRampToValueAtTime(0.0001, now + DEATH_TONE_SECONDS + 0.15);
-    fall.connect(fallGain).connect(context.destination);
+    fall.connect(fallGain).connect(sfxBus);
     fall.start(now);
     fall.stop(now + DEATH_TONE_SECONDS + 0.2);
 
@@ -298,7 +307,7 @@ export function createPickupAudio(getContext: () => AudioContext | null): Pickup
     swellGain.gain.setValueAtTime(0.0001, now);
     swellGain.gain.exponentialRampToValueAtTime(DEATH_SWELL_PEAK, now + 0.35);
     swellGain.gain.exponentialRampToValueAtTime(0.0001, now + DEATH_SWELL_SECONDS);
-    swell.connect(low).connect(swellGain).connect(context.destination);
+    swell.connect(low).connect(swellGain).connect(sfxBus);
     swell.start(now);
     swell.stop(now + DEATH_SWELL_SECONDS);
   }

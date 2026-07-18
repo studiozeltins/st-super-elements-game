@@ -54,7 +54,10 @@ interface UnitState {
   stepParity: boolean;
 }
 
-export function createMovementAudio(getContext: () => AudioContext | null): MovementAudio {
+export function createMovementAudio(
+  getContext: () => AudioContext | null,
+  getSfxBus: () => GainNode | null
+): MovementAudio {
   const units = new Map<string, UnitState>();
   let spamWindowStart = -Infinity;
   let spamPlays = 0;
@@ -177,9 +180,11 @@ export function createMovementAudio(getContext: () => AudioContext | null): Move
   function playStep(kind: FootstepKind, level: number, pan: number, stepParity: boolean) {
     const context = ready();
     if (!context) return;
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
     const now = context.currentTime;
     if (!underSpamBudget(now)) return;
-    const out = panned(context, pan, context.destination);
+    const out = panned(context, pan, sfxBus);
     if (kind === 'player') playPlayerStep(context, level, out, now);
     else if (kind === 'goliath')
       playGoliathStep(context, level, out, now, stepParity ? GOLIATH_ALTERNATE_STEP_PITCH : 1);

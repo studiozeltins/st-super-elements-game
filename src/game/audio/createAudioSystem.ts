@@ -58,7 +58,12 @@ const WHOOSH_BAND_END_HZ = 250;
 const WHOOSH_PEAK = 0.4;
 const WHOOSH_Q = 0.6; // wide band = airy, never whistly
 
-export function createAudioSystem(): AudioSystem {
+// This module OWNS the shared AudioContext (gesture unlock), so it PROVIDES
+// getContext to its siblings + createAudioBuses rather than receiving one. It
+// takes only a lazy sfx-bus closure (optional: it can construct before `buses`
+// exists — createGame late-binds it via `() => buses.sfx()`). Every attack play
+// routes through that bus, never the raw destination (D-02).
+export function createAudioSystem(getSfxBus: () => GainNode | null = () => null): AudioSystem {
   let context: AudioContext | null = null;
 
   function removeGestureListeners() {
@@ -82,7 +87,9 @@ export function createAudioSystem(): AudioSystem {
     const level = clampGain(gainFactor);
     if (level === 0) return;
     const now = context.currentTime;
-    const out = panned(context, pan, context.destination);
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
+    const out = panned(context, pan, sfxBus);
 
     // Low thump: sine sweeping ~70Hz → ~40Hz over 0.25s through a fast-attack,
     // exponential-decay gain envelope that reaches silence by ~0.35s.
@@ -118,7 +125,9 @@ export function createAudioSystem(): AudioSystem {
     const level = clampGain(gainFactor);
     if (level === 0) return;
     const now = context.currentTime;
-    const out = panned(context, pan, context.destination);
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
+    const out = panned(context, pan, sfxBus);
 
     // Pure air (playtest 2026-07-12: the swing's low thock made it read like
     // the slam's little sibling — ALL low content removed, band raised to a
@@ -148,7 +157,9 @@ export function createAudioSystem(): AudioSystem {
     const level = clampGain(gainFactor);
     if (level === 0) return;
     const now = context.currentTime;
-    const out = panned(context, pan, context.destination);
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
+    const out = panned(context, pan, sfxBus);
 
     // Whirling swell (medium tier): a longer bandpass noise that rises then
     // falls — the blade cutting a full circle of air. Playtest fix (05-05
@@ -217,7 +228,9 @@ export function createAudioSystem(): AudioSystem {
     const level = clampGain(gainFactor);
     if (level === 0) return;
     const now = context.currentTime;
-    const out = panned(context, pan, context.destination);
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
+    const out = panned(context, pan, sfxBus);
 
     // Skid-in scrape: a very short low-band noise rising 400→900Hz right
     // before the clang — the shield grinding the ground on the way in.
@@ -279,7 +292,9 @@ export function createAudioSystem(): AudioSystem {
     if (level === 0 || durationSeconds <= 0) return;
     const now = context.currentTime;
     const end = now + durationSeconds;
-    const out = panned(context, pan, context.destination);
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
+    const out = panned(context, pan, sfxBus);
 
     const air = createNoiseSource(context, durationSeconds);
     const band = context.createBiquadFilter();

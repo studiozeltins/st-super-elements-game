@@ -97,7 +97,10 @@ const RISER_RUMBLE_PEAK_FRACTION = 0.6;
 const RISER_CANCEL_FADE_SECONDS = 0.08;
 const MAX_CONCURRENT_RISERS = 6;
 
-export function createWeaponAudio(getContext: () => AudioContext | null): WeaponAudio {
+export function createWeaponAudio(
+  getContext: () => AudioContext | null,
+  getSfxBus: () => GainNode | null
+): WeaponAudio {
   const gateNextAt = new Map<string, number>();
   const activeRiserCancels = new Set<() => void>();
 
@@ -125,6 +128,8 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
   ) {
     const context = ready();
     if (!context) return;
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
     const now = context.currentTime;
     if (!gateOpen(key, SWING_GATE_SECONDS, now)) return;
     const rate = jitter(0.1);
@@ -138,7 +143,7 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(peak * jitter(0.1), now + 0.02);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + seconds);
-    air.connect(band).connect(gain).connect(context.destination);
+    air.connect(band).connect(gain).connect(sfxBus);
     air.start(now);
     air.stop(now + seconds);
   }
@@ -157,7 +162,9 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     const level = clampGain(gainFactor);
     if (level === 0) return;
     const now = context.currentTime;
-    const out = panned(context, pan, context.destination);
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
+    const out = panned(context, pan, sfxBus);
     const rate = jitter(0.08);
 
     // String twang: a fast-decay triangle pluck.
@@ -204,7 +211,9 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     if (level === 0) return;
     const now = context.currentTime;
     if (!gateOpen('arcane', SWING_GATE_SECONDS, now)) return;
-    const out = panned(context, pan, context.destination);
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
+    const out = panned(context, pan, sfxBus);
     const rate = jitter(0.1);
 
     // Body: a falling sine swell — the "fwoom" of the bolt leaving the page.
@@ -240,7 +249,9 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     if (level === 0) return;
     const now = context.currentTime;
     if (!gateOpen('projectileImpact', IMPACT_GATE_SECONDS, now)) return;
-    const out = panned(context, pan, context.destination);
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
+    const out = panned(context, pan, sfxBus);
     const rate = jitter(0.12);
 
     // Wet mid splat: the body of the impact.
@@ -295,7 +306,9 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     const level = clampGain(gainFactor);
     if (level === 0) return;
     const now = context.currentTime;
-    const out = panned(context, pan, context.destination);
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
+    const out = panned(context, pan, sfxBus);
     const rate = jitter(0.15); // heavy jitter: a camp of hoppers must not phase
 
     // Phase 1 — compress: a falling wet squish as the blob loads up.
@@ -344,7 +357,9 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     const level = clampGain(gainFactor);
     if (level === 0) return;
     const now = context.currentTime;
-    const out = panned(context, pan, context.destination);
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return;
+    const out = panned(context, pan, sfxBus);
     const rate = jitter(0.12);
 
     // Fat splat body: a lowpassed noise burst — all low-mid, no crack.
@@ -381,9 +396,11 @@ export function createWeaponAudio(getContext: () => AudioContext | null): Weapon
     const level = clampGain(gainFactor);
     if (!context || level === 0 || durationSeconds <= 0) return () => {};
     if (activeRiserCancels.size >= MAX_CONCURRENT_RISERS) return () => {};
+    const sfxBus = getSfxBus();
+    if (!sfxBus) return () => {};
     const now = context.currentTime;
     const end = now + durationSeconds;
-    const out = panned(context, pan, context.destination);
+    const out = panned(context, pan, sfxBus);
 
     // Master envelope: swells to its peak just before the windup lands, then
     // snaps shut — the silence right before the hit is part of the telegraph.
