@@ -18,6 +18,7 @@ import { createScorchMap, SCORCH_PER_STRIKE } from './systems/createScorchMap';
 import { createWind } from './systems/createWind';
 import { sunDirUniform } from './systems/sunUniform';
 import { createDayNightCycle } from './systems/createDayNightCycle';
+import { phase01 } from './systems/dayNightMath';
 import { createServerClock } from './net/createServerClock';
 import { createMondstadtWorld, isInsideSafeZone } from './world/createMondstadtWorld';
 import {
@@ -27,11 +28,15 @@ import {
 } from './physics/resolveCollisions';
 import { clampRangeToWorld, pointHitsWorld } from './physics/projectileBlockers';
 import { getTerrainHeight } from './world/terrain';
+import { getCampSites } from './world/camps';
 import { createCharacterModel, createNameSprite, type CharacterModel } from './entities/createCharacterModel';
 import { createBoostOrbit } from './entities/createBoostOrbit';
 import { createInputSystem } from './systems/createInputSystem';
 import { createAudioSystem } from './audio/createAudioSystem';
 import { createAudioBuses, type AudioBuses } from './audio/createAudioBuses';
+import { createSampleCache } from './audio/createSampleCache';
+import { createAmbience } from './audio/createAmbience';
+import { isInCombat } from './audio/combatState';
 import { createCombatAudio } from './audio/createCombatAudio';
 import { createMovementAudio, type FootstepKind } from './audio/createMovementAudio';
 import { createWeaponAudio } from './audio/createWeaponAudio';
@@ -442,6 +447,21 @@ export function createGame(
   const movementAudio = createMovementAudio(audioSystem.getContext, buses.sfx);
   // Pickup chimes (gem streak ladder, shard gain/loss) + the death knell.
   const pickupAudio = createPickupAudio(audioSystem.getContext, buses.sfx);
+  // Living-world ambience (10-03): decode-once creature samples + the procedural
+  // gust-reactive wind bed + gated one-shots, all on the ambient bus. The grunt
+  // layer scales by nearest-camp proximity — camps are a static deterministic
+  // set, so this is a cheap fixed-array min, never a live table scan (AMBI-05).
+  const sampleCache = createSampleCache(audioSystem.getContext);
+  const campSites = getCampSites();
+  function minCampDistance(): number {
+    let min = Infinity;
+    for (const camp of campSites) {
+      const distance = Math.hypot(camp.x - playerPosition.x, camp.z - playerPosition.z);
+      if (distance < min) min = distance;
+    }
+    return min;
+  }
+  const ambience = createAmbience(audioSystem.getContext, buses.ambient, sampleCache, minCampDistance);
   // Same linear falloff shape the strike juice uses — a far fight is a faint
   // tick, my own hit is full volume.
   function hitAudioGain(x: number, z: number): number {
@@ -481,6 +501,10 @@ export function createGame(
   let lastSyncedCharacterId = '';
   let pvpDamageSinceSync = 0;
   let elapsedSeconds = 0;
+  // ONE combat-state stamp (D-08): refreshed by the three damage callbacks on MY
+  // combat only; isInCombat() derives the enter-now/exit-after-cooldown signal in
+  // frame() that gates the ambience (birds-stop) here and the duck+music in 10-06.
+  let lastCombatAt = -Infinity;
   let positionSyncTimer = 0;
   let healTimer = 0;
   let combo = 0;
@@ -1382,6 +1406,12 @@ export function createGame(
     // loop, NEVER derived per React render (Pitfall 6.1). The cycle reads
     // serverClock.nowMicros() internally; no private accumulator.
     daynight.update();
+    // ONE combat signal (D-08), fanned into the ambience: birds stop while in
+    // combat, the bed swells with the live gust, creatures gate on the day/night
+    // phase (same clock as the palette). The bed-duck + music crossfade in 10-06
+    // will consume this SAME `inCombat` — do not derive it twice.
+    const inCombat = isInCombat(elapsedSeconds, lastCombatAt);
+    ambience.update(deltaSeconds, wind.getGustEnvelope(), phase01(serverClock.nowMicros()), inCombat);
 
     // Combo drops if the next hit does not land inside the (shrinking) window.
     if (combo > 0 && elapsedSeconds - lastComboHitAt > comboWindowSeconds(combo)) {
@@ -1558,6 +1588,8 @@ export function createGame(
       weaponAudio.dispose();
       movementAudio.dispose();
       pickupAudio.dispose();
+      ambience.dispose();
+      sampleCache.dispose();
       audioSystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
       scene.remove(playerModel.group);
@@ -1759,7 +1791,12 @@ export function createGame(
       // Every self number has a feel: damage = low body thud (crit adds the
       // alarm snap), heals = the soft chime.
       if (kind === 'heal') combatAudio.playHeal();
-      else combatAudio.playPlayerHurt(kind === 'takenCrit' || kind === 'pvpCrit');
+      else {
+        // I took damage → I am in combat (heals don't count). MY combat only, so
+        // a spectated far fight never ducks my exploration ambience (D-08).
+        lastCombatAt = elapsedSeconds;
+        combatAudio.playPlayerHurt(kind === 'takenCrit' || kind === 'pvpCrit');
+      }
       damageNumbers.spawn(playerPosition.clone().setY(playerPosition.y + 1.4), amount, kind);
     },
     spawnWorldNumber(positionX, positionZ, amount, kind, isMine) {
@@ -1767,6 +1804,8 @@ export function createGame(
       // panned to where they sit on screen.
       const gain = isMine ? 1 : hitAudioGain(positionX, positionZ);
       const pan = hitAudioPan(positionX, positionZ);
+      // My hit landed → I am in combat (spectated hits don't stamp — D-08).
+      if (isMine) lastCombatAt = elapsedSeconds;
       if (kind === 'crit') combatAudio.playEnemyCrit(gain, pan);
       else combatAudio.playEnemyHit(gain, pan);
       damageNumbers.spawn(new THREE.Vector3(positionX, 1.2, positionZ), amount, kind);
@@ -1785,6 +1824,8 @@ export function createGame(
       // My landed PVP crit pops full volume; spectated hits tick by distance.
       const gain = isMine ? 1 : hitAudioGain(p.x, p.z);
       const pan = hitAudioPan(p.x, p.z);
+      // My PVP hit landed → I am in combat (spectated hits don't stamp — D-08).
+      if (isMine) lastCombatAt = elapsedSeconds;
       if (kind === 'crit' || kind === 'pvpCrit') combatAudio.playEnemyCrit(gain, pan);
       else combatAudio.playEnemyHit(gain, pan);
       damageNumbers.spawn(p.clone().setY(p.y + 1), amount, kind);
