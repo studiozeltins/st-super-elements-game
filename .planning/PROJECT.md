@@ -207,6 +207,8 @@ downstream.
 | 2026-07-10 | Contact drain deleted in the same slice that guarantees no facetank dead zone (Phase 4) | Keeping drain + strikes double-dips and re-introduces undodgeable damage | ✓ Good |
 | 2026-07-13 | leapSlam maxBand 8→5.5 + size-2 laneLength 7.95 (seed deviations, user-accepted at close) | Without band fix shieldDash was dead code; 8.0 sat on the strict-> SNAP_DISTANCE float hazard | ✓ Good |
 | 2026-07-13 | Close v0.2.0-alpha at Phase 6; defer crit poise interrupt (Phase 7) | User ruling — playtests approved phases 4/6; interrupt is a small standalone slice with all deps shipped | — Pending (POISE-01..03 open) |
+| 2026-07-18 | Phase 11 (Lived-in Props & Wear) complete — WEAR-01..05 validated | Footpaths/props/scorch-heal/bend-trail/dust shipped, UAT 5/5, security clean | ✓ Good — town furniture made solid + walkable, doors detailed & merged to fix a draw-call FPS regression |
+| 2026-07-18 | Every change gets an up-front performance analysis (draw calls/allocs/frame cost) | Detailed doors added ~300 draw calls → 24-30fps city regression; caught only in playtest | ✓ Applied — merge meshes, gate shadows, quantify deltas in commits |
 
 ## Out of Scope
 
@@ -238,4 +240,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-13 — milestone v0.3.0-alpha Living World started*
+*Last updated: 2026-07-18 — after Phase 11 (Lived-in Props & Wear) complete; next: Phase 12 Wildlife*

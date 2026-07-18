@@ -1,23 +1,28 @@
 ---
 phase: 11-lived-in-props-wear
 verified: 2026-07-18T12:30:43Z
-status: human_needed
+status: passed
 score: 5/5 code-verifiable must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Walk the camp↔plaza↔bridge routes on the LAN build (pnpm build, laragon page — not the dev server)"
     expected: "Footpaths read worn/trampled — lighter, greener tint than packed-dirt roads, grass thinned but blades still poke through, and they never fade"
     why_human: "WEAR-01 visual bake — no test can assert 'reads as a worn path'. Code path (footpathFactor → terrain tint + grass thinning) is present + wired and proven off the decaying channels, but the perceptual read is by-eye only."
+
   - test: "Inspect the plaza — crates/barrels along the market-tile edge facing the fountain, fences at plaza-boundary / path-entry gaps"
     expected: "Arrangement reads deliberate ('who put this here'), not random scatter; player paths cleanly around props without getting boxed into a pocket"
     why_human: "WEAR-02 perceptual arrangement judgment. Placement is deterministic + collidable in code, but 'reads lived-in' and 'no inescapable collision pocket' (see WR-01 warning) need a playtest."
+
   - test: "Fight to scorch the ground, leave, return after ~1–3 min; while running watch your own grass-bend trail"
     expected: "Scorch still visible on quick return, healed after longer; grass-bend trail fades in ~2s"
     why_human: "WEAR-03/04 timing feel over a live cycle. The decay math is unit-pinned (VERIFIED below), but the in-engine feel is a perceptual confirmation."
+
   - test: "Run over grass vs dirt/path/town; then append ?nodust to the URL"
     expected: "No dust on grass; subtle ground-hug puffs (not a spray) on dirt/path/town; ?nodust removes all puffs"
     why_human: "WEAR-05 perceptual + surface-gating by eye. Spawn gate (surface !== 'grass'), hard-capped pool, and ?nodust bisect are code-verified; 'subtle + ground-hugging' read is visual."
+
   - test: "Run scripts/fps_playtest.py in a golem-class fight with wind + day/night + audio + wear all enabled"
     expected: "No FPS regression vs baseline (toggle ?nodust to isolate dust cost if needed)"
     why_human: "Milestone perf gate — the phase's only new per-frame draw-call source. Cannot be asserted by unit tests."

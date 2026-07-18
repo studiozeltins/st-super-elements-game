@@ -34,7 +34,7 @@ enabled — per-phase costs sum.
 - [x] **Phase 9: Atmosphere & Day/Night** - Distance fog + sky gradient + ~20min day/night color drift as ONE server-anchored color pipeline, lanterns at dusk (completed 2026-07-14)
 - [ ] **Phase 9.1: Dynamic Sun and Shadows** *(INSERTED)* - Shadows sweep with the time-of-day sun on a readability-capped arc; overrides Phase 9's frozen-sun (D-02) with texel-snap + reduce-motion fallback
 - [ ] **Phase 10: Ambient Audio & Music** - Bus/compressor refactor, procedural wind bed + randomized one-shots, region + combat music crossfade, combat ducking
-- [ ] **Phase 11: Lived-in Props & Wear** - Worn footpaths on real routes, plaza props, scorch regrowth + bend-trail tuning, sprint dust puffs
+- [x] **Phase 11: Lived-in Props & Wear** - Worn footpaths on real routes, plaza props, scorch regrowth + bend-trail tuning, sprint dust puffs (completed 2026-07-18)
 - [ ] **Phase 12: Wildlife** - Instanced butterflies by day, startle-flush birds off the sprint signal, emissive fireflies at dusk/night
 - [ ] **Phase 13: Camera Feel** - Run lean, idle breathing on the model, burst-damage FOV kick — all zeroed by a persisted reduce-motion toggle
 
@@ -257,7 +257,7 @@ Wave 3 *(integration + phase gate)*
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
-| 11. Lived-in Props & Wear | 8/8 | Complete   | 2026-07-18 |
+| 11. Lived-in Props & Wear | 8/8 | Complete    | 2026-07-18 |
 | 12. Wildlife | 0/TBD | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |
 
