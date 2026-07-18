@@ -4,17 +4,17 @@ milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 12
 current_phase_name: wildlife
-status: executing
+status: verifying
 stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-07-18T20:10:22.264Z"
+last_updated: "2026-07-18T20:17:05.852Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 12 execution started
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 38
-  completed_plans: 37
-  percent: 71
+  completed_plans: 38
+  percent: 86
 ---
 
 # Project State
@@ -32,7 +32,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 
 Phase: 12 (wildlife) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-18 — Phase 12 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -103,6 +103,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 12 P02 | 4min | 1 tasks | 2 files |
 | Phase 12 P03 | 3min | 2 tasks | 3 files |
 | Phase 12 P04 | 8min | 1 tasks | 2 files |
+| Phase 12 P05 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -176,6 +177,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: [Phase 12] 12-03 bird flush: externally-spawned pooled InstancedMesh (createDustPuffs spine); spawn(x,z) bursts 2-4 birds, update() ages wildlifeMath.birdArc + recycles at t01>=1; fade = instance shrink not alpha; BIRD_POOL_SIZE=12
 - [Phase ?]: [Phase 12] 12-03 wing sfx: createWildlifeSfx procedural one-shot (3 staggered bandpass-noise wingbeats) on sfx bus, gesture-guarded + .onended cleanup; debounce stays at the 12-05 grass-stamp call site (no GPU readback)
 - [Phase 12]: Fireflies use UNLIT MeshBasicMaterial + instanceColor pulse (never a scene light) so they glow while Phase 9 dims lit materials at night
+- [Phase ?]: [Phase 12] 12-05: wildlife wired into createGame WIRE-only (dust template) — 3 pools + wing sfx behind ?nobugs/?nobirds/?nofireflies, fed wind.timeUniform.value + dayNightPhase + player pos once/frame; grass-sprint flush at the CPU surface=='grass' stamp site debounced by flushReady (lastFlushSec), never a GPU read; literal wing gain 0.6
+- [Phase ?]: [Phase 12] 12-05: Tasks 2 (perceptual UAT) + 3 (SC4 golem-fight FPS gate) are blocking human checkpoints — auto-deferred to /gsd-verify-work per --auto policy, NOT fabricated; all code + automated verification (884/884, tsc clean) complete
 
 ### Pending Todos
 
@@ -222,7 +225,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-18T20:09:51.363Z
+Last session: 2026-07-18T20:16:53.372Z
 Stopped at: Completed 12-02-PLAN.md
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: None
