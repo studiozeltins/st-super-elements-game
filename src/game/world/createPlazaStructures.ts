@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createFountainWater } from './createFountainWater';
-import { rockPillarMaterial } from './assets/createRockMesh';
+import { cobbleTowerMaterial } from './town/createCobbleMaterial';
 
 /**
  * Plaza landmarks that are not part of the district town-build: the windmill
@@ -13,11 +13,11 @@ const TOWER_HEIGHT = 11;
 export function createWindmill(): { group: THREE.Group; blades: THREE.Group } {
   const windmill = new THREE.Group();
 
-  // Round tapered stone tower with the shared ROCK surface (pixel stone mottle +
-  // gravel bevel depth) so it reads as a real chiseled-stone mill, not flat boxes.
+  // Smooth round tapered tower built from COBBLESTONES (triplanar Voronoi cobble
+  // + gravel bevel). More radial segments = a properly round mill, not a prism.
   const tower = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.35, 2.1, TOWER_HEIGHT, 12),
-    rockPillarMaterial()
+    new THREE.CylinderGeometry(1.35, 2.1, TOWER_HEIGHT, 28),
+    cobbleTowerMaterial()
   );
   tower.position.y = TOWER_HEIGHT / 2;
   tower.castShadow = true;
@@ -42,9 +42,11 @@ export function createWindmill(): { group: THREE.Group; blades: THREE.Group } {
     const arm = new THREE.Group();
     const spar = new THREE.Mesh(new THREE.BoxGeometry(0.16, sailLength, 0.16), sparMat);
     spar.position.y = sailLength / 2;
+    spar.castShadow = true;
     arm.add(spar);
     const sail = new THREE.Mesh(new THREE.BoxGeometry(0.85, sailLength * 0.86, 0.04), sailMat);
     sail.position.set(0.55, sailLength * 0.48, 0);
+    sail.castShadow = true;
     arm.add(sail);
     for (let slat = 1; slat <= 4; slat++) {
       const bar = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.05, 0.07), sparMat);
@@ -56,6 +58,7 @@ export function createWindmill(): { group: THREE.Group; blades: THREE.Group } {
   }
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.5, 8), sparMat);
   hub.rotation.x = Math.PI / 2;
+  hub.castShadow = true;
   blades.add(hub);
   blades.position.set(0, TOWER_HEIGHT - 0.6, 2.0);
   windmill.add(blades);
