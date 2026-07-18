@@ -1,7 +1,7 @@
 /**
  * Pure combat-state hysteresis — the single source of truth for the ONE
  * client-side combat signal (D-08) that feeds BOTH the ambience duck (AMBI-06)
- * and the region↔combat music crossfade (MUSIC-02). ZERO imports (not even
+ * and the day/night/combat music crossfade (MUSIC-02). ZERO imports (not even
  * three, no WebAudio, no React) so the enter-immediately / exit-after-cooldown
  * behavior is unit-testable without a renderer or an AudioContext — a mirror of
  * the windMath.ts / dayNightMath.ts pure-helper discipline.

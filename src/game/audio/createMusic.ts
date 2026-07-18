@@ -1,61 +1,59 @@
-// Combat-aware music (MUSIC-01/02, D-12): two seamless looping recordings — a
-// calm region-exploration loop and a tension combat loop — on the music bus, with
-// an equal-power crossfade driven by the ONE combat signal (the same `inCombat`
-// the ambience duck reads, D-08). No hard cut ever: combat swells IN over ~1s and
-// region crosses back over ~2-3s, aligned with the bed/music duck (10-02).
+// Mood-aware music (MUSIC-01/02, D-12; extended 2026-07-18 to THREE moods on user
+// request): a DAY exploration loop, a NIGHT exploration loop, and a COMBAT loop on
+// the music bus. The active mood is `combat` while the ONE combat signal is set
+// (D-08 — the same `inCombat` the ambience duck reads), else `day`/`night` from the
+// day/night phase (aligned with the creature layers via ambienceMath.isBirdTime).
+// Transitions are an equal-power-style crossfade via setTargetAtTime — no hard cut:
+// combat swells IN fast (~1s), exploration returns gently (~2.4s), matching the
+// bed/music duck (10-02).
 //
-// Two PERSISTENT AudioBufferSourceNodes (loop=true, explicit loopStart/loopEnd),
-// each feeding its OWN GainNode into the music bus. Both start once (lazily, on
-// the first live-context frame after their buffer decodes) and NEVER stop/restart
-// — only the two gains move, so there is no start/stop churn and no re-sync drift.
-// The crossfade is equal-power (cos/sin) so perceived loudness stays constant
-// through the transition (a linear crossfade dips ~-3dB at the midpoint).
+// Each mood plays a real CC0 `.ogg` when one is decoded, and otherwise a PROCEDURAL
+// voice (proceduralMusic.ts) so the world has music with no asset sourcing and no
+// copyright. A file is preferred: a track only falls back to procedural after a
+// short grace, so a real `.ogg` that decodes on load transparently wins with zero
+// code change (drop it at the path below).
 //
-// Music has NO synth fallback (unlike the creatures, D-04): until the two `.ogg`
-// loops are dropped at the paths below, `setCombat` is a silent no-op — no throw,
-// no NaN into an AudioParam, no source built. The instant both files decode the
-// full crossfade is live with zero code change (RESEARCH Pattern 4, Pitfall 3).
-//
-// Zero-alloc steady state: `setCombat` runs every frame but only re-ramps on an
-// actual combat-state FLIP (or when a source is first built); an unchanged state
-// returns after the cheap ensure()/build checks.
+// Zero-alloc steady state: setState runs every frame but only re-ramps on an actual
+// mood change; an unchanged mood returns after the cheap ensure()/build checks.
 
+import { isBirdTime } from './ambienceMath';
+import { createProceduralVoice, type MusicMood, type ProceduralVoice } from './proceduralMusic';
 import type { SampleCache } from './createSampleCache';
 
 export interface Music {
-  /** Drive the equal-power region↔combat crossfade from the shared combat signal (D-08). Called per frame; no-op until both loops decode. */
-  setCombat(inCombat: boolean): void;
+  /**
+   * Drive the day/night/combat crossfade from the shared combat signal (D-08) and
+   * the day/night phase01. Called per frame; picks the mood and ramps the mix.
+   */
+  setState(inCombat: boolean, phase01: number): void;
   dispose(): void;
 }
 
 // ── Loop recording paths (served from public/audio/music/, D-14) ─────────────
 const MUSIC = '/audio/music/';
-const REGION_URL = `${MUSIC}region-loop.ogg`;
-const COMBAT_URL = `${MUSIC}combat-loop.ogg`;
+const MOOD_URLS: Record<MusicMood, string> = {
+  day: `${MUSIC}day-loop.ogg`,
+  night: `${MUSIC}night-loop.ogg`,
+  combat: `${MUSIC}combat-loop.ogg`,
+};
 
-// Crossfade time constants — mirror the duck (10-02): enter fast so combat grabs
-// the mix (~1s settle), restore slow so region returns gently (~2.4s settle).
-// τ ≈ settle/3, matching DUCK_ENTER_TAU / DUCK_EXIT_TAU in createAudioBuses.
+// Crossfade time constants — mirror the duck (10-02): into combat fast so it grabs
+// the mix, back to exploration slow so it returns gently. τ ≈ settle/3.
 const CROSS_ENTER_TAU = 0.33;
 const CROSS_EXIT_TAU = 0.8;
 
-// Equal-power (constant-loudness) crossfade curves. `x` is the target: 0 = full
-// region (exploration), 1 = full combat. Region rides cos(x·½π) (1→0), combat
-// rides cos((1-x)·½π) (0→1); their powers sum to 1 so loudness never dips.
-function regionGainFor(x: number): number {
-  return Math.cos(x * 0.5 * Math.PI);
-}
-function combatGainFor(x: number): number {
-  return Math.cos((1 - x) * 0.5 * Math.PI);
-}
+// A real `.ogg` gets this long (seconds of running context) to decode and win
+// before its mood falls back to the procedural voice.
+const FILE_GRACE_S = 1.5;
 
-/** One looping music track: its source, its own gain, and the url it decodes from. */
 interface Track {
+  mood: MusicMood;
   url: string;
-  source: AudioBufferSourceNode | null;
-  gain: GainNode | null;
-  /** The equal-power gain this track should sit at for a given crossfade target. */
-  gainFor(x: number): number;
+  built: boolean;
+  /** The node the director ramps for the crossfade (buffer gain OR the voice output). */
+  gainNode: GainNode | null;
+  source: AudioBufferSourceNode | null; // real-file path
+  voice: ProceduralVoice | null; // procedural fallback
 }
 
 export function createMusic(
@@ -63,27 +61,33 @@ export function createMusic(
   getMusicBus: () => GainNode | null,
   sampleCache: SampleCache
 ): Music {
-  // Current crossfade target (0 = region, 1 = combat). Survives a context rebuild
-  // so freshly-built sources start at the correct steady gain.
-  let currentTarget = 0;
+  let currentMood: MusicMood = 'day';
   let musicContext: AudioContext | null = null;
+  let runningSince = 0; // ctx.currentTime when the live context first appeared (grace clock)
   let disposed = false;
 
-  const region: Track = { url: REGION_URL, source: null, gain: null, gainFor: regionGainFor };
-  const combat: Track = { url: COMBAT_URL, source: null, gain: null, gainFor: combatGainFor };
-  const tracks = [region, combat];
+  const tracks: Track[] = (['day', 'night', 'combat'] as MusicMood[]).map((mood) => ({
+    mood,
+    url: MOOD_URLS[mood],
+    built: false,
+    gainNode: null,
+    source: null,
+    voice: null,
+  }));
 
-  // Warm both loops immediately (network is context-free — Pitfall 1); they decode
-  // lazily once the context unlocks. Absent files simply never decode → no-op.
-  sampleCache.preload(REGION_URL);
-  sampleCache.preload(COMBAT_URL);
+  // Warm the loops immediately (network is context-free — Pitfall 1). Absent files
+  // never decode → the procedural voice covers that mood.
+  for (const track of tracks) sampleCache.preload(track.url);
 
   function ready(): AudioContext | null {
     const context = getContext();
     return context && context.state === 'running' ? context : null;
   }
 
-  /** Tear a track's nodes down (context swap / dispose). */
+  function gainTarget(track: Track): number {
+    return track.mood === currentMood ? 1 : 0;
+  }
+
   function teardown(track: Track): void {
     if (track.source) {
       try {
@@ -93,77 +97,80 @@ export function createMusic(
       }
       track.source.disconnect();
     }
-    track.gain?.disconnect();
+    track.voice?.dispose();
+    track.gainNode?.disconnect();
     track.source = null;
-    track.gain = null;
+    track.voice = null;
+    track.gainNode = null;
+    track.built = false;
   }
 
-  /** (Re)bind to the live context, tearing down stale sources if it changed. */
+  /** (Re)bind to the live context, tearing down stale nodes if it changed. */
   function ensure(): AudioContext | null {
     const context = ready();
     if (!context) return null;
     if (musicContext !== context) {
       for (const track of tracks) teardown(track);
       musicContext = context;
+      runningSince = context.currentTime;
     }
     return context;
   }
 
-  /**
-   * Lazily build + start a track's loop once its buffer has decoded. Both tracks
-   * build the moment their buffer is ready (typically the same frame — both were
-   * preloaded together), so they start phase-locked. Only gains move afterward.
-   */
+  /** Build a track once: prefer a decoded buffer, else (after grace) a procedural voice. */
   function build(context: AudioContext, bus: GainNode, track: Track): void {
-    if (track.source) return;
+    if (track.built) return;
     const buffer = sampleCache.get(track.url);
-    if (!buffer) return; // not decoded yet (or file absent) → stay silent (no fallback)
-
-    const source = context.createBufferSource();
-    source.buffer = buffer;
-    source.loop = true;
-    // Explicit loop points past any lead-in keep the seam clean (Pitfall 3); a
-    // true-loop asset uses the whole buffer.
-    source.loopStart = 0;
-    source.loopEnd = buffer.duration;
-
-    const gain = context.createGain();
-    // Start at the steady equal-power level for the CURRENT target (region full /
-    // combat silent while exploring), so a mid-combat build lands at the right gain.
-    gain.gain.value = track.gainFor(currentTarget);
-    source.connect(gain).connect(bus);
-    source.start();
-
-    track.source = source;
-    track.gain = gain;
+    if (buffer) {
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.loopStart = 0;
+      source.loopEnd = buffer.duration;
+      const gain = context.createGain();
+      gain.gain.value = gainTarget(track);
+      source.connect(gain).connect(bus);
+      source.start();
+      track.source = source;
+      track.gainNode = gain;
+      track.built = true;
+      return;
+    }
+    // No file yet — give it a moment to decode before committing to procedural.
+    if (context.currentTime - runningSince < FILE_GRACE_S) return;
+    const voice = createProceduralVoice(context, track.mood);
+    voice.output.gain.value = gainTarget(track);
+    voice.output.connect(bus);
+    track.voice = voice;
+    track.gainNode = voice.output;
+    track.built = true;
   }
 
-  /** Ramp both tracks to their equal-power targets over τ (never a per-frame .value= — Pitfall 4). */
   function applyCrossfade(context: AudioContext, tau: number): void {
     const now = context.currentTime;
     for (const track of tracks) {
-      const param = track.gain?.gain;
+      const param = track.gainNode?.gain;
       if (!param) continue;
       param.cancelScheduledValues(now);
       param.setValueAtTime(param.value, now);
-      param.setTargetAtTime(track.gainFor(currentTarget), now, tau);
+      param.setTargetAtTime(gainTarget(track), now, tau);
     }
   }
 
   return {
-    setCombat(inCombat) {
+    setState(inCombat, phase01) {
       if (disposed) return;
       const context = ensure();
       if (!context) return;
       const bus = getMusicBus();
       if (!bus) return;
-      // Build any track whose buffer just decoded (both no-op once built).
       for (const track of tracks) build(context, bus, track);
 
-      const target = inCombat ? 1 : 0;
-      if (target === currentTarget) return; // steady state: nothing to re-ramp
-      currentTarget = target;
-      applyCrossfade(context, inCombat ? CROSS_ENTER_TAU : CROSS_EXIT_TAU);
+      const mood: MusicMood = inCombat ? 'combat' : isBirdTime(phase01) ? 'day' : 'night';
+      if (mood === currentMood) return; // steady state
+      currentMood = mood;
+      // Fast into combat, gentle back out to (or between) exploration moods.
+      applyCrossfade(context, mood === 'combat' ? CROSS_ENTER_TAU : CROSS_EXIT_TAU);
     },
 
     dispose() {

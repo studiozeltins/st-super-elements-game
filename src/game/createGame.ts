@@ -1429,7 +1429,7 @@ export function createGame(
     // ONE combat signal (D-08), fanned into all three consumers: the ambience
     // (birds stop while in combat, the bed swells with the live gust, creatures
     // gate on the day/night phase), the bed+music DUCK (−6..−12dB over ~1s /
-    // restore ~2-3s, the AMBI-06 bed-duck half), and the region↔combat music
+    // restore ~2-3s, the AMBI-06 bed-duck half), and the day/night/combat music
     // crossfade (MUSIC-02). All three read the SAME `inCombat` — never re-derived.
     const inCombat = isInCombat(elapsedSeconds, lastCombatAt);
     // Wind audio tracks the VISIBLE swirl: sample the gust AT THE PLAYER (same
@@ -1444,15 +1444,17 @@ export function createGame(
         -1,
         1
       ) * 0.8;
+    const dayNightPhase = phase01(serverClock.nowMicros());
     ambience.update(
       deltaSeconds,
       wind.sampleGust(playerPosition.x, playerPosition.z),
-      phase01(serverClock.nowMicros()),
+      dayNightPhase,
       inCombat,
       windPan
     );
     buses.duck(inCombat);
-    music.setCombat(inCombat);
+    // Music picks day / night / combat from the SAME combat signal + day/night phase.
+    music.setState(inCombat, dayNightPhase);
 
     // Combo drops if the next hit does not land inside the (shrinking) window.
     if (combo > 0 && elapsedSeconds - lastComboHitAt > comboWindowSeconds(combo)) {

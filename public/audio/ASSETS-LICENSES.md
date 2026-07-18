@@ -40,11 +40,16 @@ ambient layers; none are required for Phase 10.
 | --------------- | -------------- | ------- | ---------- | ------- |
 | *(none needed)* | wind bed (proc)| N/A     | —          | —       |
 
-## Music (`music/`) — region + combat loops (Phase 10-06, MUSIC-01/02)
+## Music (`music/`) — day / night / combat loops (Phase 10-06, MUSIC-01/02)
 
-Music has **NO synth fallback** — these two loops MUST be sourced for MUSIC-01/02 to pass.
+Three moods: `day` + `night` exploration loops crossfade by time of day, `combat`
+overrides both on the combat signal. Each mood now has a **procedural fallback**
+(`proceduralMusic.ts`) so music plays with no files. Dropping a real CC0 `.ogg` at
+the matching path transparently overrides that mood's procedural theme (a decoded
+buffer wins a short grace race on load — no code change).
 
-| Filename           | Layer               | Status  | Source URL | License |
-| ------------------ | ------------------- | ------- | ---------- | ------- |
-| `region-loop.ogg`  | exploration music   | PENDING | TODO       | TODO    |
-| `combat-loop.ogg`  | combat music        | PENDING | TODO       | TODO    |
+| Filename          | Layer                  | Status  | Source URL | License |
+| ----------------- | ---------------------- | ------- | ---------- | ------- |
+| `day-loop.ogg`    | daytime exploration    | PENDING | TODO       | TODO    |
+| `night-loop.ogg`  | nighttime exploration  | PENDING | TODO       | TODO    |
+| `combat-loop.ogg` | combat                 | PENDING | TODO       | TODO    |
