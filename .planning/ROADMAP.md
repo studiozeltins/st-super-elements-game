@@ -216,7 +216,7 @@ Wave 2 *(footpath bake + classifier + prop placement)*
 
 Wave 3 *(integration + phase gate)*
 
-- [ ] 11-08-PLAN.md — Wire dust + surfaceAt + footstep surface + ?nodust flag into createGame; human perceptual + FPS gate (WEAR-05) [Wave 3, depends 11-04, 11-06]
+- [x] 11-08-PLAN.md — Wire dust + surfaceAt + footstep surface + ?nodust flag into createGame; human perceptual + FPS gate (WEAR-05) [Wave 3, depends 11-04, 11-06]
 
 ### Phase 12: Wildlife
 
@@ -257,7 +257,7 @@ Wave 3 *(integration + phase gate)*
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
-| 11. Lived-in Props & Wear | 7/8 | In Progress|  |
+| 11. Lived-in Props & Wear | 8/8 | Complete   | 2026-07-18 |
 | 12. Wildlife | 0/TBD | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |
 
