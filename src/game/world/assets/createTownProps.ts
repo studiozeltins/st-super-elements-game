@@ -4,55 +4,15 @@ import type { SeededRandom, WorldAsset } from './types';
 import { edgeLit, lambert, pickRandom, randomBetween } from './assetHelpers';
 
 /**
- * Lived-in plaza clutter — barrels, crate stacks, market stalls and handcarts —
- * in the voxel/pixel look (boxes + low-segment cylinders). Scattered between the
- * houses so the town square reads as inhabited, not a bare ring. All decor:
- * returned groups carry no obstacles (players walk through) to keep the spawn
- * plaza clear for movement.
+ * Lived-in plaza clutter — market stalls, handcarts, benches, cafe tables,
+ * planters and grass tufts — in the voxel/pixel look (boxes + low-segment
+ * cylinders). Scattered between the houses so the town square reads as
+ * inhabited, not a bare ring. Crates/barrels/fences live in their own sibling
+ * files (createCrate/createBarrel/createFence) and carry collision footprints.
  */
 
 const WOOD = 0x7a5230;
 const WOOD_DARK = 0x3a2a1a;
-const HOOP = 0x2e2118;
-
-/** A short staved barrel: a low-segment cylinder with two dark iron hoops. */
-export function createBarrel(random: SeededRandom): WorldAsset {
-  const group = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.82, 8), lambert(WOOD));
-  body.position.y = 0.41;
-  group.add(body);
-  const hoopMat = lambert(HOOP);
-  for (const y of [0.16, 0.66]) {
-    const hoop = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.09, 8), hoopMat);
-    hoop.position.y = y;
-    group.add(hoop);
-  }
-  group.rotation.y = random() * Math.PI * 2;
-  return { group };
-}
-
-/** One or two stacked wooden crates with plank trim on the lid. */
-export function createCrate(random: SeededRandom): WorldAsset {
-  const group = new THREE.Group();
-  const crateMat = lambert(0x8a6a3f);
-  const trimMat = lambert(WOOD_DARK);
-  const boxCount = random() < 0.45 ? 2 : 1;
-  let y = 0;
-  for (let i = 0; i < boxCount; i += 1) {
-    const size = 0.72 - i * 0.16;
-    const crate = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), crateMat);
-    crate.position.y = y + size / 2;
-    crate.rotation.y = randomBetween(random, -0.25, 0.25);
-    group.add(crate);
-    const lid = new THREE.Mesh(new THREE.BoxGeometry(size + 0.04, 0.06, size + 0.04), trimMat);
-    lid.position.set(0, y + size, 0);
-    lid.rotation.y = crate.rotation.y;
-    group.add(lid);
-    y += size;
-  }
-  group.rotation.y = random() * Math.PI * 2;
-  return { group };
-}
 
 const PRODUCE = [0xd8623a, 0xe0a53a, 0x6ea24a, 0xc23a4a];
 const AWNING = [0xcf4b3a, 0xdcc9a8];
