@@ -69,21 +69,21 @@ zero server publish.
 - [ ] **AMBI-01**: Audio routes through a master/ambient/sfx bus with a compressor —
   existing SFX migrated off direct `context.destination`; single shared AudioContext
 
-- [ ] **AMBI-02**: Player hears a continuous procedural wind bed (filtered noise, slowly
+- [x] **AMBI-02**: Player hears a continuous procedural wind bed (filtered noise, slowly
   modulated) whose gain swells with the wind module's gust envelope
 
-- [ ] **AMBI-03**: Player hears randomized one-shots — bird chirps every 5–15s with pitch
+- [x] **AMBI-03**: Player hears randomized one-shots — bird chirps every 5–15s with pitch
   ±10–20% + pan + volume jitter (never a fixed-interval metronome); synth-first,
   playtest-gated with CC0 recording swap as fallback
 
 - [ ] **AMBI-04**: Player hears grass rustle when sprinting through grass cells
-- [ ] **AMBI-05**: Player hears distant goliath grunts, gain scaled by nearest-camp
+- [x] **AMBI-05**: Player hears distant goliath grunts, gain scaled by nearest-camp
   proximity, long random intervals
 
-- [ ] **AMBI-06**: Combat ducks the ambience — birds stop entirely, bed ducks −6..−12dB
+- [x] **AMBI-06**: Combat ducks the ambience — birds stop entirely, bed ducks −6..−12dB
   over ~1s, restores over ~2–3s after combat ends (never hard-cut)
 
-- [ ] **AMBI-07**: Ambience varies by time of day — birds by day, crickets/owl at night
+- [x] **AMBI-07**: Ambience varies by time of day — birds by day, crickets/owl at night
   (paired with DAYNITE phase)
 
 ### Music (MUSIC)
@@ -91,7 +91,7 @@ zero server publish.
 - [ ] **MUSIC-01**: Player hears a region exploration music loop (CC0/properly-licensed
   track, seamless loop) on the music bus at ambient-friendly volume
 
-- [ ] **MUSIC-02**: Combat music crossfades in when combat starts and back out when combat
+- [x] **MUSIC-02**: Combat music crossfades in when combat starts and back out when combat
   ends (same combat-state signal as AMBI-06) — horizontal crossfade, no hard cuts
 
 - [ ] **MUSIC-03**: Player can mute/adjust music independently of SFX (music vs sfx bus
@@ -196,14 +196,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SHADOW-03 | Phase 9.1 | Complete |
 | SHADOW-04 | Phase 9.1 | Complete |
 | AMBI-01 | Phase 10 | Pending |
-| AMBI-02 | Phase 10 | Pending |
-| AMBI-03 | Phase 10 | Pending |
+| AMBI-02 | Phase 10 | Complete |
+| AMBI-03 | Phase 10 | Complete |
 | AMBI-04 | Phase 10 | Pending |
-| AMBI-05 | Phase 10 | Pending |
-| AMBI-06 | Phase 10 | Pending |
-| AMBI-07 | Phase 10 | Pending |
+| AMBI-05 | Phase 10 | Complete |
+| AMBI-06 | Phase 10 | Complete |
+| AMBI-07 | Phase 10 | Complete |
 | MUSIC-01 | Phase 10 | Pending |
-| MUSIC-02 | Phase 10 | Pending |
+| MUSIC-02 | Phase 10 | Complete |
 | MUSIC-03 | Phase 10 | Pending |
 | WEAR-01 | Phase 11 | Pending |
 | WEAR-02 | Phase 11 | Pending |

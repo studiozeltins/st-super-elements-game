@@ -168,7 +168,7 @@ Plans:
 Plans:
 **Wave 0**
 
-- [ ] 10-01-PLAN.md — Pure helpers test-first: combatState (isInCombat hysteresis) + ambienceMath (one-shot timing, bed-gain, proximity, day/night gates) [Wave 0]
+- [x] 10-01-PLAN.md — Pure helpers test-first: combatState (isInCombat hysteresis) + ambienceMath (one-shot timing, bed-gain, proximity, day/night gates) [Wave 0]
 
 **Wave 1** *(blocked on Wave 0)*
 
@@ -239,7 +239,7 @@ Plans:
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
-| 10. Ambient Audio & Music | 0/6 | Not started | - |
+| 10. Ambient Audio & Music | 1/6 | In Progress|  |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |
