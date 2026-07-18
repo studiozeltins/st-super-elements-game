@@ -63,13 +63,61 @@ function buildLeaf(
     }
   }
 
-  // Round iron handle near the meeting edge.
+  // Round iron handle on a small backplate near the meeting edge.
+  const plate = box(0.16, 0.22, 0.04, IRON);
+  plate.position.set(handleSide * width * 0.36, height * 0.5, front - 0.06);
+  leaf.add(plate);
   const handle = new THREE.Mesh(
     new THREE.TorusGeometry(0.09, 0.025, 6, 10),
     new THREE.MeshLambertMaterial({ color: IRON })
   );
   handle.position.set(handleSide * width * 0.36, height * 0.5, front - 0.1);
   leaf.add(handle);
+
+  // Strap hinges on the hinge edge (opposite the handle): two iron bands biting
+  // into the leaf from the edge, each ending in a round pintle knuckle.
+  const hingeEdge = -handleSide;
+  for (const hy of [height * 0.22, height * 0.78]) {
+    const strap = box(width * 0.34, 0.09, 0.05, IRON);
+    strap.position.set(hingeEdge * (width / 2 - width * 0.17), hy, front - 0.06);
+    leaf.add(strap);
+    const knuckle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.06, 0.14, 8),
+      new THREE.MeshLambertMaterial({ color: STUD })
+    );
+    knuckle.rotation.x = Math.PI / 2;
+    knuckle.position.set(hingeEdge * (width / 2 - 0.02), hy, front - 0.07);
+    leaf.add(knuckle);
+  }
+
+  // Barred peep window near the top: a dark recessed panel behind crossed iron
+  // bars — reads as a glazed, iron-grilled opening.
+  const winW = width * 0.42;
+  const winH = height * 0.16;
+  const winY = height * 0.86;
+  const pane = box(winW, winH, 0.04, 0x14100a);
+  pane.position.set(0, winY, front + 0.03);
+  leaf.add(pane);
+  const bars = 3;
+  for (let b = 0; b < bars; b += 1) {
+    const bar = box(0.03, winH * 1.05, 0.04, IRON);
+    bar.position.set(-winW / 2 + (winW / (bars - 1)) * b, winY, front - 0.05);
+    leaf.add(bar);
+  }
+  const crossBar = box(winW * 1.05, 0.03, 0.04, IRON);
+  crossBar.position.set(0, winY, front - 0.05);
+  leaf.add(crossBar);
+
+  // Iron ring knocker on a stud, centered below the window.
+  const knockPlate = box(0.1, 0.1, 0.04, STUD);
+  knockPlate.position.set(0, height * 0.62, front - 0.06);
+  leaf.add(knockPlate);
+  const knocker = new THREE.Mesh(
+    new THREE.TorusGeometry(0.07, 0.02, 6, 10),
+    new THREE.MeshLambertMaterial({ color: IRON })
+  );
+  knocker.position.set(0, height * 0.58, front - 0.1);
+  leaf.add(knocker);
 
   return leaf;
 }
@@ -118,6 +166,11 @@ export function createDoor(random: SeededRandom, options: DoorOptions): THREE.Gr
     head.position.set(0, height + 0.11, frameZ);
     head.castShadow = true;
     door.add(head);
+    // Centered keystone proud of the lintel — a small carved-stone accent.
+    const keystone = box(0.24, 0.3, 0.32, 0x8a8377);
+    keystone.position.set(0, height + 0.12, frameZ - 0.02);
+    keystone.castShadow = true;
+    door.add(keystone);
   }
 
   // Doorstep slab.
