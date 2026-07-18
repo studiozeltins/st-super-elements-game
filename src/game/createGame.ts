@@ -49,6 +49,7 @@ import { createLightPool } from './systems/createLightPool';
 import { createAttackViewClock } from './systems/createAttackViewClock';
 import { createEnemyRenderer } from './systems/createEnemyRenderer';
 import { createGoliathRenderer } from './systems/createGoliathRenderer';
+import { prewarmEntityModels } from './entities/prewarmEntityModels';
 import { createTelegraphSystem } from './systems/createTelegraphSystem';
 import { createDamageNumbers } from './systems/createDamageNumbers';
 import {
@@ -430,6 +431,12 @@ export function createGame(
     groundInfluence.stamp(x, z, SLIME_SLAM_RADIUS * 0.8, 1, 0, 0, 0.55)
   );
   const goliathRenderer = createGoliathRenderer(scene);
+  // Warm every enemy/goliath variant's geometry + shader NOW, against the lit
+  // scene, so the first live spawn in a fight never freezes the frame building
+  // voxel clusters and compiling programs (~400ms hitch → moved into load).
+  if (!perfFlags.has('noprewarm')) {
+    prewarmEntityModels(pixelRenderer.renderer, scene, pixelRenderer.camera);
+  }
   // Ground telegraphs for server unit_attack windups (D4-14): discs sit on the
   // terrain at the LOCKED landing so the dodge read matches the server hitbox.
   const telegraphSystem = createTelegraphSystem(scene, (x, z) => world.getGroundHeight(x, z));
