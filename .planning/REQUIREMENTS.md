@@ -112,7 +112,7 @@ zero server publish.
 
 ### Lived-in Wear (WEAR)
 
-- [ ] **WEAR-01**: Worn footpaths run along REAL routes (camp↔camp, plaza↔bridge) —
+- [x] **WEAR-01**: Worn footpaths run along REAL routes (camp↔camp, plaza↔bridge) —
   static bake: grass placement thinned along path splines + ground tint strip (never the
   decaying influence channels)
 
@@ -205,7 +205,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MUSIC-01 | Phase 10 | Complete |
 | MUSIC-02 | Phase 10 | Complete |
 | MUSIC-03 | Phase 10 | Complete |
-| WEAR-01 | Phase 11 | Pending |
+| WEAR-01 | Phase 11 | Complete |
 | WEAR-02 | Phase 11 | Pending |
 | WEAR-03 | Phase 11 | Complete |
 | WEAR-04 | Phase 11 | Complete |
