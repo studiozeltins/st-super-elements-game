@@ -8,7 +8,7 @@ import {
   meadowLushness,
   terrainColorAt,
 } from './terrain';
-import { roadFactor } from './roads';
+import { roadFactor, footpathFactor } from './roads';
 import { isInTown } from './town/townPlan';
 
 /**
@@ -73,6 +73,12 @@ export function generateGrassBlades(totalCount: number): GrassBladeSpec[][] {
         if (getTerrainSlope(x, z) > MAX_GRASS_SLOPE) continue;
         if (roadFactor(x, z) > 0.5) continue; // keep the road surface clear
         if (isInTown(x, z)) continue; // no grass on the pavement — only faked seam grass
+        // Partial footpath thinning: probabilistically drop blades along the worn
+        // route graph so grass still pokes through (trampled, not cleared). Capped
+        // at FOOTPATH_MAX (0.6) so at most ~60% is removed on the spine, tapering
+        // to 0 at the edges. Uses the seeded random() already threaded here.
+        const foot = footpathFactor(x, z);
+        if (foot > 0 && random() < foot) continue;
         const y = getTerrainHeight(x, z);
         const isFlower = random() < FLOWER_FRACTION;
         blades.push({

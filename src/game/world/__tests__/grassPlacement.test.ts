@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { generateGrassBlades } from '../grassPlacement';
 import { ISLANDS, getTerrainHeight, getTerrainSlope, isOnLand, meadowLushness } from '../terrain';
+import { footpathFactor, roadFactor } from '../roads';
+import { isInTown } from '../town/townPlan';
 import { SAFE_ZONE_RADIUS } from '../../data/constants';
 
 const TOTAL = 2000;
@@ -60,5 +62,43 @@ describe('generateGrassBlades', () => {
         expect(channel).toBeLessThanOrEqual(1);
       }
     }
+  });
+
+  it('thins — but does not clear — grass along footpath spines', () => {
+    // Blades still poke through the trampled path: some land on strong spines.
+    const onSpine = allBlades.filter(blade => footpathFactor(blade.x, blade.z) > 0.25);
+    expect(onSpine.length).toBeGreaterThan(0); // NOT a hard clear like a road
+
+    // But areal density on spines is markedly LOWER than in matched non-path
+    // meadow of comparable lushness. Grid-scan eligible cells to normalise by
+    // available area so the comparison is a true density, not a raw count.
+    const PLAZA = SAFE_ZONE_RADIUS + 1;
+    let areaSpine = 0;
+    let areaMeadow = 0;
+    for (let x = -120; x <= 120; x += 1) {
+      for (let z = -120; z <= 120; z += 1) {
+        if (!isOnLand(x, z)) continue;
+        if (Math.hypot(x, z) < PLAZA) continue;
+        if (getTerrainSlope(x, z) > 0.85) continue;
+        if (roadFactor(x, z) > 0.5) continue;
+        if (isInTown(x, z)) continue;
+        if (meadowLushness(x, z) < 0.4) continue; // match on lushness (drives density)
+        const foot = footpathFactor(x, z);
+        if (foot > 0.25) areaSpine += 1;
+        else if (foot === 0) areaMeadow += 1;
+      }
+    }
+    const spineBlades = allBlades.filter(
+      blade => meadowLushness(blade.x, blade.z) >= 0.4 && footpathFactor(blade.x, blade.z) > 0.25
+    ).length;
+    const meadowBlades = allBlades.filter(
+      blade => meadowLushness(blade.x, blade.z) >= 0.4 && footpathFactor(blade.x, blade.z) === 0
+    ).length;
+    const spineDensity = spineBlades / areaSpine;
+    const meadowDensity = meadowBlades / areaMeadow;
+    // Trampled: at least a third thinner than matched meadow (observed ~3x).
+    expect(spineDensity).toBeLessThan(meadowDensity * 0.7);
+    // And meadow density away from paths is preserved (no global regression).
+    expect(meadowDensity).toBeGreaterThan(0.1);
   });
 });
