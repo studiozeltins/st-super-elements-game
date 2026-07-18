@@ -3,11 +3,14 @@ import * as THREE from 'three';
 import { createSeededRandom } from '../../rng';
 import { createWind } from '../../../systems/createWind';
 import {
+  createBarrel,
   createBoulder,
   createBush,
   createCampFlag,
   createCampfire,
   createCanopyTree,
+  createCrate,
+  createFence,
   createFlower,
   createMushroom,
   createPalmTree,
@@ -87,4 +90,47 @@ describe.each(FACTORY_ENTRIES)('%s', (_name, create, climbable) => {
       expect(asset.platforms).toBeUndefined();
     });
   }
+});
+
+/** True if any descendant of the object is a THREE.Light (props must have none). */
+function hasLight(object: THREE.Object3D): boolean {
+  let found = false;
+  object.traverse(child => {
+    if ((child as THREE.Light).isLight) found = true;
+  });
+  return found;
+}
+
+// The lived-in plaza props (WEAR-02): merged-box voxel bodies that carry
+// collision footprints and NO light (D-08/D-10). Placement happens in Plan 07.
+const PROP_FACTORIES: Record<string, AssetFactory> = {
+  createCrate,
+  createBarrel,
+  createFence,
+};
+
+describe.each(Object.entries(PROP_FACTORIES))('%s', (_name, create) => {
+  it('returns a WorldAsset with a merged mesh and at least one obstacle', () => {
+    const asset = create(createSeededRandom(1));
+    expect(asset.group).toBeInstanceOf(THREE.Group);
+    expect(asset.group.children.length).toBeGreaterThanOrEqual(1);
+    expect(asset.obstacles).toBeDefined();
+    expect(asset.obstacles!.length).toBeGreaterThanOrEqual(1);
+    for (const obstacle of asset.obstacles!) {
+      expect(obstacle.radius).toBeGreaterThan(0);
+    }
+  });
+
+  it('carries NO light (light-pool discipline, D-10)', () => {
+    const asset = create(createSeededRandom(1));
+    expect(hasLight(asset.group)).toBe(false);
+  });
+
+  it('is deterministic: two builds with the same fresh seed match', () => {
+    const first = create(createSeededRandom(7));
+    const second = create(createSeededRandom(7));
+    expect(first.group.children.length).toBe(second.group.children.length);
+    expect(first.obstacles!.length).toBe(second.obstacles!.length);
+    expect(first.obstacles).toEqual(second.obstacles);
+  });
 });
