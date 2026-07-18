@@ -5,16 +5,22 @@
 // global spam guard keeps a crowded screen from turning into rain.
 
 import { clampGain, createNoiseSource, jitter, panned } from './audioCore';
+import type { Surface } from '../systems/surfaceAt';
 
 // No 'slime' kind: slimes move ONLY by hopping now — their locomotion sound is
 // the per-hop leap squish (createWeaponAudio.playSlimeLeap), not a stride.
 export type FootstepKind = 'player' | 'goliath' | 'golem';
 
-/** Terrain under a moving unit — flags the player's own steps for a grass-rustle layer (AMBI-04, D-06). */
-export type FootstepSurface = 'grass';
+/**
+ * Terrain under a moving unit — the four ground surfaces, re-exported from
+ * `surfaceAt.Surface` so dust spawning and footstep audio share ONE tag set
+ * (D-13). Only `'grass'` layers a grass-rustle (AMBI-04, D-06); the other three
+ * (dirt/path/town) simply skip the rustle — no new audio code.
+ */
+export type FootstepSurface = Surface;
 
 export interface MovementAudio {
-  /** Call once per frame per visible moving unit. Accumulates travel distance and emits one footstep each time it crosses the kind's stride length. gain 0 (culled by distance) still advances tracking but plays nothing. Pass `surface: 'grass'` for the local player over grass to layer a soft rustle. */
+  /** Call once per frame per visible moving unit. Accumulates travel distance and emits one footstep each time it crosses the kind's stride length. gain 0 (culled by distance) still advances tracking but plays nothing. Pass the local player's real `surface` (from surfaceAt) — a soft rustle layers only when it is `'grass'`. */
   updateUnit(
     key: string,
     kind: FootstepKind,
