@@ -36,6 +36,7 @@ import { createAudioSystem } from './audio/createAudioSystem';
 import { createAudioBuses, type AudioBuses } from './audio/createAudioBuses';
 import { createSampleCache } from './audio/createSampleCache';
 import { createAmbience } from './audio/createAmbience';
+import { createMusic } from './audio/createMusic';
 import { isInCombat } from './audio/combatState';
 import { createCombatAudio } from './audio/createCombatAudio';
 import { createMovementAudio, type FootstepKind } from './audio/createMovementAudio';
@@ -462,6 +463,10 @@ export function createGame(
     return min;
   }
   const ambience = createAmbience(audioSystem.getContext, buses.ambient, sampleCache, minCampDistance);
+  // Combat-aware music (10-06): region + combat loops crossfade on the music bus,
+  // reusing the SAME decode-once sampleCache. Both loops must be sourced — music
+  // has no synth fallback, so it stays silent until the two .ogg files are dropped.
+  const music = createMusic(audioSystem.getContext, buses.music, sampleCache);
   // Same linear falloff shape the strike juice uses — a far fight is a faint
   // tick, my own hit is full volume.
   function hitAudioGain(x: number, z: number): number {
@@ -1417,12 +1422,15 @@ export function createGame(
     // loop, NEVER derived per React render (Pitfall 6.1). The cycle reads
     // serverClock.nowMicros() internally; no private accumulator.
     daynight.update();
-    // ONE combat signal (D-08), fanned into the ambience: birds stop while in
-    // combat, the bed swells with the live gust, creatures gate on the day/night
-    // phase (same clock as the palette). The bed-duck + music crossfade in 10-06
-    // will consume this SAME `inCombat` — do not derive it twice.
+    // ONE combat signal (D-08), fanned into all three consumers: the ambience
+    // (birds stop while in combat, the bed swells with the live gust, creatures
+    // gate on the day/night phase), the bed+music DUCK (−6..−12dB over ~1s /
+    // restore ~2-3s, the AMBI-06 bed-duck half), and the region↔combat music
+    // crossfade (MUSIC-02). All three read the SAME `inCombat` — never re-derived.
     const inCombat = isInCombat(elapsedSeconds, lastCombatAt);
     ambience.update(deltaSeconds, wind.getGustEnvelope(), phase01(serverClock.nowMicros()), inCombat);
+    buses.duck(inCombat);
+    music.setCombat(inCombat);
 
     // Combo drops if the next hit does not land inside the (shrinking) window.
     if (combo > 0 && elapsedSeconds - lastComboHitAt > comboWindowSeconds(combo)) {
@@ -1600,6 +1608,7 @@ export function createGame(
       movementAudio.dispose();
       pickupAudio.dispose();
       ambience.dispose();
+      music.dispose();
       sampleCache.dispose();
       audioSystem.dispose();
       for (const [identityHex, view] of remotePlayers) removeRemotePlayer(identityHex, view);
