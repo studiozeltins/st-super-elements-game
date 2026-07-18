@@ -17,3 +17,6 @@ Discovered during execution; NOT fixed here (scope boundary — unrelated to thi
 - **Re-confirmed in 10-02:** still failing, and confirmed pre-existing by re-running the test at
   commit `1bad15d` (the tip before this plan) where it also fails. The 10-02 bus refactor touches
   only `src/game/audio/**` + the audio wiring in `createGame.ts`; grassPlacement is not in the diff.
+- **Re-confirmed in 10-04:** still failing; re-verified pre-existing by `git stash`-ing the 10-04
+  rustle change and re-running the test on the clean tree (still red). 10-04 touches only
+  `createMovementAudio.ts` + the footstep call in `createGame.ts`; grassPlacement is not in the diff.

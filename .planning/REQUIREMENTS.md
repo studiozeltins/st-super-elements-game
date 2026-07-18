@@ -76,7 +76,7 @@ zero server publish.
   ±10–20% + pan + volume jitter (never a fixed-interval metronome); synth-first,
   playtest-gated with CC0 recording swap as fallback
 
-- [ ] **AMBI-04**: Player hears grass rustle when sprinting through grass cells
+- [x] **AMBI-04**: Player hears grass rustle when sprinting through grass cells
 - [x] **AMBI-05**: Player hears distant goliath grunts, gain scaled by nearest-camp
   proximity, long random intervals
 
@@ -198,7 +198,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AMBI-01 | Phase 10 | Complete |
 | AMBI-02 | Phase 10 | Complete |
 | AMBI-03 | Phase 10 | Complete |
-| AMBI-04 | Phase 10 | Pending |
+| AMBI-04 | Phase 10 | Complete |
 | AMBI-05 | Phase 10 | Complete |
 | AMBI-06 | Phase 10 | Complete |
 | AMBI-07 | Phase 10 | Complete |
