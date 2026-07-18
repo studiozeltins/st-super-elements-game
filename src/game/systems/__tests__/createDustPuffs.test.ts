@@ -15,17 +15,19 @@ function findDustMesh(scene: THREE.Scene): THREE.InstancedMesh {
   return mesh;
 }
 
-/** Count active puffs by decomposing each instance matrix (scale 0 = inactive). */
+// Inactive slots are written as makeScale(0,0,0) — a matrix whose entire upper
+// 3x3 block is zero. (THREE's Matrix4.decompose famously returns scale 1 for a
+// zero matrix, so we read the rotation/scale block directly instead.)
+const UPPER_3X3 = [0, 1, 2, 4, 5, 6, 8, 9, 10];
+
+/** Count active puffs — a live puff's instance matrix has a non-zero 3x3 block. */
 function countLive(mesh: THREE.InstancedMesh): number {
   const m = new THREE.Matrix4();
-  const pos = new THREE.Vector3();
-  const quat = new THREE.Quaternion();
-  const scale = new THREE.Vector3();
   let live = 0;
   for (let i = 0; i < mesh.count; i += 1) {
     mesh.getMatrixAt(i, m);
-    m.decompose(pos, quat, scale);
-    if (scale.x > 1e-6) live += 1;
+    const magnitude = UPPER_3X3.reduce((sum, e) => sum + Math.abs(m.elements[e]), 0);
+    if (magnitude > 1e-6) live += 1;
   }
   return live;
 }
