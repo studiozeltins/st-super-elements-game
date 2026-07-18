@@ -176,7 +176,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 10-03-PLAN.md — createSampleCache + createAmbience (gust-reactive bed + day/night creature one-shots) + combat-state stamp + frame update (AMBI-02/03/05/06/07) [Wave 2]
+- [x] 10-03-PLAN.md — createSampleCache + createAmbience (gust-reactive bed + day/night creature one-shots) + combat-state stamp + frame update (AMBI-02/03/05/06/07) [Wave 2]
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -239,7 +239,7 @@ Plans:
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
-| 10. Ambient Audio & Music | 2/6 | In Progress|  |
+| 10. Ambient Audio & Music | 3/6 | In Progress|  |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |
