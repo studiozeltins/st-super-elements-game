@@ -111,7 +111,9 @@ export function createHouse(
 
   house.position.set(x, 0, z);
   house.lookAt(faceTargetX, 0, faceTargetZ);
-  house.rotation.y += (random() - 0.5) * 0.1;
+  // Object3D.lookAt points local +Z at the target, but the door/front is authored
+  // on local -Z — flip 180° so the door actually faces the street target.
+  house.rotation.y += Math.PI + (random() - 0.5) * 0.1;
   house.scale.setScalar(scale);
   return house;
 }
@@ -199,6 +201,8 @@ export function createChurch(
 
   church.position.set(x, 0, z);
   church.lookAt(faceTargetX, 0, faceTargetZ);
+  // lookAt points +Z at the target; the bell-tower door front is authored on -Z.
+  church.rotation.y += Math.PI;
   return church;
 }
 
@@ -263,5 +267,7 @@ export function createCafeBuilding(
 
   cafe.position.set(x, 0, z);
   cafe.lookAt(faceTargetX, 0, faceTargetZ);
+  // lookAt points +Z at the target; the awning/counter front is authored on -Z.
+  cafe.rotation.y += Math.PI;
   return cafe;
 }
