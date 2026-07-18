@@ -211,7 +211,7 @@ Wave 1 *(parallel — no dependencies)*
 Wave 2 *(footpath bake + classifier + prop placement)*
 
 - [x] 11-05-PLAN.md — Footpath terrain tint + partial grass thinning (baked, off aRoad) (WEAR-01) [Wave 2, depends 11-02]
-- [ ] 11-06-PLAN.md — surfaceAt(x,z) pure classifier + boundary test (WEAR-05) [Wave 2, depends 11-02]
+- [x] 11-06-PLAN.md — surfaceAt(x,z) pure classifier + boundary test (WEAR-05) [Wave 2, depends 11-02]
 - [ ] 11-07-PLAN.md — Deterministic plaza prop placement before world freeze (WEAR-02) [Wave 2, depends 11-03]
 
 Wave 3 *(integration + phase gate)*
@@ -257,7 +257,7 @@ Wave 3 *(integration + phase gate)*
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
-| 11. Lived-in Props & Wear | 5/8 | In Progress|  |
+| 11. Lived-in Props & Wear | 6/8 | In Progress|  |
 | 12. Wildlife | 0/TBD | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |
 
