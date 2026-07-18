@@ -8,11 +8,14 @@ import { getRoads, ROAD_HALF_WIDTH, roadFactor } from './roads';
 import { getCampSites } from './camps';
 import type { ObstacleCircle } from '../physics/resolveCollisions';
 import {
+  createBarrel,
   createBoulder,
   createBush,
   createCampfire,
   createCampFlag,
   createCanopyTree,
+  createCrate,
+  createFence,
   createFlower,
   createLantern,
   createMushroom,
@@ -41,6 +44,7 @@ import {
 } from './assets/flagImpulse';
 import { createFountain, createWindmill } from './createPlazaStructures';
 import { buildTown } from './town/buildTown';
+import { TOWN_DISTRICTS } from './town/townPlan';
 import { buildSunBasis } from '../systems/dayNightMath';
 import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
@@ -650,6 +654,53 @@ export function createMondstadtWorld(
       }
     }
   }
+
+  // Plaza props (WEAR-02, D-09): crates/barrels stacked at the market-tile edge
+  // FACING the fountain — a market with its goods stacked toward the square (the
+  // "who put this here" read) — plus short fence runs at plaza-boundary/path
+  // gaps. Own-salt seeded RNG so the counts/jitter stay deterministic AND
+  // independent of the prior decor draws (D-09). Placed BEFORE the freeze below;
+  // runtime adds to the frozen group are forbidden (Pitfall 5). Each factory
+  // already declares its own collision footprint (placeAsset pushes
+  // asset.obstacles automatically — so NO collisionRadius here, that would
+  // double the obstacle), and NO prop carries a PointLight (D-10) — they are
+  // lightless frozen-matrix statics.
+  const propRandom = createSeededRandom(WORLD_DECOR_SEED ^ 0xc4a7e);
+  const propJitter = (range: number) => (propRandom() - 0.5) * range;
+  // Data-driven anchors: the two east market tiles whose WEST edge faces the
+  // fountain at the origin. No magic coordinates — derived from TOWN_DISTRICTS.
+  const marketE = TOWN_DISTRICTS.find(d => d.id === 'market-e')!;
+  const marketNE = TOWN_DISTRICTS.find(d => d.id === 'market-ne')!;
+  const plaza = TOWN_DISTRICTS.find(d => d.id === 'plaza')!;
+  // Sit props a touch INSIDE the tile edge so they rest on cobble, not grass.
+  const MARKET_EDGE_INSET = 0.8;
+
+  // Main stall run: crates & barrels lined along market-e's fountain-facing edge,
+  // alternating with small seeded jitter so it reads as a stacked stall, not a
+  // random scatter.
+  const marketEEdgeX = marketE.cx - marketE.half + MARKET_EDGE_INSET;
+  [-3.4, -2.1, -0.7, 0.6, 1.9, 3.2].forEach((baseZ, i) => {
+    const asset = i % 2 === 0 ? createCrate(propRandom) : createBarrel(propRandom);
+    placeAsset(asset, marketEEdgeX + propJitter(0.5), baseZ + propJitter(0.35));
+  });
+
+  // A smaller stack tucked at market-ne's corner nearest the plaza.
+  const marketNEEdgeX = marketNE.cx - marketNE.half + MARKET_EDGE_INSET;
+  const marketNECornerZ = marketNE.cz + marketNE.half - MARKET_EDGE_INSET;
+  [0, 1, 2].forEach(i => {
+    const asset = i % 2 === 0 ? createBarrel(propRandom) : createCrate(propRandom);
+    placeAsset(asset, marketNEEdgeX + propJitter(0.6), marketNECornerZ - i * 1.1 + propJitter(0.3));
+  });
+
+  // Short fence runs at plaza-boundary gaps — flanking the path entering the
+  // plaza from the south with a central gap left open to walk through, plus one
+  // run off to the north side. Fences run along +x (their factory orientation),
+  // so an x-aligned boundary reads right AND keeps each post's collision
+  // footprint aligned (placeAsset does not rotate asset obstacles).
+  const southFenceZ = plaza.half + 0.6; // just outside the south plaza edge
+  placeAsset(createFence(propRandom), -4.2 + propJitter(0.3), southFenceZ + propJitter(0.2));
+  placeAsset(createFence(propRandom), 4.2 + propJitter(0.3), southFenceZ + propJitter(0.2));
+  placeAsset(createFence(propRandom), 3.5 + propJitter(0.3), -(plaza.half + 0.6) + propJitter(0.2));
 
   scene.add(group);
 
