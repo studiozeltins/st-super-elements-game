@@ -119,10 +119,10 @@ zero server publish.
 - [ ] **WEAR-02**: Plaza has lived-in props — crates, fences, lanterns arranged to answer
   "who put this here" (market edge, path gaps), frozen-matrix static meshes
 
-- [ ] **WEAR-03**: Scorch marks regrow — existing scorch decay tuned so battle wear heals
+- [x] **WEAR-03**: Scorch marks regrow — existing scorch decay tuned so battle wear heals
   over minutes
 
-- [ ] **WEAR-04**: Player leaves a lingering grass-bend trail (~2s fade) — existing
+- [x] **WEAR-04**: Player leaves a lingering grass-bend trail (~2s fade) — existing
   groundInfluence bend decay tuned/verified for the target feel
 
 - [ ] **WEAR-05**: Sprint steps on dirt/path puff small pooled dust sprites
@@ -207,8 +207,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MUSIC-03 | Phase 10 | Complete |
 | WEAR-01 | Phase 11 | Pending |
 | WEAR-02 | Phase 11 | Pending |
-| WEAR-03 | Phase 11 | Pending |
-| WEAR-04 | Phase 11 | Pending |
+| WEAR-03 | Phase 11 | Complete |
+| WEAR-04 | Phase 11 | Complete |
 | WEAR-05 | Phase 11 | Pending |
 | WILD-01 | Phase 12 | Pending |
 | WILD-02 | Phase 12 | Pending |

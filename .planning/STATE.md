@@ -4,16 +4,16 @@ milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 10
 current_phase_name: ambient-audio-music
-status: executing
+status: verifying
 stopped_at: Phase 11 context gathered
-last_updated: "2026-07-18T11:25:01.633Z"
+last_updated: "2026-07-18T11:30:07.758Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 25
-  completed_plans: 25
+  total_plans: 33
+  completed_plans: 26
   percent: 57
 ---
 
@@ -32,7 +32,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 
 Phase: 10 (ambient-audio-music) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-18 — Phase 10 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -90,6 +90,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 10 P05 | ~20 min | 2 tasks | 3 files |
 | Phase 10 P04 | 12 min | 1 tasks | 2 files |
 | Phase 10 P06 | 15 min | 4 tasks | 2 files |
+| Phase 11 P01 | 6m | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -145,6 +146,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: onGrass derived cheaply from isGrounded() (walkable island = grass) — no GPU texture read, no per-frame alloc; road-exclusion deferred per client-perf rules
 - [Phase ?]: Music loudness on the music bus HEAD (0.7); crossfade gains stay pure equal-power cos/sin so perceived loudness is constant through the region<->combat transition
 - [Phase ?]: Music crossfade re-ramps only on a combat-state flip; steady-state setCombat is a cheap ensure/build check — zero per-frame AudioParam churn
+- [Phase ?]: Bend trail decay 0.985->0.980 for ~2s springy fade (WEAR-04/D-04/D-05)
+- [Phase ?]: Wear/scorch regrow time constant 25s->75s: reads at 1min, heals <10% by ~2.88min (WEAR-03/D-06)
 
 ### Pending Todos
 
@@ -191,7 +194,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-18T10:49:53.598Z
+Last session: 2026-07-18T11:29:26.186Z
 Stopped at: Phase 11 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/11-lived-in-props-wear/11-CONTEXT.md
