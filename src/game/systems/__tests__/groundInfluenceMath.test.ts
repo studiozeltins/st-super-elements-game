@@ -66,6 +66,14 @@ describe('decayForDelta', () => {
     const half = decayForDelta(1 / 120);
     expect(half * half).toBeCloseTo(decayForDelta(1 / 60), 10);
   });
+
+  it('fades the bend trail to a ~2s readable feel', () => {
+    // WEAR-04 / D-04 / D-05: the springy grass-bend trail should still read at
+    // 1s, be essentially faded by ~2s, and be gone by ~3s.
+    expect(decayForDelta(1)).toBeGreaterThan(0.1);
+    expect(decayForDelta(2)).toBeLessThan(0.1);
+    expect(decayForDelta(3)).toBeLessThan(0.03);
+  });
 });
 
 describe('wearDecayForDelta', () => {
@@ -78,9 +86,10 @@ describe('wearDecayForDelta', () => {
     expect(wearDecayForDelta(1 / 60)).toBeGreaterThan(decayForDelta(1 / 60));
   });
 
-  it('full wear regrows within about a minute, but not much sooner', () => {
-    // Destroyed grass (wear 1) should still read at 30s and be gone by ~60s.
-    expect(wearDecayForDelta(30)).toBeGreaterThan(0.1);
-    expect(wearDecayForDelta(60)).toBeLessThan(0.1);
+  it('heals scorch/wear over minutes, still reading on return at 1min', () => {
+    // WEAR-03 / D-06: fresh damage (wear 1) should still visibly read when the
+    // player returns ~1min later, then heal below 10% over a couple more minutes.
+    expect(wearDecayForDelta(60)).toBeGreaterThan(0.4);
+    expect(wearDecayForDelta(180)).toBeLessThan(0.1);
   });
 });
