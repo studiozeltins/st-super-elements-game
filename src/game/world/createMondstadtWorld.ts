@@ -603,7 +603,10 @@ export function createMondstadtWorld(
         collisionRadius
       );
     };
-    placeAsset(createCampfire(campRandom), campSite.x, campSite.z, 0.8);
+    // Campfire is walk-through decor (no collisionRadius) — its warm flickering
+    // PointLight (CAMPFIRE_LIGHT_NAME, collected + flickered below) is the point,
+    // not a wall; blocking it just snagged players on the camp centre.
+    placeAsset(createCampfire(campRandom), campSite.x, campSite.z);
     placeAroundCamp(createTeepee(campRandom), 4.5, 1.4);
     placeAroundCamp(createTeepee(campRandom), 5, 1.4);
     placeAroundCamp(createTotem(campRandom), 3.5, 0.5);
