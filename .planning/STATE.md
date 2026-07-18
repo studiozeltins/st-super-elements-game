@@ -5,15 +5,15 @@ milestone_name: Living World
 current_phase: 10
 current_phase_name: ambient-audio-music
 status: executing
-stopped_at: Phase 10 UI-SPEC approved
-last_updated: "2026-07-18T02:05:21.388Z"
+stopped_at: Completed 10-05-PLAN.md
+last_updated: "2026-07-18T02:13:51.631Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 10 execution started
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 25
-  completed_plans: 22
+  completed_plans: 23
   percent: 43
 ---
 
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 10 (ambient-audio-music) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-07-18 — Phase 10 execution started
 
@@ -87,6 +87,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 10 P01 | 12min | 2 tasks | 4 files |
 | Phase 10 P02 | 15min | 3 tasks | 7 files |
 | Phase 10 P03 | 12min | 4 tasks | 7 files |
+| Phase 10 P05 | ~20 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: [Phase 10]: 10-02: ONE createAudioBuses routing owner (master->DynamicsCompressor->destination + sfx/music/ambient sub-buses); music/ambient are HEAD->DUCK in series so user-volume/bed-swell x combat-duck never stomp one AudioParam (RESEARCH Pitfall 5)
 - [Phase ?]: [Phase 10]: 10-02: all 5 SFX modules migrated off context.destination onto the injected sfx bus (D-02/D-03); createAudioSystem owns the context and late-binds the sfx closure to break the createAudioSystem<->createAudioBuses circularity
 - [Phase ?]: 10-03: creature layers ship with per-layer synth fallback (birds/crickets/owl/grunt); real CC0 .ogg recordings drop in later with zero code change (D-04/D-06)
+- [Phase 10]: 10-05: audio settings UI (SKAŅA) — native range sliders + affirmative mute Toggles, App state to persist to imperative Game bus setters, readVolume V5 clamp (music 0.7/sfx 1.0 defaults)
 
 ### Pending Todos
 
@@ -183,7 +185,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-18T02:05:00.306Z
-Stopped at: Phase 10 UI-SPEC approved
+Last session: 2026-07-18T02:13:51.604Z
+Stopped at: Completed 10-05-PLAN.md
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/10-ambient-audio-music/10-UI-SPEC.md

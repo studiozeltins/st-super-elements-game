@@ -181,7 +181,7 @@ Plans:
 **Wave 3** *(blocked on Wave 2)*
 
 - [ ] 10-04-PLAN.md — Grass rustle on player grass-movement, on the sfx bus (AMBI-04) [Wave 3]
-- [ ] 10-05-PLAN.md — MUSIC-03 settings UI: music/SFX volume sliders + mute toggles, persisted (MUSIC-03) [Wave 3]
+- [x] 10-05-PLAN.md — MUSIC-03 settings UI: music/SFX volume sliders + mute toggles, persisted (MUSIC-03) [Wave 3]
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -239,7 +239,7 @@ Plans:
 | 8. Wind Core | 11/11 | Complete    | 2026-07-14 |
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
-| 10. Ambient Audio & Music | 3/6 | In Progress|  |
+| 10. Ambient Audio & Music | 4/6 | In Progress|  |
 | 11. Lived-in Props & Wear | 0/TBD | Not started | - |
 | 12. Wildlife | 0/TBD | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |
