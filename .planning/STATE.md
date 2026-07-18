@@ -6,14 +6,14 @@ current_phase: 11
 current_phase_name: lived-in-props-wear
 status: executing
 stopped_at: Completed 11-03-PLAN.md
-last_updated: "2026-07-18T11:45:23.358Z"
+last_updated: "2026-07-18T11:52:53.466Z"
 last_activity: 2026-07-18
 last_activity_desc: Phase 11 execution started
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 33
-  completed_plans: 28
+  completed_plans: 29
   percent: 57
 ---
 
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 11 (lived-in-props-wear) — EXECUTING
-Plan: 3 of 8
+Plan: 4 of 8
 Status: Ready to execute
 Last activity: 2026-07-18 — Phase 11 execution started
 
@@ -93,6 +93,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 11 P01 | 6m | 1 tasks | 2 files |
 | Phase 11 P02 | 6min | 2 tasks | 2 files |
 | Phase 11 P03 | 12 min | 2 tasks | 6 files |
+| Phase 11 P04 | 4min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -151,6 +152,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: Bend trail decay 0.985->0.980 for ~2s springy fade (WEAR-04/D-04/D-05)
 - [Phase ?]: Wear/scorch regrow time constant 25s->75s: reads at 1min, heals <10% by ~2.88min (WEAR-03/D-06)
 - [Phase ?]: [Phase 11] 11-03: createCrate/createBarrel pre-existed in createTownProps.ts as walk-through decor; moved to dedicated files + upgraded to merged-box voxel + collision + lightless spec (CLAUDE.md no-legacy). buildTown market crates/barrels now carry a collision footprint.
+- [Phase ?]: createDustPuffs caches per-puff groundY at spawn so update() stays zero-alloc (no per-frame getGroundHeight)
+- [Phase ?]: Dust is externally player-spawned: spawn(x,z,dirX,dirZ) claims a slot; update(dt) only ages the live pool (unlike self-emitting smoke)
 
 ### Pending Todos
 
@@ -197,7 +200,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-18T11:45:23.326Z
+Last session: 2026-07-18T11:52:53.448Z
 Stopped at: Completed 11-03-PLAN.md
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: None

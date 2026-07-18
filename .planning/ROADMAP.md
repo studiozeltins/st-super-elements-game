@@ -206,7 +206,7 @@ Wave 1 *(parallel — no dependencies)*
 - [x] 11-01-PLAN.md — Retune bend (~2s) + scorch/wear (~75s) decay constants + re-pin groundInfluenceMath tests (WEAR-03/04) [Wave 1]
 - [x] 11-02-PLAN.md — Footpath route graph + footpathFactor() worn-path tier in roads.ts + roads.test.ts (WEAR-01) [Wave 1]
 - [x] 11-03-PLAN.md — createCrate/createBarrel/createFence voxel prop factories + assets test (WEAR-02) [Wave 1]
-- [ ] 11-04-PLAN.md — createDustPuffs ground-hugging pooled system (hard-capped, zero-alloc) + pool test (WEAR-05) [Wave 1]
+- [x] 11-04-PLAN.md — createDustPuffs ground-hugging pooled system (hard-capped, zero-alloc) + pool test (WEAR-05) [Wave 1]
 
 Wave 2 *(footpath bake + classifier + prop placement)*
 
@@ -257,7 +257,7 @@ Wave 3 *(integration + phase gate)*
 | 9. Atmosphere & Day/Night | 5/5 | Complete    | 2026-07-14 |
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
-| 11. Lived-in Props & Wear | 3/8 | In Progress|  |
+| 11. Lived-in Props & Wear | 4/8 | In Progress|  |
 | 12. Wildlife | 0/TBD | Not started | - |
 | 13. Camera Feel | 0/TBD | Not started | - |
 

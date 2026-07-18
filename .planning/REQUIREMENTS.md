@@ -125,7 +125,7 @@ zero server publish.
 - [x] **WEAR-04**: Player leaves a lingering grass-bend trail (~2s fade) — existing
   groundInfluence bend decay tuned/verified for the target feel
 
-- [ ] **WEAR-05**: Sprint steps on dirt/path puff small pooled dust sprites
+- [x] **WEAR-05**: Sprint steps on dirt/path puff small pooled dust sprites
 
 ### Camera Feel (CAM) — do last
 
@@ -209,7 +209,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WEAR-02 | Phase 11 | Complete |
 | WEAR-03 | Phase 11 | Complete |
 | WEAR-04 | Phase 11 | Complete |
-| WEAR-05 | Phase 11 | Pending |
+| WEAR-05 | Phase 11 | Complete |
 | WILD-01 | Phase 12 | Pending |
 | WILD-02 | Phase 12 | Pending |
 | WILD-03 | Phase 12 | Pending |
