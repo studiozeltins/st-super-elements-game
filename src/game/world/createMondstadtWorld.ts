@@ -621,17 +621,20 @@ export function createMondstadtWorld(
   const lanternRandom = createSeededRandom(WORLD_DECOR_SEED ^ 0x1a27);
   const LANTERN_COUNT = 6;
   const LANTERN_RING_RADIUS = 14;
+  // A lantern lands inside a market stall / prop when its ring spot coincides
+  // with one — skip those (a missing lamp reads far better than one skewered
+  // through a trade booth). Checked against the obstacles placed so far.
+  const spotBlocked = (lx: number, lz: number): boolean =>
+    obstacles.some(o => Math.hypot(o.x - lx, o.z - lz) < o.radius + 0.6);
   // BISECT the house gaps: houses sit at (i/6)*2π + 0.4 (radius 12). Adding a
   // half-step (π/LANTERN_COUNT) drops each lantern exactly BETWEEN two houses so
   // they line the plaza edge instead of clipping into a house wall.
   for (let index = 0; index < LANTERN_COUNT; index += 1) {
     const angle = (index / LANTERN_COUNT) * Math.PI * 2 + 0.4 + Math.PI / LANTERN_COUNT;
-    placeAsset(
-      createLantern(lanternRandom),
-      Math.cos(angle) * LANTERN_RING_RADIUS,
-      Math.sin(angle) * LANTERN_RING_RADIUS,
-      0.3
-    );
+    const lx = Math.cos(angle) * LANTERN_RING_RADIUS;
+    const lz = Math.sin(angle) * LANTERN_RING_RADIUS;
+    if (spotBlocked(lx, lz)) continue;
+    placeAsset(createLantern(lanternRandom), lx, lz, 0.3);
   }
 
   // Road lanterns: line each road (the top-island avenue) with lanterns stepped
@@ -657,6 +660,7 @@ export function createMondstadtWorld(
         const cx = ax + segX * t + perpX * ROAD_LANTERN_OFFSET * sideFlip;
         const cz = az + segZ * t + perpZ * ROAD_LANTERN_OFFSET * sideFlip;
         if (!isOnLand(cx, cz)) continue;
+        if (spotBlocked(cx, cz)) continue; // don't skewer a stall/prop with a lamp
         // No PointLight on road lanterns — emissive lamp only. Every real light is
         // looped per-fragment by every lit material scene-wide (forward renderer),
         // so a dozen decorative road lights taxed terrain/grass FPS everywhere.

@@ -75,7 +75,7 @@ export function createHouse(
 
   // Planked, iron-braced door on the front, ground floor.
   const doorX = random() < 0.5 ? -0.7 : 0.7;
-  const door = createDoor(random, { width: 1.0, height: 1.9, woodColor: 0x6b4a2f });
+  const door = createDoor({ width: 1.0, height: 1.9, woodColor: 0x6b4a2f });
   door.position.set(doorX, 0.5, frontZ);
   house.add(door);
 
@@ -194,7 +194,7 @@ export function createChurch(
 
   // Grand arched double door on the bell-tower front.
   const towerFrontZ = tower.position.z - towerW / 2 - 0.02;
-  const churchDoor = createDoor(random, {
+  const churchDoor = createDoor({
     width: 1.8,
     height: 3.0,
     arched: true,
