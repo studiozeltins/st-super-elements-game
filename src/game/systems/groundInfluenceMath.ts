@@ -10,8 +10,9 @@ import { WORLD_BOUND } from '../data/constants';
 export const INFLUENCE_WORLD_MIN = -(WORLD_BOUND + 6);
 export const INFLUENCE_WORLD_SIZE = (WORLD_BOUND + 6) * 2;
 
-/** Trail persistence tuned at 60fps; footsteps stay readable ~4–5s. */
-const DECAY_PER_FRAME_AT_60 = 0.985;
+/** Trail persistence tuned at 60fps; footsteps read a ~2s springy fade
+ * (0.980^120 ≈ 0.09 at 2s, ≈ 0.03 by 3s). */
+const DECAY_PER_FRAME_AT_60 = 0.980;
 
 /** World XZ → influence-map UV (0..1 on both axes). */
 export function worldToInfluenceUv(x: number, z: number): { u: number; v: number } {
@@ -38,10 +39,11 @@ export function decayForDelta(deltaSeconds: number): number {
 
 /**
  * Trampled/destroyed grass (the influence map's A "wear" channel) regrows on a
- * much slower clock than the springy bend: full wear stays visibly flat for
- * ~a minute (exp(-t/25) drops below 0.1 at ~58s), light footpath wear sooner.
+ * much slower clock than the springy bend: fresh damage still visibly reads when
+ * the player returns ~1min later (exp(-t/75) ≈ 0.45 at 60s) and heals below 0.1
+ * over a couple more minutes (≈ 0.09 at 180s / ~2.88min), light footpath wear sooner.
  */
-const WEAR_REGROW_TIME_CONSTANT_SECONDS = 25;
+const WEAR_REGROW_TIME_CONSTANT_SECONDS = 75;
 
 /** Frame-rate-independent wear (regrow) decay factor for one frame. */
 export function wearDecayForDelta(deltaSeconds: number): number {
