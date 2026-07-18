@@ -154,10 +154,14 @@ export interface Game {
   setMusicVolume(volume: number): void;
   /** Sets the SFX-bus volume [0,1] (clamped in the bus module). MUSIC-03 backend, D-13. */
   setSfxVolume(volume: number): void;
+  /** Sets the ambience-bus volume [0,1] (clamped in the bus module). Writes the ambient HEAD only, D-13. */
+  setAmbientVolume(volume: number): void;
   /** Mutes/unmutes music independently of its volume (MUSIC-03, D-13). */
   setMusicMuted(muted: boolean): void;
   /** Mutes/unmutes SFX independently of its volume (MUSIC-03, D-13). */
   setSfxMuted(muted: boolean): void;
+  /** Mutes/unmutes ambience independently of its volume (D-13). */
+  setAmbientMuted(muted: boolean): void;
   setActiveCharacter(characterId: string): void;
   /** Active character's constellation level, scaling its damage. */
   setActiveConstellation(constellation: number): void;
@@ -1643,11 +1647,17 @@ export function createGame(
     setSfxVolume(volume) {
       buses.setSfxGain(volume);
     },
+    setAmbientVolume(volume) {
+      buses.setAmbientGain(volume);
+    },
     setMusicMuted(muted) {
       buses.setMusicMuted(muted);
     },
     setSfxMuted(muted) {
       buses.setSfxMuted(muted);
+    },
+    setAmbientMuted(muted) {
+      buses.setAmbientMuted(muted);
     },
     setPartyAllies(identityHexes) {
       partyAllyHexes = new Set(identityHexes);

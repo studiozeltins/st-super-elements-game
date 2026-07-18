@@ -37,10 +37,14 @@ export interface AudioBuses {
   setMusicGain(volume: number): void;
   /** Set the SFX HEAD-node volume [0,1] (clamped). Independent of mute + duck (D-13). */
   setSfxGain(volume: number): void;
+  /** Set the ambient HEAD-node volume [0,1] (clamped). Writes the ambient HEAD only, never the duck (D-13). */
+  setAmbientGain(volume: number): void;
   /** Mute/unmute music at the HEAD node without losing the stored volume (D-13). */
   setMusicMuted(muted: boolean): void;
   /** Mute/unmute SFX at the HEAD node without losing the stored volume (D-13). */
   setSfxMuted(muted: boolean): void;
+  /** Mute/unmute ambience at the HEAD node without losing the stored volume (D-13). */
+  setAmbientMuted(muted: boolean): void;
   dispose(): void;
 }
 
@@ -82,8 +86,10 @@ export function createAudioBuses(getContext: () => AudioContext | null): AudioBu
   // Logical state that must survive a context rebuild (re-applied in ensure()).
   let musicVolume = DEFAULT_MUSIC_GAIN;
   let sfxVolume = DEFAULT_SFX_GAIN;
+  let ambientVolume = DEFAULT_AMBIENT_GAIN;
   let musicMuted = false;
   let sfxMuted = false;
+  let ambientMuted = false;
   let duckTarget = 1; // current combat-duck level on the duck nodes
 
   /** (Re)builds the graph once per context, mirroring createCombatAudio.bus(). */
@@ -118,7 +124,7 @@ export function createAudioBuses(getContext: () => AudioContext | null): AudioBu
     // duck nodes) so an async context swap never resets the mix.
     sfxBus.gain.value = sfxMuted ? 0 : sfxVolume;
     musicHead.gain.value = musicMuted ? 0 : musicVolume;
-    ambientHead.gain.value = DEFAULT_AMBIENT_GAIN;
+    ambientHead.gain.value = ambientMuted ? 0 : ambientVolume;
     musicDuck.gain.value = duckTarget;
     ambientDuck.gain.value = duckTarget;
 
@@ -162,6 +168,11 @@ export function createAudioBuses(getContext: () => AudioContext | null): AudioBu
       applyHead(sfxBus, sfxMuted, sfxVolume);
     },
 
+    setAmbientGain(volume: number) {
+      ambientVolume = clampGain(volume); // non-finite/≤0 → 0; else min(1, v) (V5)
+      applyHead(ambientHead, ambientMuted, ambientVolume); // HEAD only — the duck node is untouched
+    },
+
     setMusicMuted(muted: boolean) {
       musicMuted = muted;
       applyHead(musicHead, musicMuted, musicVolume);
@@ -170,6 +181,11 @@ export function createAudioBuses(getContext: () => AudioContext | null): AudioBu
     setSfxMuted(muted: boolean) {
       sfxMuted = muted;
       applyHead(sfxBus, sfxMuted, sfxVolume);
+    },
+
+    setAmbientMuted(muted: boolean) {
+      ambientMuted = muted;
+      applyHead(ambientHead, ambientMuted, ambientVolume);
     },
 
     dispose() {

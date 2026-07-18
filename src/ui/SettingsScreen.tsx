@@ -26,13 +26,17 @@ interface SettingsScreenProps {
   /** Audio bus levels as stored gains [0,1]; the slider maps ↔ integer percent. */
   musicVolume: number;
   sfxVolume: number;
+  ambientVolume: number;
   /** Mute flags (independent of volume, D-13); a muted bus keeps its stored level. */
   musicMuted: boolean;
   sfxMuted: boolean;
+  ambientMuted: boolean;
   onMusicVolumeChange(next: number): void;
   onSfxVolumeChange(next: number): void;
+  onAmbientVolumeChange(next: number): void;
   onToggleMusicMuted(next: boolean): void;
   onToggleSfxMuted(next: boolean): void;
+  onToggleAmbientMuted(next: boolean): void;
   onLogout(): void;
   /** All pending party invites for the viewer (incl. dismissed/expired toasts). */
   missedInvites: readonly MissedInvite[];
@@ -90,12 +94,16 @@ export function SettingsScreen({
   onHudThemeChange,
   musicVolume,
   sfxVolume,
+  ambientVolume,
   musicMuted,
   sfxMuted,
+  ambientMuted,
   onMusicVolumeChange,
   onSfxVolumeChange,
+  onAmbientVolumeChange,
   onToggleMusicMuted,
   onToggleSfxMuted,
+  onToggleAmbientMuted,
   onLogout,
   missedInvites,
   onAcceptInvite,
@@ -178,6 +186,13 @@ export function SettingsScreen({
         checked={!sfxMuted}
         onChange={next => onToggleSfxMuted(!next)}
       />
+      <VolumeField
+        label="Vides skaļums"
+        volume={ambientVolume}
+        muted={ambientMuted}
+        onChange={onAmbientVolumeChange}
+      />
+      <Toggle label="Vide" checked={!ambientMuted} onChange={next => onToggleAmbientMuted(!next)} />
 
       <p className="settings__section">KONTS</p>
       <Button variant="danger" block onClick={onLogout}>

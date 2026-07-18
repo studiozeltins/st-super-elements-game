@@ -98,10 +98,16 @@ export default function App() {
   // music 0.7 (loop rides under SFX), sfx 1.0. Absent mute key = unmuted.
   const [musicVolume, setMusicVolume] = useState(() => readVolume('settings.musicVolume', 0.7));
   const [sfxVolume, setSfxVolume] = useState(() => readVolume('settings.sfxVolume', 1));
+  const [ambientVolume, setAmbientVolume] = useState(() =>
+    readVolume('settings.ambientVolume', 1)
+  );
   const [musicMuted, setMusicMuted] = useState(
     () => localStorage.getItem('settings.musicMuted') === '1'
   );
   const [sfxMuted, setSfxMuted] = useState(() => localStorage.getItem('settings.sfxMuted') === '1');
+  const [ambientMuted, setAmbientMuted] = useState(
+    () => localStorage.getItem('settings.ambientMuted') === '1'
+  );
   // Which gameplay-HUD skin is active. Drives `data-hud-theme` on the .app root;
   // the CSS in src/styles/hud/ reskins the HUD accordingly. Persisted per device.
   const [hudTheme, setHudTheme] = useState(() => {
@@ -824,8 +830,10 @@ export default function App() {
     // later changes), so a fresh game / reconnect starts at the chosen levels.
     game.setMusicVolume(readVolume('settings.musicVolume', 0.7));
     game.setSfxVolume(readVolume('settings.sfxVolume', 1));
+    game.setAmbientVolume(readVolume('settings.ambientVolume', 1));
     game.setMusicMuted(localStorage.getItem('settings.musicMuted') === '1');
     game.setSfxMuted(localStorage.getItem('settings.sfxMuted') === '1');
+    game.setAmbientMuted(localStorage.getItem('settings.ambientMuted') === '1');
     game.start();
     gameRef.current = game;
     // Seed the world state that arrived before this game instance existed.
@@ -929,6 +937,10 @@ export default function App() {
     gameRef.current?.setSfxVolume(sfxVolume);
   }, [sfxVolume]);
   useEffect(() => {
+    localStorage.setItem('settings.ambientVolume', String(ambientVolume));
+    gameRef.current?.setAmbientVolume(ambientVolume);
+  }, [ambientVolume]);
+  useEffect(() => {
     localStorage.setItem('settings.musicMuted', musicMuted ? '1' : '0');
     gameRef.current?.setMusicMuted(musicMuted);
   }, [musicMuted]);
@@ -936,6 +948,10 @@ export default function App() {
     localStorage.setItem('settings.sfxMuted', sfxMuted ? '1' : '0');
     gameRef.current?.setSfxMuted(sfxMuted);
   }, [sfxMuted]);
+  useEffect(() => {
+    localStorage.setItem('settings.ambientMuted', ambientMuted ? '1' : '0');
+    gameRef.current?.setAmbientMuted(ambientMuted);
+  }, [ambientMuted]);
 
   // ESC opens settings (closes the gacha screen first if it's open). The Radix
   // dialog handles ESC-to-close itself, so here we only need the open path.
@@ -1104,12 +1120,16 @@ export default function App() {
         onHudThemeChange={setHudTheme}
         musicVolume={musicVolume}
         sfxVolume={sfxVolume}
+        ambientVolume={ambientVolume}
         musicMuted={musicMuted}
         sfxMuted={sfxMuted}
+        ambientMuted={ambientMuted}
         onMusicVolumeChange={setMusicVolume}
         onSfxVolumeChange={setSfxVolume}
+        onAmbientVolumeChange={setAmbientVolume}
         onToggleMusicMuted={setMusicMuted}
         onToggleSfxMuted={setSfxMuted}
+        onToggleAmbientMuted={setAmbientMuted}
         missedInvites={invitesWithNames.map(invite => ({
           id: invite.id,
           message: invite.message,
