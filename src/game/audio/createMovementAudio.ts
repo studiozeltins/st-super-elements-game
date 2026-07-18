@@ -10,9 +10,20 @@ import { clampGain, createNoiseSource, jitter, panned } from './audioCore';
 // the per-hop leap squish (createWeaponAudio.playSlimeLeap), not a stride.
 export type FootstepKind = 'player' | 'goliath' | 'golem';
 
+/** Terrain under a moving unit — flags the player's own steps for a grass-rustle layer (AMBI-04, D-06). */
+export type FootstepSurface = 'grass';
+
 export interface MovementAudio {
-  /** Call once per frame per visible moving unit. Accumulates travel distance and emits one footstep each time it crosses the kind's stride length. gain 0 (culled by distance) still advances tracking but plays nothing. */
-  updateUnit(key: string, kind: FootstepKind, x: number, z: number, gain: number, pan: number): void;
+  /** Call once per frame per visible moving unit. Accumulates travel distance and emits one footstep each time it crosses the kind's stride length. gain 0 (culled by distance) still advances tracking but plays nothing. Pass `surface: 'grass'` for the local player over grass to layer a soft rustle. */
+  updateUnit(
+    key: string,
+    kind: FootstepKind,
+    x: number,
+    z: number,
+    gain: number,
+    pan: number,
+    surface?: FootstepSurface
+  ): void;
   /** Call once per frame after all updateUnit calls: drops tracking for units NOT updated since the previous endFrame (despawned/culled). */
   endFrame(): void;
   dispose(): void;
@@ -44,6 +55,10 @@ const SPAM_MAX_PLAYS = 4;
 const PLAYER_STEP_PEAK = 0.12;
 const GOLIATH_STEP_PEAK = 0.5;
 const GOLEM_STEP_PEAK = 0.4;
+
+// Grass rustle: a breathy high-band swish layered UNDER the player's own tap
+// while moving over grass — peak well below the step so it's felt, not heard.
+const GRASS_RUSTLE_PEAK = 0.05;
 
 interface UnitState {
   x: number;
@@ -102,6 +117,26 @@ export function createMovementAudio(
     thock.connect(thockGain).connect(out);
     thock.start(now);
     thock.stop(now + 0.06);
+  }
+
+  // Grass rustle (AMBI-04, D-06): a breathy, longer bandpassed noise wash sitting
+  // in a distinct high band above the low step tap — a wider, softer swish that
+  // reads as leaves brushing past, peaked well below the footstep. Same procedural
+  // noise-burst idiom as the tap; layered onto the player's own step over grass.
+  function playGrassRustle(context: AudioContext, level: number, out: AudioNode, now: number) {
+    const rate = jitter(0.2);
+    const rustle = createNoiseSource(context, 0.14);
+    const band = context.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = 0.7; // wide, breathy — not a resonant whistle
+    band.frequency.value = 2600 * rate;
+    const rustleGain = context.createGain();
+    rustleGain.gain.setValueAtTime(0.0001, now);
+    rustleGain.gain.exponentialRampToValueAtTime(GRASS_RUSTLE_PEAK * level, now + 0.03);
+    rustleGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+    rustle.connect(band).connect(rustleGain).connect(out);
+    rustle.start(now);
+    rustle.stop(now + 0.14);
   }
 
   // The "dun": a deep descending sine felt in the chest + a lowpassed thud.
@@ -177,7 +212,13 @@ export function createMovementAudio(
     thud.stop(now + 0.14);
   }
 
-  function playStep(kind: FootstepKind, level: number, pan: number, stepParity: boolean) {
+  function playStep(
+    kind: FootstepKind,
+    level: number,
+    pan: number,
+    stepParity: boolean,
+    surface: FootstepSurface | undefined
+  ) {
     const context = ready();
     if (!context) return;
     const sfxBus = getSfxBus();
@@ -185,13 +226,24 @@ export function createMovementAudio(
     const now = context.currentTime;
     if (!underSpamBudget(now)) return;
     const out = panned(context, pan, sfxBus);
-    if (kind === 'player') playPlayerStep(context, level, out, now);
-    else if (kind === 'goliath')
+    if (kind === 'player') {
+      playPlayerStep(context, level, out, now);
+      // Grass rustle rides the same step emission → same spam budget, never floods.
+      if (surface === 'grass') playGrassRustle(context, level, out, now);
+    } else if (kind === 'goliath')
       playGoliathStep(context, level, out, now, stepParity ? GOLIATH_ALTERNATE_STEP_PITCH : 1);
     else playGolemStep(context, level, out, now);
   }
 
-  function updateUnit(key: string, kind: FootstepKind, x: number, z: number, gain: number, pan: number) {
+  function updateUnit(
+    key: string,
+    kind: FootstepKind,
+    x: number,
+    z: number,
+    gain: number,
+    pan: number,
+    surface?: FootstepSurface
+  ) {
     const state = units.get(key);
     if (!state) {
       // First sighting: record position only — a step here would fire on spawn.
@@ -215,7 +267,7 @@ export function createMovementAudio(
     // Culled-by-distance units keep their cadence tracked but stay silent.
     const level = clampGain(gain);
     if (level === 0) return;
-    playStep(kind, level, pan, state.stepParity);
+    playStep(kind, level, pan, state.stepParity, surface);
   }
 
   function endFrame() {

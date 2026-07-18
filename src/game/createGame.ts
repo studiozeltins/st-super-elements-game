@@ -1283,8 +1283,19 @@ export function createGame(
     }
     // Airborne frames feed nothing: the prune-and-reinsert cycle restarts the
     // stride on landing, so a jump's horizontal drift never clicks out steps.
+    // Grounded on the walkable island = grass underfoot → flag a rustle layer
+    // (AMBI-04, D-06). Cheap: reuses isGrounded(), no terrain texture read, no
+    // alloc; the rustle only actually fires when a step does (i.e. when moving).
     if (isGrounded()) {
-      movementAudio.updateUnit('me', 'player', playerPosition.x, playerPosition.z, OWN_STEP_GAIN, 0);
+      movementAudio.updateUnit(
+        'me',
+        'player',
+        playerPosition.x,
+        playerPosition.z,
+        OWN_STEP_GAIN,
+        0,
+        'grass'
+      );
     }
     movementAudio.endFrame();
   }
