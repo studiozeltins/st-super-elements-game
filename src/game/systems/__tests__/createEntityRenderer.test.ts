@@ -156,6 +156,67 @@ describe('createEntityRenderer — reconciliation', () => {
   });
 });
 
+describe('createEntityRenderer — spawn budgeting', () => {
+  it('builds a lone spawn the same frame (no deferral for single spawns)', () => {
+    const { scene, adapter, spawned } = makeHarness();
+    const renderer = createEntityRenderer({ scene, adapter });
+
+    renderer.syncRows([row({ id: 1n })]);
+
+    expect(spawned).toHaveLength(1);
+    expect(groupCount(scene)).toBe(1);
+  });
+
+  it('spreads a same-frame burst across frames instead of building all at once', () => {
+    const { scene, adapter, spawned } = makeHarness();
+    const renderer = createEntityRenderer({ scene, adapter });
+
+    // Three rows arrive together — only the per-frame budget (1) builds now.
+    renderer.syncRows([row({ id: 1n }), row({ id: 2n }), row({ id: 3n })]);
+    expect(spawned).toHaveLength(1);
+
+    // Each update refills the budget and drains one more from the queue.
+    renderer.update(0.016, () => 0);
+    expect(spawned).toHaveLength(2);
+    renderer.update(0.016, () => 0);
+    expect(spawned).toHaveLength(3);
+    expect(groupCount(scene)).toBe(3);
+
+    // No extra builds once the queue is empty.
+    renderer.update(0.016, () => 0);
+    expect(spawned).toHaveLength(3);
+  });
+
+  it('drops a queued spawn that vanishes before it ever builds', () => {
+    const { scene, adapter, spawned } = makeHarness();
+    const renderer = createEntityRenderer({ scene, adapter });
+
+    renderer.syncRows([row({ id: 1n }), row({ id: 2n }), row({ id: 3n })]);
+    expect(spawned).toHaveLength(1); // only id 1 built; 2 and 3 queued
+
+    // id 3 disappears from the row set while still queued — it must never build.
+    renderer.syncRows([row({ id: 1n }), row({ id: 2n })]);
+    renderer.update(0.016, () => 0); // budget builds id 2
+    renderer.update(0.016, () => 0); // queue empty — id 3 was dropped
+
+    expect(spawned).toHaveLength(2);
+    expect(groupCount(scene)).toBe(2);
+  });
+
+  it('spawns a still-queued entity at its latest observed position', () => {
+    const { scene, adapter, spawned } = makeHarness();
+    const renderer = createEntityRenderer({ scene, adapter });
+
+    // id 2 queues behind id 1, then moves before it ever builds.
+    renderer.syncRows([row({ id: 1n }), row({ id: 2n, x: 0, z: 0 })]);
+    renderer.syncRows([row({ id: 1n }), row({ id: 2n, x: 9, z: 0 })]);
+    renderer.update(0.016, () => 0); // now builds id 2 from the latest row
+
+    // The second spawned model is id 2 — it should sit at the moved-to spot.
+    expect(spawned[1].model.group.position.x).toBe(9);
+  });
+});
+
 describe('createEntityRenderer — life and death', () => {
   it('fires onKilled once and animates death when a watched-alive row dies', () => {
     const { scene, adapter, spawned, onKilled } = makeHarness();

@@ -125,6 +125,14 @@ const MOTION_EPSILON = 0.02;
  * the intent instead.
  */
 const OVERLAY_VISIBLE_SECONDS = 4;
+/**
+ * Max NEW entity models built per frame. Extra same-frame spawns (a camp waking,
+ * three goliaths landing at once) queue and build over the following frames, so
+ * a burst never freezes one frame constructing meshes + per-unit overlay
+ * canvases. A lone spawn still builds the same frame — the budget refills each
+ * update, so only a genuine burst is ever deferred (~16ms/model of latency).
+ */
+const SPAWN_BUDGET_PER_FRAME = 1;
 
 interface RenderedEntity<Row> {
   model: EnemyModel;
@@ -150,9 +158,25 @@ export function createEntityRenderer<Row>(
 ): EntityRenderer<Row> {
   const { scene, adapter, onHealthDrop } = options;
   const entities = new Map<string, RenderedEntity<Row>>();
+  // Rows seen but not yet built, keyed like entities. Drained under a per-frame
+  // budget (drainSpawns) so a spawn burst spreads its model builds over frames.
+  // The stored row is the latest observed — a queued entity that moves before it
+  // builds spawns at its current position.
+  const pending = new Map<string, Row>();
+  let spawnBudget = SPAWN_BUDGET_PER_FRAME;
   // Live attack views keyed by entity id string; replaced wholesale each refresh.
   let attackViews: Map<string, AttackAnimationView> = new Map();
   let elapsedSeconds = 0;
+
+  /** Builds queued spawns until the frame's budget runs out or the queue empties. */
+  function drainSpawns() {
+    while (spawnBudget > 0 && pending.size > 0) {
+      const [key, row] = pending.entries().next().value as [string, Row];
+      pending.delete(key);
+      entities.set(key, insert(row));
+      spawnBudget -= 1;
+    }
+  }
 
   function insert(row: Row): RenderedEntity<Row> {
     const spawned = adapter.spawn(row);
@@ -215,7 +239,9 @@ export function createEntityRenderer<Row>(
       seen.add(key);
       const existing = entities.get(key);
       if (!existing) {
-        entities.set(key, insert(row));
+        // Not built yet: queue it (or refresh a still-pending row's position).
+        // drainSpawns below builds it this frame if the budget allows.
+        pending.set(key, row);
         continue;
       }
       existing.row = row;
@@ -240,8 +266,15 @@ export function createEntityRenderer<Row>(
       else if (!nowAlive && existing.alive) kill(existing);
       existing.alive = nowAlive;
     }
+    // Build what the budget allows now so a lone spawn appears the same frame;
+    // the rest waits for the next update's refilled budget.
+    drainSpawns();
     for (const [key, entity] of entities) {
       if (!seen.has(key)) remove(key, entity);
+    }
+    // A row that vanished before it ever built just drops out of the queue.
+    for (const key of [...pending.keys()]) {
+      if (!seen.has(key)) pending.delete(key);
     }
   }
 
@@ -264,6 +297,10 @@ export function createEntityRenderer<Row>(
   }
 
   function update(deltaSeconds: number, getGroundHeight: GetGroundHeight) {
+    // Refill the spawn budget for this frame and build any backlog first, so a
+    // burst that overflowed earlier frames keeps trickling in.
+    spawnBudget = SPAWN_BUDGET_PER_FRAME;
+    drainSpawns();
     elapsedSeconds += deltaSeconds;
     const lerpFactor = Math.min(1, deltaSeconds * LERP_RATE);
     for (const [key, entity] of entities) {
@@ -331,6 +368,7 @@ export function createEntityRenderer<Row>(
         scene.remove(entity.model.group);
       }
       entities.clear();
+      pending.clear();
     },
   };
 }
