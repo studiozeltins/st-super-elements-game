@@ -26,8 +26,13 @@ const LAMP_HEIGHT = 3.6;
 // The lantern hangs off the cross-arm end, offset from the post on +x.
 const HANG_X = 0.28;
 
-/** Base intensity of a fully-lit lantern. Plan 04 scales this by lanternLevel. */
-export const LANTERN_BASE_INTENSITY = 1.8;
+/**
+ * Base intensity of a fully-lit lantern (the day/night cycle scales it by
+ * lanternLevel). three 0.185 lights are physical (inverse-square), and the lamp
+ * hangs ~3.6u up, so the ground is ~3.6u away — the old 1.8 gave ~0.14 there
+ * (invisible). This is tuned so the lamp casts a clear warm pool on the ground.
+ */
+export const LANTERN_BASE_INTENSITY = 16;
 
 /** Name of the lantern PointLight — the day/night cycle fades these by intensity. */
 export const LANTERN_LIGHT_NAME = 'lanternLight';
@@ -116,7 +121,7 @@ export function createLantern(
   // distance/decay: a soft pool, not a combat flare. Base intensity is the lit
   // value; the day/night cycle fades it.
   if (withLight) {
-    const light = new THREE.PointLight(GLOW_COLOR, LANTERN_BASE_INTENSITY, 12, 2);
+    const light = new THREE.PointLight(GLOW_COLOR, LANTERN_BASE_INTENSITY, 14, 2);
     light.name = LANTERN_LIGHT_NAME;
     // Visible to all camera layers — a pass that culls lights flips the renderer's
     // lights-state hash and re-inits every lit material per frame (RESEARCH Pattern 6).
