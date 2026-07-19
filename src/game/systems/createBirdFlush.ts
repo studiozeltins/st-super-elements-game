@@ -8,10 +8,11 @@ import { createWingedGeometry, createFlapMaterial, attachFlapAttrs } from './win
  * birds that PECK on the grass by day near the player (self-managing like the
  * butterflies), and FLUSH into flight when the player scuffs grass nearby — the
  * call site (12-05) invokes spawn(x,z) on a grass-sprint. A flushed bird takes off
- * with fast-beating wings, flies to a DIFFERENT grassy spot a good distance away
- * (each on its own scatter heading — never the same direction), LANDS, and resumes
- * PECKING there. Birds only leave when they wander out of the cull radius, never a
- * fade-in-place. Hard-capped pool, one draw call, zero per-frame allocation.
+ * with fast-beating wings, flies to a DIFFERENT nearby grassy spot (each on its own
+ * scatter heading — never the same direction, and close enough to stay visible and
+ * inside the cull radius), LANDS, and resumes PECKING there. Birds only leave when
+ * they wander out of the cull radius, never a fade-in-place. Hard-capped pool, one
+ * draw call, zero per-frame allocation.
  *
  * Flight + peck rhythm delegate to the unit-tested wildlifeMath twin; wings flap on
  * the GPU (per-instance amplitude: full while flying, folded while pecking).
@@ -37,10 +38,14 @@ const BIRD_SIZE = 0.75;
 const BIRD_WING = 0x6b6f78;
 const BIRD_BODY = 0x2b2b33;
 /** A grass scuff flushes grounded birds within this radius of the player's step. */
-const FLUSH_RADIUS = 9;
-/** How far a flushed bird flies to its new spot (world units). */
-const FLEE_MIN = 20;
-const FLEE_MAX = 38;
+const FLUSH_RADIUS = 6;
+/**
+ * How far a flushed bird flies to its new spot (world units). Kept short enough
+ * that the landing spot stays inside SPAWN.cull (30) of the player — so the bird
+ * settles somewhere still visible and does NOT get instantly culled on landing.
+ */
+const FLEE_MIN = 10;
+const FLEE_MAX = 18;
 const RECHECK_INTERVAL = 0.5;
 const MAX_SPAWNS_PER_RECHECK = 2;
 const SPAWN_ATTEMPTS = 6;
@@ -167,8 +172,10 @@ export function createBirdFlush(
 
   return {
     spawn(x, z) {
-      // A grass scuff: flush nearby grounded birds into flight. If none are close
-      // (or the pool is empty), spawn a fresh burst so the flush always reads.
+      // A grass scuff: flush the grounded birds that were ACTUALLY pecking nearby.
+      // No synthetic fallback burst — birds never materialize from nothing just to
+      // bolt; the ambient recheck keeps the ground populated with real peckers, and
+      // only those flush when the player scuffs close to them.
       let flushed = 0;
       for (let index = 0; index < BIRD_POOL_SIZE; index += 1) {
         const bird = pool[index];
@@ -179,14 +186,6 @@ export function createBirdFlush(
           launch(bird, index);
           flushed += 1;
           if (flushed >= 4) break;
-        }
-      }
-      if (flushed === 0) {
-        const count = 2 + Math.floor(Math.random() * 2); // 2–3 fresh birds bolt off
-        for (let n = 0; n < count; n += 1) {
-          const slot = claimPeck(x, z);
-          if (slot === -1) break; // pool full
-          launch(pool[slot], slot);
         }
       }
     },
