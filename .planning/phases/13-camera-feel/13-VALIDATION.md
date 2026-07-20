@@ -2,7 +2,7 @@
 phase: 13
 slug: camera-feel
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-07-20
 ---
@@ -17,20 +17,21 @@ created: 2026-07-20
 
 | Property | Value |
 |----------|-------|
-| **Framework** | vitest |
-| **Config file** | {path or "none — Wave 0 installs"} |
-| **Quick run command** | `{quick command}` |
-| **Full suite command** | `{full command}` |
-| **Estimated runtime** | ~{N} seconds |
+| **Framework** | vitest 3.2.4 |
+| **Config file** | `vitest.config.ts` (repo root, present) |
+| **Quick run command** | `npx vitest run src/game/systems/__tests__/cameraFeelMath.test.ts` |
+| **Full suite command** | `npm test` (`vitest run`) |
+| **Compile gate** | `npx tsc -b` (typecheck) / `npm run build` (tsc -b + vite build) |
+| **Estimated runtime** | quick ~2s · full suite ~15s · build ~30s |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run `{quick run command}`
-- **After every plan wave:** Run `{full suite command}`
-- **Before `/gsd-verify-work`:** Full suite must be green
-- **Max feedback latency:** {N} seconds
+- **After every task commit:** Run `npx vitest run src/game/systems/__tests__/cameraFeelMath.test.ts` (+ `npx tsc -b` on the MOD/system tasks)
+- **After every plan wave:** Run `npm test`
+- **Before `/gsd-verify-work`:** `npm run build` + `npm test` green, then the manual playtest checklist
+- **Max feedback latency:** ~30 seconds (build)
 
 ---
 
@@ -38,7 +39,13 @@ created: 2026-07-20
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| {N}-01-01 | 01 | 1 | REQ-{XX} | T-{N}-01 / — | {expected secure behavior or "N/A"} | unit | `{command}` | ✅ / ❌ W0 | ⬜ pending |
+| 13-01-01 | 01 | 1 | CAM-01/02/03/04 | T-13-01a / — | N/A (pure math, no input) | unit | `npx tsc -b` | ❌ W0 | ⬜ pending |
+| 13-01-02 | 01 | 1 | CAM-01/02/03/04 | T-13-01a / — | N/A | unit | `npx vitest run src/game/systems/__tests__/cameraFeelMath.test.ts` | ❌ W0 | ⬜ pending |
+| 13-02-01 | 02 | 2 | CAM-03, CAM-04 | T-13-02a / mitigate | Gated projection rebuild + rate gate (perf DoS) | unit (delegated) + compile | `npx tsc -b` | ✅ (twin) | ⬜ pending |
+| 13-03-01 | 03 | 2 | CAM-01, CAM-02, CAM-04 | T-13-03a / mitigate | Positional breathing + conservative pixelScale (no crawl) | unit (delegated) + compile | `npx tsc -b` | ✅ (twin) | ⬜ pending |
+| 13-04-01 | 04 | 3 | CAM-01/02/03/04 | T-13-04b / mitigate | Cooldown rate gate wired to crit handlers | compile + grep | `npm run build` | ✅ | ⬜ pending |
+| 13-04-02 | 04 | 3 | CAM-04 | T-13-04a / mitigate | `=== '1'` coercion; absent key -> OS default; garbage -> off | compile | `npm run build` | ✅ | ⬜ pending |
+| 13-04-03 | 04 | 3 | CAM-01/02/03/04 | T-13-04a/b | Perceptual acceptance | **manual** | human playtest (see below) | manual | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -46,11 +53,11 @@ created: 2026-07-20
 
 ## Wave 0 Requirements
 
-- [ ] `{tests/test_file.py}` — stubs for REQ-{XX}
-- [ ] `{tests/conftest.py}` — shared fixtures
-- [ ] `{framework install}` — if no framework detected
+Wave 0 (the pure-helper testable seam) is **Plan 13-01**:
 
-*If none: "Existing infrastructure covers all phase requirements."*
+- [ ] `src/game/systems/cameraFeelMath.ts` — pure helpers (`smooth`, `leanTarget`, `breatheOffset`, `startKick`/`stepFovKick`, `projectionActive`, `canKick`, `CAMERA_FEEL`) covering CAM-01..04.
+- [ ] `src/game/systems/__tests__/cameraFeelMath.test.ts` — the vitest twin (behavior-pinned).
+- No framework install needed (vitest 3.2.4 already configured; 58 test files exist, incl. `windMath.test.ts`).
 
 ---
 
@@ -58,19 +65,21 @@ created: 2026-07-20
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| {behavior} | REQ-{XX} | {reason} | {steps} |
-
-*If none: "All phase behaviors have automated verification."*
+| Run-lean reads right in every direction, no horizon tilt | CAM-01 | "feels right" + directional correctness is perceptual | Run N/S/E/W; body pitches INTO the run direction; world horizon never tilts (Pitfall 1). |
+| Idle breathing is calm, not distracting | CAM-02 | Perceptual amplitude/frequency judgement | Stand still; sway is subtle, on the model, never while moving, never on the camera. |
+| FOV kick is noticeable-but-rare, never strobes | CAM-03 | Rarity/strobe is perceptual over live combat | Land own crits (kick); AoE/swirl crit-many-in-one-frame must not strobe; damage taken never kicks. |
+| No pixel-crawl on a standing character in pixel mode | CAM-04 / D-03 | Crawl on the pixel grid is a perceptual artifact | Pixel filter ON, stand still, inspect the silhouette for shimmer; if present, reduce breathing amplitude before frequency. |
+| Toggle zeroes all four motions instantly + persists + OS default | CAM-04 / D-08/D-09 | End-to-end perceptual + reload behavior | Enable toggle mid-combat → lean/breathing/FOV/shake all stop; reload persists; absent key + OS reduce-motion → defaults ON. |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < {N}s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies (13-04-03 is an irreducible manual gate with a `<human-check>`)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (cameraFeelMath twin, plan 13-01)
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** {pending / approved YYYY-MM-DD}
+**Approval:** approved 2026-07-20
