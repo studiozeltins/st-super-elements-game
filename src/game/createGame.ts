@@ -48,9 +48,6 @@ import { createSmokeColumns } from './systems/createSmokeColumns';
 import { createDustPuffs } from './systems/createDustPuffs';
 import { createButterflies } from './systems/createButterflies';
 import { createFireflies } from './systems/createFireflies';
-import { createBirdFlush } from './systems/createBirdFlush';
-import { createWildlifeSfx } from './audio/createWildlifeSfx';
-import { flushReady } from './systems/wildlifeMath';
 import { surfaceAt, type Surface } from './systems/surfaceAt';
 import { createLightPool } from './systems/createLightPool';
 import { createAttackViewClock } from './systems/createAttackViewClock';
@@ -336,7 +333,7 @@ export function createGame(
   const pixelRenderer = createPixelRenderer(canvas);
   // Perf bisect kill-switches: append ?nograss / ?nobend / ?noshadow / ?nofx
   // / ?nowind / ?nosmoke / ?nodust / ?nodaynight / ?nomovingsun / ?nobugs
-  // / ?nobirds / ?nofireflies to the URL to disable one ambiance system and
+  // / ?nofireflies to the URL to disable one ambiance system and
   // find a frame-cost culprit.
   const perfFlags = new URLSearchParams(window.location.search);
   if (perfFlags.has('noshadow')) pixelRenderer.renderer.shadowMap.enabled = false;
@@ -357,7 +354,6 @@ export function createGame(
   // Wildlife (Phase 12): each ?no* skips its pool's construction entirely (zero
   // objects, zero draw calls) — the clean per-system FPS bisect for the SC4 gate.
   const butterfliesEnabled = !perfFlags.has('nobugs');
-  const birdsEnabled = !perfFlags.has('nobirds');
   const firefliesEnabled = !perfFlags.has('nofireflies');
   // ?nodaynight freezes the palette at a neutral day key (D-09) — a clean FPS
   // bisection baseline, mirroring the ?nowind/?nosmoke convention.
@@ -447,9 +443,6 @@ export function createGame(
   const fireflies = firefliesEnabled
     ? createFireflies(scene, (x, z) => world.getGroundHeight(x, z))
     : undefined;
-  const birdFlush = birdsEnabled
-    ? createBirdFlush(scene, (x, z) => world.getGroundHeight(x, z))
-    : undefined;
   const damageNumbers = createDamageNumbers(scene);
   // Enemies and goliaths are now server-authoritative: these renderers only draw
   // the `enemy`/`goliath` table rows and interpolate them. Damage/HP/economy all
@@ -493,9 +486,6 @@ export function createGame(
   const movementAudio = createMovementAudio(audioSystem.getContext, buses.sfx);
   // Pickup chimes (gem streak ladder, shard gain/loss) + the death knell.
   const pickupAudio = createPickupAudio(audioSystem.getContext, buses.sfx);
-  // Procedural wing-flap one-shot (Phase 12) — played when a grass sprint flushes
-  // birds, on the same gesture-unlocked sfx bus as the other audio siblings.
-  const wildlifeSfx = createWildlifeSfx(audioSystem.getContext, buses.sfx);
   // Living-world ambience (10-03): decode-once creature samples + the procedural
   // gust-reactive wind bed + gated one-shots, all on the ambient bus. The grunt
   // layer scales by nearest-camp proximity — camps are a static deterministic
@@ -1031,11 +1021,6 @@ export function createGame(
   // (updateFootsteps, runs later same frame) — dust spawn + audio never disagree
   // and surfaceAt is called at most once per frame (D-12).
   let playerSurface: Surface = 'grass';
-  // Debounce for the grass-sprint bird flush (WILD-02): the elapsedSeconds of the
-  // last flush, gated by wildlifeMath.flushReady so continuous running never
-  // machine-guns birds. A CPU surface==='grass' trigger — never a GPU read.
-  let lastFlushSec = -Infinity;
-
   function updateLocalPlayer(deltaSeconds: number) {
     const isStunned = performance.now() < stunActiveUntilPerfMs;
     const moveVector = inputSystem.getMoveVector();
@@ -1068,14 +1053,6 @@ export function createGame(
         playerSurface = surfaceAt(playerPosition.x, playerPosition.z);
         if (playerSurface !== 'grass') {
           dustPuffs?.spawn(playerPosition.x, playerPosition.z, worldMoveX, worldMoveZ);
-        } else if (birdFlush && flushReady(lastFlushSec, elapsedSeconds)) {
-          // Grass complement of the dust gate (WILD-02): a moving player over
-          // grass startles a bird flush + one wing one-shot, debounced by
-          // flushReady on the CPU surface classify — never the groundInfluence
-          // texture. Literal gain (0.6); OWN_STEP_GAIN is out of scope here.
-          lastFlushSec = elapsedSeconds;
-          birdFlush.spawn(playerPosition.x, playerPosition.z);
-          wildlifeSfx?.playWingFlap(0.6, 0);
         }
       }
     }
@@ -1550,8 +1527,7 @@ export function createGame(
     dustPuffs?.update(deltaSeconds);
     // Wildlife pools (Phase 12), fed the shared wind drift clock
     // (wind.timeUniform.value) + the day/night phase + the player position.
-    // Butterflies (day) and fireflies (dusk/night) self-manage spawn/cull;
-    // birdFlush only ages its arc (spawning is the grass-sprint hook above).
+    // Butterflies (day) and fireflies (dusk/night) self-manage spawn/cull.
     butterflies?.update(
       deltaSeconds,
       pixelRenderer.camera,
@@ -1561,14 +1537,6 @@ export function createGame(
       wind.timeUniform.value
     );
     fireflies?.update(
-      deltaSeconds,
-      pixelRenderer.camera,
-      playerPosition.x,
-      playerPosition.z,
-      dayNightPhase,
-      wind.timeUniform.value
-    );
-    birdFlush?.update(
       deltaSeconds,
       pixelRenderer.camera,
       playerPosition.x,
@@ -1747,8 +1715,6 @@ export function createGame(
       dustPuffs?.dispose();
       butterflies?.dispose();
       fireflies?.dispose();
-      birdFlush?.dispose();
-      wildlifeSfx?.dispose();
       lightPool?.dispose();
       gemGeometry.dispose();
       shardGeometry.dispose();
