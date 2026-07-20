@@ -129,16 +129,16 @@ zero server publish.
 
 ### Camera Feel (CAM) — do last
 
-- [ ] **CAM-01**: Character (not camera) leans slightly into run direction with a spring
+- [x] **CAM-01**: Character (not camera) leans slightly into run direction with a spring
   (~2–4°, playtest-tuned)
 
-- [ ] **CAM-02**: Idle characters have a subtle breathing sway (on the character model,
+- [x] **CAM-02**: Idle characters have a subtle breathing sway (on the character model,
   never continuous camera motion — pixel-crawl + nausea)
 
-- [ ] **CAM-03**: Burst damage triggers a brief FOV kick (+2–5°, ~60ms in / ~300ms
+- [x] **CAM-03**: Burst damage triggers a brief FOV kick (+2–5°, ~60ms in / ~300ms
   spring-back) — rare high-tier events only, never every hit
 
-- [ ] **CAM-04**: A "reduce camera motion" toggle zeroes lean/roll/FOV-kick (XAG 117),
+- [x] **CAM-04**: A "reduce camera motion" toggle zeroes lean/roll/FOV-kick (XAG 117),
   persisted locally
 
 ## v2 Requirements (future)
@@ -213,10 +213,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WILD-01 | Phase 12 | Complete |
 | WILD-02 | Phase 12 | Complete |
 | WILD-03 | Phase 12 | Complete |
-| CAM-01 | Phase 13 | Pending |
-| CAM-02 | Phase 13 | Pending |
-| CAM-03 | Phase 13 | Pending |
-| CAM-04 | Phase 13 | Pending |
+| CAM-01 | Phase 13 | Complete |
+| CAM-02 | Phase 13 | Complete |
+| CAM-03 | Phase 13 | Complete |
+| CAM-04 | Phase 13 | Complete |
 
 **Coverage:**
 

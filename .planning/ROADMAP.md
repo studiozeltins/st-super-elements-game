@@ -265,7 +265,7 @@ Plans:
 Plans:
 **Wave 1** *(pure testable seam)*
 
-- [ ] 13-01-PLAN.md — cameraFeelMath pure THREE-free twin + vitest (smooth/leanTarget/breatheOffset/two-phase FOV kick/cooldown/projection gate/reduce-motion zeroing), test-first (CAM-01/02/03/04) [Wave 1]
+- [x] 13-01-PLAN.md — cameraFeelMath pure THREE-free twin + vitest (smooth/leanTarget/breatheOffset/two-phase FOV kick/cooldown/projection gate/reduce-motion zeroing), test-first (CAM-01/02/03/04) [Wave 1]
 
 **Wave 2** *(parallel, disjoint files — blocked on Wave 1)*
 
@@ -288,7 +288,7 @@ Plans:
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
 | 11. Lived-in Props & Wear | 8/8 | Complete    | 2026-07-18 |
 | 12. Wildlife | 5/5 | Complete    | 2026-07-18 |
-| 13. Camera Feel | 0/4 | Not started | - |
+| 13. Camera Feel | 1/4 | In Progress|  |
 
 ---
 
