@@ -6,6 +6,7 @@ import { createTerrainMesh, getTerrainHeight, getTerrainSlope, isOnLand } from '
 import { getBridges, type BridgeSpec } from './bridges';
 import { getRoads, ROAD_HALF_WIDTH, roadFactor } from './roads';
 import { getCampSites } from './camps';
+import { mergeStaticDecor } from './mergeStaticDecor';
 import type { ObstacleCircle } from '../physics/resolveCollisions';
 import {
   createBarrel,
@@ -303,6 +304,12 @@ interface AssetScatterRule {
   collisionRadius?: number;
   /** Keep this far clear of every enemy camp — big rocks must not block spawns. */
   avoidCamps?: number;
+  /**
+   * Static + non-animated: bake every instance into one merged mesh per material
+   * (draw-call collapse, see mergeStaticDecor). Omit for wind-animated decor
+   * (canopy) whose in-shader sway needs a live, un-baked world transform.
+   */
+  mergeable?: boolean;
 }
 
 /** Uniform sample across the whole map, rejected until it lands on an island. */
@@ -363,10 +370,18 @@ export function createMondstadtWorld(
   const platforms: Platform[] = [];
   const obstacles: ObstacleCircle[] = [];
 
-  function placeAsset(asset: WorldAsset, x: number, z: number, collisionRadius?: number) {
+  function placeAsset(
+    asset: WorldAsset,
+    x: number,
+    z: number,
+    collisionRadius?: number,
+    sink?: (placed: THREE.Group) => void
+  ) {
     const groundY = getTerrainHeight(x, z);
     asset.group.position.set(x, groundY, z);
-    group.add(asset.group);
+    // sink diverts the visual group to the decor-merge collector; obstacles and
+    // platforms (below) are unaffected — collision is baked separately from render.
+    (sink ?? (g => group.add(g)))(asset.group);
     if (collisionRadius) obstacles.push({ x, y: groundY, z, radius: collisionRadius });
     for (const solid of asset.obstacles ?? []) {
       obstacles.push({
@@ -393,7 +408,7 @@ export function createMondstadtWorld(
     return campSites.some(camp => Math.hypot(camp.x - x, camp.z - z) < clearance);
   }
 
-  function scatterAssets(rule: AssetScatterRule) {
+  function scatterAssets(rule: AssetScatterRule, sink?: (placed: THREE.Group) => void) {
     let placed = 0;
     let attempts = 0;
     while (placed < rule.count && attempts < rule.count * 12) {
@@ -403,7 +418,7 @@ export function createMondstadtWorld(
       if (getTerrainSlope(landPosition.x, landPosition.z) > rule.maxSlope) continue;
       // Big rocks must not smother a camp's enemy spawn ring.
       if (rule.avoidCamps && nearCamp(landPosition.x, landPosition.z, rule.avoidCamps)) continue;
-      placeAsset(rule.create(random), landPosition.x, landPosition.z, rule.collisionRadius);
+      placeAsset(rule.create(random), landPosition.x, landPosition.z, rule.collisionRadius, sink);
       placed++;
     }
   }
@@ -574,8 +589,10 @@ export function createMondstadtWorld(
   const scatterRules: AssetScatterRule[] = [
     // Boulders and spires declare their own per-piece footprints (asset.obstacles):
     // boulders block their base but stay jump-climbable; spires block full height.
-    { create: createBoulder, count: 26, minRadius: SAFE_ZONE_RADIUS + 8, maxSlope: 0.9, avoidCamps: 16 },
-    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2, avoidCamps: 16 },
+    // mergeable: static, non-animated decor — baked into merged meshes below.
+    // canopy trees are OMITTED (in-shader wind sway needs a live world transform).
+    { create: createBoulder, count: 26, minRadius: SAFE_ZONE_RADIUS + 8, maxSlope: 0.9, avoidCamps: 16, mergeable: true },
+    { create: createRockSpire, count: 14, minRadius: 52, maxSlope: 1.2, avoidCamps: 16, mergeable: true },
     { create: createCanopyTree, count: 8, minRadius: 30, maxSlope: 0.45, collisionRadius: 0.7 },
     {
       create: createPalmTree,
@@ -583,12 +600,19 @@ export function createMondstadtWorld(
       minRadius: SAFE_ZONE_RADIUS + 4,
       maxSlope: 0.4,
       collisionRadius: 0.45,
+      mergeable: true,
     },
-    { create: createBush, count: 24, minRadius: SAFE_ZONE_RADIUS + 2, maxSlope: 0.6 },
-    { create: createMushroom, count: 12, minRadius: SAFE_ZONE_RADIUS + 4, maxSlope: 0.6 },
-    { create: createFlower, count: 16, minRadius: SAFE_ZONE_RADIUS + 1, maxSlope: 0.5 },
+    { create: createBush, count: 24, minRadius: SAFE_ZONE_RADIUS + 2, maxSlope: 0.6, mergeable: true },
+    { create: createMushroom, count: 12, minRadius: SAFE_ZONE_RADIUS + 4, maxSlope: 0.6, mergeable: true },
+    { create: createFlower, count: 16, minRadius: SAFE_ZONE_RADIUS + 1, maxSlope: 0.5, mergeable: true },
   ];
-  for (const rule of scatterRules) scatterAssets(rule);
+  // Static decor is diverted to a collector and merged by material into a handful
+  // of draw calls; animated decor (canopy) still adds its live groups directly.
+  const decorToMerge: THREE.Group[] = [];
+  for (const rule of scatterRules) {
+    scatterAssets(rule, rule.mergeable ? g => decorToMerge.push(g) : undefined);
+  }
+  for (const merged of mergeStaticDecor(decorToMerge)) group.add(merged);
 
   for (const campSite of campSites) {
     const campRandom = createSeededRandom(
