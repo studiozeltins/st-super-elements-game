@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { BIRD, birdFlight, peckDip, isDayTime, inSpawnRing, beyondCull, SPAWN } from './wildlifeMath';
 import { surfaceAt } from './surfaceAt';
-import { loadCrowModel, type CrowModel } from './crowModel';
+import { loadCrowModel, createCrowWingGeometry, CROW_WING_COLOR, type CrowModel } from './crowModel';
+import { createSolidFlapMaterial, attachFlapAttrs } from './wingedCreature';
 
 /**
  * Ground crows + startle flush (WILD-02): ONE fixed-pool InstancedMesh of the
@@ -54,6 +55,9 @@ const HOP_HOVER = 0.02; // a grounded crow's feet sit a hair above the blades
 const PECK_PITCH = 0.7;
 /** Slight nose-up/down pitch across a flight (radians). */
 const FLIGHT_PITCH = 0.35;
+/** Wing-beat: radians/sec and peak rotation of the crow's procedural wings. */
+const WING_FLAP_SPEED = 16;
+const WING_FLAP_AMP = 1.15;
 const TAU = Math.PI * 2;
 
 type BirdState = 'peck' | 'fly';
@@ -94,9 +98,21 @@ export function createBirdFlush(
   }));
 
   // Built once the crow model resolves; until then update() runs the pool logic but
-  // writes no matrices (nothing to render yet).
+  // writes no matrices (nothing to render yet). `mesh` is the crow body; `wingMesh`
+  // is the procedural flapping wings, sharing the body's per-instance matrix.
   let mesh: THREE.InstancedMesh | null = null;
+  let wingMesh: THREE.InstancedMesh | null = null;
   let disposed = false;
+  const wingFlap = createSolidFlapMaterial({
+    flapSpeed: WING_FLAP_SPEED,
+    flapAmp: WING_FLAP_AMP,
+    color: CROW_WING_COLOR,
+  });
+  let flapAmps: Float32Array | null = null;
+  let flapPhases: Float32Array | null = null;
+  let ampAttr: THREE.InstancedBufferAttribute | null = null;
+  let phaseAttr: THREE.InstancedBufferAttribute | null = null;
+  let flapClock = 0;
 
   const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
   // Closure-level scratch — zero per-frame allocations.
@@ -108,11 +124,19 @@ export function createBirdFlush(
   const flightScratch = { travel: 0, height: 0, visible: 0 };
   let recheckTimer = RECHECK_INTERVAL;
 
+  /** aFlapAmp for a slot: 0 tucks the wings, 1 spreads + beats them. */
+  function setFlapAmp(slot: number, amp: number): void {
+    if (!flapAmps || !ampAttr) return;
+    flapAmps[slot] = amp;
+    ampAttr.needsUpdate = true;
+  }
+
   const ready = loadModel()
     .then((model) => {
       if (disposed) {
         model.geometry.dispose();
         (model.material as THREE.Material).dispose();
+        wingFlap.material.dispose();
         return;
       }
       const built = new THREE.InstancedMesh(model.geometry, model.material, BIRD_POOL_SIZE);
@@ -120,10 +144,30 @@ export function createBirdFlush(
       built.frustumCulled = false;
       built.castShadow = false;
       built.receiveShadow = false;
-      for (let index = 0; index < BIRD_POOL_SIZE; index += 1) built.setMatrixAt(index, zeroMatrix);
+
+      const wings = new THREE.InstancedMesh(createCrowWingGeometry(), wingFlap.material, BIRD_POOL_SIZE);
+      wings.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      wings.frustumCulled = false;
+      wings.castShadow = false;
+      wings.receiveShadow = false;
+      const attrs = attachFlapAttrs(wings, BIRD_POOL_SIZE);
+      flapAmps = attrs.amps;
+      flapPhases = attrs.phases;
+      ampAttr = attrs.ampAttr;
+      phaseAttr = attrs.phaseAttr;
+
+      for (let index = 0; index < BIRD_POOL_SIZE; index += 1) {
+        built.setMatrixAt(index, zeroMatrix);
+        wings.setMatrixAt(index, zeroMatrix);
+        flapPhases[index] = Math.random() * TAU;
+      }
       built.instanceMatrix.needsUpdate = true;
+      wings.instanceMatrix.needsUpdate = true;
+      phaseAttr.needsUpdate = true;
       scene.add(built);
+      scene.add(wings);
       mesh = built;
+      wingMesh = wings;
     })
     .catch((err) => {
       // A missing/broken crow.glb must not crash the game — just no ground birds.
@@ -148,11 +192,12 @@ export function createBirdFlush(
     bird.seed = Math.random() * TAU;
     bird.state = 'peck';
     bird.active = true;
+    setFlapAmp(slot, 0); // grounded → wings tucked
     return slot;
   }
 
   /** Launch a bird into flight toward its OWN scattered far target. */
-  function launch(bird: Bird): void {
+  function launch(bird: Bird, slot: number): void {
     const angle = Math.random() * TAU; // each bird its own heading — never a shared direction
     const dist = FLEE_MIN + Math.random() * (FLEE_MAX - FLEE_MIN);
     bird.spawnX = bird.anchorX;
@@ -164,6 +209,7 @@ export function createBirdFlush(
     bird.yaw = Math.atan2(bird.anchorX - bird.spawnX, bird.anchorZ - bird.spawnZ);
     bird.age = 0;
     bird.state = 'fly';
+    setFlapAmp(slot, 1); // airborne → wings spread and beat
   }
 
   return {
@@ -180,7 +226,7 @@ export function createBirdFlush(
         const dx = bird.anchorX - x;
         const dz = bird.anchorZ - z;
         if (dx * dx + dz * dz <= FLUSH_RADIUS * FLUSH_RADIUS) {
-          launch(bird);
+          launch(bird, index);
           flushed += 1;
           if (flushed >= 4) break;
         }
@@ -204,6 +250,7 @@ export function createBirdFlush(
           if (bird.state === 'peck' && (!day || beyondCull(dx, dz))) {
             bird.active = false;
             if (mesh) mesh.setMatrixAt(index, zeroMatrix);
+            if (wingMesh) wingMesh.setMatrixAt(index, zeroMatrix);
           } else {
             live += 1;
           }
@@ -230,7 +277,10 @@ export function createBirdFlush(
         }
       }
 
-      if (!mesh) return; // model still loading — pool state advanced, nothing to draw yet
+      if (!mesh || !wingMesh) return; // model still loading — pool advanced, nothing to draw yet
+
+      flapClock += deltaSeconds;
+      wingFlap.setTime(flapClock);
 
       for (let index = 0; index < BIRD_POOL_SIZE; index += 1) {
         const bird = pool[index];
@@ -243,6 +293,7 @@ export function createBirdFlush(
             // Landed — resume pecking at the new spot (NOT despawn).
             bird.state = 'peck';
             bird.age = 0;
+            setFlapAmp(index, 0); // wings tuck on touchdown
             scratchPosition.set(bird.anchorX, bird.groundY + HOP_HOVER, bird.anchorZ);
             orientEuler.set(0, bird.yaw, 0);
           } else {
@@ -266,18 +317,28 @@ export function createBirdFlush(
         orientQuat.setFromEuler(orientEuler);
         scratchMatrix.compose(scratchPosition, orientQuat, scratchScale);
         mesh.setMatrixAt(index, scratchMatrix);
+        wingMesh.setMatrixAt(index, scratchMatrix); // wings share the body transform
       }
 
       mesh.instanceMatrix.needsUpdate = true;
+      wingMesh.instanceMatrix.needsUpdate = true;
     },
     dispose() {
       disposed = true;
-      if (!mesh) return;
-      scene.remove(mesh);
-      mesh.geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
-      mesh.dispose();
-      mesh = null;
+      if (mesh) {
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        (mesh.material as THREE.Material).dispose();
+        mesh.dispose();
+        mesh = null;
+      }
+      if (wingMesh) {
+        scene.remove(wingMesh);
+        wingMesh.geometry.dispose();
+        wingMesh.dispose();
+        wingMesh = null;
+      }
+      wingFlap.material.dispose();
     },
   };
 }

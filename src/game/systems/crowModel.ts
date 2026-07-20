@@ -21,6 +21,40 @@ const TARGET_HEIGHT = 1.3;
 /** Facing correction about Y (radians) — flip to π if the beak points the wrong way. */
 const BASE_YAW = 0;
 
+/** Approx dark plumage tint for the procedural wings (matches the crow texture). */
+export const CROW_WING_COLOR = 0x26262c;
+
+/**
+ * Procedural wing geometry for the crow, authored in the normalized crow space
+ * (feet at y=0, ~1.3u tall, facing +Z). Two swept triangles per side rooted at the
+ * shoulders; `aWing` = ∓1 drives the flap shader, which retracts them to the spine
+ * when grounded (amp 0 → tucked/invisible) and spreads + beats them in flight
+ * (amp 1). Rendered as a second InstancedMesh sharing the body's per-instance matrix.
+ */
+export function createCrowWingGeometry(): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const wing: number[] = [];
+  const push = (p: [number, number, number], side: number): void => {
+    pos.push(p[0], p[1], p[2]);
+    wing.push(side);
+  };
+  const side = (s: number): void => {
+    const rootF: [number, number, number] = [0, 0.82, 0.22];
+    const rootB: [number, number, number] = [0, 0.70, -0.42];
+    const tipF: [number, number, number] = [s * 0.64, 0.92, 0.02];
+    const tipB: [number, number, number] = [s * 0.56, 0.82, -0.6];
+    push(rootF, s); push(rootB, s); push(tipB, s);
+    push(rootF, s); push(tipB, s); push(tipF, s);
+  };
+  side(-1);
+  side(1);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('aWing', new THREE.Float32BufferAttribute(wing, 1));
+  geo.computeVertexNormals();
+  return geo;
+}
+
 export function loadCrowModel(url: string = CROW_URL): Promise<CrowModel> {
   const loader = new GLTFLoader();
   return loader.loadAsync(url).then((gltf) => {
