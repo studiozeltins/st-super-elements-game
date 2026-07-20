@@ -1,20 +1,24 @@
 ---
 phase: 12-wildlife
 verified: 2026-07-18T23:30:00Z
-status: human_needed
+status: passed
 score: 26/26 code/math must-haves verified (47 automated tests pass + static wiring); 4 roadmap-SC perceptual/perf reads → human
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Roam grass by day (WILD-01). Confirm butterflies drift naturally, read as SPARSE (an encounter, not wallpaper), spawn/despawn near the player, and NONE appear at night. Toggle ?nobugs to confirm they vanish."
     expected: "Rare, natural summed-sine drift over grass by day; empty at dusk/night; ?nobugs removes them entirely."
     why_human: "Perceptual density + motion feel — 'sparse enough that spotting one feels like an event' cannot be asserted by a unit test. The spawn/cull/day-gate mechanics ARE unit-tested (createButterflies.test.ts); only the aesthetic read is human."
+
   - test: "Sprint through grass (WILD-02). Confirm 2-4 birds burst up a rising arc, ONE wing one-shot plays with them, they despawn, and continuous running does not retrigger a flush spam (~6s debounce)."
     expected: "A single startle burst + one wing sound per flush, arc up then fade/despawn, no retrigger stream; ?nobirds off."
     why_human: "Timing/feel + audio perception. The 2-4 burst, birdArc despawn, and flushReady(6s) debounce are unit-tested + statically wired at the CPU surface==='grass' site; the audible/felt result needs a human."
+
   - test: "Advance to dusk/night (WILD-03). Confirm fireflies appear as glowing, phase-randomized emissive quads, none by day, and that combat lighting/telegraphs are unaffected (no new lights)."
     expected: "Glowing decorrelated pulses at dusk/night, clean day no-op, combat lightPool untouched; ?nofireflies off."
     why_human: "Perceptual glow read under the pixel filter. The unlit MeshBasicMaterial, no-scene-light guarantee, day no-op, level-scaled fade, and per-instance pulse are unit-tested (createFireflies.test.ts); only the visual glow quality is human."
+
   - test: "SC4 milestone FPS gate: run scripts/fps_playtest.py through a golem-class fight with ALL ambiance enabled (wind + daynight + audio + wear + wildlife). Use ?no* flags to isolate any per-system cost."
     expected: "Frame rate holds through the golem fight with everything on; each ?no* flag removes exactly its system for bisecting."
     why_human: "Perf under real render load — requires running the FPS harness against a live golem fight. Cannot be asserted by unit tests. WR-01 (per-frame palette allocation) was already fixed in code (scalar fireflyLevelForPhase), so the zero-alloc mandate holds in source."

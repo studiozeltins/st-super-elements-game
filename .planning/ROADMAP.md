@@ -35,7 +35,7 @@ enabled — per-phase costs sum.
 - [ ] **Phase 9.1: Dynamic Sun and Shadows** *(INSERTED)* - Shadows sweep with the time-of-day sun on a readability-capped arc; overrides Phase 9's frozen-sun (D-02) with texel-snap + reduce-motion fallback
 - [ ] **Phase 10: Ambient Audio & Music** - Bus/compressor refactor, procedural wind bed + randomized one-shots, region + combat music crossfade, combat ducking
 - [x] **Phase 11: Lived-in Props & Wear** - Worn footpaths on real routes, plaza props, scorch regrowth + bend-trail tuning, sprint dust puffs (completed 2026-07-18)
-- [ ] **Phase 12: Wildlife** - Instanced butterflies by day, startle-flush birds off the sprint signal, emissive fireflies at dusk/night
+- [x] **Phase 12: Wildlife** - Instanced butterflies by day, startle-flush birds off the sprint signal, emissive fireflies at dusk/night (completed 2026-07-20)
 - [ ] **Phase 13: Camera Feel** - Run lean, idle breathing on the model, burst-damage FOV kick — all zeroed by a persisted reduce-motion toggle
 
 ## Phase Details
@@ -273,7 +273,7 @@ Plans:
 | 9.1. Dynamic Sun and Shadows *(inserted)* | 2/3 | In Progress|  |
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
 | 11. Lived-in Props & Wear | 8/8 | Complete    | 2026-07-18 |
-| 12. Wildlife | 5/5 | Complete   | 2026-07-18 |
+| 12. Wildlife | 5/5 | Complete    | 2026-07-18 |
 | 13. Camera Feel | 0/TBD | Not started | - |
 
 ---
