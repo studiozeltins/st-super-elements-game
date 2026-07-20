@@ -1,21 +1,23 @@
 import * as THREE from 'three';
-import { BIRD, PECK, birdFlight, peckDip, isDayTime, inSpawnRing, beyondCull, SPAWN } from './wildlifeMath';
+import { BIRD, birdFlight, peckDip, isDayTime, inSpawnRing, beyondCull, SPAWN } from './wildlifeMath';
 import { surfaceAt } from './surfaceAt';
-import { createWingedGeometry, createFlapMaterial, attachFlapAttrs } from './wingedCreature';
+import { loadCrowModel, type CrowModel } from './crowModel';
 
 /**
- * Ground birds + startle flush (WILD-02): ONE fixed-pool InstancedMesh of winged
- * birds that PECK on the grass by day near the player (self-managing like the
- * butterflies), and FLUSH into flight when the player scuffs grass nearby — the
- * call site (12-05) invokes spawn(x,z) on a grass-sprint. A flushed bird takes off
- * with fast-beating wings, flies to a DIFFERENT nearby grassy spot (each on its own
- * scatter heading — never the same direction, and close enough to stay visible and
- * inside the cull radius), LANDS, and resumes PECKING there. Birds only leave when
- * they wander out of the cull radius, never a fade-in-place. Hard-capped pool, one
- * draw call, zero per-frame allocation.
+ * Ground crows + startle flush (WILD-02): ONE fixed-pool InstancedMesh of the
+ * CC-BY crow model (see ATTRIBUTION.md) that PECK on the grass by day near the
+ * player (self-managing like the butterflies), and FLUSH into flight when the
+ * player scuffs grass nearby — the call site (12-05) invokes spawn(x,z). A flushed
+ * crow takes off, flies to a DIFFERENT nearby grassy spot (each on its own scatter
+ * heading, close enough to stay visible and inside the cull radius), LANDS, and
+ * resumes PECKING. Crows only leave when they wander out of the cull radius, never
+ * a fade-in-place. Hard-capped pool, one draw call, zero per-frame allocation.
  *
- * Flight + peck rhythm delegate to the unit-tested wildlifeMath twin; wings flap on
- * the GPU (per-instance amplitude: full while flying, folded while pecking).
+ * The crow glb is a single static mesh (no skeleton), so pose is done on the CPU
+ * per instance from the unit-tested wildlifeMath twin: pecking dips a forward body
+ * pitch (head to the ground), flight follows the scripted take-off/land arch. The
+ * model loads asynchronously — update() runs the pool state machine every frame and
+ * only writes instance matrices once the mesh is built (see `ready`).
  */
 export interface BirdFlush {
   /** Flush any grounded birds near (x,z) into flight (a grass-scuff disturbance). */
@@ -29,15 +31,12 @@ export interface BirdFlush {
     t: number
   ): void;
   dispose(): void;
+  /** Resolves once the crow model has loaded and the InstancedMesh is on the scene. */
+  ready: Promise<void>;
 }
 
-/** Hard pool cap — a small scattering of ground birds + a flush or two in flight. */
+/** Hard pool cap — a small scattering of ground crows + a flush or two in flight. */
 export const BIRD_POOL_SIZE = 12;
-/** Overall bird size (world units) — clearly bigger than a butterfly. */
-const BIRD_SIZE = 1.15;
-/** Warm robin-ish tones: rufous back/body, buff wings. Not the old near-black. */
-const BIRD_WING = 0xc4b092;
-const BIRD_BODY = 0x9c5a3c;
 /** A grass scuff flushes grounded birds within this radius of the player's step. */
 const FLUSH_RADIUS = 6;
 /**
@@ -50,7 +49,11 @@ const FLEE_MAX = 18;
 const RECHECK_INTERVAL = 0.5;
 const MAX_SPAWNS_PER_RECHECK = 2;
 const SPAWN_ATTEMPTS = 6;
-const HOP_HOVER = 0.12; // a grounded bird sits a hair above the blades
+const HOP_HOVER = 0.02; // a grounded crow's feet sit a hair above the blades
+/** Peak forward body-pitch at the bottom of a peck (radians). */
+const PECK_PITCH = 0.7;
+/** Slight nose-up/down pitch across a flight (radians). */
+const FLIGHT_PITCH = 0.35;
 const TAU = Math.PI * 2;
 
 type BirdState = 'peck' | 'fly';
@@ -73,7 +76,8 @@ interface Bird {
 
 export function createBirdFlush(
   scene: THREE.Scene,
-  getGroundHeight: (x: number, z: number) => number
+  getGroundHeight: (x: number, z: number) => number,
+  loadModel: (url?: string) => Promise<CrowModel> = loadCrowModel
 ): BirdFlush {
   const pool: Bird[] = Array.from({ length: BIRD_POOL_SIZE }, () => ({
     anchorX: 0,
@@ -89,47 +93,42 @@ export function createBirdFlush(
     age: 0,
   }));
 
-  const flap = createFlapMaterial({ flapSpeed: 9, flapAmp: 1.05 });
-  const mesh = new THREE.InstancedMesh(
-    createWingedGeometry({
-      // One swept, pointed wing pair — reads as a bird wing, not a square.
-      wings: [{ span: 0.55, rootFront: 0.14, rootBack: -0.22, tipZ: -0.16 }],
-      bodyLength: 0.72,
-      bodyWidth: 0.14,
-      wingColor: BIRD_WING,
-      bodyColor: BIRD_BODY,
-    }),
-    flap.material,
-    BIRD_POOL_SIZE
-  );
-  const { phases: flapPhases, amps: flapAmps, phaseAttr, ampAttr } = attachFlapAttrs(mesh, BIRD_POOL_SIZE);
-  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  mesh.frustumCulled = false;
-  mesh.castShadow = false;
-  mesh.receiveShadow = false;
-  const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
-  const white = new THREE.Color(0xffffff);
-  for (let index = 0; index < BIRD_POOL_SIZE; index += 1) {
-    mesh.setMatrixAt(index, zeroMatrix);
-    mesh.setColorAt(index, white);
-  }
-  mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
-  scene.add(mesh);
+  // Built once the crow model resolves; until then update() runs the pool logic but
+  // writes no matrices (nothing to render yet).
+  let mesh: THREE.InstancedMesh | null = null;
+  let disposed = false;
 
+  const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
   // Closure-level scratch — zero per-frame allocations.
   const scratchMatrix = new THREE.Matrix4();
   const scratchPosition = new THREE.Vector3();
-  const scratchScale = new THREE.Vector3(BIRD_SIZE, BIRD_SIZE, BIRD_SIZE);
+  const scratchScale = new THREE.Vector3(1, 1, 1); // geometry is pre-sized in crowModel
   const orientQuat = new THREE.Quaternion();
   const orientEuler = new THREE.Euler();
   const flightScratch = { travel: 0, height: 0, visible: 0 };
   let recheckTimer = RECHECK_INTERVAL;
-  let flapClock = 0;
 
-  function setAmp(slot: number, amp: number): void {
-    flapAmps[slot] = amp;
-    ampAttr.needsUpdate = true;
-  }
+  const ready = loadModel()
+    .then((model) => {
+      if (disposed) {
+        model.geometry.dispose();
+        (model.material as THREE.Material).dispose();
+        return;
+      }
+      const built = new THREE.InstancedMesh(model.geometry, model.material, BIRD_POOL_SIZE);
+      built.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      built.frustumCulled = false;
+      built.castShadow = false;
+      built.receiveShadow = false;
+      for (let index = 0; index < BIRD_POOL_SIZE; index += 1) built.setMatrixAt(index, zeroMatrix);
+      built.instanceMatrix.needsUpdate = true;
+      scene.add(built);
+      mesh = built;
+    })
+    .catch((err) => {
+      // A missing/broken crow.glb must not crash the game — just no ground birds.
+      console.error('[birdFlush] crow model failed to load:', err);
+    });
 
   /** Claim a free slot as a grounded pecking bird at (x,z). Returns the slot or -1. */
   function claimPeck(x: number, z: number): number {
@@ -149,14 +148,11 @@ export function createBirdFlush(
     bird.seed = Math.random() * TAU;
     bird.state = 'peck';
     bird.active = true;
-    flapPhases[slot] = Math.random() * TAU;
-    phaseAttr.needsUpdate = true;
-    setAmp(slot, 0); // folded wings on the ground
     return slot;
   }
 
   /** Launch a bird into flight toward its OWN scattered far target. */
-  function launch(bird: Bird, slot: number): void {
+  function launch(bird: Bird): void {
     const angle = Math.random() * TAU; // each bird its own heading — never a shared direction
     const dist = FLEE_MIN + Math.random() * (FLEE_MAX - FLEE_MIN);
     bird.spawnX = bird.anchorX;
@@ -168,10 +164,10 @@ export function createBirdFlush(
     bird.yaw = Math.atan2(bird.anchorX - bird.spawnX, bird.anchorZ - bird.spawnZ);
     bird.age = 0;
     bird.state = 'fly';
-    setAmp(slot, 1); // full flap in the air
   }
 
   return {
+    ready,
     spawn(x, z) {
       // A grass scuff: flush the grounded birds that were ACTUALLY pecking nearby.
       // No synthetic fallback burst — birds never materialize from nothing just to
@@ -184,7 +180,7 @@ export function createBirdFlush(
         const dx = bird.anchorX - x;
         const dz = bird.anchorZ - z;
         if (dx * dx + dz * dz <= FLUSH_RADIUS * FLUSH_RADIUS) {
-          launch(bird, index);
+          launch(bird);
           flushed += 1;
           if (flushed >= 4) break;
         }
@@ -192,10 +188,7 @@ export function createBirdFlush(
     },
     update(deltaSeconds, camera, playerX, playerZ, phase, t) {
       void camera;
-      let matrixDirty = false;
       const day = isDayTime(phase);
-      flapClock += deltaSeconds;
-      flap.setTime(flapClock);
 
       recheckTimer += deltaSeconds;
       if (recheckTimer >= RECHECK_INTERVAL) {
@@ -210,8 +203,7 @@ export function createBirdFlush(
           // Flying birds are never culled mid-air (they finish their landing).
           if (bird.state === 'peck' && (!day || beyondCull(dx, dz))) {
             bird.active = false;
-            mesh.setMatrixAt(index, zeroMatrix);
-            matrixDirty = true;
+            if (mesh) mesh.setMatrixAt(index, zeroMatrix);
           } else {
             live += 1;
           }
@@ -238,6 +230,8 @@ export function createBirdFlush(
         }
       }
 
+      if (!mesh) return; // model still loading — pool state advanced, nothing to draw yet
+
       for (let index = 0; index < BIRD_POOL_SIZE; index += 1) {
         const bird = pool[index];
         if (!bird.active) continue;
@@ -249,7 +243,6 @@ export function createBirdFlush(
             // Landed — resume pecking at the new spot (NOT despawn).
             bird.state = 'peck';
             bird.age = 0;
-            setAmp(index, 0);
             scratchPosition.set(bird.anchorX, bird.groundY + HOP_HOVER, bird.anchorZ);
             orientEuler.set(0, bird.yaw, 0);
           } else {
@@ -259,33 +252,32 @@ export function createBirdFlush(
               bird.spawnY + (bird.groundY - bird.spawnY) * flightScratch.travel + flightScratch.height,
               bird.spawnZ + (bird.anchorZ - bird.spawnZ) * flightScratch.travel
             );
-            orientEuler.set(-Math.cos(Math.PI * t01) * 0.5, bird.yaw, 0);
+            // Nose up on the climb, level on descent.
+            orientEuler.set(-Math.cos(Math.PI * t01) * FLIGHT_PITCH, bird.yaw, 0);
           }
         } else {
-          // Pecking on the ground: a quick head-down jab dips the body + tips the
-          // nose down, resting between jabs. Wings folded (aFlapAmp 0).
+          // Pecking on the ground: a quick forward body-pitch dips the head toward
+          // the grass, resting upright between jabs.
           const dip = peckDip(t, bird.seed);
-          scratchPosition.set(
-            bird.anchorX,
-            bird.groundY + HOP_HOVER + PECK.rest - PECK.depth * dip,
-            bird.anchorZ
-          );
-          orientEuler.set(dip * 0.9, bird.yaw, 0); // nose pitches down into the peck
+          scratchPosition.set(bird.anchorX, bird.groundY + HOP_HOVER, bird.anchorZ);
+          orientEuler.set(dip * PECK_PITCH, bird.yaw, 0);
         }
 
         orientQuat.setFromEuler(orientEuler);
         scratchMatrix.compose(scratchPosition, orientQuat, scratchScale);
         mesh.setMatrixAt(index, scratchMatrix);
-        matrixDirty = true;
       }
 
-      if (matrixDirty) mesh.instanceMatrix.needsUpdate = true;
+      mesh.instanceMatrix.needsUpdate = true;
     },
     dispose() {
+      disposed = true;
+      if (!mesh) return;
       scene.remove(mesh);
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
       mesh.dispose();
+      mesh = null;
     },
   };
 }

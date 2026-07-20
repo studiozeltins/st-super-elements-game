@@ -44,14 +44,24 @@ function firstLivePosition(mesh: THREE.InstancedMesh): { x: number; z: number } 
 const flatGround = () => 0;
 const camera = new THREE.PerspectiveCamera();
 
+// The real factory loads a crow GLTF asynchronously; inject a synchronous fake so
+// the pool/flush/land state machine is tested headlessly (no WebGL, no file I/O).
+// The pose math (peck pitch, flight arc) is proven in wildlifeMath.test.ts.
+function fakeCrow() {
+  return Promise.resolve({
+    geometry: new THREE.BoxGeometry(0.4, 1.3, 1.2),
+    material: new THREE.MeshLambertMaterial(),
+  });
+}
+
 describe('createBirdFlush', () => {
-  it('parents a winged, lit InstancedMesh to the scene root with pool flags', () => {
+  it('parents an InstancedMesh (crow model) to the scene root with pool flags', async () => {
     const scene = new THREE.Scene();
-    const birds = createBirdFlush(scene, flatGround);
+    const birds = createBirdFlush(scene, flatGround, fakeCrow);
+    await birds.ready;
     const mesh = findMesh(scene);
     expect(mesh.count).toBe(BIRD_POOL_SIZE);
     expect(mesh.geometry).toBeInstanceOf(THREE.BufferGeometry);
-    expect(mesh.geometry.getAttribute('aWing')).toBeDefined(); // winged geometry, not a flat quad
     expect(mesh.material).toBeInstanceOf(THREE.MeshLambertMaterial);
     expect(mesh.frustumCulled).toBe(false);
     expect(BIRD_POOL_SIZE).toBeGreaterThan(0);
@@ -59,9 +69,10 @@ describe('createBirdFlush', () => {
     birds.dispose();
   });
 
-  it('flushing bare ground with no pecker nearby spawns nothing — never a phantom burst', () => {
+  it('flushing bare ground with no pecker nearby spawns nothing — never a phantom burst', async () => {
     const scene = new THREE.Scene();
-    const birds = createBirdFlush(scene, flatGround);
+    const birds = createBirdFlush(scene, flatGround, fakeCrow);
+    await birds.ready;
     const mesh = findMesh(scene);
     expect(countLive(mesh)).toBe(0);
     birds.spawn(5, 5); // no grounded birds within FLUSH_RADIUS → nothing flushes
@@ -71,9 +82,10 @@ describe('createBirdFlush', () => {
     birds.dispose();
   });
 
-  it('a flushed bird LANDS and keeps living (pecks) — it does not despawn', () => {
+  it('a flushed bird LANDS and keeps living (pecks) — it does not despawn', async () => {
     const scene = new THREE.Scene();
-    const birds = createBirdFlush(scene, flatGround);
+    const birds = createBirdFlush(scene, flatGround, fakeCrow);
+    await birds.ready;
     const mesh = findMesh(scene);
     // Populate grounded peckers over grass (ambient recheck), like the day-gate test.
     for (let i = 0; i < 6; i += 1) birds.update(0.5, camera, 0, 0, DAY, i);
@@ -89,9 +101,10 @@ describe('createBirdFlush', () => {
     birds.dispose();
   });
 
-  it('self-spawns grounded birds over grass by day and clears them at night', () => {
+  it('self-spawns grounded birds over grass by day and clears them at night', async () => {
     const scene = new THREE.Scene();
-    const birds = createBirdFlush(scene, flatGround); // flatGround → surfaceAt grass at origin
+    const birds = createBirdFlush(scene, flatGround, fakeCrow); // flatGround → surfaceAt grass at origin
+    await birds.ready;
     const mesh = findMesh(scene);
     // Several rechecks by day top up grounded peckers near the player.
     for (let i = 0; i < 6; i += 1) birds.update(0.5, camera, 0, 0, DAY, i);
@@ -102,10 +115,13 @@ describe('createBirdFlush', () => {
     birds.dispose();
   });
 
-  it('hard-caps live birds at BIRD_POOL_SIZE under heavy flushing', () => {
+  it('hard-caps live birds at BIRD_POOL_SIZE under heavy flushing', async () => {
     const scene = new THREE.Scene();
-    const birds = createBirdFlush(scene, flatGround);
+    const birds = createBirdFlush(scene, flatGround, fakeCrow);
+    await birds.ready;
     const mesh = findMesh(scene);
+    // Populate grounded peckers, then flush a wide swath so many take off at once.
+    for (let i = 0; i < 6; i += 1) birds.update(0.5, camera, 0, 0, DAY, i);
     for (let i = 0; i < BIRD_POOL_SIZE * 2; i += 1) birds.spawn(i, 0);
     birds.update(0.016, camera, 0, 0, DAY, 0);
     expect(countLive(mesh)).toBeLessThanOrEqual(BIRD_POOL_SIZE);
@@ -113,9 +129,10 @@ describe('createBirdFlush', () => {
     birds.dispose();
   });
 
-  it('removes the mesh from the scene on dispose without throwing', () => {
+  it('removes the mesh from the scene on dispose without throwing', async () => {
     const scene = new THREE.Scene();
-    const birds = createBirdFlush(scene, flatGround);
+    const birds = createBirdFlush(scene, flatGround, fakeCrow);
+    await birds.ready;
     const mesh = findMesh(scene);
     expect(scene.children).toContain(mesh);
     expect(() => birds.dispose()).not.toThrow();
