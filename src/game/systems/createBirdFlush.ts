@@ -33,10 +33,11 @@ export interface BirdFlush {
 
 /** Hard pool cap — a small scattering of ground birds + a flush or two in flight. */
 export const BIRD_POOL_SIZE = 12;
-/** Overall bird size (world units). */
-const BIRD_SIZE = 0.75;
-const BIRD_WING = 0x6b6f78;
-const BIRD_BODY = 0x2b2b33;
+/** Overall bird size (world units) — clearly bigger than a butterfly. */
+const BIRD_SIZE = 1.15;
+/** Warm robin-ish tones: rufous back/body, buff wings. Not the old near-black. */
+const BIRD_WING = 0xc4b092;
+const BIRD_BODY = 0x9c5a3c;
 /** A grass scuff flushes grounded birds within this radius of the player's step. */
 const FLUSH_RADIUS = 6;
 /**
@@ -88,13 +89,13 @@ export function createBirdFlush(
     age: 0,
   }));
 
-  const flap = createFlapMaterial({ flapSpeed: 22, flapAmp: 0.95 });
+  const flap = createFlapMaterial({ flapSpeed: 9, flapAmp: 1.05 });
   const mesh = new THREE.InstancedMesh(
     createWingedGeometry({
-      wingSpan: 0.5,
-      wingChord: 0.34,
-      bodyLength: 0.7,
-      bodyWidth: 0.11,
+      // One swept, pointed wing pair — reads as a bird wing, not a square.
+      wings: [{ span: 0.55, rootFront: 0.14, rootBack: -0.22, tipZ: -0.16 }],
+      bodyLength: 0.72,
+      bodyWidth: 0.14,
       wingColor: BIRD_WING,
       bodyColor: BIRD_BODY,
     }),

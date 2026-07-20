@@ -8,7 +8,8 @@ import {
   SPAWN,
 } from './wildlifeMath';
 import { surfaceAt } from './surfaceAt';
-import { createWingedGeometry, createFlapMaterial, attachFlapAttrs } from './wingedCreature';
+import { createTexturedFlapMaterial, attachFlapAttrs } from './wingedCreature';
+import { createButterflyTexture } from './butterflyTexture';
 
 /**
  * Daytime butterflies: ONE sparse, self-managing InstancedMesh pool that spawns
@@ -40,14 +41,44 @@ const RECHECK_INTERVAL = 0.5;
 const MAX_SPAWNS_PER_RECHECK = 2;
 /** Ring-point candidate attempts per recheck before giving up (avoids an infinite grass hunt). */
 const SPAWN_ATTEMPTS = 6;
-/** Overall butterfly size (world units) — big enough to read as wings, not a dot. */
-const BUTTERFLY_SIZE = 1.3;
+/** Overall butterfly size (world units) — delicate, and clearly SMALLER than a bird. */
+const BUTTERFLY_SIZE = 0.95;
 /** Small hover above the ground so a butterfly floats, never clips the grass. */
 const HOVER = 1.1;
-/** Warm butterfly wing tint + a dark body, baked as vertex colors. */
-const BUTTERFLY_WING = 0xf2b53a;
-const BUTTERFLY_BODY = 0x2a2018;
 const TAU = Math.PI * 2;
+
+/**
+ * Two flat wing quads (left x∈[-0.5,0], right x∈[0,0.5]) laid in the XZ plane and
+ * hinged at the body spine (x=0), UV-mapped so each half samples its side of the
+ * morpho texture. aWing = ∓1 per side drives the GPU flap (dihedral fold about the
+ * +Z spine); the fixed 3/4 camera looks down onto the pattern. One geometry, shared
+ * by every instance.
+ */
+function createButterflyGeometry(): THREE.BufferGeometry {
+  const S = 0.5;
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const wing: number[] = [];
+  const quad = (x0: number, x1: number, side: number): void => {
+    const corners: [number, number][] = [
+      [x0, -S], [x1, -S], [x1, S], [x0, S],
+    ];
+    for (const i of [0, 1, 2, 0, 2, 3]) {
+      const [x, z] = corners[i];
+      pos.push(x, 0, z);
+      uv.push(x + 0.5, z + 0.5);
+      wing.push(side);
+    }
+  };
+  quad(-S, 0, -1);
+  quad(0, S, 1);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setAttribute('aWing', new THREE.Float32BufferAttribute(wing, 1));
+  geo.computeVertexNormals();
+  return geo;
+}
 
 interface Butterfly {
   anchorX: number;
@@ -69,22 +100,12 @@ export function createButterflies(
     active: false,
   }));
 
-  // Winged body+2-wings geometry with a wide GPU wing-flap (createFlapMaterial) —
-  // real depth + flapping wings with a warm wing / dark body two-tone (baked vertex
-  // colors), not a jiggling billboard. One InstancedMesh, one draw call.
-  const flap = createFlapMaterial({ flapSpeed: 11, flapAmp: 1.35 });
-  const mesh = new THREE.InstancedMesh(
-    createWingedGeometry({
-      wingSpan: 0.55,
-      wingChord: 0.5,
-      bodyLength: 0.42,
-      bodyWidth: 0.06,
-      wingColor: BUTTERFLY_WING,
-      bodyColor: BUTTERFLY_BODY,
-    }),
-    flap.material,
-    BUTTERFLY_POOL_SIZE
-  );
+  // Textured blue-morpho wings with a GPU flap: two flat quads sampling a painted
+  // morpho texture (alpha cutout), folding on the +Z spine. Unlit so the blue pops
+  // in any light. One InstancedMesh, one draw call.
+  const wingTexture = createButterflyTexture();
+  const flap = createTexturedFlapMaterial({ flapSpeed: 7, flapAmp: 1.15, map: wingTexture });
+  const mesh = new THREE.InstancedMesh(createButterflyGeometry(), flap.material, BUTTERFLY_POOL_SIZE);
   const { phases: flapPhases, amps: flapAmps, phaseAttr, ampAttr } = attachFlapAttrs(mesh, BUTTERFLY_POOL_SIZE);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
@@ -197,9 +218,13 @@ export function createButterflies(
           b.groundY + butterflyBob(t, b.seed),
           b.anchorZ + wanderScratch.z
         );
-        // Slowly turning yaw + a little pitch bob → a living flight path; wings
-        // (horizontal, flapping about the forward spine) read from the 3/4 cam.
-        orientEuler.set(Math.sin(t * 0.9 + b.seed) * 0.25, b.seed + t * 0.35, 0);
+        // Near-flat so the 3/4 camera looks down onto the wing pattern; a slow yaw
+        // drift + a gentle pitch/roll wobble give life without hiding the wings.
+        orientEuler.set(
+          0.14 * Math.sin(t * 1.3 + b.seed),
+          b.seed + t * 0.35,
+          0.12 * Math.sin(t * 0.8 + b.seed)
+        );
         orientQuat.setFromEuler(orientEuler);
         scratchMatrix.compose(scratchPosition, orientQuat, scratchScale);
         mesh.setMatrixAt(index, scratchMatrix);
@@ -212,6 +237,7 @@ export function createButterflies(
       scene.remove(mesh);
       mesh.geometry.dispose();
       (mesh.material as THREE.Material).dispose();
+      wingTexture.dispose();
       // InstancedMesh.dispose() releases the instanceMatrix/instanceColor GPU
       // buffers — geometry/material alone don't.
       mesh.dispose();

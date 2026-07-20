@@ -30,6 +30,17 @@ function countLive(mesh: THREE.InstancedMesh): number {
   return live;
 }
 
+/** World-space (x,z) of the first live slot, or null if the pool is empty. */
+function firstLivePosition(mesh: THREE.InstancedMesh): { x: number; z: number } | null {
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < mesh.count; i += 1) {
+    mesh.getMatrixAt(i, m);
+    const magnitude = UPPER_3X3.reduce((sum, e) => sum + Math.abs(m.elements[e]), 0);
+    if (magnitude > 1e-6) return { x: m.elements[12], z: m.elements[14] };
+  }
+  return null;
+}
+
 const flatGround = () => 0;
 const camera = new THREE.PerspectiveCamera();
 
@@ -48,16 +59,15 @@ describe('createBirdFlush', () => {
     birds.dispose();
   });
 
-  it('flushing empty grass bursts 2–4 fresh birds into flight', () => {
+  it('flushing bare ground with no pecker nearby spawns nothing — never a phantom burst', () => {
     const scene = new THREE.Scene();
     const birds = createBirdFlush(scene, flatGround);
     const mesh = findMesh(scene);
     expect(countLive(mesh)).toBe(0);
-    birds.spawn(5, 5); // no grounded birds nearby → fresh burst
-    birds.update(0.016, camera, 5, 5, DAY, 0);
-    const live = countLive(mesh);
-    expect(live).toBeGreaterThanOrEqual(2);
-    expect(live).toBeLessThanOrEqual(4);
+    birds.spawn(5, 5); // no grounded birds within FLUSH_RADIUS → nothing flushes
+    // No update() here, so the ambient recheck never runs: the ONLY path to a live
+    // bird would be the removed synthetic fallback. Prove it stays empty.
+    expect(countLive(mesh)).toBe(0);
     birds.dispose();
   });
 
@@ -65,12 +75,15 @@ describe('createBirdFlush', () => {
     const scene = new THREE.Scene();
     const birds = createBirdFlush(scene, flatGround);
     const mesh = findMesh(scene);
-    birds.spawn(0, 0);
-    birds.update(0.016, camera, 0, 0, DAY, 0);
-    const inFlight = countLive(mesh);
-    expect(inFlight).toBeGreaterThan(0);
-    // Advance well past a flight life — birds arrive and switch to pecking, still live.
-    for (let i = 0; i < 20; i += 1) birds.update(0.5, camera, 0, 0, DAY, i);
+    // Populate grounded peckers over grass (ambient recheck), like the day-gate test.
+    for (let i = 0; i < 6; i += 1) birds.update(0.5, camera, 0, 0, DAY, i);
+    const grounded = firstLivePosition(mesh);
+    expect(grounded).not.toBeNull();
+    // Flush at a real pecker's spot so it takes off (within FLUSH_RADIUS of itself).
+    birds.spawn(grounded!.x, grounded!.z);
+    // Advance well past a flight life — flushed birds arrive at a NEW spot and switch
+    // back to pecking; nothing fades in place, so the pool stays populated.
+    for (let i = 0; i < 20; i += 1) birds.update(0.5, camera, 0, 0, DAY, 6 + i);
     expect(countLive(mesh)).toBeGreaterThan(0); // still present, now pecking
     expect(mesh.count).toBe(BIRD_POOL_SIZE);
     birds.dispose();

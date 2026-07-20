@@ -68,15 +68,16 @@ function runDay(
 }
 
 describe('createButterflies', () => {
-  it('parents a billboarded, lit InstancedMesh to the scene root with pool flags', () => {
+  it('parents a textured, flapping InstancedMesh to the scene root with pool flags', () => {
     const scene = new THREE.Scene();
     const b = createButterflies(scene, flatGround);
 
     const mesh = findMesh(scene);
     expect(mesh.count).toBe(BUTTERFLY_POOL_SIZE);
     expect(mesh.geometry).toBeInstanceOf(THREE.BufferGeometry);
-    expect(mesh.geometry.getAttribute('aWing')).toBeDefined(); // winged geometry, not a flat quad
-    expect(mesh.material).toBeInstanceOf(THREE.MeshLambertMaterial);
+    expect(mesh.geometry.getAttribute('aWing')).toBeDefined(); // flapping wing quads
+    expect(mesh.geometry.getAttribute('uv')).toBeDefined(); // textured morpho wings
+    expect(mesh.material).toBeInstanceOf(THREE.MeshBasicMaterial); // unlit so blue pops
     expect(mesh.frustumCulled).toBe(false);
     expect(mesh.castShadow).toBe(false);
     expect(mesh.receiveShadow).toBe(false);
