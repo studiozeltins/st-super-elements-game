@@ -51,10 +51,6 @@ function patchFlapShader(material: THREE.Material, flapSpeed: number, flapAmp: n
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
-         // Retract wing verts toward the spine as aFlapAmp falls to 0 (crow tucks
-         // its wings when grounded). Body verts (aWing=0) are untouched; the
-         // butterfly always runs amp=1, so this is a no-op there.
-         transformed.x *= mix(1.0, aFlapAmp, abs(aWing));
          float flapAngle = aWing * sin(uFlapTime * uFlapSpeed + aFlapPhase) * uFlapAmp * aFlapAmp;
          float cf = cos(flapAngle);
          float sf = sin(flapAngle);
@@ -82,21 +78,6 @@ export function createTexturedFlapMaterial(opts: {
     transparent: false,
     alphaTest: 0.5,
   });
-  const uFlapTime = patchFlapShader(material, opts.flapSpeed, opts.flapAmp);
-  return { material, setTime: (s) => { uFlapTime.value = s; } };
-}
-
-/**
- * A solid-colour lit (MeshLambert) flap material — for the crow's procedural wings,
- * which tuck against the body when grounded (aFlapAmp 0) and spread + beat in flight
- * (aFlapAmp 1). `color` matches the crow's dark plumage.
- */
-export function createSolidFlapMaterial(opts: {
-  flapSpeed: number;
-  flapAmp: number;
-  color: number;
-}): FlapMaterial {
-  const material = new THREE.MeshLambertMaterial({ color: opts.color, side: THREE.DoubleSide });
   const uFlapTime = patchFlapShader(material, opts.flapSpeed, opts.flapAmp);
   return { material, setTime: (s) => { uFlapTime.value = s; } };
 }
