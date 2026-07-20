@@ -414,18 +414,20 @@ function updateCamera(dt) {
 | A4 | Runtime sun re-pin (D-10) is construction-time only today and out of required scope | Pattern 6 | LOW — verified `movingSunEnabled` computed once at `:365`; D-10 is explicitly optional. |
 | A5 | `createGame` can track the pixel-filter boolean to feed `pixelScale` (renderer has no getter) | Resp. map / D-01 | LOW — `setPixelFilter` already flows App→Game; store the boolean alongside. Initial default `true` matches renderer's `pixelated=true`. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Does lean need a lateral bank, or is forward pitch enough? (D-05)**
+> All three settled by CONTEXT locked decisions; plans committed to the default path.
+
+1. **RESOLVED: Does lean need a lateral bank, or is forward pitch enough? (D-05)**
    - Known: forward pitch into run direction is the required default; bank is optional.
    - Unclear: whether bank "reads well" — perceptual, resolvable only in playtest.
    - Recommendation: ship forward-pitch first; add bank behind the same spring only if the running character feels stiff. Bank needs turn-rate in the motion config (compute from frame-to-frame `playerRotationY` delta).
 
-2. **Should breathing also apply to remote players?**
+2. **RESOLVED: Should breathing also apply to remote players?**
    - Known: default is local-only; cheap to extend since remote uses the same `animate()`.
    - Recommendation: local-only for v1; revisit if the world of standing remote players feels lifeless. (Would just pass a motion config to remote models too — but note the per-model spring state must then be per-model, not a shared scratch field.)
 
-3. **Does the reduce-motion default need to react to live OS changes mid-session?**
+3. **RESOLVED: Does the reduce-motion default need to react to live OS changes mid-session?**
    - Known: D-09 reads the media query as the *first-load* default, then persists explicit choice.
    - Recommendation: read-once default is sufficient (matches the existing `:364` behavior); no `matchMedia` change listener required. Flag only if a reviewer wants live OS reactivity.
 
