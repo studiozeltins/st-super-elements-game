@@ -5,10 +5,28 @@ import { OVERLAY_LAYER } from '../data/constants';
 import type { CharacterDefinition } from '../data/characters';
 import type { WeaponId } from '../data/weapons';
 import type { SwingProfile } from '../combat/comboSystem';
+import { smooth, leanTarget, breatheOffset, CAMERA_FEEL } from '../systems/cameraFeelMath';
+
+/**
+ * Per-model camera-feel motion inputs (13-03). Passed ONLY for the local player
+ * so run-lean + idle-breathing are local-only (D-05); remote models keep the
+ * 3-arg animate call and stay unaffected. Both magnitudes route through
+ * cameraFeelMath, so reduce-motion zeroing (CAM-04) and pixel-scaling (D-01/D-03)
+ * are inherited.
+ */
+export interface MotionConfig {
+  reduceMotion: boolean;
+  pixelScale: number;
+}
 
 export interface CharacterModel {
   group: THREE.Group;
-  animate(elapsedSeconds: number, deltaSeconds: number, isMoving: boolean): void;
+  animate(
+    elapsedSeconds: number,
+    deltaSeconds: number,
+    isMoving: boolean,
+    motion?: MotionConfig
+  ): void;
   /** Starts a weapon swing whose shape and size come from the swing profile. */
   triggerAttack(profile: SwingProfile): void;
   dispose(): void;
@@ -201,6 +219,11 @@ export function createCharacterModel(character: CharacterDefinition): CharacterM
   let swingRemaining = 0;
   let swingDuration = 0;
   let activeProfile: SwingProfile | null = null;
+  // Per-model forward-lean spring state (13-03). Independent per model so a
+  // future remote-breathing extension keeps its own state; only fed when a
+  // motion config is passed (local player). Rides bodyPivot.rotation.x — the
+  // FACING frame (bodyPivot is a child of the yaw group), never world space.
+  let leanX = 0;
 
   function applySwing(progress: number) {
     if (!activeProfile) return;
@@ -232,7 +255,7 @@ export function createCharacterModel(character: CharacterDefinition): CharacterM
 
   return {
     group,
-    animate(elapsedSeconds, deltaSeconds, isMoving) {
+    animate(elapsedSeconds, deltaSeconds, isMoving, motion) {
       if (swingRemaining > 0) {
         swingRemaining = Math.max(0, swingRemaining - deltaSeconds);
         applySwing(1 - swingRemaining / swingDuration);
@@ -249,6 +272,26 @@ export function createCharacterModel(character: CharacterDefinition): CharacterM
       }
       head.position.y = 1.75 + Math.sin(elapsedSeconds * 3) * 0.02;
       (aura.material as THREE.MeshBasicMaterial).opacity = 0.4 + Math.sin(elapsedSeconds * 4) * 0.12;
+
+      // Local-player camera-feel (13-03): forward run-lean + idle breathing on
+      // the free bodyPivot channels (.rotation.x / .position.y — swings only
+      // touch .rotation.y, so this is conflict-free). No motion config = remote
+      // model = untouched. All zeroing/scaling lives in cameraFeelMath.
+      if (motion) {
+        leanX = smooth(
+          leanX,
+          leanTarget(isMoving, motion.reduceMotion, motion.pixelScale),
+          CAMERA_FEEL.LEAN_K,
+          deltaSeconds
+        );
+        bodyPivot.rotation.x = leanX;
+        bodyPivot.position.y = breatheOffset(
+          elapsedSeconds,
+          isMoving,
+          motion.reduceMotion,
+          motion.pixelScale
+        );
+      }
     },
     triggerAttack(profile) {
       activeProfile = profile;
