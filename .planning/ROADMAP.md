@@ -270,7 +270,7 @@ Plans:
 **Wave 2** *(parallel, disjoint files — blocked on Wave 1)*
 
 - [x] 13-02-PLAN.md — createCameraFeel system: two-phase FOV kick + rate gate + gated updateProjectionMatrix + absorbed combat shake + reduce-motion/pixel-scale owner (CAM-03/CAM-04) [Wave 2]
-- [ ] 13-03-PLAN.md — createCharacterModel lean spring (bodyPivot.rotation.x) + idle breathing sway (bodyPivot.position.y), local-only via optional motion config (CAM-01/CAM-02/CAM-04) [Wave 2]
+- [x] 13-03-PLAN.md — createCharacterModel lean spring (bodyPivot.rotation.x) + idle breathing sway (bodyPivot.position.y), local-only via optional motion config (CAM-01/CAM-02/CAM-04) [Wave 2]
 
 **Wave 3** *(integration + phase gate — blocked on Wave 2)*
 
@@ -288,7 +288,7 @@ Plans:
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
 | 11. Lived-in Props & Wear | 8/8 | Complete    | 2026-07-18 |
 | 12. Wildlife | 5/5 | Complete    | 2026-07-18 |
-| 13. Camera Feel | 2/4 | In Progress|  |
+| 13. Camera Feel | 3/4 | In Progress|  |
 
 ---
 

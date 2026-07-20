@@ -6,14 +6,14 @@ current_phase: 13
 current_phase_name: camera-feel
 status: executing
 stopped_at: Phase 13 context gathered
-last_updated: "2026-07-20T18:01:29.941Z"
+last_updated: "2026-07-20T18:04:58.705Z"
 last_activity: 2026-07-20
 last_activity_desc: Phase 13 execution started
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 42
-  completed_plans: 40
+  completed_plans: 41
   percent: 86
 ---
 
@@ -31,7 +31,7 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 ## Current Position
 
 Phase: 13 (camera-feel) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-20 — Phase 13 execution started
 
@@ -107,6 +107,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | Phase 12 P05 | 3min | 1 tasks | 1 files |
 | Phase 13 P01 | 8min | 2 tasks | 2 files |
 | Phase 13 P02 | 2min | 1 tasks | 1 files |
+| Phase 13 P03 | 4min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -184,6 +185,7 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: [Phase 12] 12-05: Tasks 2 (perceptual UAT) + 3 (SC4 golem-fight FPS gate) are blocking human checkpoints — auto-deferred to /gsd-verify-work per --auto policy, NOT fabricated; all code + automated verification (884/884, tsc clean) complete
 - [Phase 13]: 13-01: cameraFeelMath.ts is the pure zero-import camera-feel twin (smooth spring, two-phase FOV kick, lean/breathing targets, cooldown + projection gate); reduce-motion zeroing lives in leanTarget/breatheOffset, the FOV reduce-motion gate is a 13-02 caller concern (canKick + startKick guard)
 - [Phase ?]: [Phase 13]: 13-02: createCameraFeel owns discretionary camera motion (two-phase FOV kick + absorbed shake), delegates spring/gate math to cameraFeelMath, gates updateProjectionMatrix in one spot (D-07), reduce-motion snaps both to 0 (Pitfall 6); legacy shake deletion + wiring deferred to 13-04
+- [Phase ?]: [Phase 13]: 13-03: model run-lean + idle breathing wired into createCharacterModel.animate via an optional TRAILING MotionConfig arg — presence IS the local/remote switch (D-05); lean on bodyPivot.rotation.x (facing frame, Pitfall 1), breathing on bodyPivot.position.y (positional, no texel-snap D-02/D-03); zeroing/scaling delegated to cameraFeelMath
 
 ### Pending Todos
 
@@ -230,7 +232,7 @@ v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
 
 ## Session Continuity
 
-Last session: 2026-07-20T18:01:03.688Z
+Last session: 2026-07-20T18:04:44.229Z
 Stopped at: Phase 13 context gathered
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: .planning/phases/13-camera-feel/13-CONTEXT.md
