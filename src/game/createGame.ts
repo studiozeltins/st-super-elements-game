@@ -16,6 +16,8 @@ import { detectQualityProfile } from './engine/deviceProfile';
 import { createGroundInfluence } from './systems/createGroundInfluence';
 import { createScorchMap, SCORCH_PER_STRIKE } from './systems/createScorchMap';
 import { createWind } from './systems/createWind';
+import { createCameraFeel } from './systems/createCameraFeel';
+import { CAMERA_FEEL } from './systems/cameraFeelMath';
 import { sunDirUniform } from './systems/sunUniform';
 import { createDayNightCycle } from './systems/createDayNightCycle';
 import { phase01 } from './systems/dayNightMath';
@@ -155,6 +157,7 @@ export interface Game {
   dispose(): void;
   /** Switches between the chunky-pixel render path and native resolution. */
   setPixelFilter(enabled: boolean): void;
+  setReduceMotion(enabled: boolean): void;
   /** Sets the music-bus volume [0,1] (clamped in the bus module). MUSIC-03 backend, D-13. */
   setMusicVolume(volume: number): void;
   /** Sets the SFX-bus volume [0,1] (clamped in the bus module). MUSIC-03 backend, D-13. */
@@ -361,8 +364,22 @@ export function createGame(
   // Moving sun (Phase 09.1): ?nomovingsun OR prefers-reduced-motion pins the sun
   // to the frozen high-noon key (colors still drift); nodaynight ⊇ nomovingsun,
   // so the sun is frozen too whenever the palette is (D-09/D-11).
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Frame-1 seed for ALL discretionary motion (moving sun + camera feel). `let`
+  // so setReduceMotion can re-assign it at runtime; App re-seeds from the
+  // persisted toggle on construct. ONE matchMedia read, unified per D-09.
+  let reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const movingSunEnabled = dayNightEnabled && !perfFlags.has('nomovingsun') && !reduceMotion;
+  // The single owner of discretionary CAMERA motion (FOV kick + combat shake).
+  const cameraFeel = createCameraFeel({ camera: pixelRenderer.camera, reduceMotion });
+  // Pixel-filter state is write-only on the renderer (RESEARCH A5), so mirror it
+  // here to derive the pixel-mode magnitude factor for the model + cameraFeel.
+  let pixelated = true;
+  // Reused per-frame MotionConfig for the LOCAL model's animate() — mutated in
+  // place, never a fresh literal per frame (Pitfall 5, zero-alloc discipline).
+  const MOTION_CFG_SCRATCH = {
+    reduceMotion,
+    pixelScale: pixelated ? CAMERA_FEEL.PIXEL_SCALE : 1,
+  };
   const wind = createWind(windEnabled);
   const world = createMondstadtWorld(scene, {
     grass: {
@@ -1105,7 +1122,9 @@ export function createGame(
 
     playerModel.group.position.copy(playerPosition);
     playerModel.group.rotation.y = playerRotationY;
-    playerModel.animate(elapsedSeconds, deltaSeconds, isMoving);
+    MOTION_CFG_SCRATCH.reduceMotion = reduceMotion;
+    MOTION_CFG_SCRATCH.pixelScale = pixelated ? CAMERA_FEEL.PIXEL_SCALE : 1;
+    playerModel.animate(elapsedSeconds, deltaSeconds, isMoving, MOTION_CFG_SCRATCH);
   }
 
   function syncPositionToServer(deltaSeconds: number) {
@@ -1356,13 +1375,13 @@ export function createGame(
     movementAudio.endFrame();
   }
 
-  // Slam camera shake (D4-15): taste-tunable. A strike sets shakeMagnitude; each
-  // frame adds a random offset (render-only cosmetic randomness — the determinism
-  // rule binds spacetimedb/src, not the renderer) and decays the magnitude
-  // exponentially over ~0.45s. Bumped after 04-07 playtest: 0.2/12 read as nothing.
+  // Slam camera shake (D4-15): taste-tunable. A strike pushes a magnitude into
+  // the camera-feel owner; createCameraFeel adds a decaying random camera offset each
+  // frame (render-only cosmetic randomness — the determinism rule binds
+  // spacetimedb/src, not the renderer). Decay + floor now live in createCameraFeel
+  // (no-legacy: the local shake state moved there wholesale in 13-04).
+  // Bumped after 04-07 playtest: 0.2/12 read as nothing.
   const SHAKE_START_MAGNITUDE = 0.45; // world units
-  const SHAKE_DECAY_RATE = 7; // e^-3 ≈ 5% left after ~0.43s
-  const SHAKE_FLOOR = 0.005; // below this the shake snaps off
   // Per-attack juice seeds (ANIM-04): swing lightest, swirl medium, slam full.
   // Handler-local by design — feel numbers, not client/server parity material.
   const SWING_BURST_PARTICLES = 10;
@@ -1391,18 +1410,11 @@ export function createGame(
   // Without the gate, three goliaths chaining basics across the archipelago
   // shook and thundered on every client on the map.
   const STRIKE_JUICE_RANGE = 40; // world units
-  let shakeMagnitude = 0;
   const desiredPosition = new THREE.Vector3();
 
   function updateCamera(deltaSeconds: number) {
     desiredPosition.copy(playerPosition).add(CAMERA_OFFSET);
-    if (shakeMagnitude > 0) {
-      desiredPosition.x += (Math.random() - 0.5) * 2 * shakeMagnitude;
-      desiredPosition.y += (Math.random() - 0.5) * 2 * shakeMagnitude;
-      desiredPosition.z += (Math.random() - 0.5) * 2 * shakeMagnitude;
-      shakeMagnitude *= Math.exp(-SHAKE_DECAY_RATE * deltaSeconds);
-      if (shakeMagnitude < SHAKE_FLOOR) shakeMagnitude = 0;
-    }
+    cameraFeel.apply(desiredPosition, deltaSeconds);
     pixelRenderer.camera.position.lerp(desiredPosition, Math.min(1, deltaSeconds * 6));
     pixelRenderer.camera.lookAt(playerPosition.x, playerPosition.y + 1, playerPosition.z);
   }
@@ -1730,6 +1742,13 @@ export function createGame(
     },
     setPixelFilter(enabled) {
       pixelRenderer.setPixelated(enabled);
+      pixelated = enabled;
+      cameraFeel.setPixelScale(pixelated ? CAMERA_FEEL.PIXEL_SCALE : 1);
+    },
+    setReduceMotion(enabled) {
+      reduceMotion = enabled;
+      cameraFeel.setReduceMotion(enabled);
+      MOTION_CFG_SCRATCH.reduceMotion = enabled;
     },
     // MUSIC-03 backend: App drives these imperatively (never React-derived, CLAUDE.md);
     // the clamp/mute logic lives in the bus module (D-13).
@@ -1931,6 +1950,8 @@ export function createGame(
       if (isMine) lastCombatAt = elapsedSeconds;
       if (kind === 'crit') combatAudio.playEnemyCrit(gain, pan);
       else combatAudio.playEnemyHit(gain, pan);
+      // My OWN crit landed → a rare FOV punch (D-06; rate-gated inside kickFov).
+      if (isMine && kind === 'crit') cameraFeel.kickFov(elapsedSeconds);
       damageNumbers.spawn(new THREE.Vector3(positionX, 1.2, positionZ), amount, kind);
     },
     flashRemoteHealth(identityHex) {
@@ -1951,6 +1972,8 @@ export function createGame(
       if (isMine) lastCombatAt = elapsedSeconds;
       if (kind === 'crit' || kind === 'pvpCrit') combatAudio.playEnemyCrit(gain, pan);
       else combatAudio.playEnemyHit(gain, pan);
+      // My OWN (pvp) crit landed → a rare FOV punch (D-06; rate-gated inside kickFov).
+      if (isMine && (kind === 'crit' || kind === 'pvpCrit')) cameraFeel.kickFov(elapsedSeconds);
       damageNumbers.spawn(p.clone().setY(p.y + 1), amount, kind);
     },
     syncGemDrops(drops) {
@@ -2089,7 +2112,7 @@ export function createGame(
         effectSystem.spawnBurst(landing, SLIME_SLAM_COLOR, SLIME_SLAM_BURST_PARTICLES);
         debrisSystem?.spawn(landing, SLIME_SLAM_COLOR, 6);
         if (strikeDistance < SLIME_SLAM_SHAKE_RANGE) {
-          shakeMagnitude = Math.max(shakeMagnitude, SLIME_SLAM_SHAKE_MAGNITUDE * juiceFalloff);
+          cameraFeel.shake(SLIME_SLAM_SHAKE_MAGNITUDE * juiceFalloff);
         }
         weaponAudio.playSlimeSquash(juiceFalloff, strikePan);
         return;
@@ -2099,7 +2122,7 @@ export function createGame(
         // (a circular shockwave misreads the swing's cone).
         effectSystem.spawnBurst(landing, juiceColor, SWING_BURST_PARTICLES);
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
-        shakeMagnitude = Math.max(shakeMagnitude, SWING_SHAKE_MAGNITUDE * juiceFalloff);
+        cameraFeel.shake(SWING_SHAKE_MAGNITUDE * juiceFalloff);
         audioSystem.playSwing(juiceFalloff, strikePan);
         return;
       }
@@ -2108,7 +2131,7 @@ export function createGame(
         effectSystem.spawnBurst(landing, juiceColor, SWIRL_BURST_PARTICLES);
         effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
-        shakeMagnitude = Math.max(shakeMagnitude, SWIRL_SHAKE_MAGNITUDE * juiceFalloff);
+        cameraFeel.shake(SWIRL_SHAKE_MAGNITUDE * juiceFalloff);
         audioSystem.playSwirl(juiceFalloff, strikePan);
         return;
       }
@@ -2138,7 +2161,7 @@ export function createGame(
           }
         }
         telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
-        shakeMagnitude = Math.max(shakeMagnitude, DASH_SHAKE_MAGNITUDE * juiceFalloff);
+        cameraFeel.shake(DASH_SHAKE_MAGNITUDE * juiceFalloff);
         debrisSystem?.spawn(landing, EARTH_DEBRIS_COLOR, 10);
         audioSystem.playDash(juiceFalloff, strikePan);
         return;
@@ -2148,7 +2171,7 @@ export function createGame(
       effectSystem.spawnShockwave(landing, strike.radius, juiceColor);
       debrisSystem?.spawn(landing, EARTH_DEBRIS_COLOR, Math.round(14 * juiceFalloff) + 6);
       telegraphSystem.flashStrike(`${strike.unitKind}:${strike.unitId}`);
-      shakeMagnitude = Math.max(shakeMagnitude, SHAKE_START_MAGNITUDE * juiceFalloff);
+      cameraFeel.shake(SHAKE_START_MAGNITUDE * juiceFalloff);
       audioSystem.playSlam(juiceFalloff, strikePan);
     },
     handleRemoteSkillCast(cast) {
