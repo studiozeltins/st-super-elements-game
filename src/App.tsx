@@ -93,6 +93,14 @@ export default function App() {
   const [pixelFilter, setPixelFilter] = useState(
     () => localStorage.getItem('settings.pixelFilter') !== '0'
   );
+  // Reduce camera motion (CAM-04): zeroes lean/breathing/FOV-kick/shake. Absent
+  // key defaults to the OS prefers-reduced-motion pref (D-09); any stored value
+  // other than '1' is off (tamper-safe coercion, T-13-04a).
+  const [reduceMotion, setReduceMotion] = useState(() => {
+    const saved = localStorage.getItem('settings.reduceMotion');
+    if (saved === null) return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return saved === '1';
+  });
   // Audio mix (D-13): Music/SFX gains + independent mute flags, persisted per
   // device and applied live through the imperative Game bus setters. Defaults:
   // music 0.7 (loop rides under SFX), sfx 1.0. Absent mute key = unmuted.
@@ -826,6 +834,14 @@ export default function App() {
     // The [pixelFilter] effect only fires on toggle changes; new games read the
     // persisted value directly so a reconnect keeps the chosen render path.
     game.setPixelFilter(localStorage.getItem('settings.pixelFilter') !== '0');
+    // Reduce-motion seed uses the SAME predicate as the state init: absent key →
+    // OS pref (D-09), else '1'-only coercion — so frame 1 is correct pre-effect.
+    game.setReduceMotion(
+      (() => {
+        const s = localStorage.getItem('settings.reduceMotion');
+        return s === null ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : s === '1';
+      })()
+    );
     // Seed the persisted audio mix directly (the [state] effects only fire on
     // later changes), so a fresh game / reconnect starts at the chosen levels.
     game.setMusicVolume(readVolume('settings.musicVolume', 0.7));
@@ -926,6 +942,10 @@ export default function App() {
     localStorage.setItem('settings.pixelFilter', pixelFilter ? '1' : '0');
     gameRef.current?.setPixelFilter(pixelFilter);
   }, [pixelFilter]);
+  useEffect(() => {
+    localStorage.setItem('settings.reduceMotion', reduceMotion ? '1' : '0');
+    gameRef.current?.setReduceMotion(reduceMotion);
+  }, [reduceMotion]);
   // Audio: persist + live-apply through the Game bus setters. Volume and mute are
   // independent (D-13) — muting keeps the stored gain, unmute re-applies it.
   useEffect(() => {
@@ -1116,6 +1136,8 @@ export default function App() {
         onTogglePing={setShowPing}
         pixelFilter={pixelFilter}
         onTogglePixelFilter={setPixelFilter}
+        reduceMotion={reduceMotion}
+        onToggleReduceMotion={setReduceMotion}
         hudTheme={hudTheme}
         onHudThemeChange={setHudTheme}
         musicVolume={musicVolume}

@@ -21,6 +21,8 @@ interface SettingsScreenProps {
   onTogglePing(next: boolean): void;
   pixelFilter: boolean;
   onTogglePixelFilter(next: boolean): void;
+  reduceMotion: boolean;
+  onToggleReduceMotion(next: boolean): void;
   hudTheme: string;
   onHudThemeChange(next: string): void;
   /** Audio bus levels as stored gains [0,1]; the slider maps ↔ integer percent. */
@@ -90,6 +92,8 @@ export function SettingsScreen({
   onTogglePing,
   pixelFilter,
   onTogglePixelFilter,
+  reduceMotion,
+  onToggleReduceMotion,
   hudTheme,
   onHudThemeChange,
   musicVolume,
@@ -158,6 +162,7 @@ export function SettingsScreen({
       <Toggle label="Rādīt FPS" checked={showFps} onChange={onToggleFps} />
       <Toggle label="Rādīt ping" checked={showPing} onChange={onTogglePing} />
       <Toggle label="Pikseļu filtrs" checked={pixelFilter} onChange={onTogglePixelFilter} />
+      <Toggle label="Samazināt kustību" checked={reduceMotion} onChange={onToggleReduceMotion} />
       {fullscreenSupported && (
         <Button variant="ghost" block onClick={toggleFullscreen}>
           ⛶ Pilnekrāns
