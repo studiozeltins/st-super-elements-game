@@ -3,18 +3,18 @@ gsd_state_version: 1.0
 milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 13
-current_phase_name: camera-feel
 status: verifying
 stopped_at: Completed 13-04-PLAN.md — phase 13 ready for verification
-last_updated: "2026-07-21T08:23:21.320Z"
-last_activity: 2026-07-20
-last_activity_desc: Phase 13 execution started
+last_updated: "2026-07-21T08:27:54.552Z"
+last_activity: 2026-07-21
+last_activity_desc: Phase 13 complete
 progress:
   total_phases: 7
   completed_phases: 7
   total_plans: 42
   completed_plans: 42
   percent: 100
+current_phase_name: camera-feel
 ---
 
 # Project State
@@ -30,10 +30,10 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 
 ## Current Position
 
-Phase: 13 (camera-feel) — COMPLETE (ready for verification)
-Plan: 4 of 4 — all plans complete
+Phase: 13
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-07-21 — Phase 13 execution complete (13-04 shipped + playtest approved)
+Last activity: 2026-07-21 — Phase 13 complete
 
 Progress: [██████████] 100%
 
@@ -56,7 +56,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 
 **Velocity (this milestone):**
 
-- Total plans completed: 29
+- Total plans completed: 33
 - Average duration: —
 - Total execution time: —
 
@@ -68,6 +68,7 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 | 9 | 5 | - | - |
 | 11 | 8 | - | - |
 | 12 | 5 | - | - |
+| 13 | 4 | - | - |
 
 *Updated after each plan completion.*
 | Phase 08 P01 | 7 min | 2 tasks | 2 files |
