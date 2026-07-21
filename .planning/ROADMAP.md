@@ -274,7 +274,7 @@ Plans:
 
 **Wave 3** *(integration + phase gate — blocked on Wave 2)*
 
-- [ ] 13-04-PLAN.md — wire cameraFeel into createGame (updateCamera delegate, 5 shake impulses, crit FOV taps, MOTION_CFG_SCRATCH) + persisted reduce-motion toggle (App + SettingsScreen, unified OS pref) + manual playtest gate (CAM-01/02/03/04) [Wave 3]
+- [x] 13-04-PLAN.md — wire cameraFeel into createGame (updateCamera delegate, 5 shake impulses, crit FOV taps, MOTION_CFG_SCRATCH) + persisted reduce-motion toggle (App + SettingsScreen, unified OS pref) + manual playtest gate (CAM-01/02/03/04) [Wave 3]
 
 ## Progress
 
@@ -288,7 +288,7 @@ Plans:
 | 10. Ambient Audio & Music | 6/6 | Complete   | 2026-07-18 |
 | 11. Lived-in Props & Wear | 8/8 | Complete    | 2026-07-18 |
 | 12. Wildlife | 5/5 | Complete    | 2026-07-18 |
-| 13. Camera Feel | 3/4 | In Progress|  |
+| 13. Camera Feel | 4/4 | Complete   | 2026-07-21 |
 
 ---
 
