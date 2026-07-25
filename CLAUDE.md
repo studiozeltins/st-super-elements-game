@@ -681,6 +681,8 @@ So `.env.local`'s `VITE_SPACETIMEDB_HOST` only affects a browser opened at `loca
 - Client visual/logic-only change → just `npm run build` (laragon serves fresh `dist/`); no republish.
 - Server schema/reducer change → publish to **both** `local` and `maincloud`, regenerate bindings, then `npm run build`.
 - Vite dev server (`npm run dev`, localhost:5173) serves unbundled `/src/...` and uses `.env.local`. A hashed `index-<hash>.js` in an error means the browser is on the **built `dist/`** (laragon), NOT the dev server.
+- **Canonical play URL on this computer: `elements.kingdom.lv`.** Vite blocks unknown hosts, so `vite.config.ts` keeps `server: { host: true, allowedHosts: ['elements.kingdom.lv'] }`. Never drop that entry (error: "Blocked request. This host ... is not allowed."). Always start/play the game via this host.
+- **Remote topology:** `elements.kingdom.lv` (Cloudflare https) is fronted by **cloudflared on `192.168.1.31`**, which proxies to **this PC `192.168.1.32`** (vite `:5173`). The client dials STDB same-origin `wss://elements.kingdom.lv/v1/...`, so `.31`'s tunnel MUST also route `path ^/v1/ → http://192.168.1.32:3000` (above the game rule) or login hangs "connecting". `.32` needs inbound TCP 3000 open (Private profile). No cloudflared on `.32`.
 
 ## Ownership gotcha (important)
 
