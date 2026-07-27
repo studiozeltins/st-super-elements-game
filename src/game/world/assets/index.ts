@@ -24,3 +24,10 @@ export {
 } from './createTownProps';
 export { createSpikes } from './createSpikes';
 export { createWoodenArch } from './createWoodenArch';
+export {
+  createSeashell,
+  createStarfish,
+  createDriftwood,
+  createBeachPebbles,
+  createBeachRock,
+} from './createBeachProps';

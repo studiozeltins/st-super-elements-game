@@ -2,26 +2,38 @@ import * as THREE from 'three';
 import { disposeObject } from '../engine/disposeObject';
 import { SAFE_ZONE_RADIUS, WORLD_BOUND } from '../data/constants';
 import { createSeededRandom } from './rng';
-import { createTerrainMesh, getTerrainHeight, getTerrainSlope, isOnLand } from './terrain';
+import {
+  createTerrainMesh,
+  getTerrainHeight,
+  getTerrainSlope,
+  isOnLand,
+  beachSandFactor,
+  ISLANDS,
+} from './terrain';
 import { getBridges, type BridgeSpec } from './bridges';
 import { getRoads, ROAD_HALF_WIDTH, roadFactor } from './roads';
 import { getCampSites } from './camps';
 import type { ObstacleCircle } from '../physics/resolveCollisions';
 import {
   createBarrel,
+  createBeachPebbles,
+  createBeachRock,
   createBoulder,
   createBush,
   createCampfire,
   createCampFlag,
   createCanopyTree,
   createCrate,
+  createDriftwood,
   createFence,
   createFlower,
   createLantern,
   createMushroom,
   createPalmTree,
   createRockSpire,
+  createSeashell,
   createSpikes,
+  createStarfish,
   createTeepee,
   createTotem,
   createWoodenArch,
@@ -43,6 +55,7 @@ import {
   type FlagImpulse,
 } from './assets/flagImpulse';
 import { createFountain, createWindmill } from './createPlazaStructures';
+import { createSeaWater } from './createSeaWater';
 import { buildTown } from './town/buildTown';
 import { TOWN_DISTRICTS } from './town/townPlan';
 import { buildSunBasis } from '../systems/dayNightMath';
@@ -401,6 +414,9 @@ export function createMondstadtWorld(
       const landPosition = findRandomLandPosition(random, rule.minRadius);
       if (!landPosition) continue;
       if (getTerrainSlope(landPosition.x, landPosition.z) > rule.maxSlope) continue;
+      // Keep the general scatter (jagged rock spires, boulders, forest trees) OFF
+      // the beach — the sand gets its own smooth, sandy beach props instead.
+      if (beachSandFactor(landPosition.x, landPosition.z) > 0.15) continue;
       // Big rocks must not smother a camp's enemy spawn ring.
       if (rule.avoidCamps && nearCamp(landPosition.x, landPosition.z, rule.avoidCamps)) continue;
       placeAsset(rule.create(random), landPosition.x, landPosition.z, rule.collisionRadius);
@@ -521,7 +537,10 @@ export function createMondstadtWorld(
   }
 
   const { skyLight, sunLight } = createLighting(group);
-  group.add(createTerrainMesh(options.scorch));
+  group.add(createTerrainMesh(options.scorch, options.grass.influence, options.wind));
+  // Open sea around the archipelago — fills the void beyond every island shore.
+  const sea = createSeaWater(options.wind);
+  group.add(sea.mesh);
   const fountain = createFountain();
   group.add(fountain.group);
   obstacles.push({ x: 0, y: 0, z: 0, radius: 3.0 }); // fountain basin, plaza is flat at y=0
@@ -720,6 +739,44 @@ export function createMondstadtWorld(
   placeAsset(createFence(propRandom), 4.2 + propJitter(0.3), southFenceZ + propJitter(0.2));
   placeAsset(createFence(propRandom), 3.5 + propJitter(0.3), -(plaza.half + 0.6) + propJitter(0.2));
 
+  // Beach clutter: scatter shells, starfish, driftwood, pebbles and a few palms
+  // along each island's ONE sandy beach arc (see ISLANDS.beachDir/beachArc). Sits
+  // on the dry-to-waterline sand ring, on gentle ground only (skips the cliffs).
+  const beachRandom = createSeededRandom(WORLD_DECOR_SEED ^ 0xbea3);
+  // Rocks standing in/near the water — fed to the sea so surf washes around them.
+  const seaRocks: { x: number; z: number; radius: number }[] = [];
+  for (const island of ISLANDS) {
+    if (island.beachArc <= 0) continue; // cliff-only island: no beach clutter
+    for (let attempt = 0; attempt < 22; attempt += 1) {
+      const angle = island.beachDir + (beachRandom() * 2 - 1) * island.beachArc;
+      // Ring from a little inland (dry sand) to just past the shore (wet sand).
+      const radius = island.radius - beachRandom() * 5 + beachRandom() * 2;
+      const bx = island.centerX + Math.cos(angle) * radius;
+      const bz = island.centerZ + Math.sin(angle) * radius;
+      if (getTerrainSlope(bx, bz) > 0.5) continue; // stay on the flat sand, not cliffs
+      const groundY = getTerrainHeight(bx, bz);
+      const roll = beachRandom();
+      if (roll < 0.14) {
+        if (groundY < -0.2) continue; // palms only on dry sand, never in the water
+        placeAsset(createPalmTree(beachRandom), bx, bz, 0.4);
+      } else if (roll < 0.32) {
+        placeAsset(createBeachRock(beachRandom), bx, bz, 0.7);
+        // Rocks near/below the waterline get surf washing around them in the sea.
+        if (groundY < 0.4) seaRocks.push({ x: bx, z: bz, radius: 1.3 });
+      } else if (roll < 0.48) {
+        placeAsset(createBeachPebbles(beachRandom), bx, bz);
+      } else if (roll < 0.64) {
+        placeAsset(createDriftwood(beachRandom), bx, bz);
+      } else if (roll < 0.82) {
+        placeAsset(createStarfish(beachRandom), bx, bz);
+      } else {
+        placeAsset(createSeashell(beachRandom), bx, bz);
+      }
+    }
+  }
+
+  sea.setRocks(seaRocks);
+
   scene.add(group);
 
   // The world is static: compute every matrix ONCE and freeze the subtree.
@@ -790,7 +847,7 @@ export function createMondstadtWorld(
       background: scene.background as THREE.Color,
       lanternLights,
       lanternLamps,
-      waterMaterials: [fountain.waterMaterial],
+      waterMaterials: [fountain.waterMaterial, sea.material],
       setSkyTop(c) {
         skyTopColor.copy(c);
       },
@@ -863,6 +920,7 @@ export function createMondstadtWorld(
     },
     dispose() {
       grassField.dispose();
+      sea.dispose();
       scene.remove(skyDome);
       disposeObject(skyDome);
       scene.remove(group);

@@ -37,6 +37,9 @@ export interface DayNightCycle {
  */
 const NEUTRAL_DAY_PHASE = 0.3;
 
+/** Pale cool moonlight tint for the sea glint when the sun is below the horizon. */
+const MOON_GLINT_COLOR = 0xaec6ff;
+
 export function createDayNightCycle(
   enabled: boolean,
   movingSunEnabled: boolean,
@@ -104,23 +107,33 @@ export function createDayNightCycle(
     ambience.sunLight.color.copy(scratchSunColor);
     ambience.sunLight.intensity = palette.sunIntensity;
 
-    // Sun DIRECTION rides the same phase (Phase 09.1, SHADOW-01): when moving,
-    // write the capped-dome sunDir(phase) into the persistent scratch and push it
-    // through the single ambience channel (pure math → reused scratch, zero alloc).
-    // When !movingSunEnabled we DON'T call sunDir — the world keeps its frozen
-    // FROZEN_SUN_DIR default (byte-exact SHADOW-04), while colors above STILL drift
-    // whenever dayNightEnabled (D-10).
+    // Sun DIRECTION rides the phase (Phase 09.1, SHADOW-01). Compute it ONCE for
+    // both consumers (pure math → reused scratch, zero alloc): the sea's specular
+    // glint ALWAYS reads it (below), but the SHADOW sun is only moved when
+    // movingSunEnabled — otherwise the world keeps its frozen FROZEN_SUN_DIR default
+    // (byte-exact SHADOW-04), while colors above STILL drift whenever enabled (D-10).
+    sunDir(phase, scratchSunDir);
     if (movingSunEnabled) {
-      sunDir(phase, scratchSunDir);
       ambience.setSunDirection(scratchSunDir.x, scratchSunDir.y, scratchSunDir.z);
     }
+    // Glint light body: the SUN when it is above the horizon, otherwise its antipode
+    // (≈ the MOON, up at night) so the sea always carries a reflected highlight.
+    const sunUp = scratchSunDir.y > 0.02;
+    const glintX = sunUp ? scratchSunDir.x : -scratchSunDir.x;
+    const glintY = sunUp ? scratchSunDir.y : -scratchSunDir.y;
+    const glintZ = sunUp ? scratchSunDir.z : -scratchSunDir.z;
 
-    // Fountain water reflects the current sky — drive its uSkyTop/uHorizon so the
-    // pool is bright day water and dark blue by night (matches the sky dome).
+    // Water reflects the sky (uSkyTop/uHorizon → bright day water, dark by night)
+    // and, on the sea, the sun/moon glint (uSunDir/uSunColor — the fountain water
+    // has no such uniforms, so both are guarded).
     for (let i = 0; i < ambience.waterMaterials.length; i += 1) {
       const u = ambience.waterMaterials[i].uniforms;
       (u.uSkyTop.value as THREE.Color).setHex(palette.skyTop);
       (u.uHorizon.value as THREE.Color).setHex(palette.horizon);
+      if (u.uSunDir) (u.uSunDir.value as THREE.Vector3).set(glintX, glintY, glintZ);
+      if (u.uSunColor) {
+        (u.uSunColor.value as THREE.Color).setHex(sunUp ? palette.sunColor : MOON_GLINT_COLOR);
+      }
     }
 
     // Hemisphere fill: sky color, ground color, intensity.

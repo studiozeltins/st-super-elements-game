@@ -35,8 +35,10 @@ describe('getTerrainHeight', () => {
     for (let sample = 0; sample < 40; sample += 1) {
       const x = (random() - 0.5) * 260;
       const z = (random() - 0.5) * 260;
+      // Beach arcs now carry a shallow sand shelf ~14u past the radius, so only
+      // points well beyond that (open ocean) are guaranteed void.
       const isNearAnyIsland = ISLANDS.some(
-        island => Math.hypot(x - island.centerX, z - island.centerZ) < island.radius + 7
+        island => Math.hypot(x - island.centerX, z - island.centerZ) < island.radius + 15
       );
       if (isNearAnyIsland) continue;
       const height = getTerrainHeight(x, z);

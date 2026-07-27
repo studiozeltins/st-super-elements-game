@@ -2,6 +2,7 @@ import { createSeededRandom } from './rng';
 import { SAFE_ZONE_RADIUS } from '../data/constants';
 import {
   ISLANDS,
+  beachSandFactor,
   getTerrainHeight,
   getTerrainSlope,
   isOnLand,
@@ -79,6 +80,10 @@ export function generateGrassBlades(totalCount: number): GrassBladeSpec[][] {
         // to 0 at the edges. Uses the seeded random() already threaded here.
         const foot = footpathFactor(x, z);
         if (foot > 0 && random() < foot) continue;
+        // No grass on the beach sand — thin proportionally, so only the arc's
+        // grassy corners (partial sand) keep the odd tuft.
+        const sand = beachSandFactor(x, z);
+        if (sand > 0 && random() < sand) continue;
         const y = getTerrainHeight(x, z);
         const isFlower = random() < FLOWER_FRACTION;
         blades.push({

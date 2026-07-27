@@ -3,20 +3,56 @@ import { hashGridPoint } from './rng';
 import { WORLD_BOUND } from '../data/constants';
 import { roadFactor, roadAcross, footpathFactor } from './roads';
 import type { ScorchMapUniforms } from '../systems/createScorchMap';
+import type { GroundInfluenceUniforms } from '../systems/createGroundInfluence';
+import type { WindUniforms } from '../systems/createWind';
+import { patchTerrainShader } from './terrainShader';
 
 const TERRAIN_SEED = 20260703;
 const NOISE_FREQUENCY = 0.03;
-const MAX_HILL_HEIGHT = 10;
-const HEIGHT_OFFSET = -2.5;
-/** One terrace is jumpable (jump apex ≈ 2.4) but not walkable (max step 0.9). */
-export const TERRACE_HEIGHT = 1.8;
+/**
+ * Global vertical squash. 1/9 flattens the whole archipelago to gentle mounds
+ * sitting in the sea (see SEA_LEVEL) instead of tall terraced pillars over the
+ * void. EVERYTHING reads getTerrainHeight (bridges, platforms, props, grass),
+ * so scaling these few source constants moves the entire world down together.
+ */
+const HEIGHT_SCALE = 1 / 9;
+const MAX_HILL_HEIGHT = 10 * HEIGHT_SCALE;
+const HEIGHT_OFFSET = -2.5 * HEIGHT_SCALE;
+/** Terrace step, squashed with the rest of the relief (was 1.8 pre-squash). */
+export const TERRACE_HEIGHT = 1.8 * HEIGHT_SCALE;
 const TERRACE_BLEND = 0.75;
 const FLAT_CENTER_RADIUS = 24;
 const FLAT_BLEND_RADIUS = 40;
 const TERRAIN_SIZE = WORLD_BOUND * 2 + 12;
-const TERRAIN_SEGMENTS = 150;
-const EDGE_FALLOFF_WIDTH = 6;
+// Finer mesh (was 150) so the coastline triangulation is smooth, not blocky —
+// the beach ramp below crosses the waterline over ~6u, and this gives ~4 cells
+// across that band instead of ~3. Terrain is a frozen static mesh, so this is a
+// one-time vertex-count cost, no per-frame churn.
+const TERRAIN_SEGMENTS = 200;
 export const VOID_DEPTH = -40;
+/**
+ * Sea surface height. Sits just below the squashed land (city plaza = 0, island
+ * mounds rise to ~1), so water laps the shores and fills every gap out to the
+ * void beyond island radius. The sea plane hides the abyss falloff.
+ */
+export const SEA_LEVEL = -0.8;
+// Beach shaping. The outer edge of each island eases down to a shallow SHORE_FLOOR
+// (below the waterline) across [radius - SHORE_INNER, radius + SHORE_OUTER] — a
+// gentle sand beach that CROSSES the sea level — then plunges to the void across
+// the next VOID_FALLOFF units. Gentle + wide = a smooth, non-jagged coast.
+// Beach ramp: dry sand starts SHORE_INNER inland, eases down to the shallow shelf
+// SHORE_OUTER past the radius, that shelf reaches SHELF_EXTENT out INTO the water
+// (a big wadeable sandy flat), then plunges to the void.
+const SHORE_INNER = 6;
+const SHORE_OUTER = 3;
+const SHELF_EXTENT = 9;
+const VOID_FALLOFF = 5;
+const SHORE_FLOOR = -1.3;
+// Cliff coast: everything that is NOT the beach arc drops steeply from the land
+// surface straight to the void over this short span — a near-vertical rock wall.
+const CLIFF_FALLOFF = 2.5;
+// Angular soft edge where the beach arc blends back into cliff (radians).
+const BEACH_ANGLE_BLEND = 0.6;
 
 export interface IslandDefinition {
   centerX: number;
@@ -25,25 +61,78 @@ export interface IslandDefinition {
   /** Multiples of TERRACE_HEIGHT so bridges land on clean terrace levels. */
   baseHeight: number;
   hilliness: number;
+  /**
+   * Compass direction (radians, atan2(dz, dx)) the ONE walk-in beach faces. The
+   * rest of the coast is a steep cliff. Outer islands face their beach toward the
+   * city so you land off the bridge onto sand.
+   */
+  beachDir: number;
+  /** Half-angle (radians) of the beach arc — how wide that one sandy side is. */
+  beachArc: number;
+}
+
+/** Beach faces the city center from an outer island (walk off the bridge onto sand). */
+function beachTowardCity(centerX: number, centerZ: number): number {
+  return Math.atan2(-centerZ, -centerX);
 }
 
 /** The archipelago: main city island plus outer islands linked by bridges. */
 export const ISLANDS: IslandDefinition[] = [
-  { centerX: 0, centerZ: 0, radius: 46, baseHeight: 0, hilliness: 1 },
-  { centerX: 95, centerZ: 20, radius: 26, baseHeight: 1.8, hilliness: 0.7 },
-  { centerX: -80, centerZ: -60, radius: 24, baseHeight: 3.6, hilliness: 0.6 },
-  { centerX: -20, centerZ: 100, radius: 22, baseHeight: 5.4, hilliness: 0.5 },
-  { centerX: 60, centerZ: -85, radius: 24, baseHeight: 1.8, hilliness: 0.8 },
+  // ONLY the main (city) island has a beach — it opens west (−x), toward the open
+  // windmill meadow, clear of every bridge. Every OTHER island is cliff all the way
+  // around (beachArc 0 = no beach). beachDir on the cliff-only islands is unused.
+  { centerX: 0, centerZ: 0, radius: 54, baseHeight: 0 * TERRACE_HEIGHT, hilliness: 1, beachDir: Math.PI, beachArc: 1.05 },
+  { centerX: 95, centerZ: 20, radius: 32, baseHeight: 1 * TERRACE_HEIGHT, hilliness: 0.7, beachDir: beachTowardCity(95, 20), beachArc: 0 },
+  { centerX: -80, centerZ: -60, radius: 30, baseHeight: 2 * TERRACE_HEIGHT, hilliness: 0.6, beachDir: beachTowardCity(-80, -60), beachArc: 0 },
+  { centerX: -20, centerZ: 100, radius: 28, baseHeight: 3 * TERRACE_HEIGHT, hilliness: 0.5, beachDir: beachTowardCity(-20, 100), beachArc: 0 },
+  { centerX: 60, centerZ: -85, radius: 30, baseHeight: 1 * TERRACE_HEIGHT, hilliness: 0.8, beachDir: beachTowardCity(60, -85), beachArc: 0 },
 ];
 
 const GRASS_LOW = new THREE.Color(0x4f9147);
 const GRASS_HIGH = new THREE.Color(0x67b35a);
 const GRASS_TINT = new THREE.Color(0x58a24f);
 const CLIFF_COLOR = new THREE.Color(0x4a5568);
+// Warm dry beach sand; darkened for the wet band below the waterline.
+const SAND_COLOR = new THREE.Color(0xdcc68f);
+// How far the sand reaches inland from, and seaward over the shelf past, a shoreline.
+const SAND_INLAND = 6;
+const SAND_SEAWARD = 10;
+
+/**
+ * Sand strength (0..1) at a point — ONLY on a beach arc, in a band straddling
+ * that shoreline (dry sand inland + a wider wet sand shelf out into the water).
+ * Keyed on the beach arc + shore proximity, so flat inland ground (also near
+ * y=0) and the rocky cliff coasts stay grass/rock.
+ */
+export function beachSandFactor(x: number, z: number): number {
+  let best = 0;
+  for (const island of ISLANDS) {
+    if (island.beachArc <= 0) continue; // cliff-only island: no sand
+    const dx = x - island.centerX;
+    const dz = z - island.centerZ;
+    const signed = Math.hypot(dx, dz) - island.radius; // + seaward, − inland
+    const band =
+      signed >= 0
+        ? 1 - smoothstep(SAND_SEAWARD, SAND_SEAWARD + 3, signed)
+        : 1 - smoothstep(SAND_INLAND, SAND_INLAND + 3, -signed);
+    if (band <= 0) continue;
+    const bearing = Math.atan2(dz, dx);
+    const arc =
+      1 - smoothstep(island.beachArc, island.beachArc + BEACH_ANGLE_BLEND, angleBetween(bearing, island.beachDir));
+    best = Math.max(best, band * arc);
+  }
+  return best;
+}
 
 function smoothstep(edge0: number, edge1: number, value: number): number {
   const t = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
+}
+
+/** Smallest angle between two headings, 0..PI. */
+function angleBetween(a: number, b: number): number {
+  const d = Math.abs(a - b) % (Math.PI * 2);
+  return d > Math.PI ? Math.PI * 2 - d : d;
 }
 
 function valueNoise(x: number, z: number, seed: number): number {
@@ -94,7 +183,7 @@ export function getTerrainHeight(x: number, z: number): number {
   let highestSurface = VOID_DEPTH;
   for (const island of ISLANDS) {
     const distanceFromIslandCenter = Math.hypot(x - island.centerX, z - island.centerZ);
-    if (distanceFromIslandCenter > island.radius + EDGE_FALLOFF_WIDTH) continue;
+    if (distanceFromIslandCenter > island.radius + SHELF_EXTENT + VOID_FALLOFF) continue;
 
     let hills = terracedHills * island.hilliness;
     const isCityIsland = island === ISLANDS[0];
@@ -102,12 +191,45 @@ export function getTerrainHeight(x: number, z: number): number {
       hills *= smoothstep(FLAT_CENTER_RADIUS, FLAT_BLEND_RADIUS, Math.hypot(x, z));
     }
     const surface = island.baseHeight + hills;
-    const edgeFactor = smoothstep(
+
+    // Which coast is this? 1 on the single beach arc, 0 on the cliff coast.
+    // beachArc 0 = cliff-only island (no beach anywhere).
+    const bearing = Math.atan2(z - island.centerZ, x - island.centerX);
+    const beachMask =
+      island.beachArc <= 0
+        ? 0
+        : 1 -
+          smoothstep(
+            island.beachArc,
+            island.beachArc + BEACH_ANGLE_BLEND,
+            angleBetween(bearing, island.beachDir)
+          );
+
+    // CLIFF profile: land holds to the radius, then a near-vertical drop to void.
+    const cliffT = smoothstep(
       island.radius,
-      island.radius + EDGE_FALLOFF_WIDTH,
+      island.radius + CLIFF_FALLOFF,
       distanceFromIslandCenter
     );
-    highestSurface = Math.max(highestSurface, surface + (VOID_DEPTH - surface) * edgeFactor);
+    const cliffY = surface + (VOID_DEPTH - surface) * cliffT;
+
+    // BEACH profile: land eases to the shallow shore floor across the ramp
+    // (crossing the waterline = walk-in sand), holds that shallow shelf far out
+    // INTO the water, then the shelf drops to the void.
+    const rampT = smoothstep(
+      island.radius - SHORE_INNER,
+      island.radius + SHORE_OUTER,
+      distanceFromIslandCenter
+    );
+    const shelfY = surface + (SHORE_FLOOR - surface) * rampT;
+    const voidT = smoothstep(
+      island.radius + SHELF_EXTENT,
+      island.radius + SHELF_EXTENT + VOID_FALLOFF,
+      distanceFromIslandCenter
+    );
+    const beachY = shelfY + (VOID_DEPTH - shelfY) * voidT;
+
+    highestSurface = Math.max(highestSurface, cliffY + (beachY - cliffY) * beachMask);
   }
   return highestSurface;
 }
@@ -156,6 +278,14 @@ export function terrainColorAt(x: number, z: number, height: number): THREE.Colo
   const lushness = meadowLushness(x, z);
   grassColor.lerp(MEADOW_DRY, smoothstep(0.6, 0.85, 1 - lushness) * 0.5);
   grassColor.lerp(MEADOW_MOSS, smoothstep(0.55, 0.8, lushness) * 0.45);
+  // Beach sand on the beach arcs — a wide dry band inland plus a broad wet shelf
+  // out into the water. The wet band below the waterline is darkened (damp sand).
+  const sandStrength = beachSandFactor(x, z);
+  if (sandStrength > 0) {
+    const sand = SAND_COLOR.clone();
+    if (height < SEA_LEVEL) sand.multiplyScalar(0.72); // wet sand under the water
+    grassColor.lerp(sand, Math.min(0.96, sandStrength));
+  }
   // Trampled footpath: a light worn tint baked BEFORE the road blend so the road
   // wins on overlap. Partial by construction (footpathFactor <= FOOTPATH_MAX 0.6),
   // so the ground reads worn-but-not-bare along the traffic graph.
@@ -167,163 +297,11 @@ export function terrainColorAt(x: number, z: number, height: number): THREE.Colo
   return grassColor;
 }
 
-/**
- * Patches the terrain material to read the SCORCH map (strike impacts only —
- * walking never writes it, so footpaths stay green). The fragment stage
- * samples per world-space CELL so the patch is built from visible square
- * pixels: 5 brown shades = 5 stacked strikes, hash-jittered thresholds tear
- * the band edges so overlapping craters merge raggedly instead of as clean
- * circles. Vertices press DOWN in matching steps (a real dent), and the map
- * decays on the regrow clock, so the ground heals by itself.
- */
-const SCORCH_CELLS_PER_UNIT = 3.0;
-/** Pixel grass-clod size — chunky world cells so the meadow reads as pixels. */
-const GRASS_CELLS_PER_UNIT = 2.2;
-/** Pixel-dirt clod size on the road — a touch chunkier than the scorch clods. */
-const ROAD_CELLS_PER_UNIT = 2.4;
-/** Band k needs scorch > 0.07 + k*0.2 — one SCORCH_PER_STRIKE per band. */
-const SCORCH_BAND_GLSL = /* glsl */ `
-  float scorchBand(float scorch) {
-    return scorch < 0.07 ? -1.0 : min(4.0, floor((scorch - 0.07) * 5.0));
-  }
-`;
-
-function patchTerrainWithScorch(
-  material: THREE.MeshLambertMaterial,
-  scorch: ScorchMapUniforms
-) {
-  material.onBeforeCompile = shader => {
-    shader.uniforms.uScorchMap = scorch.textureUniform;
-    shader.uniforms.uScorchBounds = scorch.boundsUniform;
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        /* glsl */ `
-        #include <common>
-        uniform sampler2D uScorchMap;
-        uniform vec4 uScorchBounds;
-        varying vec2 vScorchWorld;
-        attribute float aRoad;
-        attribute float aRoadCross;
-        varying float vRoad;
-        varying float vRoadCross;
-        ${SCORCH_BAND_GLSL}
-        `
-      )
-      .replace(
-        '#include <begin_vertex>',
-        /* glsl */ `
-        vec3 transformed = vec3(position);
-        // Geometry is baked into world XZ (plane rotated, terrain at origin).
-        vScorchWorld = position.xz;
-        vRoad = aRoad;
-        vRoadCross = aRoadCross;
-        vec2 scorchUv = (position.xz - uScorchBounds.xy) * uScorchBounds.zw;
-        float dentBand = scorchBand(texture2D(uScorchMap, scorchUv).r);
-        transformed.y -= (dentBand + 1.0) * 0.05; // stepped dent, deeper per stack
-        `
-      );
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        /* glsl */ `
-        #include <common>
-        uniform sampler2D uScorchMap;
-        uniform vec4 uScorchBounds;
-        varying vec2 vScorchWorld;
-        varying float vRoad;
-        varying float vRoadCross;
-        ${SCORCH_BAND_GLSL}
-        float scorchHash(vec2 cell, vec2 basis) {
-          return fract(sin(dot(cell, basis)) * 43758.5453);
-        }
-        // Smooth value noise + fbm — gives the grass STRUCTURE (soft clumps and
-        // bare patches) instead of per-cell random blocks.
-        float tNoise(vec2 p) {
-          vec2 i = floor(p), f = fract(p);
-          f = f * f * (3.0 - 2.0 * f);
-          float a = scorchHash(i, vec2(127.1, 311.7));
-          float b = scorchHash(i + vec2(1.0, 0.0), vec2(127.1, 311.7));
-          float c = scorchHash(i + vec2(0.0, 1.0), vec2(127.1, 311.7));
-          float d = scorchHash(i + vec2(1.0, 1.0), vec2(127.1, 311.7));
-          return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-        }
-        float tFbm(vec2 p) {
-          return tNoise(p) * 0.6 + tNoise(p * 2.1 + 5.0) * 0.3 + tNoise(p * 4.3 + 9.0) * 0.1;
-        }
-        `
-      )
-      .replace(
-        '#include <color_fragment>',
-        /* glsl */ `
-        #include <color_fragment>
-        {
-          // STRUCTURED pixel-art grass: sample smooth fbm at the pixel-CELL centre,
-          // so the ground reads as soft clumps of lush and dry grass with occasional
-          // worn bare-dirt patches (a lived-in meadow), still snapped to chunky
-          // pixels. Only tints actual grass — grey cliffs/abyss pass through.
-          vec2 gp = floor(vScorchWorld * ${GRASS_CELLS_PER_UNIT.toFixed(1)}) / ${GRASS_CELLS_PER_UNIT.toFixed(1)};
-          float isGrass = step(diffuseColor.r + 0.015, diffuseColor.g)
-            * step(diffuseColor.b, diffuseColor.g);
-          float clump = tFbm(gp * 0.14);           // big lush/dry clumps
-          float fine = tNoise(gp * 0.75 + 3.0);    // medium break-up
-          float tone = clamp(clump * 0.72 + fine * 0.28, 0.0, 1.0);
-          vec3 lush = diffuseColor.rgb * vec3(0.84, 1.10, 0.78);
-          vec3 dry = diffuseColor.rgb * vec3(1.10, 1.00, 0.74);
-          vec3 grass = mix(dry, lush, smoothstep(0.34, 0.72, tone)) * (0.9 + fine * 0.18);
-          float bare = tFbm(gp * 0.1 + 17.0);      // worn dirt patches, "a path was trodden"
-          grass = mix(grass, vec3(0.44, 0.35, 0.23), smoothstep(0.76, 0.9, bare) * 0.6);
-          diffuseColor.rgb = mix(diffuseColor.rgb, grass, isGrass);
-        }
-        // Pixel-art PACKED-DIRT ROAD: per world-space cell, pick one of a few brown
-        // clod shades + speckle so the path reads as chunky pixel dirt (matching the
-        // scorch clods), not the smooth per-vertex gradient. Applied FIRST so scorch
-        // craters below still win on top of it.
-        if (vRoad > 0.02) {
-          vec2 rcell = floor(vScorchWorld * ${ROAD_CELLS_PER_UNIT.toFixed(1)});
-          float rh = scorchHash(rcell, vec2(53.7, 21.3));
-          vec3 rd = rh < 0.38 ? vec3(0.63, 0.49, 0.31)
-            : rh < 0.72 ? vec3(0.55, 0.42, 0.26)
-            : vec3(0.46, 0.34, 0.20);
-          rd *= 0.86 + scorchHash(rcell, vec2(11.2, 91.5)) * 0.28;   // per-clod brightness
-          if (scorchHash(rcell + 3.0, vec2(7.1, 88.2)) < 0.13) rd *= 0.68; // dark gravel specks
-          // CART-WHEEL RUTS: two grooves at ±gauge across the road (from the signed
-          // cross-road coord). Dark packed-earth trough with a lit lip = fake depth,
-          // and a faint worn centre strip where the cart belly dragged.
-          float ar = abs(vRoadCross);
-          float rutDist = abs(ar - 0.85);                          // 0 at a rut centreline
-          float trough = 1.0 - smoothstep(0.0, 0.24, rutDist);     // inside the groove
-          float lip = smoothstep(0.24, 0.32, rutDist) * (1.0 - smoothstep(0.32, 0.46, rutDist));
-          rd *= 1.0 - trough * 0.4;                                // darker packed trough
-          rd += lip * 0.05;                                        // sunlit lip on the ridge
-          rd *= 1.0 - (1.0 - smoothstep(0.0, 0.5, ar)) * 0.12;     // worn centre drag strip
-          diffuseColor.rgb = mix(diffuseColor.rgb, rd, vRoad);
-        }
-        {
-          // One sample per world-space cell = square pixel-art dirt clods.
-          vec2 cell = floor(vScorchWorld * ${SCORCH_CELLS_PER_UNIT.toFixed(1)});
-          vec2 cellUv = ((cell + 0.5) / ${SCORCH_CELLS_PER_UNIT.toFixed(1)}
-            - uScorchBounds.xy) * uScorchBounds.zw;
-          float scorch = texture2D(uScorchMap, cellUv).r
-            + (scorchHash(cell, vec2(127.1, 311.7)) - 0.5) * 0.13;
-          float band = scorchBand(scorch);
-          if (band >= 0.0) {
-            vec3 shade = band < 0.5 ? vec3(0.52, 0.40, 0.24)
-              : band < 1.5 ? vec3(0.44, 0.32, 0.18)
-              : band < 2.5 ? vec3(0.35, 0.25, 0.14)
-              : band < 3.5 ? vec3(0.27, 0.18, 0.10)
-              : vec3(0.19, 0.12, 0.07);
-            // Per-cell brightness speckle: dirt texture, still flat per pixel.
-            diffuseColor.rgb = shade * (0.9 + scorchHash(cell, vec2(269.5, 183.3)) * 0.2);
-          }
-        }
-        `
-      );
-  };
-  material.customProgramCacheKey = () => 'terrainScorch';
-}
-
-export function createTerrainMesh(scorch: ScorchMapUniforms | null): THREE.Mesh {
+export function createTerrainMesh(
+  scorch: ScorchMapUniforms,
+  influence: GroundInfluenceUniforms,
+  wind: WindUniforms
+): THREE.Mesh {
   const geometry = new THREE.PlaneGeometry(
     TERRAIN_SIZE,
     TERRAIN_SIZE,
@@ -339,6 +317,8 @@ export function createTerrainMesh(scorch: ScorchMapUniforms | null): THREE.Mesh 
   const roadStrength = new Float32Array(positions.count);
   // Signed cross-road offset, so the shader can draw two cart-wheel ruts.
   const roadCross = new Float32Array(positions.count);
+  // Per-vertex sand strength — the shader paints pixel-art sand + footprints here.
+  const sand = new Float32Array(positions.count);
   for (let vertexIndex = 0; vertexIndex < positions.count; vertexIndex++) {
     const x = positions.getX(vertexIndex);
     const z = positions.getZ(vertexIndex);
@@ -350,14 +330,16 @@ export function createTerrainMesh(scorch: ScorchMapUniforms | null): THREE.Mesh 
     colors[vertexIndex * 3 + 2] = color.b;
     roadStrength[vertexIndex] = roadFactor(x, z);
     roadCross[vertexIndex] = roadAcross(x, z);
+    sand[vertexIndex] = beachSandFactor(x, z);
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.setAttribute('aRoad', new THREE.BufferAttribute(roadStrength, 1));
   geometry.setAttribute('aRoadCross', new THREE.BufferAttribute(roadCross, 1));
+  geometry.setAttribute('aSand', new THREE.BufferAttribute(sand, 1));
   // No computeVertexNormals: flatShading derives face normals in the shader.
 
   const material = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
-  if (scorch) patchTerrainWithScorch(material, scorch);
+  patchTerrainShader(material, scorch, influence, wind);
   const terrainMesh = new THREE.Mesh(geometry, material);
   terrainMesh.receiveShadow = true;
   return terrainMesh;
