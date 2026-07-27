@@ -1,111 +1,279 @@
-# Stack Research
+# Technology Stack
 
-**Domain:** Client-only world-ambiance polish for a Three.js browser game (v0.3.0-alpha "Living World")
-**Researched:** 2026-07-13
-**Confidence:** HIGH — every load-bearing claim verified against the installed `three@0.185.1` build in `node_modules` or the npm registry directly; web-sourced claims cross-checked (seam tier: MEDIUM).
+**Project:** super-elements — v0.4.0-alpha WebGPU Sky & Water
+**Researched:** 2026-07-28
+**Scope:** Only the NEW capability — WebGPU backend + TSL + vendoring Water Pro v3.2.1 and Sky Pro v2.0.0. The existing three/TS/Vite/pnpm stack is validated and unchanged.
+**Overall confidence:** HIGH (every version, export name, and load path verified directly against the vendored `./pro` packages and installed `node_modules`).
 
-## Bottom Line
+## TL;DR
 
-**Zero new dependencies.** Every target feature maps to APIs already in the project: `three@0.185.1` built-ins (which is the **latest npm release** — published 2026-07-01, verified against registry.npmjs.org on 2026-07-13), the browser Web Audio API, and existing project seams (`audioCore`, grass `timeUniform`, `groundInfluence`, `lightPool`). The one capability that might have tempted a dependency — 2D/3D gradient noise for wildlife wander and gust fields — ships **inside the already-installed three package** as addons. Nothing to `pnpm add`.
+- **Nothing new to install for WebGPU/TSL.** `three@0.185.1` (already installed) ships the `three/webgpu` and `three/tsl` subpath entry points; `@types/three@0.185.0` (already installed) ships their type subpaths. Verified in `node_modules`.
+- **Vendor the two Pro libs by copying their prebuilt `build/`** into `src/vendor/threejs-water-pro/` and `src/vendor/threejs-sky-pro/` (with Sky's `data/`). Do NOT alias to their `src/`.
+- **Sky Pro loads cloud-noise at runtime** via `fetch(new URL("./data/"+name+".bin", import.meta.url))` — a *dynamic* path Vite cannot statically analyze. Dev works natively; the **build** needs a ~10-line inline Vite plugin to copy `data/` into `dist/assets/data/`.
+- **The secure-context risk is smaller than the handoff feared:** `WebGPURenderer` auto-falls back to a **WebGL2 backend**, and both Pro libs ship WebGL2 paths. Plain-http LAN players still render (same TSL materials) — they lose WebGPU *performance*, not the whole scene. No dual-renderer code needed.
 
 ## Recommended Stack
 
-### Core Technologies (all already installed)
+### Core (already installed — DO NOT reinstall or change)
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| three | ^0.185.1 (= latest) | Fog, hemisphere tint, instanced wildlife, camera | Already the project renderer; r185 is the current release, no upgrade exists. Fog/HemisphereLight/InstancedMesh/onBeforeCompile APIs unchanged in recent releases (recent churn is all WebGPURenderer/TSL, irrelevant to this WebGL pipeline) |
-| Web Audio API | browser built-in | Procedural ambient beds, chirps, positional scaling | Same zero-asset synthesis approach as `pullSounds.ts`; all needed nodes (`AudioBufferSourceNode.loop`, `BiquadFilterNode`, `StereoPannerNode`, `GainNode`, `OscillatorNode`) are Baseline / universal |
-| @types/three | ^0.185.0 | Types | Already aligned with three 0.185.x |
+| Technology | Version | Purpose | Why / Verification |
+|------------|---------|---------|--------------------|
+| `three` | `0.185.1` | WebGPU renderer, TSL node system | `node_modules/three/package.json` `exports` has `"./webgpu" → build/three.webgpu.js` and `"./tsl" → build/three.tsl.js`. Both files exist in `build/`. Nothing extra to add. |
+| `@types/three` | `0.185.0` | Types for `three/webgpu`, `three/tsl` | `exports["./webgpu"]` and `exports["./tsl"]` present. Vendored `.d.ts` files import `three/webgpu` — resolves cleanly under `moduleResolution: "bundler"`. |
+| `vite` | `7.1.x` | Dev server + build | Serves the extra `.html` spike page and the vendored ESM as-is. |
+| `typescript` | `~5.6.2` | Typecheck | `tsconfig.app.json` already uses `moduleResolution: "bundler"` — required for the `three/webgpu` subpath + directory-import resolution of the vendored libs. |
+| `pnpm` | (repo) | Package manager | Repo root only. The Pro packages are NOT installed through pnpm (see vendoring). |
 
-### Feature → Built-in API Map
+### Vendored (licensed — copied from `./pro`, NOT from npm)
 
-| Feature | API (no dependency) | Integration seam |
-|---------|--------------------|------------------|
-| Wind-noise bed | `AudioBuffer` filled by leaky-integrator brown noise (`out = (last + 0.02*white)/1.02`, ×~3.5), looped via `AudioBufferSourceNode.loop = true`, shaped by `BiquadFilterNode` (lowpass) with `frequency`/gain modulated by `setTargetAtTime` gusts | New `createBrownNoiseLoop()` beside `createNoiseSource()` in `src/game/audio/audioCore.ts`. Buffer ≥ 2–4 s so the loop seam is inaudible |
-| Bird chirps | `OscillatorNode` (sine) + `exponentialRampToValueAtTime` frequency sweeps + `jitter()` — literally the `pullSounds.ts` recipe with different envelopes | Reuse `clampGain`/`jitter`/`panned` from audioCore verbatim |
-| Positional/proximity sounds (goliath grunts, rustle) | Existing `panned()` (`StereoPannerNode`) + a distance-scaled `GainNode`. **Not** `PannerNode`: HRTF panning costs real CPU and models 3D listener orientation the top-down camera doesn't have | `panned()` already takes screen-space pan; add a `distanceGain(dist, falloff)` helper |
-| Distance fog, hemisphere-tinted | `THREE.Fog` — **already in the scene** (`createMondstadtWorld.ts:203`, `new THREE.Fog(0x8ecae6, 80, 300)`). Mutate `scene.fog.color` per frame — verified in the 0.185.1 build: `refreshFogUniforms` copies `fog.color` into the `fogColor` uniform on every render, no `needsUpdate` required | Lerp `scene.fog.color` toward the `HemisphereLight` sky color (`createMondstadtWorld.ts:112`) each frame from the day/night palette; preallocate the scratch `THREE.Color` |
-| Shared wind phase | Plain shared uniform object `{ value: number }` — the exact pattern grass already uses (`timeUniform` in `createGrassField.ts`). Pass the same object reference into every patched material and read it from CPU-animated code (flags, smoke) | Advance once per frame in `createGame.ts`'s loop; hand the same object to the audio gust modulator so wind sound and grass sway share phase |
-| Wildlife (butterflies/birds/fireflies) | `THREE.InstancedMesh` + `PlaneGeometry`; setup: `instanceMatrix.setUsage(THREE.DynamicDrawUsage)`; per frame: `setMatrixAt(i, m)` + `instanceMatrix.needsUpdate = true`; per-instance tint via `setColorAt` + `instanceColor.needsUpdate`. Wander noise: `SimplexNoise` / `ImprovedNoise` from `three/addons/math/*` — **verified present in the installed package** | Birds flush via the existing `groundInfluence` hook (player-sprint disturbance already computed); fireflies acquire glow lights from `lightPool` (quads carry the visual, only a handful of real lights) |
-| Day/night lite | Pure math + `THREE.Color.lerpColors(a, b, t)` between preallocated palette keyframes; drive `HemisphereLight.color/groundColor/intensity`, sun `DirectionalLight` color/intensity (direction FIXED — respects the texel-snapped shadow basis), and `scene.fog.color` from one palette sampler. Phase = `(serverTimestampMicros / cycleMicros) % 1` from the already-subscribed world timestamp | Lanterns at night: `lightPool.acquire()` with long-lived handles (verify pool capacity budget); zero allocs if all Colors are preallocated |
-| Camera lean / FOV kick | `camera.fov = base + kick; camera.updateProjectionMatrix()` — still the required call in r185; cost is one 4×4 rebuild (trivial). Lean: small roll on the camera rig; spring both with hand-rolled exponential smoothing (`v += (target - v) * (1 - exp(-k*dt))`). Skip `updateProjectionMatrix()` when \|fov − base\| < ε | Do last per PROJECT.md; keep amplitudes tiny (top-down = low motion-sickness risk, but lean > ~1.5° reads as broken horizon) |
+| Library | Version | Peer `three` | Runtime assets | Import specifier |
+|---------|---------|--------------|----------------|------------------|
+| `threejs-water-pro` | `3.2.1` | `>=0.181.0` (repo 0.185.1 ✅) | **None** — foam textures are bundled/data-URL (`loadBuiltInFoamTexture`); no external files. Verified: no `import.meta.url` asset fetch in `build/index.js`. | `./vendor/threejs-water-pro` |
+| `threejs-sky-pro` | `2.0.0` | `>=0.185.0` (repo 0.185.1 ✅ — **tight**, do not downgrade three) | **`data/*.bin`** cloud-noise volumes (`baseShape16/32/64.bin`, ~1 MB) loaded at runtime relative to `index.js`. Must ship next to the bundle. | `./vendor/threejs-sky-pro` |
 
-### Development Tools
+> ⚠️ Sky Pro's `three` peer floor is exactly the repo's `0.185.1`. Any future three downgrade breaks it.
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| vitest 3.2.4 (existing) | Unit-test pure helpers (noise fill, palette sampler, wind phase, distance-gain curve) | Follow pure-helper discipline: palette lerp + brown-noise math are zero-import functions |
-| Playwright playtest (existing harness) | End-of-phase visual/audio check | `scripts/fps_playtest.py` catches frame-cost regressions from the new per-frame instance updates |
+### New dev dependency (one small, optional)
 
-## Installation
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| `@webgpu/types` | `^0.1.x` | Types for `navigator.gpu` / `GPUAdapter` in *our* feature-detect code | Only if you write `navigator.gpu` checks in TS. Add to `tsconfig.app.json` `"types"`. `skipLibCheck: true` means you don't need it for the vendored/three types, only for code you author. Alternatively read the backend off `renderer.backend` after `init()` and skip this entirely. |
 
-```bash
-# Nothing. Zero new dependencies.
-# Noise addons import from the already-installed package:
-#   import { SimplexNoise } from 'three/addons/math/SimplexNoise.js';
-#   import { ImprovedNoise } from 'three/addons/math/ImprovedNoise.js';
+No other packages are required. In particular there is **no** `vite-plugin-static-copy` in the recommended path — a tiny inline plugin (below) handles Sky's `data/` with zero new dependencies (matches the project's lean/perf ethos).
+
+## Vendoring: recommended approach (concrete)
+
+**Chosen: Option 1 — copy each prebuilt `build/` into `src/vendor/…`.**
+Rejected: Option 3 (Vite alias to the packages' `src/index.ts`).
+
+**Why copy `build/`, not alias to `src/`:**
+- The `build/` output is a self-contained, `sideEffects: false` ESM bundle with bundled `.d.ts` — it drops straight into our Vite/TS graph with no transitive dev-deps.
+- Aliasing to their `src/` would drag each package's full TypeScript source (and its own `@types/three`, eslint, tsx expectations) through **our** compiler and Vite, and their build scripts run under **npm**, colliding with our **pnpm-only** rule.
+- A frozen vendored bundle is reproducible and immune to their `npm install && npm run build:lib` step drifting. The handoff and both packages' own docs recommend copying `build/`.
+
+**One-time build of the bundles (inside `./pro`, using their own npm — independent of repo pnpm):** only needed if you patch their `src/`. The shipped `./pro/**/build/` is already built, so you can copy it directly.
+
+**Target layout (import specifier = the directory; Vite resolves `index.js`, TS resolves `index.d.ts`):**
+
+```
+src/vendor/
+├── threejs-water-pro/
+│   ├── index.js
+│   ├── index.js.map
+│   └── index.d.ts
+└── threejs-sky-pro/
+    ├── index.js
+    ├── index.js.map
+    ├── index.d.ts
+    └── data/            ← baseShape16.bin, baseShape32.bin, baseShape64.bin (MUST copy)
 ```
 
-## Alternatives Considered
+```ts
+import { WaterSystem, getPresetParams } from "./vendor/threejs-water-pro";
+import { SkySystem, PRESETS } from "./vendor/threejs-sky-pro";
+```
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| Keep linear `THREE.Fog` (already in scene) | `THREE.FogExp2` | Only if the linear near/far band visibly bands on the fixed-distance top-down camera. Note: fog **type** is a compile-time define (`FOG_EXP2`, verified in the 0.185.1 shader chunks) — switching type at runtime recompiles every material. Pick one up front; tune color/near/far at runtime freely |
-| Looped brown-noise `AudioBuffer` | `AudioWorkletNode` generating noise live | Only if you need runtime-parametric noise *spectra* (you don't — gusts are gain/filter modulation on a static bed). Worklet adds a second JS thread, a module file, and autoplay-policy edge cases for zero audible win |
-| `StereoPannerNode` + distance gain | `PannerNode` (HRTF/equalpower) | Only for true 3D listener orientation (first-person). Top-down screen-space pan + proximity gain is the standard 2.5D pattern and matches the existing `panned()` helper |
-| CPU `setMatrixAt` wildlife (tens of instances) | Vertex-shader flap/wander via instance attributes + `uTime` | If wildlife counts grow into hundreds+; wing flap in the vertex stage (per-instance phase attribute) is the first escalation, reusing the grass material-patch pattern |
-| Hemisphere/sun/fog color lerp for grading | `EffectComposer` + LUT/color-grade pass | Only if a later milestone wants film-style grading; a full-screen pass interacts with the pixel-filter pipeline and costs a render target. Light-driven grading is free |
+### The Sky `data/` load path — the one real gotcha
 
-## What NOT to Use
+`build/index.js` resolves noise at runtime as (verified by disassembling the minified bundle):
 
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| `pnpm add simplex-noise` (or `open-simplex`, `noisejs`) | Redundant — `SimplexNoise` + `ImprovedNoise` ship inside the installed three package (`three/addons/math/`), verified on disk | `three/addons/math/SimplexNoise.js` |
-| three's `AudioListener` / `Audio` / `PositionalAudio` | Asset-playback wrappers around `PannerNode`; redundant with (and would fragment) the existing zero-asset `audioCore` context; `PositionalAudio` drags in HRTF panning | Extend `audioCore` |
-| Tone.js / howler.js | Tone is a large synthesis framework duplicating ~40 lines of needed WebAudio; howler is asset-file playback — this project has zero audio assets by design | Hand-rolled nodes in `audioCore` |
-| GSAP / tween.js / `maath` for camera micro-feel | A tween lib for two scalars (fov, lean) violates the zero-dep rule held across two milestones | Exponential smoothing in the game loop |
-| A second `AudioContext` for ambience | Browsers cap concurrent contexts; `pullSounds.ts` already lazy-owns one (`src/ui/pullSounds.ts:12`) | Hoist the context singleton into `audioCore` (or export it from pullSounds) and hang a persistent `ambientBus` GainNode off it — also gives combat-vs-ambience ducking for free |
-| Runtime `Fog` ↔ `FogExp2` swap or fog on/off toggling | `USE_FOG`/`FOG_EXP2` are program defines — toggling forces shader recompiles across the scene mid-play | Keep fog always on; animate `color`/`near`/`far` (uniforms, refreshed every render) |
-| Moving the sun for day/night | Fights the texel-snapped shadow basis (locked in PROJECT.md) | Color/intensity drift only, direction fixed |
+```js
+fetch(new URL("./data/" + shapeName + ".bin", import.meta.url))
+```
 
-## Stack Patterns by Variant
+Because the path is **concatenated** (not a static string literal), Vite/Rollup's `new URL('literal', import.meta.url)` asset handling does **not** pick it up. Behaviour per mode:
 
-**If wildlife instance counts stay ≤ ~100 (expected):**
-- CPU wander + `setMatrixAt` each frame is fine; keep matrices/quats as preallocated scratch objects (no per-frame allocs).
+- **Dev (`vite`):** `import.meta.url` → `/src/vendor/threejs-sky-pro/index.js`, so `./data/*.bin` → `/src/vendor/threejs-sky-pro/data/*.bin`, which Vite's dev server serves from disk. **Works with no config.**
+- **Build (`vite build`):** the vendored code lands in a hashed chunk under `dist/assets/`, so `import.meta.url` → `dist/assets/…`, and `./data/*.bin` → `dist/assets/data/*.bin` — which Vite does NOT emit. **Broken unless you copy `data/` there.**
 
-**If a wildlife layer needs hundreds of instances:**
-- Move flap/bob into the vertex stage via an instanced float phase attribute + the shared wind `timeUniform`; CPU then only writes matrices on wander-target changes.
+**Fix — inline plugin in `vite.config.ts` (no new dependency):**
 
-**If any raw `ShaderMaterial` FX must respect fog** (patched built-ins are already covered):
-- It needs `fog: true` in its constructor **plus** the `fog_pars_*`/`fog_vertex`/`fog_fragment` chunks and fog uniforms — built-ins get this free; raw shaders don't. Audit `createEffectSystem.ts` materials for horizon-distance FX; most close-range FX can skip fog entirely.
+```ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { cpSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-## Version Compatibility
+export default defineConfig({
+  plugins: [
+    react(),
+    {
+      name: 'copy-sky-pro-noise',
+      apply: 'build',
+      // dist/assets/data/ is where import.meta.url (the hashed chunk) resolves ./data/
+      closeBundle() {
+        cpSync(
+          resolve(__dirname, 'src/vendor/threejs-sky-pro/data'),
+          resolve(__dirname, 'dist/assets/data'),
+          { recursive: true },
+        );
+      },
+    },
+  ],
+  server: {
+    host: true,
+    allowedHosts: ['elements.kingdom.lv'],
+  },
+});
+```
 
-| Package | Compatible With | Notes |
-|-----------|-----------------|-------|
-| three@0.185.1 | @types/three@0.185.0 | Already matched in package.json; keep the minor versions in lockstep |
-| three@0.185.1 | vite@7.1.x | Current combo already building; `three/addons/*` resolves via the package `exports` map (verified in the installed package.json) — no vite config needed |
-| Web Audio nodes used | All evergreen browsers | `StereoPannerNode`, `BiquadFilterNode`, looped `AudioBufferSourceNode` are Baseline; no polyfills |
+- It is directory-relative (`assets/data`), so it is **hash-independent** — the chunk name doesn't matter.
+- Packaged alternative if preferred: `vite-plugin-static-copy` (verify its Vite 7 peer range first). The inline plugin avoids that dependency and the peer-range risk.
+- Fallback if a future Vite splits the sky code into a nested chunk dir: also mirror `data/` into `public/data/` — cheap insurance, harmless.
 
-## Key Verified Facts (for the planner)
+**tsconfig:** no change required. `tsconfig.app.json` already has `moduleResolution: "bundler"` (resolves the `three/webgpu` subpath and the directory import to `index.d.ts`) and `include: ["src"]` (covers `src/vendor`). `allowJs` is off, so the vendored `index.js` is never type-checked — types come from the sibling `index.d.ts`. `skipLibCheck: true` absorbs any minor type friction in the vendored declarations.
 
-1. **`scene.fog.color` is per-frame mutable for free** — `refreshFogUniforms` (three.module.js:14990, called per material render at :18724) does `fog.color.getRGB(uniforms.fogColor.value, …)` every frame. No `material.needsUpdate`.
-2. **`onBeforeCompile` patches don't break fog** — fog lives in its own shader chunks (`fog_pars_fragment`, `fog_fragment`), separate from the chunks the grass material patches; `MeshLambertMaterial` has `fog: true` by default. The existing grass will fog correctly with zero changes.
-3. **Fog type is a compile-time define** — `#ifdef FOG_EXP2` in the chunk source; choose Fog vs FogExp2 once.
-4. **`SimplexNoise` / `ImprovedNoise` exist at `node_modules/three/examples/jsm/math/`** — importable as `three/addons/math/*`.
-5. **three 0.185.1 is the newest release** (npm registry: 0.185.0 → 2026-06-25, 0.185.1 → 2026-07-01). No upgrade decision exists for this milestone.
-6. **InstancedMesh dynamic path unchanged in r185**: `setUsage(DynamicDrawUsage)` once, `setMatrixAt` + `instanceMatrix.needsUpdate = true` per frame, `mesh.count` to cap visible instances.
+### Licensing / git decision (flag for requirements)
+
+`./pro` is gitignored (licensed, never commit). But `src/vendor/**` under the copy approach **would** be committed by default. The deploy pipeline (`.31`: git pull → build) needs the vendored files present at build time. Pick one, up front:
+- **Commit `src/vendor/**` into the private repo** (simplest; the repo is `private: true`, single-owner) — accept the licensed bundles live in git history. **Recommended** given the pull-then-build deploy.
+- OR gitignore `src/vendor/**` and add a deploy step that copies from a licensed source onto `.31` — more moving parts, and breaks a clean `git pull && build`.
+
+## Exact public entry points (verified against `build/index.d.ts`)
+
+### Water Pro `3.2.1` — `from "./vendor/threejs-water-pro"`
+
+Exports used by the integration (all confirmed in `build/index.d.ts`): `WaterSystem`, `Sky`, `getPresetParams`, `PRESETS`, `applyPresetToParams`, `QUALITY_LEVELS`, `getQualityFeatures`, `type QualityLevel`, `type WaterPreset`, `type PresetName`, `SkyProvider` (type), plus optional systems `BuoyancySystem`, `WakeSystem`, `SpraySystem`, `RainSystem`, `OceanFloor`.
+
+`WaterSystem` public API (from `WaterSystem.d.ts`):
+
+```ts
+static create(
+  renderer: THREE.WebGPURenderer,
+  scene: THREE.Scene,
+  camera: THREE.PerspectiveCamera,
+  quality?: QualityLevel,          // 'low' | 'medium' | 'high' | 'ultra'
+  options?: WaterSystemOptions,
+): Promise<WaterSystem>;
+
+get scene(): THREE.Scene;          // pass(water.scene, water.camera) for post
+get camera(): THREE.PerspectiveCamera;
+get lighting(): Lighting;          // lighting.sun.direction = sun vector
+get postProcessing(): PostProcessingPipeline;  // .buildNode(scenePass, out)
+get wake(): WakeSystem;            // wake.addGenerator(mesh, opts) → id; wake.removeGenerator(id)
+readonly buoyancy: BuoyancySystem; // buoyancy.addObject(mesh, opts)
+readonly masking: WaterMasking;    // masking.add(mesh) / masking.remove(mesh)
+
+setSky(sky: SkyProvider | null): void;   // ← Sky Pro plugs in here
+loadPreset(preset: PresetName | WaterPreset): void;
+update(deltaTime: number): Promise<void>;         // await each frame, BEFORE post.render()
+resize(width?: number, height?: number): void;
+setQualityLevel(quality: QualityLevel, params: WaterSceneParams): Promise<void>; // rebuild post after
+```
+
+### Sky Pro `2.0.0` — `from "./vendor/threejs-sky-pro"`
+
+Exports (from `build/index.d.ts`): `SkySystem`, `SunDriver`, `TimeOfDay`, `Atmosphere`, `Sun`, `Clouds`, `GodRays`, `PRESETS`, `SkyProvider` (type), `NightSkyPanorama`, `BUNDLED_MOON_TEXTURE_URL`, `QUALITY_LEVELS`, `RenderLayer`, `equirectUVFromDir`.
+
+`SkySystem` public API (from `SkySystem.d.ts`):
+
+```ts
+static create(config: {
+  renderer: THREE.WebGPURenderer;
+  camera: THREE.PerspectiveCamera;
+  scene: THREE.Scene;              // backdrop meshes auto-added here
+  quality?: QualityLevel;          // default 'high'
+  godRays?: boolean;
+  timeOfDay?: TimeOfDayParams;
+  nightSky?: NightSkyPanoramaOptions;  // { texture } — else night renders BLACK
+}): Promise<SkySystem>;
+
+readonly atmosphere: Atmosphere;
+readonly sun: Sun;                 // sun.setFromAngles(elevationDeg, azimuthDeg)
+readonly clouds: Clouds;
+readonly godRays: GodRays;
+readonly timeOfDay: TimeOfDay;     // ← the dynamic day/night clock (see below)
+
+update(dt: number): void;                       // call BEFORE water.update
+applyTo(sceneColor, scenePass): Node;           // splice into post AFTER water's node
+applyPreset(preset: SkyParams): Promise<void>;
+createSkyProvider(options?: { envMap?: boolean | SkyEnvironmentOptions }): SkyProvider; // → water.setSky
+resize(width: number, height: number): void;
+setQualityLevel(level: QualityLevel, overrides?): Promise<void>;
+```
+
+**Correction to the handoff's mental model of the day/night driver:** the *public* clock is `sky.timeOfDay`, not `SunDriver`. `SunDriver` is exported but is owned internally by `SkySystem` (a private `_sunDriver`). Drive day/night through:
+
+```ts
+sky.timeOfDay.time.value = 0.5;                  // 0=midnight, .25=sunrise, .5=noon, .75=sunset
+sky.timeOfDay.autoAdvanceSecondsPerDay = 600;    // or let sky.update(dt) advance it; 0 = paused
+sky.timeOfDay.latitude = 60; sky.timeOfDay.azimuth = 135;
+```
+
+Feed the existing LAN-shared server clock into `timeOfDay.time.value` each frame (map server timestamp → 0..1), and set `autoAdvanceSecondsPerDay = 0` so the server remains authoritative — this replaces `createDayNightCycle.ts` cleanly.
+
+### The wiring (one call, verified in both packages' integration guides)
+
+```ts
+sky.update(dt);                                    // 1. sky first
+await water.update(dt);                             // 2. then water samples this frame's sky
+water.setSky(sky.createSkyProvider({ envMap: true }));  // once at setup; envMap:true = cloud reflections
+```
+
+Post chain order (both guides agree): `pass(water.scene, water.camera)` → `water.postProcessing.buildNode(scenePass, out)` → `sky.applyTo(out, scenePass)` → your pixel-filter/outline TSL → bloom/tone-map. Both nodes read the scene pass depth, so fog/clouds/god-rays composite against geometry.
+
+## WebGPU / secure-context reality
+
+**Support (from both installation docs):** Chrome/Edge 113+, Safari 18+ (Sky says Safari 26+), Firefox 141+ (Nightly for Water). `navigator.gpu` requires a **secure context**: `https://` or `http://localhost` / `127.0.0.1`. Plain-http LAN origins (`http://192.168.1.32`) have **no** `navigator.gpu`.
+
+**Why this is NOT the milestone-killer the handoff worried about:**
+- `WebGPURenderer` **automatically falls back to a WebGL2 backend** when WebGPU is unavailable (stated in both installation docs).
+- Water Pro ships WebGL2 code paths — `index.d.ts` exports `WebGLWaveSimulation` and has `simulation/waves/webgl` + `wake/webgl` folders. Sky Pro's install doc: "runs on both backends."
+- **TSL node materials compile to both backends.** So the pixel-filter/outline port to TSL and the 17 shader ports run on WebGL2 too — the *same* code, one pipeline.
+- Net: plain-http LAN players still see water + sky + pixel filter via WebGL2; they lose WebGPU compute *performance* (FFT/SSR tiers), not the scene. This removes the need for a "force https everywhere or keep the old WebGL water" fork.
+
+**Runtime feature-detect (know which backend you got, to pick a quality tier):**
+
+```ts
+const renderer = new THREE.WebGPURenderer();
+await renderer.init();                              // async — App bootstrap becomes async
+const onWebGPU = (renderer.backend as any)?.isWebGPUBackend === true;
+// pick water/sky quality from onWebGPU + a quick FPS probe; do NOT branch renderers.
+```
+
+Optional pre-check before constructing: `const webgpuOK = !!navigator.gpu && !!(await navigator.gpu.requestAdapter());` (needs `@webgpu/types` for TS, or `// @ts-expect-error`).
+
+**Dev config:**
+- `localhost` dev over http: WebGPU works (localhost is a secure context). No change.
+- To exercise **real WebGPU over LAN**, serve https (Vite `server.https`) or launch Chrome with `--enable-unsafe-webgpu --unsafely-treat-insecure-origin-as-secure=http://192.168.1.32:5173`. `elements.kingdom.lv` is https → WebGPU works there already.
+- Validation gotcha (from handoff, still true): headless Playwright + SwiftShader will not run WebGPU compute — validate with headed Chrome or user screenshots.
+
+## What NOT to add
+
+| Do NOT | Why |
+|--------|-----|
+| `pnpm add` any separate WebGPU/TSL three build (`three-webgpu`, `three/examples` copies) | `three@0.185.1` already exports `three/webgpu` + `three/tsl`. Verified. |
+| Install `threejs-water-pro` / `threejs-sky-pro` from npm | Licensed, not on npm. Vendor from `./pro` `build/`. |
+| Run `pnpm install` inside `./pro`, or route the Pro build through pnpm | Their build uses **npm**; and the shipped `build/` is already compiled — copy it directly. Only re-run `npm run build:lib` (with their npm) if you patch their `src`. |
+| Alias `threejs-*-pro` → their `src/index.ts` (Option 3) | Drags their full TS source + dev-deps through our compiler/Vite and collides with pnpm-only. Copy `build/` instead. |
+| Add a second/parallel `WebGLRenderer`, a WebGL-fallback shim, or a dual pipeline | `WebGPURenderer` + TSL already covers the WebGL2 fallback. One renderer, one material path. |
+| Keep any `THREE.ShaderMaterial` / `onBeforeCompile` GLSL path "as a fallback" | `WebGPURenderer` ignores raw GLSL; the 17 shaders MUST become TSL (that's phase work, not a stack addition). No dead GLSL left behind (project rule). |
+| Globally alias `three` → `three/webgpu` in Vite/tsconfig | Breaks plain `three` type/runtime imports elsewhere. Import `three/webgpu` explicitly only where the WebGPU scene lives. |
+| Add `@react-three/fiber` / `drei` | Game renders with vanilla three; keep it. |
+| Add `vite-plugin-static-copy` (unless you want it) | The inline `closeBundle` copy covers Sky's `data/` with zero deps and no Vite-7 peer-range risk. |
+| Add a starmap package | Night sky needs an equirectangular starmap **asset** (public-domain NASA maps listed in Sky docs), passed as `nightSky.texture` — an asset decision, not a dependency. Without it, night renders black (acceptable if the cycle keeps the sun up). |
+
+## Installation / setup summary
+
+```bash
+# 1. Nothing to install for WebGPU/TSL — three@0.185.1 + @types/three@0.185.0 already present.
+
+# 2. (Optional) types for navigator.gpu feature-detect
+pnpm add -D @webgpu/types      # then add "@webgpu/types" to tsconfig.app.json "types"
+
+# 3. Vendor the licensed bundles (copy from ./pro build/):
+#    src/vendor/threejs-water-pro/  <- ./pro/Three.js Water Pro v3.2.1/threejs-water-pro/build/{index.js,index.js.map,index.d.ts}
+#    src/vendor/threejs-sky-pro/    <- ./pro/Three.js Sky Pro v2.0.0/threejs-sky-pro/build/{index.js,index.js.map,index.d.ts,data/}
+
+# 4. Add the inline copy-sky-pro-noise plugin to vite.config.ts (see above).
+
+# 5. Decide git policy for src/vendor/** (commit into private repo — recommended for the pull+build deploy).
+```
 
 ## Sources
 
-- npm registry (`registry.npmjs.org/three`) — latest version + release dates, fetched directly 2026-07-13 (HIGH: primary source)
-- Installed `node_modules/three/build/three.module.js` @ 0.185.1 — `refreshFogUniforms`, fog shader chunks, `FOG_EXP2` define (HIGH: verified in shipped source)
-- Installed `node_modules/three/examples/jsm/math/` — SimplexNoise/ImprovedNoise presence (HIGH: verified on disk)
-- [threejs.org docs — InstancedMesh](https://threejs.org/docs/#api/en/objects/InstancedMesh) (seam tier: LOW-webfetch, corroborated by project's own working grass InstancedMesh usage)
-- [MDN — StereoPannerNode](https://developer.mozilla.org/en-US/docs/Web/API/StereoPannerNode), [MDN — Web Audio advanced techniques](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Advanced_techniques), [Noisehack — Generate noise with Web Audio](https://noisehack.com/generate-noise-web-audio-api/) (seam tier: MEDIUM-verified web)
-- Project seams read directly: `src/game/audio/audioCore.ts`, `src/game/world/createGrassField.ts`, `src/game/world/createMondstadtWorld.ts` (fog + hemisphere already exist), `src/ui/pullSounds.ts` (AudioContext singleton), `package.json`
-
----
-*Stack research for: v0.3.0-alpha Living World (client-only ambiance)*
-*Researched: 2026-07-13*
+- Vendored packages (authoritative, read directly): `./pro/**/build/index.d.ts`, `WaterSystem.d.ts`, `SkySystem.d.ts`, both `package.json`, and disassembled `build/index.js` (Sky `new URL("./data/"+name+".bin", import.meta.url)`; Water = no external asset fetch). Confidence HIGH.
+- Package docs: Water `docs/guide/{installation,quality-levels,sky-pro-integration}.md`; Sky `docs/guide/{installation,basic-example,water-integration,day-night-cycle}.md`. Confidence HIGH.
+- Installed toolchain: `node_modules/three@0.185.1` and `@types/three@0.185.0` `exports` maps (`./webgpu`, `./tsl` present); `tsconfig.app.json`; `vite.config.ts`; `package.json`. Confidence HIGH.
+- Project handoff: `.planning/v0.4.0-alpha-WEBGPU-WATERPRO-HANDOFF.md`, `.planning/PROJECT.md`. Confidence HIGH (corrected the `SunDriver` vs `sky.timeOfDay` public-API detail and the WebGL2-fallback risk).
+</content>

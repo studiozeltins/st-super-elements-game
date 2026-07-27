@@ -1,164 +1,170 @@
 # Project Research Summary
 
-**Project:** v0.3.0-alpha "Living World" — client-only world ambiance for the super-elements game
-**Domain:** Three.js browser-game ambiance polish (audio bed, fog/sky, coherent wind, wildlife, day/night lite, lived-in wear, camera feel) on an existing pixel-filter 3D + SpacetimeDB multiplayer client
-**Researched:** 2026-07-13
-**Confidence:** HIGH
+**Project:** super-elements — v0.4.0-alpha WebGPU Sky & Water
+**Domain:** WebGL→WebGPU/TSL renderer migration + commercial FFT water (Water Pro v3.2.1) & procedural sky (Sky Pro v2.0.0) drop-in, inside an existing perf-obsessed pixel-art top-down multiplayer game
+**Researched:** 2026-07-28
+**Confidence:** HIGH (every version, export name, load path, and shader-port count was verified directly against the vendored ./pro bundles, installed node_modules, and the real src/game source; the only MEDIUM/LOW items are on-device WebGPU perf and pixel-filter reproduction, which are exactly what the P0 spike must resolve)
 
 ## Executive Summary
 
-This milestone is pure client-side polish grafted onto a codebase that already carries hard-won performance rules (frozen world matrices, pooled materials/lights, 2-pass pixel renderer, no per-frame allocs, React table bypass). Research is unanimous on the headline conclusion: **zero new dependencies**. Every feature maps to APIs already installed — three@0.185.1 built-ins (Fog, HemisphereLight, InstancedMesh, `onBeforeCompile`, plus `SimplexNoise`/`ImprovedNoise` shipping inside `three/addons/math/`), the browser Web Audio API via the existing `audioCore` synthesis pattern, and existing project seams (`timeUniform`, `groundInfluence`, `lightPool`, `scorchMap`, camp sites). Several "new features" turn out to already exist and only need tuning: scorch regrowth and the grass-bend trail are decay-constant tunes in `groundInfluenceMath.ts`, and `scene.fog` is already in the scene.
+This milestone is **not** a "swap the water shader" task — it is a **whole-engine renderer migration**. Water Pro and Sky Pro both import THREE from "three/webgpu" and are TSL node systems, so adopting them forces the entire game off WebGLRenderer and onto WebGPURenderer + THREE.PostProcessing. The vendored water/sky APIs are the easy 10%; the load-bearing 90% is (a) reproducing the game's identity — the ~320x240 nearest-upscale pixel filter with a depth-discontinuity outline — as a TSL node graph, and (b) porting **17 custom GLSL surfaces** (ShaderMaterial/onBeforeCompile, confirmed by grep) to node materials, since WebGPU will not compile raw GLSL. The good news from STACK research: **there is nothing to install.** three@0.185.1 (already present) ships three/webgpu + three/tsl; the two Pro libraries are vendored by copying their prebuilt build/ into src/vendor/, plus one ~10-line inline Vite plugin to copy Sky Pro's data/ cloud-noise into dist/.
 
-The expert approach, distilled from Ghost of Tsushima's GDC wind talks and BotW/Genshin ambience patterns, hinges on two integration principles. First, **one shared wind phase** (extracted from the grass field's private `uTime`) that every swaying system AND the audio gust envelope consumes — plus a traveling gust-wave phase offset (`dot(worldPos, windDir)/wavelength`) that turns "synced sway" into visible wind. Second, **fog and day/night are one color pipeline, not two features**: fog color, sky background, hemisphere, and sun tint all blend from a single server-anchored day/night palette, mutated in place (never reassigned — fog type/presence is a compile-time shader define, and swapping it recompiles every material).
+The recommended approach is **spike-first, then a strict dependency chain**, and all four research streams converge on the identical phase order: **P0 feasibility spike -> P1 renderer + pixel-filter port -> P2 shader ports (one subsystem per commit) -> P3 Water Pro -> P4 Sky Pro -> P5 reactive + emissive water.** The pixel filter vs. the vendors' depth-reading post chain is the true make-or-break: both Water (buildNode) and Sky (applyTo) are nodes that read the scene-pass depth to composite fog/god-rays/clouds, and the pixel/outline pass is a new consumer of that same depth at a new resolution the vendors never designed for. P0 must screenshot-diff **two resolution shapes** (pixelate the whole low-res chain vs. pixelate full-res at the end) against master before any game code changes, and carries a sanctioned escape hatch: if the pixel look can't be reproduced, STOP and keep the WebGL renderer.
 
-The key risks are all "the naive version silently violates an existing perf rule": ambient audio needs a bus + compressor BEFORE the first looped bed (clipping, no ducking otherwise), wildlife must be emissive instanced quads with manual bounding spheres (never pooled lights, never texture readbacks), permanent footpaths must be static bakes (the wear channel decays in ~1 minute by design), the day/night clock must live in the game loop (never React — the 144→20fps regression class), and camera motion must be transient-only with an accessibility toggle (XAG 117). One factual correction from architecture research: `world_timer` is a **private** table and cannot be subscribed — the day/night clock anchors from SDK event timestamps (or `Date.now()` fallback), with zero server publishes either way.
+Two risks were **de-escalated** and one was **re-scoped** by research. De-escalated: the LAN-http "no WebGPU" fear is half-wrong — WebGPURenderer auto-falls back to WebGL2 and both Pro libs run on it, so LAN players do **not** white-screen; they lose WebGPU *performance* and WebGPU-only spray particles, making the force-https-vs-WebGL2-tier deploy choice a go/no-go gate rather than a scene-breaker. Re-scoped: the two NEW asks have **no native API** — "emissive water" is not a Water Pro property (its glow is Beer-Lambert + SSS + sparkle + bloom, so "lit" = sparkle/SSS/lifted waterColor/bloom, with additive overlays for local glow), and "projectile hits the sea" is the wrong mental model for wake (wake injects only on *horizontal* motion, capped at 16 generators/frame — vertical impacts need spray or decals, and per-projectile churn must be a fixed reused pool). Both must be de-risked in P0 before P5 is planned. API correction carried through all files: the day/night driver is sky.timeOfDay.time.value with autoAdvanceSecondsPerDay = 0 (server clock stays authoritative), **not** SunDriver.
 
 ## Key Findings
 
 ### Recommended Stack
 
-Nothing to install. three@0.185.1 is the latest npm release (verified against the registry 2026-07-13); all needed Web Audio nodes are Baseline in evergreen browsers. Noise for wildlife wander comes from `three/addons/math/SimplexNoise.js` — verified present on disk. The one architectural audio decision: hang a persistent `ambientBus` off the existing gesture-unlocked AudioContext singleton (never a second context) and use `StereoPannerNode` + distance gain, not `PannerNode`/HRTF (top-down camera has no 3D listener orientation).
+Zero new runtime dependencies. The existing three/TypeScript/Vite/pnpm stack is validated and unchanged; the WebGPU + TSL capability already ships inside the installed three@0.185.1. The two commercial libraries are **vendored** (licensed, not on npm) by copying each prebuilt build/ into src/vendor/ — chosen over aliasing their src/ because a frozen bundle drops cleanly into the pnpm/Vite/TS graph with no transitive dev-deps and no npm-vs-pnpm collision. See [STACK.md](STACK.md).
 
 **Core technologies:**
-- three ^0.185.1 (installed): fog color mutation (free per frame via `refreshFogUniforms`), `Color.lerpColors` day/night palette, `InstancedMesh` + `DynamicDrawUsage` wildlife, addon noise — no upgrade decision exists
-- Web Audio API (browser): looped brown-noise wind bed + `BiquadFilterNode` gusts + oscillator chirps, all zero-asset synthesis following the proven `pullSounds.ts` recipe
-- Existing seams: `audioCore` helpers (`jitter`/`panned`/`clampGain`), grass `timeUniform`, `groundInfluence` CPU stamp sites, `lightPool` conventions, `detectQualityProfile()`, `?no*` bisect flags
+- three@0.185.1 (installed) — WebGPU renderer + TSL node system via the three/webgpu and three/tsl subpath exports; nothing to add. Sky Pro's peer floor is *exactly* 0.185.0, so three must never be downgraded.
+- threejs-water-pro@3.2.1 (vendored from ./pro) — FFT ocean, wake, spray, foam, SSS, sparkle; no external runtime assets (foam is bundled).
+- threejs-sky-pro@2.0.0 (vendored from ./pro) — procedural atmosphere, sun/moon, volumetric clouds, day/night clock; **requires data/*.bin cloud-noise copied next to the bundle** (dev works free; vite build needs the inline closeBundle copy plugin).
+- Inline Vite plugin (no new dep) — copies Sky Pro data/ -> dist/assets/data/ so the runtime fetch(new URL of ./data/name.bin, import.meta.url) survives hashing.
+- @webgpu/types (optional dev-only) — only if you author navigator.gpu feature-detect in TS; can be skipped by reading renderer.backend after init().
 
-**Explicitly rejected:** simplex-noise/noisejs packages (redundant), Tone.js/howler (asset-playback frameworks for a zero-asset game), three's Audio/PositionalAudio wrappers, GSAP/tween for two scalars, runtime Fog↔FogExp2 swaps, moving the sun (breaks the texel-snapped shadow basis).
+**Decision flagged for requirements:** src/vendor/ should be **committed into the private repo** (simplest for the .31 git-pull->build deploy) despite holding licensed bundles.
 
 ### Expected Features
 
-**Must have (table stakes — the milestone's own premise):**
-- Wind/ambience audio bed with randomized one-shot pool (interval 5–15s, pitch ±10–20%, pan jitter) — fixed-interval chirps become a metronome, the canonical ambience failure
-- Combat ducking: birds stop + bed −6..−12dB, ~1s in / ~3s out, never hard-cut
-- Fog color = sky color from ONE shared day/night-blended source; linear fog with `near` beyond combat readability radius (fog is a horizon device on a top-down camera, not atmosphere)
-- Shared wind phase across grass/flags/canopy/smoke — desynced sway reads worse than no sway
-- Day/night lite: 4 keys (dawn/day/dusk/night), asymmetric timing (~60% day, short dusk/dawn), blue night floor ≥ ~55% intensity, server-anchored phase, lanterns fade in at dusk
-- Footstep dust puffs; "reduce camera motion" toggle (accessibility baseline once ANY camera motion ships)
+Framed through THIS game's lens: a tilted top-down camera through a low-res pixel filter. The camera **never goes underwater** and the filter **destroys sub-pixel detail**, so what matters is depth-based water color, shoreline foam, large swell, sky-driven tint, broad sun/moon glint, and wake — a like-for-like upgrade of what createSeaWater.ts hand-rolled. See [FEATURES.md](FEATURES.md).
 
-**Should have (differentiators):**
-- Traveling gust wave — Tsushima's core insight at 1% of the cost; the single highest value-per-LOC item
-- Audio bed sidechained to the gust envelope — wind you hear swell as grass bows
-- Startle-flush birds off the player-sprint signal — a world that reacts beats passive decoration
-- Dusk fireflies (emissive quads, ≤1 real light) + scorch regrowth tune + grass-bend trail + worn footpaths on real traffic routes + distant goliath grunts by camp proximity
-- FOV kick on burst damage only (+2–5°, ~60ms in / ~300ms out)
+**Must have (table stakes — the sea + sky must read correctly):**
+- Depth water color + shoreline foam + wave swell (replaces the custom quad 1:1) — all LOW, always-on.
+- Sky Pro atmosphere/sun + **external day/night** driven by the LAN server clock (timeOfDay.time.value, autoAdvance=0) — replaces createDayNightCycle.ts.
+- water.setSky(provider) coupling + sun/moon sparkle glint — one call; provider auto-syncs sun/reflection/fog each frame.
+- All underwater subsystems OFF (haze, sun shafts, particles, ocean floor, waterline) — pure perf; camera never submerges.
+- Quality tier **medium** as the floor, FPS profiled every step.
 
-**Defer (post-milestone):**
-- Weather (rain/puddles) — explicitly out of scope; time-of-day gameplay hooks (needs server work); NPC ambient life
+**Should have (competitive differentiators, add after the base sea holds framerate):**
+- Player wake trail (the single biggest "real water" tell; requires >=medium).
+- Volumetric clouds + cloud reflections in water (envMap:true).
+- Moon + stars at night (stars need a supplied equirectangular starmap asset, else night is black).
+- **Ask A** projectile reaction — pooled wake generators (skimmers) + spray on impact (vertical, WebGPU-only).
+- **Ask B** lit/emissive water — sparkle + SSS + lifted/tinted waterColor + bloom (B1, LOW, first-class API); additive surface overlays for localized glow (B2).
+
+**Defer (past this milestone):**
+- Buoyancy for floating props; SSR / screen refraction (High+ only, lost to the filter); cloud ground shadows (heavy per-material TSL); rain/weather (explicitly deferred in PROJECT.md).
 
 ### Architecture Approach
 
-Every feature is a sibling factory module (`createWind`, `createDayNightCycle`, `createAmbientAudio`, `createWildlife`, `createCameraFeel`, `createSmokeColumns`, `createServerClock`) wired into `createGame.ts`'s single `frame()` with 1–3 lines each — createGame is already 1,963 LOC and must not grow logic. Pure-helper twins (`windMath.ts`, `dayNightMath.ts`) carry the testable math per project discipline; the wind formula especially needs a single source of truth because it lives in both GLSL (grass vertex stage) and JS (flags/smoke/audio). React sees nothing — ambiance is 100% game-layer. All research seams are verified against live code with file:line citations (see ARCHITECTURE.md).
+Single WebGPURenderer (no mixed WebGL/WebGPU, no dual pipeline). The frame becomes a declarative TSL node DAG ending at postProcessing.outputNode, with a strict, non-negotiable order. "Retire, don't reinvent": createSeaWater, the sky dome, and the day/night sky/fog/water-uniform path are deleted and replaced by thin wrappers — but the **server clock stays the single time source**, now writing sky.timeOfDay.time. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 **Major components:**
-1. `createWind.ts` + `windMath.ts` — ONE `{value}` uniform object + gust envelope + `sampleWind(x,z)` CPU mirror; grass refactored to consume it (no legacy accumulator left)
-2. `createServerClock.ts` + `createDayNightCycle.ts` — SDK-event-timestamp anchor (`Date.now()` fallback) → phase → keyframed palette mutating fog/background/hemi/sun/lantern handles in place; `createMondstadtWorld` widens its return to expose `ambience` handles
-3. `createAmbientAudio.ts` — sixth audio sibling: bus + compressor first, then looped bed, game-clock-scheduled one-shots, gust-sidechained gain, camp-proximity grunts
-4. `createWildlife.ts` — instanced butterflies/fireflies/flush-birds; consumes CPU motion signal at the wear-stamp call site (`createGame.ts:899`), NEVER GPU readbacks
-5. World assets (flags/lanterns/props/footpaths) — build-time, frozen-matrix compliant; lanterns = fixed-count lights added at startup, intensity-faded (light count never changes at runtime)
-6. `createCameraFeel.ts` — absorbs existing shake state; lean/FOV kick transient-only; idle breathing lives on the CHARACTER model, not the camera
+1. createPixelRenderer.ts (REWRITTEN — the single hardest file) — owns WebGPURenderer (async init), THREE.PostProcessing, the ported TSL outline node, low-res target + nearest upscale, and the crisp native-res overlay pass.
+2. engine/tsl/ (NEW) — home for ported node materials + shared TSL chunk helpers (outline, pixelate, wind, pixel-surface, shore) that many of the 17 materials import.
+3. createWaterSystem.ts / createSkySystem.ts (NEW wrappers) — mirror today's createSeaWater/createDayNightCycle seam for minimal blast radius.
+4. createGroundInfluence / createScorchMap — WebGL RT ping-pong feeders re-expressed as WebGPU render-to-texture/compute (infra port, unblocks terrain/grass).
+5. createReactiveWater.ts (NEW, P5) — fixed-pool projectile wake generators + emissive/impact contribution.
+
+**Contract order (breaks if reordered):** post chain = pass() -> water.postProcessing.buildNode -> sky.applyTo -> outline -> pixelate -> bloom/tonemap-last; frame = sky.update(dt) -> await water.update(dt) -> postProcessing.render(). Build the SkyProvider **once** and reuse it.
 
 ### Critical Pitfalls
 
-1. **Ambient bed without a bus** → clipping in dense fights, no ducking knob. Prevention: `masterGain → DynamicsCompressorNode → destination` with `ambientBus`/`sfxBus` as the audio phase's FIRST task; reroute existing SFX in the same change.
-2. **Fog/background reassignment or toggling** → full-scene shader recompile hitch (compile-time defines). Prevention: mutate `.color/.near/.far` in place; fog identity never changes; preallocated scratch Colors.
-3. **Day/night phase through React or naive clock math** → the documented fps-regression class + per-player sunsets. Prevention: game-loop-owned clock module, bigint modulo once at anchor time, snap phase before first render on join.
-4. **Wildlife naive instancing** → flocks vanish (origin bounding sphere), static-buffer respec per frame, light-count recompiles. Prevention: manual bounding sphere or `frustumCulled=false`, `DynamicDrawUsage`, scratch objects, emissive sprites not lights, `castShadow=false`.
-5. **Permanent wear written into decaying channels** → footpaths evaporate in ~1 minute; ambient stampers starve combat scorch (`MAX_STAMPS_PER_FRAME=16`). Prevention: static bake for footpaths; channel-budget note opens the wear phase.
-6. **Persistent WebAudio graph leaks + tab/iOS lifecycle** → stacked beds after restart, permanent silence after iOS interruption. Prevention: idempotent `start()`, full `dispose()`, one looping buffer, `visibilitychange` + `'interrupted'` state handling, game-clock (never `setTimeout`) scheduling.
+Top pitfalls across the migration (full list of 10 in [PITFALLS.md](PITFALLS.md)):
+
+1. **Pixel filter vs. the vendors' depth-reading post chain (make-or-break)** — Water/Sky nodes read scene-pass depth; the pixel/outline pass is a new depth consumer at a new resolution. Prototype BOTH resolution shapes in P0 and screenshot-diff vs master; sample node-graph depth via scenePass.getTextureNode, not a hand-attached DepthTexture.
+2. **LAN-http silent WebGL2 fallback** — no white screen, but FFT/wake run as slow render-to-texture and water.spray is null. Measure the WebGL2 path in P0; make force-https-vs-WebGL2-tier an explicit deploy gate; optional-chain every water.spray call.
+3. **Async init / await water.update() races** — one un-awaited promise or early render() = white screen / undefined-pipeline crash. Make bootstrap explicitly async, gate the first frame on a ready/compileAsync flag, keep the loop async.
+4. **17 GLSL shaders must become TSL; a half-ported scene fails silently** — meshes render flat/magenta/invisible, not erroring. Port **one subsystem per commit** with a screenshot gate; port shared chunks first.
+5. **setQualityLevel() invalidates render-pass textures** — must rebuild postProcessing.outputNode + recompile after every tier change; wrap it so it's never called bare; debounce any adaptive quality.
+6. **Wake/spray cap + wrong API** — max 16 generators/frame, wake injects on *horizontal* motion only. Pool and reuse (updateGenerator), never add/remove per projectile; vertical impacts = spray/decals, not wake.
+7. **"Emissive water" has no API** — re-scope in requirements as SSS+sparkle+lifted-waterColor+bloom (or additive decals), not a water.emissive property.
+8. **Sky data/ + starmap not shipped by default** — verify data/ resolves in the built dist/ (not just dev); ship a PD starmap or night renders black.
 
 ## Implications for Roadmap
 
-Based on research, suggested phase structure (dependency-verified build order from ARCHITECTURE.md):
+Research forces a single **spike-first dependency chain** (numbering reset to P0..P5). Every file independently produced this same order; each phase is independently screenshot-gated.
 
-### Phase 1: Wind Core
-**Rationale:** The keystone — flags/canopy/smoke sway, gust-synced audio, butterfly drift, and the traveling gust wave ALL consume the wind module. Extract before any second consumer exists (Pitfall 10: N private clocks).
-**Delivers:** `windMath.ts` (tested) + `createWind.ts`; grass refactored to the shared uniform; camp flags + campfire smoke columns + canopy sway decision; traveling gust wave; `?nowind` flag.
-**Addresses:** Shared wind phase (table stakes), traveling gust wave (top differentiator).
-**Avoids:** Pitfall 10 (clock fragmentation); frozen-matrix violations (windmill-blades pattern or shader sway).
+### Phase 0: Feasibility Spike (waterpro-spike.html, zero game changes)
+**Rationale:** The pixel look is the game's identity; if it can't be reproduced on WebGPU the whole migration is worthless — and that must be known before any irreversible game-code change (sanctioned escape hatch).
+**Delivers:** An isolated spike — WebGPURenderer + WaterSystem.create + Sky Pro over a sand plane sampling the REAL getTerrainHeight, tilted top-down; both pixel-filter resolution shapes prototyped and screenshot-diffed vs master.
+**Addresses:** Four go/no-go gates — (1) pixel filter + outline survives on WebGPU; (2) the target machine runs WebGPU compute AND the WebGL2 fallback path FPS is measured; (3) the two NEW asks (emissive = sparkle/SSS/bloom feasibility; projectile-hits-sea = wake horizontal-only + spray reality) are proven; (4) realistic 17-shader port-surface estimate + SEA_LEVEL/camera waterline check + Sky data/ load in built dist/.
+**Avoids:** Pitfalls 1, 2, 6, 7, 8, 10 (all "scope/de-risk in P0"). **USER SIGN-OFF gate.**
 
-### Phase 2: Atmosphere — Fog, Sky, Day/Night Lite
-**Rationale:** Fog color and day/night are one color pipeline; shipping fog with a constant color would force an immediate refactor. Fireflies and lanterns depend on this phase's gates.
-**Delivers:** `createServerClock.ts` + bridge timestamp tap, `dayNightMath.ts` + `createDayNightCycle.ts`, ambience handles from `createMondstadtWorld`, fog near/far tune, lantern assets with lights-at-build, debug time-scale knob, `?nodaynight` flag.
-**Uses:** `Color.lerpColors` scratch pattern; SDK EventContext timestamps (verify FIRST — see Research Flags).
-**Avoids:** Pitfalls 4 (recompile), 5 (unlit materials at night — grep-audit `MeshBasicMaterial`; night floor ≥ ~55%; sun direction frozen), 6 (React/bigint/skew).
+### Phase 1: Renderer Migration + Pixel-Filter TSL Port
+**Rationale:** Everything downstream requires WebGPURenderer + the node post-processing graph; the pixel filter is the only thing that must be pixel-correct at this gate.
+**Delivers:** WebGL->WebGPU (async init/compileAsync); ported #1 pixel-filter + depth-outline as a TSL post node; all custom materials temporarily downgraded to flat built-ins so the scene still renders.
+**Uses:** three/webgpu, three/tsl, THREE.PostProcessing, the vendored bundles wired as no-ops.
+**Avoids:** Pitfall 3 (async bootstrap + compile gate), locks Pitfall 1. Gate: build + pixel-correct screenshot-diff.
 
-### Phase 3: Ambient Audio Bed
-**Rationale:** Depends on wind (gust sidechain); independent of day/night. Kills the silence — the #1 "dead world" tell.
-**Delivers:** Bus + compressor refactor (FIRST task), looped wind bed, randomized chirp/rustle/grunt one-shot pool, combat ducking, camp-proximity goliath grunts, visibility/iOS lifecycle handling, `?noambientaudio` flag.
-**Implements:** `createAmbientAudio.ts` as the sixth audio sibling on the shared unlocked context.
-**Avoids:** Pitfalls 1 (clipping/no bus), 2 (leaks/stacking — verify with double-restart listen test), 3 (tab blur / `'interrupted'`).
+### Phase 2: Shader Ports (one subsystem per commit)
+**Rationale:** WebGPU won't compile the 17 GLSL surfaces; a big-bang port is unbisectable. Ordered by dependency/blast radius; shared chunks (pixelSurface/shore/wind/sun) ported first within each subsystem.
+**Delivers:** 2a RT map feeders (groundInfluence, scorch -> WebGPU) -> 2b terrain -> 2c grass -> 2d town -> 2e props -> 2f wind props -> 2g wildlife.
+**Implements:** engine/tsl/ node materials + chunk helpers.
+**Avoids:** Pitfall 4 (screenshot after each; no default-material meshes); preserves matrix/shadow throttles per project perf memory.
 
-### Phase 4: Props + Wear
-**Rationale:** Static build-time work plus decay-constant tuning; no cross-dependencies, and two "features" (scorch regrowth, bend trail) already exist as tunable systems.
-**Delivers:** `createFootpaths.ts` (STATIC bake, not influence stamps), `createPlazaProps.ts`, camp flags placement polish, regrowth/bend-trail constant tuning in `groundInfluenceMath.ts`, dust puffs off the CPU motion signal.
-**Avoids:** Pitfall 8 (wear-channel misuse, stamp-queue starvation — open the phase with a channel-budget note).
+### Phase 3: Water Pro
+**Rationale:** Requires the proven renderer + node graph + ported terrain to blend shorelines correctly.
+**Delivers:** Retire createSeaWater -> WaterSystem at SEA_LEVEL; player wake; cove masking only where enclosed; preset/wave tuning THROUGH the pixel filter; FPS-profiled quality tier (start medium).
+**Uses:** water.postProcessing.buildNode, water.wake, water.masking.
+**Avoids:** Pitfalls 5 (rebuild post on tier change), 10 (waterline vs sampled terrain; delete old sea in the same commit — no dead code).
 
-### Phase 5: Wildlife
-**Rationale:** Latest world system because it consumes Phase 1 (wind drift) and Phase 2 (firefly dusk gate) plus the motion signal.
-**Delivers:** `createWildlife.ts` — instanced butterflies (~64–128), startle-flush birds off the sprint signal + wing one-shot, dusk fireflies (emissive, ≤1 pooled light), combat-radius suppression, counts keyed to `detectQualityProfile()`, `?nowildlife` flag.
-**Avoids:** Pitfall 7 (culling/upload/lights — name `createGrassField.ts` and `createLightPool.ts` as pattern sources in the plan).
+### Phase 4: Sky Pro
+**Rationale:** Water's setSky provider needs Sky Pro to exist; day/night must stay server-anchored.
+**Delivers:** Retire sky dome + day/night sky/fog/water-uniform path -> SkySystem driven by serverClock -> timeOfDay.time (autoAdvance=0); water.setSky(createSkyProvider) built once; rewire sun light + edge-sun-dir + fountain (#10) to the sky provider; ship PD starmap.
+**Uses:** sky.applyTo, sky.timeOfDay, sky.createSkyProvider, nightSky.texture.
+**Avoids:** Pitfalls 8 (starmap/data/ in dist/), 9 (wiring/update order, provider-once), Anti-Pattern 4 (no self-advancing clock).
 
-### Phase 6: Camera Feel (last)
-**Rationale:** Genuinely independent; PROJECT.md says do last; it is the only feature that can make players physically ill.
-**Delivers:** `createCameraFeel.ts` (absorbs existing shake), run lean, FOV kick on burst-damage tiers only, idle breathing on the character model (`createCharacterModel.animate`), "reduce camera motion" toggle as an acceptance criterion.
-**Avoids:** Pitfall 9 (pixel crawl on the nearest-filtered target — transient effects only; tune in pixelated mode).
+### Phase 5: Reactive + Emissive Water
+**Rationale:** Requires Water Pro wake + the proven sea; both NEW asks need P0's de-risking baked in.
+**Delivers:** Fixed-pool wake generators wired to projectile spawn/despawn (skimmers) + spray on vertical impact (WebGPU) with a decal/sprite fallback for WebGL2; lit water via sparkle + SSS + lifted waterColor + bloom (B1) and additive overlays for localized glow (B2). Re-profile.
+**Avoids:** Pitfalls 6 (pool max-16, reuse; right API per event), 7 (emissive = assembled cues, not a property).
 
 ### Phase Ordering Rationale
-
-- **Wind first** because five later systems consume its phase; extracting after a second consumer exists guarantees drift bugs.
-- **Atmosphere second** because fog+day/night are one color pipeline and gate fireflies/lanterns; audio does NOT depend on it, but wildlife does.
-- **Audio third** (needs wind's gust envelope) and **wear fourth** are order-swappable; both precede wildlife only by convention, wildlife strictly needs phases 1–2.
-- **Camera last** per PROJECT.md and accessibility risk.
-- **Final milestone verification** must run `scripts/fps_playtest.py` with ALL ambiance enabled during a golem-class fight — features are built per-phase but the frame cost is summed. Every phase adds its `?no*` bisect flag.
+- **Dependency-forced:** renderer -> pixel-filter -> RT maps -> terrain/grass -> town/props/wildlife -> water -> sky -> reactive. Water needs the node graph; Sky feeds Water's provider; reactive needs Water's wake.
+- **Spike-first de-risks the identity question** (pixel filter) and both no-API asks before any irreversible change; P0 also produces the perf/port-surface numbers everything else is sized against.
+- **Screenshot-gated per phase + one-subsystem-per-commit** keeps the large port bisectable and honors the no-dead-code rule (old sea/sky deleted in the same commit that replaces them).
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **None require a full `--research-phase` pass.** The four research files already verified codebase seams to file:line and API claims against installed sources.
-- **Phase 2 (Atmosphere) has one MEDIUM-confidence claim to verify as its FIRST plan task:** whether the installed SpacetimeDB TS SDK's row-callback `EventContext` exposes the reducer event's server timestamp (`world_timer` is private — the milestone framing's stated clock source is wrong). The `Date.now()` fallback inside `createServerClock.ts` keeps the design safe either way; this is a 30-minute spike, not a research phase.
+Phases likely needing deeper research during planning (gsd-plan-phase --research-phase N):
+- **Phase 0:** The make-or-break spike — pixel-filter TSL reproduction, WebGPU-compute + WebGL2 availability on target hardware, and both no-API asks are all MEDIUM/unmeasured until this runs. Highest-uncertainty phase.
+- **Phase 1:** TSL outline-node depth linearization + WebGPU shadow-throttle equivalent (BasicShadowMap, autoUpdate=false, every-other-frame) need verification against the actual WebGPU shadow API.
+- **Phase 5:** Emissive-water technique choice (B1 vs additive vs custom-TSL) and the wake/spray pool design depend on P0 findings; spray fallback for WebGL2 needs a concrete decal plan.
 
-Phases with standard patterns (skip research-phase):
-- **Phase 1 (Wind):** extraction of an existing working system; formula already in the repo.
-- **Phase 3 (Audio):** direct extension of the proven `pullSounds`/`audioCore` synthesis pattern; MDN-verified node APIs.
-- **Phases 4–6:** tuning existing systems + well-documented three.js instancing/camera patterns, all with named in-repo pattern sources.
+Phases with well-documented patterns (lighter research):
+- **Phase 2:** Mechanical GLSL->TSL translation, one subsystem at a time — tedious but pattern-established once the shared chunks are ported.
+- **Phases 3 & 4:** Vendor integration is doc-backed end-to-end (post chain, update order, setSky, day/night); the work is wiring + tuning, not discovery.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Every claim verified against the installed three@0.185.1 build on disk or the npm registry directly; zero-dependency conclusion is load-bearing and triple-checked |
-| Features | MEDIUM | Cross-verified web sources (GDC talks, XAG 117, game-audio references); camera-feel numeric magnitudes (lean degrees, FOV kick ms) are informed estimates — tune by playtest |
-| Architecture | HIGH | Every integration seam cites a verified file:line in the live codebase; one milestone-framing error caught and corrected (`world_timer` privacy) |
-| Pitfalls | HIGH | Integration pitfalls grounded in direct code reads + this repo's own regression history; ecosystem claims (iOS `'interrupted'`, fog recompile) MEDIUM web-verified |
+| Stack | HIGH | Every version/export/load-path verified against vendored ./pro bundles + installed node_modules; corrected the SunDriver->sky.timeOfDay and WebGL2-fallback details |
+| Features | HIGH | Every capability cites a real Water/Sky Pro doc or exported API; only the two NEW asks are MEDIUM (assembled from documented primitives, no purpose-built API) |
+| Architecture | HIGH | Existing 17-shader inventory from grep + real src/game files; MEDIUM only on pixel-filter reproduction (the explicit P0 question) |
+| Pitfalls | HIGH | Integration/API pitfalls verified against vendor docs; perf-budget FPS numbers MEDIUM/LOW (no on-device WebGPU profile yet) |
 
-**Overall confidence:** HIGH
+**Overall confidence:** HIGH on approach and API surface; MEDIUM on feasibility of the identity-preserving pixel filter and on-device perf — both intentionally deferred to the P0 spike gate.
 
 ### Gaps to Address
-
-- **SDK EventContext timestamp availability** (Phase 2, first task): verify against the installed SpacetimeDB TS SDK; fall back to `Date.now()` (LAN NTP skew ≪ 1s, invisible on a 20-min cycle) if absent.
-- **Camera-feel magnitudes** (Phase 6): lean 2–4°, FOV kick +2–5° / ~60ms-in ~300ms-out are LOW-confidence estimates; the phase plan should budget a playtest-tune loop and gate everything behind the motion toggle.
-- **lightPool budget split** (Phases 2/5): lanterns vs fireflies both want night lights near the plaza; decide up front — lanterns get dedicated fixed lights at build, fireflies are emissive with at most one borrowed pooled light.
-- **Bend-trail decay conflict** (Phase 4): the ~2s trail wants a different clock than the shared 4–5s bend decay; options are "accept shared clock" or "second influence texture" — decide consciously in planning, not mid-implementation.
-- **Real-time cycle soak** (Phase 2 close): banding/perf issues invisible at time-scaled speed; one full 20-min pixelated-mode cycle before phase close.
+- **Pixel-filter reproduction on WebGPU** — the make-or-break unknown; resolve in P0 by prototyping both resolution shapes and screenshot-diffing vs master. If neither works, halt (keep WebGL).
+- **On-device WebGPU + WebGL2 FPS** — unmeasured; P0 must produce headed-Chrome profiles for both backends (headless Playwright + SwiftShader can't run WebGPU compute).
+- **Deploy decision for LAN-http players** — force-https (must first confirm the cloudflared .31->.32 :3000 routing survives) vs. WebGL2-tier fallback vs. feature-flagged WebGL sea. Explicit user gate before ship.
+- **"Emissive" definition** — must be pinned in requirements (SSS+sparkle+bloom vs additive decals vs custom TSL) before P5.
+- **Starmap asset** — a PD equirectangular starmap must be sourced/licensed and vendored under the game origin, or night ships black.
+- **src/vendor/ git policy** — commit into the private repo (recommended) vs. deploy-time copy; decide before P1.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- Installed `node_modules/three` @0.185.1 — fog uniform refresh, `FOG_EXP2` define, addon noise presence, InstancedMesh dynamic path
-- npm registry (registry.npmjs.org/three) — version currency, fetched 2026-07-13
-- Direct codebase reads (file:line cited throughout ARCHITECTURE.md and PITFALLS.md): `createGame.ts`, `createMondstadtWorld.ts`, `createGrassField.ts`, `createGroundInfluence.ts`, `createScorchMap.ts`, `groundInfluenceMath.ts`, `createLightPool.ts`, `createAudioSystem.ts`, `audioCore.ts`, `pullSounds.ts`, `createPixelRenderer.ts`, `useGameTableBridge.ts`, `camps.ts`, `spacetimedb/src/index.ts`
+- Vendored packages read directly — ./pro/Three.js Water Pro v3.2.1/ and ./pro/Three.js Sky Pro v2.0.0/: build/index.d.ts, WaterSystem.d.ts, SkySystem.d.ts, both package.json, disassembled build/index.js, and docs/guide/ + docs/api/.
+- Installed toolchain — node_modules/three@0.185.1 + @types/three@0.185.0 exports maps (./webgpu, ./tsl), tsconfig.app.json, vite.config.ts, package.json.
+- Existing codebase — src/game/engine/createPixelRenderer.ts, createGame.ts, world/createSeaWater.ts, systems/createDayNightCycle.ts, world/createMondstadtWorld.ts, terrain/grass/town/prop shaders, RT feeders; grep of ShaderMaterial/onBeforeCompile in src/game = 17 files.
+- Project context — .planning/v0.4.0-alpha-WEBGPU-WATERPRO-HANDOFF.md, .planning/PROJECT.md, CLAUDE.md, project memory (always-analyze-performance, threejs-cpu-overhead-traps, identity-hex-perf-cliff, remote-domain-topology, deploy-pipeline-31).
 
 ### Secondary (MEDIUM confidence)
-- GDC Vault — Ghost of Tsushima wind + procedural grass talks (shared-simulation principle)
-- MDN — Web Audio (DynamicsCompressorNode, StereoPannerNode, BaseAudioContext.state), WebKit bug 237878 / web-audio-api#2585 (iOS `'interrupted'`)
-- Xbox Accessibility Guideline 117 — camera motion (authoritative for the toggle requirement)
-- three.js docs/forums — fog-vs-ShaderMaterial, InstancedMesh frustum culling with world-space matrices
-- Game-audio references (Game Audio Learning, Bugnet, A Sound Effect) — ambience layering + randomization patterns
+- WebGPU secure-context (navigator.gpu) gating + WebGPURenderer->WebGL2 auto-fallback — vendor docs assert it; not re-verified on this hardware.
+- The two NEW asks (projectile reaction, emissive) — assembled from documented primitives (wake/spray/decals; sparkle/SSS/bloom), no purpose-built API.
 
-### Tertiary (LOW confidence)
-- Camera lean/FOV-kick numeric magnitudes — informed estimates from accessibility/game-feel articles; validate by playtest in Phase 6
+### Tertiary (LOW confidence — needs validation in P0)
+- Per-tier FPS on target hardware — unmeasured; no on-device WebGPU profile exists yet.
+- Pixel-filter reproduction acceptability through the low internal resolution — the explicit make-or-break spike question.
 
 ---
-*Research completed: 2026-07-13*
+*Research completed: 2026-07-28*
 *Ready for roadmap: yes*
