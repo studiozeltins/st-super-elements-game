@@ -26,6 +26,10 @@ import { clampGain, createNoiseSource, jitter, panned } from './audioCore';
 import {
   BIRD_MIN_S,
   BIRD_MAX_S,
+  NIGHT_MIN_S,
+  NIGHT_MAX_S,
+  NIGHT_BACKOFF_STEP,
+  NIGHT_BACKOFF_CAP,
   GRUNT_MIN_S,
   GRUNT_MAX_S,
   bedCutoff,
@@ -34,6 +38,7 @@ import {
   isBirdTime,
   isNightCreatureTime,
   jitterFactor,
+  nextBackoffDelay,
   nextOneShotDelay,
 } from './ambienceMath';
 import type { SampleCache } from './createSampleCache';
@@ -67,6 +72,8 @@ const PITCH_SPREAD = 0.15;
 const GAIN_SPREAD = 0.15;
 /** Base per-shot loudness for the day/night creature layers (pre-jitter). */
 const CREATURE_GAIN = 0.5;
+/** Night crickets/owl are quieter than the day birds — a still night, not a chorus. */
+const NIGHT_GAIN = 0.26;
 /** Stereo spread for creature one-shots — they sit around the player, not dead-center. */
 const CREATURE_PAN = 0.6;
 const GRUNT_PAN = 0.4;
@@ -85,6 +92,10 @@ interface OneShotLayer {
   /** Procedural voice used when no recording is decoded yet (D-04/D-06 fallback). */
   synth(ctx: AudioContext, out: AudioNode, gain: number): void;
   timer: ReturnType<typeof setTimeout> | null;
+  /** Progressive-backoff layer: each fire stretches the next delay, reset when quiet. */
+  backoff: boolean;
+  /** Fires so far this active spell — grows the backoff, reset while inactive. */
+  streak: number;
 }
 
 export function createAmbience(
@@ -234,7 +245,10 @@ export function createAmbience(
   function fire(layer: OneShotLayer): void {
     const ctx = ready();
     const bus = getAmbientBus();
-    if (!ctx || !bus || !layer.active()) return;
+    if (!ctx || !bus || !layer.active()) {
+      if (layer.backoff) layer.streak = 0; // a quiet spell (e.g. daytime) resets the backoff
+      return;
+    }
     const gain = clampGain(layer.gainFor() * jitterFactor(GAIN_SPREAD, Math.random()));
     if (gain <= 0) return;
     const pan = (Math.random() * 2 - 1) * layer.panRange;
@@ -243,12 +257,24 @@ export function createAmbience(
     const buffer = url ? sampleCache.get(url) : null;
     if (buffer) playBuffer(ctx, out, buffer, gain);
     else layer.synth(ctx, out, gain);
+    // Backoff layers thin out the longer they run (crickets slowing into the night).
+    if (layer.backoff) layer.streak = Math.min(layer.streak + 1, 8);
   }
 
   /** Self-rescheduling timer — non-metronomic delay, gated only at fire time. */
   function scheduleNext(layer: OneShotLayer): void {
     if (disposed) return;
-    const delayMs = nextOneShotDelay(layer.minS, layer.maxS, Math.random()) * 1000;
+    const delayMs =
+      (layer.backoff
+        ? nextBackoffDelay(
+            layer.minS,
+            layer.maxS,
+            layer.streak,
+            NIGHT_BACKOFF_STEP,
+            NIGHT_BACKOFF_CAP,
+            Math.random()
+          )
+        : nextOneShotDelay(layer.minS, layer.maxS, Math.random())) * 1000;
     layer.timer = setTimeout(() => {
       fire(layer);
       scheduleNext(layer);
@@ -266,17 +292,22 @@ export function createAmbience(
       panRange: CREATURE_PAN,
       synth: birdChirp,
       timer: null,
+      backoff: false,
+      streak: 0,
     },
     {
-      // Night crickets + occasional owl (AMBI-07 night band).
+      // Night crickets + occasional owl (AMBI-07 night band). Quieter than the day
+      // birds, sparser window, and PROGRESSIVE BACKOFF so it thins into the night.
       active: () => isNightCreatureTime(lastPhase),
-      gainFor: () => CREATURE_GAIN,
+      gainFor: () => NIGHT_GAIN,
       urls: NIGHT_URLS,
-      minS: BIRD_MIN_S,
-      maxS: BIRD_MAX_S,
+      minS: NIGHT_MIN_S,
+      maxS: NIGHT_MAX_S,
       panRange: CREATURE_PAN,
       synth: nightVoice,
       timer: null,
+      backoff: true,
+      streak: 0,
     },
     {
       // Distant goliath grunt — gain scales with nearest-camp proximity (AMBI-05).
@@ -288,6 +319,8 @@ export function createAmbience(
       panRange: GRUNT_PAN,
       synth: gruntGrowl,
       timer: null,
+      backoff: false,
+      streak: 0,
     },
   ];
   for (const layer of layers) scheduleNext(layer);

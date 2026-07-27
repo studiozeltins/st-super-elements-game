@@ -12,18 +12,46 @@ import {
   GRUNT_MIN_S,
   GRUNT_NEAR_RADIUS,
   NIGHT_START_PHASE,
+  NIGHT_MIN_S,
+  NIGHT_MAX_S,
+  NIGHT_BACKOFF_STEP,
+  NIGHT_BACKOFF_CAP,
   bedCutoff,
   bedGainTarget,
   gruntProximityGain,
   isBirdTime,
   isNightCreatureTime,
   jitterFactor,
+  nextBackoffDelay,
   nextOneShotDelay,
 } from '../ambienceMath';
 
 // Pure ambience math (D-05/D-10/D-11, AMBI-02/03/05/07). We pin BEHAVIOR — the
 // bounds, monotonicity, non-metronomic variation, and day/night partition — not
 // the playtest-tunable magic numbers, mirroring the windMath.ts twin discipline.
+
+describe('nextBackoffDelay: night chirps thin out (progressive backoff)', () => {
+  const mid = 0.5;
+  it('equals the plain delay on the first fire (streak 0)', () => {
+    expect(nextBackoffDelay(NIGHT_MIN_S, NIGHT_MAX_S, 0, NIGHT_BACKOFF_STEP, NIGHT_BACKOFF_CAP, mid)).toBe(
+      nextOneShotDelay(NIGHT_MIN_S, NIGHT_MAX_S, mid)
+    );
+  });
+
+  it('grows monotonically with the streak', () => {
+    const d0 = nextBackoffDelay(NIGHT_MIN_S, NIGHT_MAX_S, 0, NIGHT_BACKOFF_STEP, NIGHT_BACKOFF_CAP, mid);
+    const d1 = nextBackoffDelay(NIGHT_MIN_S, NIGHT_MAX_S, 1, NIGHT_BACKOFF_STEP, NIGHT_BACKOFF_CAP, mid);
+    const d3 = nextBackoffDelay(NIGHT_MIN_S, NIGHT_MAX_S, 3, NIGHT_BACKOFF_STEP, NIGHT_BACKOFF_CAP, mid);
+    expect(d1).toBeGreaterThan(d0);
+    expect(d3).toBeGreaterThan(d1);
+  });
+
+  it('saturates at the cap multiplier for a large streak', () => {
+    const base = nextOneShotDelay(NIGHT_MIN_S, NIGHT_MAX_S, mid);
+    const huge = nextBackoffDelay(NIGHT_MIN_S, NIGHT_MAX_S, 999, NIGHT_BACKOFF_STEP, NIGHT_BACKOFF_CAP, mid);
+    expect(huge).toBeCloseTo(base * NIGHT_BACKOFF_CAP, 9);
+  });
+});
 
 describe('nextOneShotDelay window + non-metronomic cadence (AMBI-03, D-10)', () => {
   it('lands strictly inside [min,max]: min at rand=0, approaches max at rand→1', () => {

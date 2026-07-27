@@ -21,6 +21,37 @@ export const BIRD_MIN_S = 5;
 export const BIRD_MAX_S = 15;
 
 /**
+ * Night cricket/owl window, seconds — SPARSER than the day birds (a still night
+ * with the odd chirp, not a wall of insects), and it thins further through the
+ * night via progressive backoff below.
+ */
+export const NIGHT_MIN_S = 9;
+export const NIGHT_MAX_S = 22;
+/** Each successive night chirp stretches the delay by this fraction per streak step… */
+export const NIGHT_BACKOFF_STEP = 0.6;
+/** …up to this multiplier (so late-night chirps are ~4× further apart than the first). */
+export const NIGHT_BACKOFF_CAP = 4;
+
+/**
+ * Delay until the next one-shot with PROGRESSIVE BACKOFF: the base uniform pick
+ * stretched by (1 + streak·step), clamped to `cap`×. `streak` is how many times
+ * the layer has already fired this active spell (reset when it goes quiet), so
+ * the sound naturally thins out the longer it runs — e.g. crickets slowing as
+ * the night deepens. Pure (rand injected) for the vitest twin.
+ */
+export function nextBackoffDelay(
+  minS: number,
+  maxS: number,
+  streak: number,
+  step: number,
+  cap: number,
+  rand: number
+): number {
+  const growth = Math.min(cap, 1 + Math.max(0, streak) * step);
+  return nextOneShotDelay(minS, maxS, rand) * growth;
+}
+
+/**
  * Goliath grunt window, seconds — long, occasional intervals so distant camps
  * feel like a rare threat rumble, not a loop (AMBI-05). Seeded well above the
  * bird window; playtest-tunable.
