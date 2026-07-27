@@ -16,3 +16,6 @@ backup/
 scripts/__pycache__/
 __pycache__/
 .perfbot-profile/
+
+# Purchased licensed assets (Water Pro / Sky Pro) — do not redistribute
+pro/

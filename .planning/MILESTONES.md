@@ -1,5 +1,52 @@
 # Milestones
 
+## v0.3.0-alpha Living World (Shipped: 2026-07-28)
+
+**Phases completed:** 7 phases (8, 9, 9.1, 10, 11, 12, 13), 42 plans
+**Closeout:** override closeout — Phases 9.1 (dynamic sun/shadows) and 10 (ambient audio) reached
+plan-complete but their human UAT/verification gates were never signed off; acknowledged and
+deferred at close. Phase 9.1's day/night intent is superseded by the v0.4.0 Sky Pro migration.
+Known verification overrides: 13 acknowledged deferred items (see STATE.md Deferred Items).
+**Git:** 364 commits, 408 files changed, +42.7k/−2.3k LOC (2026-07-14 → 2026-07-28).
+
+**Key accomplishments:**
+
+- **One shared wind phase** — `createWind` (gust envelope + traveling front + direction wander)
+  drives grass, camp flags/banners, tree canopies, and campfire smoke from a single clock; gusts
+  travel across the field as a spatial wave; each consumer keeps its own character; `?nowind`
+  bisect flag. Flag pose math (downwind swing / windless drape / projectile impulse) test-first.
+
+- **One color pipeline** — distance fog + sky-dome gradient + ~20min day-weighted day/night drift
+  from a single palette, server-anchored (SDK timestamp, `Date.now()` fallback) so all LAN players
+  share the time of day; night is a blue combat-readable palette; plaza lanterns fade at dusk on
+  build-time lights (no runtime light add/remove).
+
+- **Dynamic sun & shadows** (9.1) — sun direction drifts with the day/night clock on a CAPPED arc,
+  per-frame texel-snapped shadow basis (no crawl under the pixel filter), `?nomovingsun` freeze.
+
+- **Layered audio** (10) — master→compressor bus graph, gust-reactive procedural wind bed,
+  day/night creature one-shots, grass rustle, combat ducking + region/combat music crossfade,
+  persisted music/SFX volume.
+
+- **Lived-in wear + wildlife + camera** — static footpath bake, plaza props, tuned scorch regrowth
+  + ~2s bend trail, pooled sprint dust; sparse day butterflies, sprint-flush birds (CPU
+  groundInfluence hook, never GPU readback), dusk/night emissive fireflies (combat light pool
+  untouched); character run-lean + idle breathing + rare burst FOV kick, all behind a persisted
+  reduce-motion toggle.
+
+### Known Gaps (deferred, override closeout)
+
+- **Phase 9.1 human gate** (09.1-03: FPS + crawl/midday A-B + LAN-sync verification) — superseded
+  by the v0.4.0 Sky Pro day/night; not signed off.
+- **Phase 10 human gate** (10-VERIFICATION `human_needed`, 10-UAT partial) — audio built,
+  verification carried to backlog.
+- **Debug sessions** flag-droop-and-projectile-reaction, flag-wind-direction-gust — both
+  diagnosed, cosmetic, backlog.
+- **Todos** raid boss / role-enforcement / crit poise interrupt (reserved milestone) + boost-orbit-v2,
+  ciena-star-restyle, expand-transcend-scaling, miss/evasion decision (backlog).
+
+---
+
 ## v0.2.0-alpha Combat Depth (Shipped: 2026-07-13)
 
 **Phases completed:** 6 phases (1–6), 25 plans, 44 tasks

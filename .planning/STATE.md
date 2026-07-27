@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v0.3.0-alpha
 milestone_name: Living World
 current_phase: 13
-status: verifying
-stopped_at: Completed 13-04-PLAN.md — phase 13 ready for verification
-last_updated: "2026-07-21T08:27:54.552Z"
-last_activity: 2026-07-21
-last_activity_desc: Phase 13 complete
+status: milestone_complete
+stopped_at: v0.3.0-alpha closed (override) — pivoting to v0.4.0 WebGPU Sky & Water
+last_updated: "2026-07-28T00:00:00.000Z"
+last_activity: 2026-07-28
+last_activity_desc: v0.3.0-alpha milestone closed (override closeout)
 progress:
   total_phases: 7
   completed_phases: 7
@@ -240,3 +240,23 @@ Last session: 2026-07-21T08:23:21.291Z
 Stopped at: Completed 13-04-PLAN.md — phase 13 ready for verification
 traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
 Resume file: None
+
+## Deferred Items
+
+Items acknowledged and deferred at v0.3.0-alpha milestone close on 2026-07-28:
+
+| Category | Item | Status |
+|----------|------|--------|
+| verification | phase-09.1-dynamic-sun (09.1-03 FPS/human gate) | deferred — superseded by v0.4.0 Sky Pro |
+| verification | phase-10-ambient-audio (10-VERIFICATION) | deferred — human gate → backlog |
+| uat | phase-09.1 (2 pending scenarios) | deferred |
+| uat | phase-10 (partial) | deferred |
+| debug | flag-droop-and-projectile-reaction | diagnosed — backlog |
+| debug | flag-wind-direction-gust | diagnosed — backlog |
+| todo | boost-orbit-v2-paths-shapes | pending backlog |
+| todo | ciena-star-restyle | pending backlog |
+| todo | expand-transcend-scaling | pending backlog |
+| todo | miss-evasion-system-decision | pending backlog |
+| todo | phase-6-raid-boss-DEFERRED | reserved milestone |
+| todo | phase-7-role-enforcement-balance-DEFERRED | reserved milestone |
+| todo | phase-7-crit-poise-interrupt-DEFERRED | reserved milestone |

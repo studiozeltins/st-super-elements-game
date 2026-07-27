@@ -10,33 +10,45 @@ churn** — the installed C0–C6 constellation base is a protected floor.
 **One-liner:** A power chase where scarce shards buy real, permanent-floor power, PVP makes
 that power worth stealing, and a co-op raid faucet lets any ganked player recover.
 
-## Current Milestone: v0.3.0-alpha Living World
+## Current Milestone: v0.4.0-alpha WebGPU Sky & Water
 
-**Goal:** Make the world between fights feel alive — layered procedural ambient audio, distance
-fog + sky depth, one coherent wind phase across everything that sways, wildlife, day/night color
-drift, lived-in wear, and camera micro-feel. All client-only (zero server publish; the day/night
-phase derives from the already-subscribed server timestamp).
+**Goal:** Replace the flat custom sea and the drift-based day/night with commercial-grade
+**Three.js Water Pro v3.2.1** (FFT ocean, layered foam, reflections, player wake, caustics)
+and **Three.js Sky Pro v2.0.0** (physical dynamic sky + day/night). Both are WebGPU-only, so
+this milestone migrates the whole render pipeline from `WebGLRenderer` to `WebGPURenderer` and
+ports the custom shaders (incl. the pixel-filter + outline pass) to TSL node materials.
 
-**Target features:**
-- Ambient audio bed — procedural via audioCore (filtered wind + gusts loosely synced to grass
-  sway, random bird chirps every 5–15s, grass rustle when running through fields, distant goliath
-  grunts scaled by camp proximity). No assets — same synth approach as `pullSounds.ts`.
-- Distance fog + sky gradient — `scene.fog` tinted to the hemisphere sky color; softens horizon,
-  hides world edge.
-- Coherent wind — grass `uTime` sway phase shared with camp flags/banners, tree canopies, and
-  campfire smoke columns (instanced quads, sine drift).
-- Wildlife — butterflies over grass (instanced quads, wander noise), birds that flush when the
-  player sprints through grass (groundInfluence hook), fireflies at dusk (lightPool).
-- Day/night lite — NO sun movement (fights the texel-snapped shadow basis); slow drift of
-  hemisphere/sun color + intensity + fog color over ~20min cycle, phase from server timestamp so
-  all LAN players see the same time; plaza lanterns fade in at night via lightPool.
-- Lived-in props + wear — worn footpaths near camps, plaza crates/fences/lanterns, grass regrows
-  over scorch (decay), footstep dust puffs, lingering ~2s grass-bend trail behind the player.
-- Camera feel — tiny run-direction lean, idle breathing sway on characters, slight FOV kick on
-  burst damage. Do last (micro-polish).
+**The hard part is the engine migration, not the water.** The pixel-art top-down look (the
+low-res render-target + nearest upscale + depth-outline pass in `createPixelRenderer`) MUST
+survive the port, and 17 custom `ShaderMaterial`/`onBeforeCompile` shaders must become node
+materials. Purchased assets are unzipped under `./pro/`.
 
-**Constraints:** all instanced/pooled, no per-frame allocs, frozen-matrix world rules respected.
-Weather (rain, puddles) explicitly deferred — real but expensive.
+**Ordered plan (spike-first):**
+1. Feasibility spike (isolated page): `WebGPURenderer` + Water Pro + Sky Pro over a sampled
+   beach; prove the pixel-filter look is reproducible in WebGPU/TSL BEFORE committing.
+2. Renderer migration: `WebGLRenderer`→`WebGPURenderer`; port pixel filter + outline to TSL.
+3. Shader ports, one subsystem at a time (build + screenshot after each).
+4. Integrate Water Pro (masked to island gaps; wire its wake API to the player, drop the
+   custom sea) + Sky Pro (drive the existing day/night cycle).
+
+**Constraints / risks:** perf-obsessed project (past 144→20 and 24fps regressions) — Water Pro
+adds reflection/refraction/compute passes; profile FPS every step and pick a `quality-level`
+that holds framerate. WebGPU needs a secure context — `elements.kingdom.lv` (https) is fine but
+plain-http LAN players may lose WebGPU; deploy story to confirm. Requirements defined via
+`/gsd-new-milestone`.
+
+<details>
+<summary>Previous milestone: v0.3.0-alpha Living World (shipped 2026-07-28)</summary>
+
+Made the world between fights alive — one shared gusting wind phase (grass/flags/canopies/smoke),
+distance fog + sky gradient + ~20min server-anchored day/night color drift as ONE pipeline,
+dynamic capped-arc sun/shadows, a layered procedural audio bed + region/combat music, lived-in
+footpaths/props/wear, sparse reactive wildlife, and reduce-motion camera micro-feel. All
+client-only. Phase 9.1 (dynamic sun) + Phase 10 (audio) human verification deferred at close;
+9.1's day/night is superseded by this milestone's Sky Pro. Full detail:
+[`milestones/v0.3.0-alpha-ROADMAP.md`](./milestones/v0.3.0-alpha-ROADMAP.md).
+
+</details>
 
 ## Current State
 
