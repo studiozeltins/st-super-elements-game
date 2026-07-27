@@ -16,11 +16,11 @@ export interface IslandDefinition {
 // height/hilliness fields are omitted. Order MUST match the client: the index of
 // an island (and therefore of its camp) is part of every enemy's stable id.
 export const ISLANDS: IslandDefinition[] = [
-  { centerX: 0, centerZ: 0, radius: 46 },
-  { centerX: 95, centerZ: 20, radius: 26 },
-  { centerX: -80, centerZ: -60, radius: 24 },
-  { centerX: -20, centerZ: 100, radius: 22 },
-  { centerX: 60, centerZ: -85, radius: 24 },
+  { centerX: 0, centerZ: 0, radius: 54 },
+  { centerX: 95, centerZ: 20, radius: 32 },
+  { centerX: -80, centerZ: -60, radius: 30 },
+  { centerX: -20, centerZ: 100, radius: 28 },
+  { centerX: 60, centerZ: -85, radius: 30 },
 ];
 
 // Solid-ground test by island footprint, mirroring isOnLand() in terrain.ts.
