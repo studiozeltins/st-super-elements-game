@@ -1,20 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.3.0-alpha
-milestone_name: Living World
-current_phase: 13
-status: milestone_complete
-stopped_at: v0.3.0-alpha closed (override) — pivoting to v0.4.0 WebGPU Sky & Water
-last_updated: "2026-07-28T00:00:00.000Z"
+milestone: v0.4.0-alpha
+milestone_name: WebGPU Sky & Water
+status: planning
+last_updated: "2026-07-27T22:58:28.917Z"
 last_activity: 2026-07-28
-last_activity_desc: v0.3.0-alpha milestone closed (override closeout)
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 42
-  completed_plans: 42
-  percent: 100
-current_phase_name: camera-feel
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -30,12 +26,10 @@ floor). This milestone makes the world BETWEEN fights worth living in.
 
 ## Current Position
 
-Phase: 13
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-07-21 — Phase 13 complete
-
-Progress: [██████████] 100%
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-07-28 — Milestone v0.4.0-alpha started
 
 ## Roadmap Summary
 

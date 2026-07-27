@@ -16,7 +16,8 @@ that power worth stealing, and a co-op raid faucet lets any ganked player recove
 **Three.js Water Pro v3.2.1** (FFT ocean, layered foam, reflections, player wake, caustics)
 and **Three.js Sky Pro v2.0.0** (physical dynamic sky + day/night). Both are WebGPU-only, so
 this milestone migrates the whole render pipeline from `WebGLRenderer` to `WebGPURenderer` and
-ports the custom shaders (incl. the pixel-filter + outline pass) to TSL node materials.
+ports the custom shaders (incl. the pixel-filter + outline pass) to TSL node materials. The sea
+also becomes **reactive** — projectile hits/fly-overs disturb it and the water emits light.
 
 **The hard part is the engine migration, not the water.** The pixel-art top-down look (the
 low-res render-target + nearest upscale + depth-outline pass in `createPixelRenderer`) MUST
@@ -30,6 +31,9 @@ materials. Purchased assets are unzipped under `./pro/`.
 3. Shader ports, one subsystem at a time (build + screenshot after each).
 4. Integrate Water Pro (masked to island gaps; wire its wake API to the player, drop the
    custom sea) + Sky Pro (drive the existing day/night cycle).
+5. Projectile-aware + emissive water: projectiles hitting the surface and flying low over it
+   drive wake/splash disturbances (per-projectile wake generators); water emits light
+   (emissive tint + caustic/light contribution) so the sea reads as lit, not flat.
 
 **Constraints / risks:** perf-obsessed project (past 144→20 and 24fps regressions) — Water Pro
 adds reflection/refraction/compute passes; profile FPS every step and pick a `quality-level`
@@ -252,4 +256,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-18 — after Phase 11 (Lived-in Props & Wear) complete; next: Phase 12 Wildlife*
+*Last updated: 2026-07-28 — v0.3.0-alpha shipped; started v0.4.0-alpha WebGPU Sky & Water (reset phase numbering to 1)*
