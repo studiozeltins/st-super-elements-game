@@ -18,8 +18,9 @@ import type { Node } from 'three/webgpu';
 import { pass } from 'three/tsl';
 import { WaterSystem, getPresetParams } from '../vendor/threejs-water-pro';
 import { SkySystem, PRESETS } from '../vendor/threejs-sky-pro';
-import { getTerrainHeight, terrainColorAt, SEA_LEVEL, ISLANDS } from '../game/world/terrain';
+import { ISLANDS } from '../game/world/terrain';
 import { pixelFilterNode } from '../game/engine/tsl/pixelFilterNode';
+import { buildBeachSlice } from './beachSlice';
 
 // The game's top-down camera: 45deg FOV, offset+tilt from createGame.ts
 // (CAMERA_OFFSET = (7,15,11), lookAt target). far extended 500 -> 20000 so the
@@ -28,43 +29,10 @@ const CAMERA_OFFSET = new THREE.Vector3(7, 15, 11);
 const CAMERA_FRAMING = 4; // pull back along the same tilt to frame the slice
 const CAMERA_FAR = 20000;
 
-// Beach slice: the ONLY beach arc is the city island (ISLANDS[0]), facing -x.
+// Beach slice framing: the ONLY beach arc is the city island (ISLANDS[0]), -x.
 const CITY = ISLANDS[0];
 const BEACH_X = CITY.centerX + Math.cos(CITY.beachDir) * CITY.radius; // ~ -54
 const BEACH_Z = CITY.centerZ + Math.sin(CITY.beachDir) * CITY.radius; // ~ 0
-const SLICE_SIZE = 90;
-const SLICE_SEG = 96;
-
-/**
- * Build the representative beach mesh: a PlaneGeometry whose per-vertex Y is the
- * real terrain height, shifted so SEA_LEVEL maps to y=0 (where Water Pro renders
- * its ocean plane). Vertex colours come from the game's terrainColorAt so the
- * sand/cliff palette reads. Plain MeshStandardMaterial is enough to give the
- * pixel filter real depth discontinuities (D-03); the custom terrain shader is
- * a Phase 3 concern.
- */
-function buildBeachSlice(): THREE.Mesh {
-  const geometry = new THREE.PlaneGeometry(SLICE_SIZE, SLICE_SIZE, SLICE_SEG, SLICE_SEG);
-  geometry.rotateX(-Math.PI / 2);
-  const positions = geometry.getAttribute('position') as THREE.BufferAttribute;
-  const colors = new Float32Array(positions.count * 3);
-  for (let i = 0; i < positions.count; i++) {
-    const worldX = positions.getX(i) + BEACH_X;
-    const worldZ = positions.getZ(i) + BEACH_Z;
-    const height = getTerrainHeight(worldX, worldZ);
-    positions.setY(i, height - SEA_LEVEL); // waterline -> 0
-    const color = terrainColorAt(worldX, worldZ, height);
-    colors[i * 3] = color.r;
-    colors[i * 3 + 1] = color.g;
-    colors[i * 3 + 2] = color.b;
-  }
-  geometry.computeVertexNormals();
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(BEACH_X, 0, BEACH_Z);
-  return mesh;
-}
 
 async function main(): Promise<void> {
   // --- renderer (auto WebGL2 fallback; read backend ONLY after init) ---
