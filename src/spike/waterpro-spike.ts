@@ -26,6 +26,12 @@ import { buildBeachSlice } from "./beachSlice";
 import { createPerfHud, forceWebGLRequested } from "./perfHud";
 import { isDeriskEnabled, installDerisk } from "./derisk";
 import {
+  applySeaStyle,
+  applySwell,
+  seaStyleFromQuery,
+  swellFromQuery,
+} from "./tuneWater";
+import {
   mountSpikeControls,
   stageFromQuery,
   outlineEnabledFromQuery,
@@ -121,6 +127,11 @@ async function main(): Promise<void> {
   // --- Water Pro (FFT ocean on WebGPU, RTT on WebGL2) ---
   const water = await WaterSystem.create(renderer, scene, camera, "medium");
   water.loadPreset(getPresetParams("blackFlag"));
+  // On-device tuning knobs (applied over the preset): `?sea=` transparency/style
+  // (default transparent is too see-through — stylised/flat read as painterly),
+  // `?swell=` wave height (calmer, smaller waves).
+  applySeaStyle(water, seaStyleFromQuery());
+  applySwell(water, swellFromQuery());
 
   // --- Sky Pro (atmosphere/clouds/sun; drives water lighting) ---
   // STCK-02 FLAG (build-output smoke, plan 03 Task 3): Sky Pro loads its

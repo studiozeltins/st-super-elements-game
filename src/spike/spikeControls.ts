@@ -95,6 +95,16 @@ export function mountSpikeControls(): void {
     : /waves=calm/.test(S())
       ? "calm"
       : "normal";
+  const sea = /sea=flat/.test(S())
+    ? "flat"
+    : /sea=stylised/.test(S())
+      ? "stylised"
+      : "real";
+  const swell = /swell=flat/.test(S())
+    ? "flat"
+    : /swell=calm/.test(S())
+      ? "calm"
+      : "normal";
 
   const toggles: Toggle[] = [
     {
@@ -147,13 +157,53 @@ export function mountSpikeControls(): void {
       ],
     },
     {
-      label: "waves",
-      tip: "How fast the water animates.",
+      label: "sea",
+      tip: "How stylised vs see-through the water is. Default physical water shows the seabed (too transparent).",
+      current: sea,
+      options: [
+        [
+          "real",
+          { sea: null },
+          "Physical Water Pro (default) — transparent, seabed visible in the shallows.",
+        ],
+        [
+          "stylised",
+          { sea: "stylised" },
+          "Opaque within a metre or two + saturated teal. LOOK: painterly sea, seabed mostly hidden — the pixel-art reading.",
+        ],
+        [
+          "flat",
+          { sea: "flat" },
+          "Near-fully opaque flat sheet + damped sparkle. LOOK: most stylised/flat, almost no see-through.",
+        ],
+      ],
+    },
+    {
+      label: "swell",
+      tip: "Wave HEIGHT (size). Separate from speed.",
+      current: swell,
+      options: [
+        ["normal", { swell: null }, "Preset wave height (default)."],
+        [
+          "calm",
+          { swell: "calm" },
+          "~half height, gentler steepness. LOOK: smaller, calmer waves.",
+        ],
+        [
+          "flat",
+          { swell: "flat" },
+          "Very small waves — nearly flat sea. Easiest to judge the surface colour.",
+        ],
+      ],
+    },
+    {
+      label: "speed",
+      tip: "How fast the water animates (motion speed, not height).",
       current: waves,
       options: [
-        ["normal", { waves: null }, "Default Water Pro wave speed."],
-        ["calm", { waves: "calm" }, "~40% speed — slower, gentler swell."],
-        ["slow", { waves: "slow" }, "~20% speed — very slow, easiest to inspect the surface."],
+        ["normal", { waves: null }, "Default Water Pro animation speed."],
+        ["calm", { waves: "calm" }, "~40% speed — slower motion."],
+        ["slow", { waves: "slow" }, "~20% speed — very slow, easiest to inspect."],
       ],
     },
     {
