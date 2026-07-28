@@ -379,22 +379,27 @@ water.spray?.addEmitter(projectileProxy, { probes: [{ local: new THREE.Vector3(0
 
 **Note:** A4 and A6 are unknowns *by design* — the spike is the instrument that resolves them. They are logged here so the planner treats the FPS numbers and the perceptual verdict as *deliverables to produce*, not facts to assume.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three are resolved-by-design: the spike's job is to answer them on-device, and each recommendation is already wired into executable plan content.
 
 1. **Which resolution shape (A vs B) wins?**
    - What we know: both are buildable; A is cheaper + closer to current look, B is higher water/sky fidelity.
    - What's unclear: which one the user perceives as "same identity" AND holds FPS.
    - Recommendation: build both behind a query-param toggle (`?shape=whole|final`) so the sign-off compares them directly.
+   - **RESOLVED:** incorporated in plan 02 (T2, both shapes behind `?shape=`) — winner picked at the go/no-go (plan 04).
 
 2. **Does Water Pro's ACES tone mapping clash with the flat pixel-art palette?**
    - What we know: Water examples set `ACESFilmicToneMapping`; the game's look is flat/stylized.
    - What's unclear: whether ACES must be disabled/neutralized to match `master`.
    - Recommendation: expose a tone-mapping toggle in the spike; capture both in the artifact.
+   - **RESOLVED:** incorporated in plan 02 (T2, `?tone=` toggle captured in the artifact).
 
 3. **How much of the 17-shader port surface does the spike reveal (SPIKE-04 estimate)?**
    - What we know: `grep -rlE "ShaderMaterial|onBeforeCompile" src/game` = 17 files (per handoff); spike ports NONE.
    - What's unclear: realistic per-subsystem effort — needed for the Phase-3 estimate the sign-off wants.
    - Recommendation: while building the beach slice, note which game shader chunks (terrain sand/swash, rock mottle, grass) would need node equivalents; produce a rough T-shirt-size estimate table as a spike artifact.
+   - **RESOLVED:** incorporated in plan 03 (T2, T-shirt-size port-surface estimate table).
 
 ## Environment Availability
 

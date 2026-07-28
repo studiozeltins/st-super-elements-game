@@ -21,6 +21,9 @@ dependency-forced (spike → renderer → shaders → water → sky → reactive
   (zero new runtime deps — `three@0.185.1` already ships both).
 - [ ] **STCK-02**: Sky Pro's `data/` (cloud noise) is copied into `dist/` by an inline Vite plugin
   so the built game loads it at the hashed asset path (dev + `dist` both work).
+  - *Phase 1 obligation:* a build-output smoke check that `data/` resolves in a built `dist/` (ROADMAP SC5).
+    The inline-Vite-plugin hardening lands in Phase 5 (alongside SKY-05) if the smoke check shows it is needed —
+    recorded here so the deferral is explicit, not implicit.
 - [ ] **STCK-03**: A git policy for `src/vendor/**` (licensed bundles) is decided and applied so
   the `.31` git-pull→build deploy succeeds.
 

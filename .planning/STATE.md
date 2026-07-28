@@ -4,15 +4,15 @@ milestone: v0.4.0-alpha
 milestone_name: WebGPU Sky & Water
 current_phase: 1
 current_phase_name: Feasibility Spike
-status: planning
+status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-07-28T12:12:39.559Z"
+last_updated: "2026-07-28T12:56:53.049Z"
 last_activity: 2026-07-28
 last_activity_desc: Roadmap created for v0.4.0-alpha (6 phases, numbering reset to 1)
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
+  total_plans: 4
   completed_plans: 0
   percent: 0
 ---
@@ -33,7 +33,7 @@ reactive **without losing the sacred pixel-art identity**.
 
 Phase: 1 of 6 (Feasibility Spike)
 Plan: — (not yet planned)
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-07-28 — Roadmap created for v0.4.0-alpha (6 phases, numbering reset to 1)
 
 Progress: [░░░░░░░░░░] 0%
