@@ -35,7 +35,7 @@ dependency-forced (spike → renderer → shaders → water → sky → reactive
 - [x] **SPIKE-01**: An isolated `waterpro-spike.html` renders `WebGPURenderer` + `WaterSystem` +
   Sky Pro over a `getTerrainHeight`-sampled beach at the game's tilted top-down camera.
 
-- [ ] **SPIKE-02**: The pixel-filter look (low-res nearest upscale + depth-discontinuity outline)
+- [x] **SPIKE-02**: The pixel-filter look (low-res nearest upscale + depth-discontinuity outline)
   is reproduced in TSL and screenshot-diffed against the `master` WebGL look, in **both** candidate
   resolution shapes (pixelate-whole-chain vs final-pixelate). A recorded go/no-go sign-off gates
   Phase 2; if unreproducible → **STOP**, keep the WebGL renderer (sanctioned escape hatch).
@@ -179,7 +179,7 @@ this milestone (`--reset-phase-numbers`).
 | STCK-02 | Phase 1 | Pending |
 | STCK-03 | Phase 1 | Complete |
 | SPIKE-01 | Phase 1 | Complete |
-| SPIKE-02 | Phase 1 | Pending |
+| SPIKE-02 | Phase 1 | Complete |
 | SPIKE-03 | Phase 1 | Pending |
 | SPIKE-04 | Phase 1 | Pending |
 | RNDR-01 | Phase 2 | Pending |

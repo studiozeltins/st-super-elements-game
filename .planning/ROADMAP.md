@@ -56,11 +56,11 @@ code). Numbering reset to Phase 1 for this milestone (`--reset-phase-numbers`).
 **Plans**: 4 plans
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Vendor Pro bundles into a private submodule + Vite entry + leading end-to-end tracer (STCK-01, STCK-03, SPIKE-01)
+- [x] 01-01-PLAN.md — Vendor Pro bundles into a private submodule + Vite entry + leading end-to-end tracer (STCK-01, STCK-03, SPIKE-01)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Representative beach slice + TSL pixel filter both shapes + sun-facing outline (SPIKE-01, SPIKE-02)
+- [x] 01-02-PLAN.md — Representative beach slice + TSL pixel filter both shapes + sun-facing outline (SPIKE-01, SPIKE-02)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
