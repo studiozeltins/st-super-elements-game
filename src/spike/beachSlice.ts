@@ -16,8 +16,13 @@
  * at y = 0, where Water Pro renders its ocean plane — i.e. the Water Pro sea
  * plane reference sits at SEA_LEVEL in the terrain's native frame.
  */
-import * as THREE from 'three/webgpu';
-import { getTerrainHeight, terrainColorAt, SEA_LEVEL, ISLANDS } from '../game/world/terrain';
+import * as THREE from "three/webgpu";
+import {
+  getTerrainHeight,
+  terrainColorAt,
+  SEA_LEVEL,
+  ISLANDS,
+} from "../game/world/terrain";
 
 // The ONLY beach arc is the city island (ISLANDS[0]); its beach opens -x.
 const CITY = ISLANDS[0];
@@ -77,9 +82,14 @@ function surfaceY(worldX: number, worldZ: number): number {
  * waterline is y=0), vertex colours from terrainColorAt (sand/cliff/grass palette).
  */
 function buildTerrainMesh(): THREE.Mesh {
-  const geometry = new THREE.PlaneGeometry(SLICE_SIZE, SLICE_SIZE, SLICE_SEG, SLICE_SEG);
+  const geometry = new THREE.PlaneGeometry(
+    SLICE_SIZE,
+    SLICE_SIZE,
+    SLICE_SEG,
+    SLICE_SEG,
+  );
   geometry.rotateX(-Math.PI / 2);
-  const positions = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const positions = geometry.getAttribute("position") as THREE.BufferAttribute;
   const colors = new Float32Array(positions.count * 3);
   for (let i = 0; i < positions.count; i++) {
     const worldX = positions.getX(i) + BEACH_X;
@@ -92,8 +102,11 @@ function buildTerrainMesh(): THREE.Mesh {
     colors[i * 3 + 2] = color.b;
   }
   geometry.computeVertexNormals();
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true });
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  const material = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    flatShading: true,
+  });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(BEACH_X, 0, BEACH_Z);
   return mesh;
@@ -102,20 +115,28 @@ function buildTerrainMesh(): THREE.Mesh {
 /** One faceted low-poly rock (position-hashed displacement → watertight facets). */
 function buildRock(random: () => number, radius: number): THREE.Mesh {
   const geometry = new THREE.IcosahedronGeometry(radius, 0); // 20 flat facets
-  const seed = new THREE.Vector3(random() * 100, random() * 100, random() * 100);
-  const pos = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const seed = new THREE.Vector3(
+    random() * 100,
+    random() * 100,
+    random() * 100,
+  );
+  const pos = geometry.getAttribute("position") as THREE.BufferAttribute;
   const v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i).normalize();
     const hx = Math.round((v.x + seed.x) * 3);
     const hy = Math.round((v.y + seed.y) * 3);
     const hz = Math.round((v.z + seed.z) * 3);
-    const h = (Math.sin(hx * 12.9898 + hy * 78.233 + hz * 37.719) * 43758.5453) % 1;
+    const h =
+      (Math.sin(hx * 12.9898 + hy * 78.233 + hz * 37.719) * 43758.5453) % 1;
     const r = 1 + (h - 0.5) * 0.6;
     pos.setXYZ(i, v.x * r * radius, v.y * r * radius, v.z * r * radius);
   }
   geometry.computeVertexNormals();
-  const material = new THREE.MeshStandardMaterial({ color: 0x5a6678, flatShading: true });
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x5a6678,
+    flatShading: true,
+  });
   return new THREE.Mesh(geometry, material);
 }
 
@@ -151,7 +172,10 @@ function buildGrassPatch(): THREE.InstancedMesh {
   const BLADES = 48;
   const geometry = new THREE.ConeGeometry(0.12, 1.1, 4);
   geometry.translate(0, 0.55, 0); // pivot at the base
-  const material = new THREE.MeshStandardMaterial({ color: 0x4f9147, flatShading: true });
+  const material = new THREE.MeshStandardMaterial({
+    color: 0x4f9147,
+    flatShading: true,
+  });
   const mesh = new THREE.InstancedMesh(geometry, material, BLADES);
   const random = mulberry32(0x9ea51);
   const patchX = BEACH_X + 26; // inland on the grass, clear of the shore

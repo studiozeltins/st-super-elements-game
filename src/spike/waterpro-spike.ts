@@ -13,14 +13,41 @@
  * adapting only the camera (game 45deg tilt, extended far) and appending the
  * pixel node LAST.
  */
-import * as THREE from 'three/webgpu';
-import type { Node } from 'three/webgpu';
-import { pass } from 'three/tsl';
-import { WaterSystem, getPresetParams } from '../vendor/threejs-water-pro';
-import { SkySystem, PRESETS } from '../vendor/threejs-sky-pro';
-import { ISLANDS } from '../game/world/terrain';
-import { pixelFilterNode } from '../game/engine/tsl/pixelFilterNode';
-import { buildBeachSlice } from './beachSlice';
+import * as THREE from "three/webgpu";
+import type { Node } from "three/webgpu";
+import { pass } from "three/tsl";
+import { WaterSystem, getPresetParams } from "../vendor/threejs-water-pro";
+import { SkySystem, PRESETS } from "../vendor/threejs-sky-pro";
+import { ISLANDS } from "../game/world/terrain";
+import { pixelFilterNode } from "../game/engine/tsl/pixelFilterNode";
+import { setOutlineSunDir } from "../game/engine/tsl/outlineNode";
+import { buildBeachSlice } from "./beachSlice";
+
+/**
+ * `?tone=neutral|none` swaps ACES filmic tone mapping for neutral, so the
+ * side-by-side can judge whether ACES clashes with the flat pixel-art palette
+ * (RESEARCH open question 2 / Pitfall 5). Default keeps ACES (Water Pro default).
+ */
+function toneMappingFromQuery(): THREE.ToneMapping {
+  const neutral = /tone=(neutral|none|off)/.test(window.location.search);
+  return neutral ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
+}
+
+/**
+ * Project the sun's world position to screen space and return the normalized
+ * screen-space direction toward it — feeds the one-sided rim (like the game's
+ * setEdgeSunDir). The rim lands only on the sun-facing side of each silhouette.
+ */
+function sunScreenDir(
+  sunWorld: THREE.Vector3,
+  camera: THREE.PerspectiveCamera,
+  out: THREE.Vector2,
+): THREE.Vector2 {
+  const ndc = sunWorld.clone().project(camera); // -> NDC (x,y in [-1,1])
+  out.set(ndc.x, ndc.y);
+  if (out.lengthSq() < 1e-8) out.set(0, 1);
+  return out.normalize();
+}
 
 // The game's top-down camera: 45deg FOV, offset+tilt from createGame.ts
 // (CAMERA_OFFSET = (7,15,11), lookAt target). far extended 500 -> 20000 so the
@@ -39,7 +66,7 @@ async function main(): Promise<void> {
   const renderer = new THREE.WebGPURenderer();
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMapping = toneMappingFromQuery();
   document.body.appendChild(renderer.domElement);
   await renderer.init();
 
@@ -49,7 +76,7 @@ async function main(): Promise<void> {
     45,
     window.innerWidth / window.innerHeight,
     0.1,
-    CAMERA_FAR
+    CAMERA_FAR,
   );
   const target = new THREE.Vector3(BEACH_X, 0, BEACH_Z);
   camera.position.copy(target).addScaledVector(CAMERA_OFFSET, CAMERA_FRAMING);
@@ -64,11 +91,16 @@ async function main(): Promise<void> {
   scene.add(buildBeachSlice());
 
   // --- Water Pro (FFT ocean on WebGPU, RTT on WebGL2) ---
-  const water = await WaterSystem.create(renderer, scene, camera, 'medium');
-  water.loadPreset(getPresetParams('blackFlag'));
+  const water = await WaterSystem.create(renderer, scene, camera, "medium");
+  water.loadPreset(getPresetParams("blackFlag"));
 
   // --- Sky Pro (atmosphere/clouds/sun; drives water lighting) ---
-  const sky = await SkySystem.create({ renderer, camera, scene, quality: 'medium' });
+  const sky = await SkySystem.create({
+    renderer,
+    camera,
+    scene,
+    quality: "medium",
+  });
   await sky.applyPreset(PRESETS.partlyCloudy);
   // ONE-CALL sky->water coupling; build the provider exactly once.
   water.setSky(sky.createSkyProvider({ envMap: true }));
@@ -76,10 +108,12 @@ async function main(): Promise<void> {
   // --- post chain: water fx -> sky composite -> pixel node LAST ---
   const postProcessing = new THREE.PostProcessing(renderer);
   const scenePass = pass(water.scene, water.camera);
-  let out: Node = scenePass.getTextureNode('output');
+  let out: Node = scenePass.getTextureNode("output");
   out = water.postProcessing.buildNode(scenePass, out); // fog / underwater / sun shafts
   out = sky.applyTo(out, scenePass); // clouds / god rays (reads depth)
-  out = pixelFilterNode(out); // <<< pixel-art identity, LAST (plan 02 adds the sun-rim + scenePass depth)
+  // <<< pixel-art identity, LAST: both shapes (?shape=whole|final) + sun-facing
+  // rim reading this scene pass's depth. near/far feed the linear-depth rebuild.
+  out = pixelFilterNode(out, scenePass, { near: camera.near, far: camera.far });
   postProcessing.outputNode = out;
 
   await renderer.compileAsync(scene, camera);
@@ -88,12 +122,13 @@ async function main(): Promise<void> {
   // isWebGPUBackend is set at runtime after init (three issue #30024) but is not
   // on the Backend .d.ts surface — cast to read it.
   const usingWebGPU =
-    (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
-  console.log('[spike] renderer backend:', usingWebGPU ? 'WebGPU' : 'WebGL2');
-  console.log('[spike] water backend  :', water.backend);
-  console.log('[spike] spray available:', water.spray !== null);
+    (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend ===
+    true;
+  console.log("[spike] renderer backend:", usingWebGPU ? "WebGPU" : "WebGL2");
+  console.log("[spike] water backend  :", water.backend);
+  console.log("[spike] spray available:", water.spray !== null);
 
-  window.addEventListener('resize', () => {
+  window.addEventListener("resize", () => {
     const w = window.innerWidth;
     const h = window.innerHeight;
     renderer.setSize(w, h);
@@ -104,6 +139,7 @@ async function main(): Promise<void> {
   });
 
   // --- async frame loop: sky FIRST, await water, then postProcessing.render ---
+  const sunScreen = new THREE.Vector2(0, 1);
   let last = performance.now();
   async function animate(): Promise<void> {
     requestAnimationFrame(animate);
@@ -112,16 +148,19 @@ async function main(): Promise<void> {
     last = now;
     sky.update(dt);
     await water.update(dt);
+    // Feed the sun's screen direction so the rim stays on its sun-facing side.
+    sunScreenDir(sun.position, camera, sunScreen);
+    setOutlineSunDir(sunScreen.x, sunScreen.y);
     await postProcessing.render(); // NEVER renderer.render() — that skips the node graph
   }
   animate();
 }
 
 main().catch((err) => {
-  console.error('[spike] boot failed:', err);
+  console.error("[spike] boot failed:", err);
   document.body.innerHTML =
     '<pre style="color:#f66;font:14px monospace;padding:16px">' +
-    'waterpro-spike boot failed:\n' +
+    "waterpro-spike boot failed:\n" +
     String(err && (err as Error).stack ? (err as Error).stack : err) +
-    '</pre>';
+    "</pre>";
 });
