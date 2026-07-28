@@ -5,15 +5,15 @@ milestone_name: WebGPU Sky & Water
 current_phase: 01
 current_phase_name: feasibility-spike
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-07-28T14:27:06.305Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-07-28T14:40:40.716Z"
 last_activity: 2026-07-28
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -32,11 +32,11 @@ reactive **without losing the sacred pixel-art identity**.
 ## Current Position
 
 Phase: 01 (feasibility-spike) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-07-28 — Phase 01 execution started
 
-Progress: [█████░░░░░] 50%
+Progress: [████████░░] 75%
 
 ## Roadmap Summary
 
@@ -75,6 +75,7 @@ land one subsystem per commit; old sea/sky deleted in the same commit that repla
 |------|----------|-------|-------|
 | Phase 01 P01 | 9 | 2 tasks | 6 files |
 | Phase 01 P02 | 22 | 2 tasks | 5 files |
+| Phase 01 P03 | 11 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -104,6 +105,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - [Phase ?]: Vendored the EXISTING prebuilt build/ output (Jul 21) instead of re-running npm build:lib; copied the FULL build/ tree (not just index.js/d.ts) so tsc -b resolves the bundle's 152 sibling .d.ts re-exports.
 - [Phase ?]: Spike TSL pixel filter: both shapes as post nodes (whole=pixelate-then-chunky-rim, final=rim-then-pixelate-last); true low-res scene pass deferred to Phase 2 if perceptual sign-off favors 'whole'
 - [Phase ?]: Spike props use plain MeshStandardMaterial, not the game's onBeforeCompile GLSL rock/terrain shaders (those cannot compile on WebGPURenderer)
+- [Phase ?]: [Phase 1]: FPS numbers captured on-device (headed Chrome, plan 04), NOT headless — SwiftShader can't run WebGPU compute; plan 03 delivers the HUD + ?forceWebGL=1 capture mechanism only
+- [Phase ?]: [Phase 1]: STCK-02 is a FLAG — built dist/ omits Sky data/*.bin (dynamic new URL Vite can't track); inline Vite copy plugin deferred to Phase 5
 
 ### Pending Todos
 
@@ -154,8 +157,8 @@ Items acknowledged and carried forward from previous milestone closes:
 
 ## Session Continuity
 
-Last session: 2026-07-28T14:26:57.211Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-07-28T14:40:28.269Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None
 
 Next: `/gsd-plan-phase 1` (Feasibility Spike) — the highest-uncertainty phase; flagged for

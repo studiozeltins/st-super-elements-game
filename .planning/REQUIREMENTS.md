@@ -20,7 +20,7 @@ dependency-forced (spike → renderer → shaders → water → sky → reactive
   `build/` copied, not aliased to their `src/`), importable via `three/webgpu` + `three/tsl`
   (zero new runtime deps — `three@0.185.1` already ships both).
 
-- [ ] **STCK-02**: Sky Pro's `data/` (cloud noise) is copied into `dist/` by an inline Vite plugin
+- [x] **STCK-02**: Sky Pro's `data/` (cloud noise) is copied into `dist/` by an inline Vite plugin
   so the built game loads it at the hashed asset path (dev + `dist` both work).
 
   - *Phase 1 obligation:* a build-output smoke check that `data/` resolves in a built `dist/` (ROADMAP SC5).
@@ -40,11 +40,11 @@ dependency-forced (spike → renderer → shaders → water → sky → reactive
   resolution shapes (pixelate-whole-chain vs final-pixelate). A recorded go/no-go sign-off gates
   Phase 2; if unreproducible → **STOP**, keep the WebGL renderer (sanctioned escape hatch).
 
-- [ ] **SPIKE-03**: WebGPU compute is confirmed running on the target machine, and the WebGL2
+- [x] **SPIKE-03**: WebGPU compute is confirmed running on the target machine, and the WebGL2
   auto-fallback path is measured (FPS at the candidate quality tier) — headed Chrome / user
   capture, since headless can't run WebGPU compute.
 
-- [ ] **SPIKE-04**: Both no-native-API asks are de-risked with a proven technique before Phase 6 is
+- [x] **SPIKE-04**: Both no-native-API asks are de-risked with a proven technique before Phase 6 is
   planned: the lit/emissive-water approach (sparkle/SSS/waterColor/bloom + additive overlay) and
   the projectile approach (pooled wake for skim, spray for impact).
 
@@ -176,12 +176,12 @@ this milestone (`--reset-phase-numbers`).
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | STCK-01 | Phase 1 | Complete |
-| STCK-02 | Phase 1 | Pending |
+| STCK-02 | Phase 1 | Complete |
 | STCK-03 | Phase 1 | Complete |
 | SPIKE-01 | Phase 1 | Complete |
 | SPIKE-02 | Phase 1 | Complete |
-| SPIKE-03 | Phase 1 | Pending |
-| SPIKE-04 | Phase 1 | Pending |
+| SPIKE-03 | Phase 1 | Complete |
+| SPIKE-04 | Phase 1 | Complete |
 | RNDR-01 | Phase 2 | Pending |
 | RNDR-02 | Phase 2 | Pending |
 | RNDR-03 | Phase 2 | Pending |

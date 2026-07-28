@@ -64,7 +64,7 @@ code). Numbering reset to Phase 1 for this milestone (`--reset-phase-numbers`).
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — Both-backend FPS capture + lit-water/wake/spray de-risk + Sky data/ dist check + 17-shader estimate (SPIKE-03, SPIKE-04, STCK-02)
+- [x] 01-03-PLAN.md — Both-backend FPS capture + lit-water/wake/spray de-risk + Sky data/ dist check + 17-shader estimate (SPIKE-03, SPIKE-04, STCK-02)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
