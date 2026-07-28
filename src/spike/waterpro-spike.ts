@@ -16,6 +16,7 @@
 import * as THREE from "three/webgpu";
 import type { Node } from "three/webgpu";
 import { pass } from "three/tsl";
+import { bloom } from "three/addons/tsl/display/BloomNode.js";
 import { WaterSystem, getPresetParams } from "../vendor/threejs-water-pro";
 import { SkySystem, PRESETS } from "../vendor/threejs-sky-pro";
 import { ISLANDS } from "../game/world/terrain";
@@ -23,6 +24,7 @@ import { pixelFilterNode } from "../game/engine/tsl/pixelFilterNode";
 import { setOutlineSunDir } from "../game/engine/tsl/outlineNode";
 import { buildBeachSlice } from "./beachSlice";
 import { createPerfHud, forceWebGLRequested } from "./perfHud";
+import { isDeriskEnabled, installDerisk } from "./derisk";
 
 /**
  * `?tone=neutral|none` swaps ACES filmic tone mapping for neutral, so the
@@ -111,12 +113,40 @@ async function main(): Promise<void> {
   // ONE-CALL sky->water coupling; build the provider exactly once.
   water.setSky(sky.createSkyProvider({ envMap: true }));
 
-  // --- post chain: water fx -> sky composite -> pixel node LAST ---
+  // --- SPIKE-04 de-risk (behind ?derisk=1): lit-water params + additive glow
+  //     overlay + pooled wake + optional-chained spray. Installed BEFORE
+  //     compileAsync so its meshes/generators are compiled with the scene. ---
+  const derisk = isDeriskEnabled();
+  const deriskHandle = derisk
+    ? installDerisk({
+        scene,
+        water,
+        seaLevelY: 0, // beachSlice shifts the terrain so the waterline is y=0
+        centerX: BEACH_X,
+        centerZ: BEACH_Z,
+      })
+    : null;
+
+  // --- post chain: water fx -> sky composite -> (bloom) -> pixel node LAST ---
   const postProcessing = new THREE.PostProcessing(renderer);
   const scenePass = pass(water.scene, water.camera);
   let out: Node = scenePass.getTextureNode("output");
   out = water.postProcessing.buildNode(scenePass, out); // fog / underwater / sun shafts
   out = sky.applyTo(out, scenePass); // clouds / god rays (reads depth)
+  // Lit-water bloom lifts the sparkle/SSS highlights — only in the de-risk run
+  // so it never alters the plain perceptual/perf side-by-side (SPIKE-04). TSL's
+  // typed-node overloads reject the base `Node` here (bloom wants Node<"vec4">
+  // and `.add` is a fluent-node method) — cast the operands to the loose fluent
+  // form (same pattern as the 01-02 salvage nodes). Runtime graph is unchanged.
+  if (derisk) {
+    const bloomNode = bloom(
+      out as unknown as Parameters<typeof bloom>[0],
+      0.5,
+      0.4,
+      0.85,
+    );
+    out = (out as unknown as { add(n: Node): Node }).add(bloomNode);
+  }
   // <<< pixel-art identity, LAST: both shapes (?shape=whole|final) + sun-facing
   // rim reading this scene pass's depth. near/far feed the linear-depth rebuild.
   out = pixelFilterNode(out, scenePass, { near: camera.near, far: camera.far });
@@ -156,12 +186,17 @@ async function main(): Promise<void> {
   // --- async frame loop: sky FIRST, await water, then postProcessing.render ---
   const sunScreen = new THREE.Vector2(0, 1);
   let last = performance.now();
+  let elapsed = 0;
   async function animate(): Promise<void> {
     requestAnimationFrame(animate);
     const now = performance.now();
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
+    elapsed += dt;
     sky.update(dt);
+    // Drive the de-risk props (horizontal wake skim + vertical spray bob + glow
+    // pulse) BEFORE water.update so this frame's wake injection sees the motion.
+    deriskHandle?.update(elapsed);
     await water.update(dt);
     // Feed the sun's screen direction so the rim stays on its sun-facing side.
     sunScreenDir(sun.position, camera, sunScreen);
