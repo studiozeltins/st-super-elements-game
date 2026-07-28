@@ -1,0 +1,3 @@
+[submodule "src/vendor"]
+	path = src/vendor
+	url = git@github.com:logingrupa/st-super-elements-vendor.git
