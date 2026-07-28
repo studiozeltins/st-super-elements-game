@@ -51,6 +51,17 @@ export function viewFromQuery(): SpikeView {
 }
 
 /**
+ * Underwater-slope factor (`?shelf=`). <1 raises + gentles the seabed into a
+ * wide shallow shelf so the water's shallow→deep colour ramp is visible.
+ * default 1 = real (often a steep shore = no visible depth).
+ */
+export function shelfFromQuery(): number {
+  if (/shelf=wide/.test(S())) return 0.18;
+  if (/shelf=gentle/.test(S())) return 0.35;
+  return 1;
+}
+
+/**
  * Water-motion speed multiplier applied to the dt fed into `water.update`
  * (`?waves=calm|slow|normal`). Lower = slower waves + gentler wake. Default 1.
  */
@@ -90,6 +101,11 @@ export function mountSpikeControls(): void {
   const outline = outlineEnabledFromQuery() ? "on" : "off";
   const px = String(pixelSizeFromQuery());
   const view = viewFromQuery();
+  const shelf = /shelf=wide/.test(S())
+    ? "wide"
+    : /shelf=gentle/.test(S())
+      ? "gentle"
+      : "real";
   const waves = /waves=slow/.test(S())
     ? "slow"
     : /waves=calm/.test(S())
@@ -153,6 +169,24 @@ export function mountSpikeControls(): void {
           "top",
           { view: "top" },
           "Steeper, more top-down angle (closer to the game's overhead camera).",
+        ],
+      ],
+    },
+    {
+      label: "shelf",
+      tip: "Underwater shore slope. Real island shores can be a cliff (deep water right at the edge = no visible depth). This gentles the seabed into a shallow shelf so the depth gradient shows.",
+      current: shelf,
+      options: [
+        ["real", { shelf: null }, "Real terrain slope (default) — may be steep."],
+        [
+          "gentle",
+          { shelf: "gentle" },
+          "Gentler seabed → a shallow shelf near shore. LOOK: a visible shallow(light)→deep(dark) band.",
+        ],
+        [
+          "wide",
+          { shelf: "wide" },
+          "Very wide, flat shallow shelf. LOOK: the biggest shallow→deep depth ramp.",
         ],
       ],
     },

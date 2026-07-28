@@ -46,10 +46,14 @@ export function applySeaStyle(water: WaterSystem, style: SeaStyle): void {
   if (!color) return;
   // stylised: opaque within a few metres, saturated teal. flat: near-fully
   // opaque flat sheet + damped sparkle for the most pixel-art reading.
+  // Moderate absorption + a DARK intrinsic waterColor gives a visible depth
+  // ramp: shallow water still shows the light seabed, deep water reads as the
+  // dark waterColor (deeper = darker). flat = stronger absorption (more opaque)
+  // but still a dark deep colour so the gradient survives.
   const cfg =
     style === "flat"
-      ? { water: "#0e5570", absorb: "#b4b4b4", sparkle: 0.15 }
-      : { water: "#12617f", absorb: "#6e6e6e", sparkle: 0.6 };
+      ? { water: "#0a3346", absorb: "#7a7a7a", sparkle: 0.2 }
+      : { water: "#0b3f57", absorb: "#3a3a3a", sparkle: 0.55 };
   try {
     color.waterColor = cfg.water;
   } catch {

@@ -38,6 +38,7 @@ import {
   pixelSizeFromQuery,
   viewFromQuery,
   waterSpeedFromQuery,
+  shelfFromQuery,
 } from "./spikeControls";
 
 /**
@@ -122,7 +123,8 @@ async function main(): Promise<void> {
   sun.position.set(-40, 60, 30);
   scene.add(sun);
 
-  scene.add(buildBeachSlice());
+  // `?shelf=` gentles the underwater slope so the water depth gradient shows.
+  scene.add(buildBeachSlice(shelfFromQuery()));
 
   // --- Water Pro (FFT ocean on WebGPU, RTT on WebGL2) ---
   const water = await WaterSystem.create(renderer, scene, camera, "medium");

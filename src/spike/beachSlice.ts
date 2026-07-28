@@ -72,16 +72,23 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-/** Rendered terrain height in the shifted (waterline=0) frame. */
-function surfaceY(worldX: number, worldZ: number): number {
-  return getTerrainHeight(worldX, worldZ) + WATERLINE_SHIFT;
+/**
+ * Rendered terrain height in the shifted (waterline=0) frame, with an optional
+ * `shelf` factor applied to UNDERWATER vertices only: multiplying negative
+ * (below-waterline) heights by <1 raises + gentles the seabed into a wide
+ * shallow shelf, so the water's depth gradient (shallow light → deep dark) has
+ * room to read. Dry land (y >= 0) is never touched. shelf = 1 = real terrain.
+ */
+function surfaceY(worldX: number, worldZ: number, shelf = 1): number {
+  const y = getTerrainHeight(worldX, worldZ) + WATERLINE_SHIFT;
+  return y < 0 ? y * shelf : y;
 }
 
 /**
  * The sampled terrain mesh: per-vertex Y from getTerrainHeight (shifted so the
  * waterline is y=0), vertex colours from terrainColorAt (sand/cliff/grass palette).
  */
-function buildTerrainMesh(): THREE.Mesh {
+function buildTerrainMesh(shelf: number): THREE.Mesh {
   const geometry = new THREE.PlaneGeometry(
     SLICE_SIZE,
     SLICE_SIZE,
@@ -95,7 +102,7 @@ function buildTerrainMesh(): THREE.Mesh {
     const worldX = positions.getX(i) + BEACH_X;
     const worldZ = positions.getZ(i) + BEACH_Z;
     const height = getTerrainHeight(worldX, worldZ);
-    positions.setY(i, height + WATERLINE_SHIFT);
+    positions.setY(i, surfaceY(worldX, worldZ, shelf));
     const color = terrainColorAt(worldX, worldZ, height);
     colors[i * 3] = color.r;
     colors[i * 3 + 1] = color.g;
@@ -144,7 +151,7 @@ function buildRock(random: () => number, radius: number): THREE.Mesh {
  * A handful of rocks straddling the shoreline (real depth discontinuities for the
  * outline) and a couple on the dry sand.
  */
-function buildRocks(): THREE.Group {
+function buildRocks(shelf: number): THREE.Group {
   const group = new THREE.Group();
   const random = mulberry32(0x5eab0c);
   const spots: Array<[number, number, number]> = [
@@ -157,7 +164,7 @@ function buildRocks(): THREE.Group {
   ];
   for (const [x, z, radius] of spots) {
     const rock = buildRock(random, radius);
-    rock.position.set(x, surfaceY(x, z) + radius * 0.35, z);
+    rock.position.set(x, surfaceY(x, z, shelf) + radius * 0.35, z);
     rock.rotation.y = random() * Math.PI * 2;
     group.add(rock);
   }
@@ -199,10 +206,10 @@ function buildGrassPatch(): THREE.InstancedMesh {
  * inland grass patch, all in the shifted (waterline = y=0) frame so Water Pro's
  * ocean laps the sand.
  */
-export function buildBeachSlice(): THREE.Group {
+export function buildBeachSlice(shelf = 1): THREE.Group {
   const group = new THREE.Group();
-  group.add(buildTerrainMesh());
-  group.add(buildRocks());
+  group.add(buildTerrainMesh(shelf));
+  group.add(buildRocks(shelf));
   group.add(buildGrassPatch());
   return group;
 }
