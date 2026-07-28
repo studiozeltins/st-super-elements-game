@@ -140,8 +140,9 @@ Explicitly excluded. Anti-features from research live here with the reason.
 
 ## Traceability
 
-Provisional phase mapping (roadmapper confirms/renumbers). Phase numbering reset to 1 this
-milestone (`--reset-phase-numbers`).
+Phase mapping **confirmed by roadmapper** 2026-07-28 (provisional mapping stood; no renumbering
+needed — the dependency-forced order matches category boundaries 1:1). Phase numbering reset to 1
+this milestone (`--reset-phase-numbers`).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -182,10 +183,15 @@ milestone (`--reset-phase-numbers`).
 | DPLY-01 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 36 total
-- Mapped to phases: 36
+- v1 requirements: 35 total (STCK×3, SPIKE×4, RNDR×5, SHDR×7, WATR×5, SKY×5, REAC×5, DPLY×1)
+- Mapped to phases: 35
 - Unmapped: 0 ✓
+
+> **Count correction (2026-07-28):** the initial definition summary read "36 total"; the actual
+> distinct requirement-ID count is **35**. No requirement was dropped — the "36" was an off-by-one
+> in the summary line. Every listed ID is mapped exactly once.
 
 ---
 *Requirements defined: 2026-07-28*
-*Last updated: 2026-07-28 after initial definition*
+*Last updated: 2026-07-28 — roadmapper confirmed traceability; corrected v1 count 36→35*
+</content>

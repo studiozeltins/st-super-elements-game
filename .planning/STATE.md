@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v0.4.0-alpha
 milestone_name: WebGPU Sky & Water
 status: planning
-last_updated: "2026-07-27T22:58:28.917Z"
+last_updated: "2026-07-28"
 last_activity: 2026-07-28
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,40 +17,44 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-13)
+See: .planning/PROJECT.md (updated 2026-07-28)
 
-**Core value:** A retained PVPvE loop — chase endless Transcendence power (scarce shards past
-C6), contest it via PVP theft + co-op raids, with no progress-wipe churn (C0–C6 is a protected
-floor). This milestone makes the world BETWEEN fights worth living in.
-**Current focus:** Phase 13 — camera-feel
+**Core value:** A retained PVPvE loop — chase endless Transcendence power, contest it via PVP
+theft + co-op raids, no progress-wipe churn (C0–C6 is a protected floor). This milestone
+re-platforms the renderer (WebGL→WebGPU/TSL) so the sea and sky become commercial-grade and
+reactive **without losing the sacred pixel-art identity**.
+**Current focus:** Phase 1 — Feasibility Spike
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-07-28 — Milestone v0.4.0-alpha started
+Phase: 1 of 6 (Feasibility Spike)
+Plan: — (not yet planned)
+Status: Ready to plan
+Last activity: 2026-07-28 — Roadmap created for v0.4.0-alpha (6 phases, numbering reset to 1)
+
+Progress: [░░░░░░░░░░] 0%
 
 ## Roadmap Summary
 
 | Phase | Goal | Requirements |
 |-------|------|--------------|
-| 8. Wind Core | One shared wind module drives grass/flags/canopies/smoke with traveling gusts | WIND-01..03 |
-| 9. Atmosphere & Day/Night | Fog + sky + ~20min day/night drift as ONE server-anchored color pipeline; lanterns at dusk | ATMO-01..03, DAYNITE-01..04 |
-| 10. Ambient Audio & Music | Bus/compressor refactor, procedural wind bed + one-shots, region/combat music crossfade, ducking | AMBI-01..07, MUSIC-01..03 |
-| 11. Lived-in Props & Wear | Static footpath bake, plaza props, regrowth/bend-trail tuning, dust puffs | WEAR-01..05 |
-| 12. Wildlife | Instanced butterflies, startle-flush birds, dusk fireflies (no light pool) | WILD-01..03 |
-| 13. Camera Feel | Run lean, idle breathing, burst FOV kick — all behind a persisted reduce-motion toggle | CAM-01..04 |
+| 1. Feasibility Spike | Prove the pixel filter survives on WebGPU + measure perf + de-risk both no-API asks; recorded go/no-go sign-off with STOP escape hatch | STCK-01..03, SPIKE-01..04 |
+| 2. Renderer + Pixel-Filter Port | WebGL→WebGPU async bootstrap; pixel filter + depth-outline ported to TSL pixel-correct; custom shaders flat-shaded | RNDR-01..05 |
+| 3. Shader Ports to TSL | 17 GLSL surfaces → node materials, one subsystem per commit, screenshot-gated | SHDR-01..07 |
+| 4. Water Pro | Retire createSeaWater → WaterSystem at SEA_LEVEL + player wake; anti-features off; FPS-holding tier | WATR-01..05 |
+| 5. Sky Pro | Retire sky dome + day/night path → SkySystem server-clock-driven, coupled to water once, starfield night | SKY-01..05 |
+| 6. Reactive & Lit Water + Ship | Pooled projectile wake + spray, lit sea, glow overlays, combat FPS gate, secure-context deploy decision | REAC-01..05, DPLY-01 |
 
-Order is dependency-forced: wind first (5 consumers), atmosphere second (one color pipeline,
-gates fireflies/lanterns), audio third (gust envelope; music shares bus + combat signal),
-wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
+Order is DEPENDENCY-FORCED (spike → renderer → shaders → water → sky → reactive); all four
+research streams converged on it independently. Water needs the node graph; Sky feeds Water's
+provider; reactive needs Water's wake. Do NOT re-order. Each phase is screenshot-gated; ports
+land one subsystem per commit; old sea/sky deleted in the same commit that replaces them.
 
 ## Performance Metrics
 
 **Velocity (this milestone):**
 
-- Total plans completed: 33
+- Total plans completed: 0
 - Average duration: —
 - Total execution time: —
 
@@ -58,52 +62,9 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 08 | 11 | - | - |
-| 9 | 5 | - | - |
-| 11 | 8 | - | - |
-| 12 | 5 | - | - |
-| 13 | 4 | - | - |
+| - | - | - | - |
 
 *Updated after each plan completion.*
-| Phase 08 P01 | 7 min | 2 tasks | 2 files |
-| Phase 08 P02 | 6 min | 2 tasks | 5 files |
-| Phase 08 P03 | 10min | 3 tasks | 5 files |
-| Phase 08 P04 | ~6 min | 2 tasks | 2 files |
-| Phase 08 P05 | ~8 min | 2 tasks | 0 files |
-| Phase 08 P06 | 8 min | 3 tasks | 5 files |
-| Phase 08 P07 | 3min | 1 tasks | 2 files |
-| Phase 08 P08 | 4 min | 2 tasks | 2 files |
-| Phase 08 P09 | 5 min | 2 tasks | 1 files |
-| Phase 09 P01 | 12 min | 2 tasks | 2 files |
-| Phase 09 P02 | 12min | 2 tasks | 1 files |
-| Phase 09 P03 | 4min | 2 tasks | 3 files |
-| Phase 09 P04 | 6min | 2 tasks | 2 files |
-| Phase 9 P05 | 27min | 3 tasks | 2 files |
-| Phase 09.1 P01 | 9min | 2 tasks | 2 files |
-| Phase 09.1 P02 | 4min | 3 tasks | 4 files |
-| Phase 10 P01 | 12min | 2 tasks | 4 files |
-| Phase 10 P02 | 15min | 3 tasks | 7 files |
-| Phase 10 P03 | 12min | 4 tasks | 7 files |
-| Phase 10 P05 | ~20 min | 2 tasks | 3 files |
-| Phase 10 P04 | 12 min | 1 tasks | 2 files |
-| Phase 10 P06 | 15 min | 4 tasks | 2 files |
-| Phase 11 P01 | 6m | 1 tasks | 2 files |
-| Phase 11 P02 | 6min | 2 tasks | 2 files |
-| Phase 11 P03 | 12 min | 2 tasks | 6 files |
-| Phase 11 P04 | 4min | 1 tasks | 2 files |
-| Phase 11 P05 | 5min | 2 tasks | 4 files |
-| Phase 11 P06 | 4min | 1 tasks | 2 files |
-| Phase 11 P07 | ~8 min | 1 tasks | 1 files |
-| Phase 11 P08 | 3min | 2 tasks | 2 files |
-| Phase 12 P01 | 6min | 2 tasks | 2 files |
-| Phase 12 P02 | 4min | 1 tasks | 2 files |
-| Phase 12 P03 | 3min | 2 tasks | 3 files |
-| Phase 12 P04 | 8min | 1 tasks | 2 files |
-| Phase 12 P05 | 3min | 1 tasks | 1 files |
-| Phase 13 P01 | 8min | 2 tasks | 2 files |
-| Phase 13 P02 | 2min | 1 tasks | 1 files |
-| Phase 13 P03 | 4min | 1 tasks | 1 files |
-| Phase 13 P04 | 5min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -111,146 +72,77 @@ wildlife needs 8+9+10, camera LAST (accessibility). Do not re-order.
 
 Decisions are logged in PROJECT.md Key Decisions table. Locked for this milestone (from research):
 
-- **Zero new dependencies**: three@0.185.1 built-ins + Web Audio + existing seams (`audioCore`,
-  `timeUniform`, `groundInfluence`, `lightPool`, `scorchMap`). Rejected: Tone.js/howler,
-  noise packages, GSAP, three Audio wrappers, runtime Fog↔FogExp2 swaps, moving the sun.
+- **Zero new runtime dependencies**: three@0.185.1 already ships `three/webgpu` + `three/tsl`;
+  Water Pro + Sky Pro are **vendored** (prebuilt `build/` copied into `src/vendor/`, not aliased
+  to their `src/`). Sky Pro's peer floor is exactly 0.185.0 — three must never be downgraded.
 
-- **Client-only milestone**: zero server publishes. Day/night clock anchors from SDK event
-  timestamps (`world_timer` is PRIVATE — cannot subscribe); `Date.now()` fallback.
+- **Client-only milestone**: zero SpacetimeDB publishes. Day/night stays server-anchored via the
+  SDK reducer-event timestamp (`Date.now()` fallback); Sky Pro's `autoAdvanceSecondsPerDay = 0`
+  (never self-advance — that desyncs LAN players).
 
-- **One color pipeline**: fog color, sky, hemisphere, sun tint all blend from a single
-  day/night palette, mutated in place (fog reassignment = full shader recompile).
+- **Pixel-art identity is sacred** (P0 make-or-break): if the pixel filter can't be reproduced on
+  WebGPU/TSL, STOP and keep WebGL. Recorded user go/no-go sign-off gates Phase 2.
 
-- **Audio bus + compressor BEFORE the first looped bed** — Phase 10's first task; existing
-  SFX rerouted in the same change.
+- **"Emissive water" has no native API**: re-scoped as sparkle/SSS/lifted-waterColor/bloom +
+  additive transparent overlays for localized glow (REAC-03/04), never a water-material emissive.
 
-- **Wildlife = emissive instanced quads**, never pooled lights, never GPU readbacks; lanterns
-  get dedicated fixed lights at build, fireflies stay emissive.
-
-- **Camera motion transient-only** + reduce-motion toggle (XAG 117) as acceptance criterion.
-- [Phase 08]: GUST periods tuned to 9/10/22s (RESEARCH 37/23/53s failed the cadence spec with gaps up to 369s) — Plan discretion grant: the cadence test is the spec; grid-searched incommensurate triples over a simulated hour
-- [Phase 08]: WANDER retuned to a1=0.25/T=600s + a2=0.12/T=1300s — RESEARCH example exceeded the 0.0035 rad/s wander rate bound 3x; retune keeps ~11 deg/min max with 0.35 rad range per 10-min window
-- [Phase 08]: Grass sway axis vec2 stays FIXED (no uWindDir in base sway — zero regression, D-01) but its values interpolate from SWAY.ampX/ampZ via toFixed(4) so all nine grass literals single-source from windMath
-- [Phase 08]: GrassField.update() deleted whole (interface + object + world call site) — shared wind clock made it empty; wind.update(deltaSeconds) at top of frame() is the client's only wind clock advance
-- [Phase 08]: Per-flag banner color via geometry vertex-color attribute so ONE pooled cloth material serves all flags
-- [Phase 08]: Asset unit tests inject createWind(true) via initCanopyWind at module load — fail-fast throw kept, contract mirrored
-- [Phase 08]: Smoke puff recycle via age >= PUFF_LIFE (= MAX_RISE/RISE_SPEED) — identical to the height check at constant rise, one pool field fewer
-- [Phase 08]: camps namespace import keeps the construction-time getCampSites() call the file's single occurrence — data-driven anchors, no scene traversal
-- [Phase 08]: Plan 08-05 blocking human-verify checkpoint auto-approved per --auto policy — 10-item playtest deferred to /gsd-verify-work (D2 coverage entry in 08-05-SUMMARY)
-- [Phase 08]: Pooled wind materials cached per WIND INSTANCE (identity guard + dispose-on-change), never per module — fixes StrictMode/reconnect freeze, keeps D-13 pooling; flag pole joins the cache because disposeObject reaches it at teardown
-- [Phase 08]: Canopy sway ramp reads a baked aTreeHeight vertex attribute (height above the tree base) — pooled materials cannot take per-mesh uniforms, and world-Y ramps saturate on hills
-- [Phase 08]: InstancedMesh teardown requires mesh.dispose() in addition to geometry/material dispose to free instance attribute GPU buffers
-- [Phase 08]: flagSwing/flagDrape closed forms: min(1, s*(0.75+0.5*g)) swing and 1-min(1, s*(0.7+0.25*g)) drape — strength-0 identities exact (swing 0, drape 1 per D-12); GLSL generators pin the full rendered expression so shader/CPU cannot drift
-- [Phase 08]: Flag downwind yaw recovered in-shader from modelMatrix[0].xz vs uWindDir (atan of dot/cross) — zero new uniforms on the pooled campFlag material; drape y-drop banded, x foreshorten continuous; CLOTH_BANDS=6 art constant lives in the asset, not windMath
-- [Phase ?]: 09-02: Sky-dome fixed-origin with xyww far-plane vertex pin (not camera-tracking) — clipping-proof as the camera roams, keeps Plan 05 wiring to one daynight.update() line
-- [Phase ?]: 09-02: ATMO-02 single-source enforced by construction — sky-dome bottomColor uniform IS scene.fog.color, topColor uniform IS the setSkyTop scratch (same THREE.Color instances, zero-alloc drift)
-- [Phase 09]: 09-03: 6 plaza lanterns as named build-time PointLights collected into ambience.lanternLights (no runtime add/remove, plaza-only per D-07)
-- [Phase 9]: 09-05: daynight.update() is called with no arg — the shipped DayNightCycle reads clock.nowMicros() internally; wiring passes serverClock into the factory so one coherent server clock drives the phase (no private accumulator).
-- [Phase 9]: 09-05: LAN day/night sync re-anchors off the enemy/goliath worldTick reducer EventContext timestamp (tag==='Reducer'), tapped in useGameTableBridge; Date.now() fallback covers the non-Reducer case. Zero server publish, cosmetic-only.
-- [Phase 9]: 09-05: 'shadows follow the sun' request DEFERRED — reverses D-02 (frozen sun basis) and contradicts DAYNITE-01; routed separately, not implemented in this phase.
-- [Phase 09.1]: 09.1-01: sun-arc math is pure-twin-first — sunDir(phase) raised-cosine dome + sine azimuth in zero-THREE dayNightMath.ts, ELEV_PEAK pinned to SUN_OFFSET 54.204deg (NOT CONTEXT prose 75deg, RESEARCH A1); buildSunBasis reproduces frozen basis renderer-free (SHADOW-04)
-- [Phase ?]: Phase 09.1-02: sun direction is a single day/night-owned channel (setSunDirection); setShadowFocus rebuilds the shadow basis per-frame from it with zero alloc
-- [Phase ?]: Phase 09.1-02: ?nomovingsun/reduce-motion/?nodaynight pin the sun byte-exact to the literal SUN_OFFSET while colors keep drifting; 30Hz shadow throttle left unchanged
-- [Phase ?]: [Phase 10]: 10-02: ONE createAudioBuses routing owner (master->DynamicsCompressor->destination + sfx/music/ambient sub-buses); music/ambient are HEAD->DUCK in series so user-volume/bed-swell x combat-duck never stomp one AudioParam (RESEARCH Pitfall 5)
-- [Phase ?]: [Phase 10]: 10-02: all 5 SFX modules migrated off context.destination onto the injected sfx bus (D-02/D-03); createAudioSystem owns the context and late-binds the sfx closure to break the createAudioSystem<->createAudioBuses circularity
-- [Phase ?]: 10-03: creature layers ship with per-layer synth fallback (birds/crickets/owl/grunt); real CC0 .ogg recordings drop in later with zero code change (D-04/D-06)
-- [Phase 10]: 10-05: audio settings UI (SKAŅA) — native range sliders + affirmative mute Toggles, App state to persist to imperative Game bus setters, readVolume V5 clamp (music 0.7/sfx 1.0 defaults)
-- [Phase ?]: Grass rustle (AMBI-04): procedural bandpass noise wash (2.6kHz, peak 0.05 under the 0.12 step tap) layered on the player footstep via updateUnit surface?:'grass', routed through getSfxBus, sharing underSpamBudget
-- [Phase ?]: onGrass derived cheaply from isGrounded() (walkable island = grass) — no GPU texture read, no per-frame alloc; road-exclusion deferred per client-perf rules
-- [Phase ?]: Music loudness on the music bus HEAD (0.7); crossfade gains stay pure equal-power cos/sin so perceived loudness is constant through the region<->combat transition
-- [Phase ?]: Music crossfade re-ramps only on a combat-state flip; steady-state setCombat is a cheap ensure/build check — zero per-frame AudioParam churn
-- [Phase ?]: Bend trail decay 0.985->0.980 for ~2s springy fade (WEAR-04/D-04/D-05)
-- [Phase ?]: Wear/scorch regrow time constant 25s->75s: reads at 1min, heals <10% by ~2.88min (WEAR-03/D-06)
-- [Phase ?]: [Phase 11] 11-03: createCrate/createBarrel pre-existed in createTownProps.ts as walk-through decor; moved to dedicated files + upgraded to merged-box voxel + collision + lightless spec (CLAUDE.md no-legacy). buildTown market crates/barrels now carry a collision footprint.
-- [Phase ?]: createDustPuffs caches per-puff groundY at spawn so update() stays zero-alloc (no per-frame getGroundHeight)
-- [Phase ?]: Dust is externally player-spawned: spawn(x,z,dirX,dirZ) claims a slot; update(dt) only ages the live pool (unlike self-emitting smoke)
-- [Phase 11]: Footpath tint 0x7d8a54 (green-dominant) baked into terrainColorAt vertex color, lighter/greener than ROAD_DIRT and off the aRoad cart-rut path (11-05)
-- [Phase 11]: Footpath grass thinning is probabilistic (continue with prob footpathFactor, capped 0.6) — trampled not cleared (11-05)
-- [Phase 11]: surfaceAt road threshold >0.5 pinned to grassPlacement.ts:74 (single road/grass boundary)
-- [Phase ?]: 11-07: omit placeAsset collisionRadius for props — Plan 03 factories self-declare asset.obstacles (passing it would double the footprint)
-- [Phase ?]: 11-07: fence runs kept at +x factory orientation on x-aligned boundaries — placeAsset does not rotate asset obstacles, so rotating would misalign per-post collision
-- [Phase 11]: 11-08: FootstepSurface re-exported from surfaceAt.Surface (one tag set for dust+audio, no-legacy)
-- [Phase 11]: 11-08: surfaceAt classified ONCE/frame at the grounded player step, shared via playerSurface closure var to the footstep audio (no second call); dust gate = moving && grounded && surface!=='grass' (no sprint state)
-- [Phase 11]: 11-08: ?nodust skips dust-pool construction entirely (zero objects, clean FPS bisect); createGame stays wire-only
-- [Phase ?]: wildlifeMath twin: isDayTime is the strict inverse of the lit firefly gate (fireflyLevel<0.01), reusing the one shipped day/night channel
-- [Phase 12]: 12-02 butterflies: self-managing pooled InstancedMesh; night force-empties the pool (hard despawn), gentle bounded top-up over grass, all motion delegated to wildlifeMath
-- [Phase ?]: [Phase 12] 12-03 bird flush: externally-spawned pooled InstancedMesh (createDustPuffs spine); spawn(x,z) bursts 2-4 birds, update() ages wildlifeMath.birdArc + recycles at t01>=1; fade = instance shrink not alpha; BIRD_POOL_SIZE=12
-- [Phase ?]: [Phase 12] 12-03 wing sfx: createWildlifeSfx procedural one-shot (3 staggered bandpass-noise wingbeats) on sfx bus, gesture-guarded + .onended cleanup; debounce stays at the 12-05 grass-stamp call site (no GPU readback)
-- [Phase 12]: Fireflies use UNLIT MeshBasicMaterial + instanceColor pulse (never a scene light) so they glow while Phase 9 dims lit materials at night
-- [Phase ?]: [Phase 12] 12-05: wildlife wired into createGame WIRE-only (dust template) — 3 pools + wing sfx behind ?nobugs/?nobirds/?nofireflies, fed wind.timeUniform.value + dayNightPhase + player pos once/frame; grass-sprint flush at the CPU surface=='grass' stamp site debounced by flushReady (lastFlushSec), never a GPU read; literal wing gain 0.6
-- [Phase ?]: [Phase 12] 12-05: Tasks 2 (perceptual UAT) + 3 (SC4 golem-fight FPS gate) are blocking human checkpoints — auto-deferred to /gsd-verify-work per --auto policy, NOT fabricated; all code + automated verification (884/884, tsc clean) complete
-- [Phase 13]: 13-01: cameraFeelMath.ts is the pure zero-import camera-feel twin (smooth spring, two-phase FOV kick, lean/breathing targets, cooldown + projection gate); reduce-motion zeroing lives in leanTarget/breatheOffset, the FOV reduce-motion gate is a 13-02 caller concern (canKick + startKick guard)
-- [Phase ?]: [Phase 13]: 13-02: createCameraFeel owns discretionary camera motion (two-phase FOV kick + absorbed shake), delegates spring/gate math to cameraFeelMath, gates updateProjectionMatrix in one spot (D-07), reduce-motion snaps both to 0 (Pitfall 6); legacy shake deletion + wiring deferred to 13-04
-- [Phase ?]: [Phase 13]: 13-03: model run-lean + idle breathing wired into createCharacterModel.animate via an optional TRAILING MotionConfig arg — presence IS the local/remote switch (D-05); lean on bodyPivot.rotation.x (facing frame, Pitfall 1), breathing on bodyPivot.position.y (positional, no texel-snap D-02/D-03); zeroing/scaling delegated to cameraFeelMath
-- [Phase 13]: 13-04: one persisted signal (settings.reduceMotion) → Game.setReduceMotion → cameraFeel + MOTION_CFG_SCRATCH is the single owner of ALL discretionary camera motion (lean/breathing/FOV kick/shake); the existing OS prefers-reduced-motion read becomes a runtime-reassignable let doubling as the createCameraFeel frame-1 seed (D-08/D-09)
-- [Phase 13]: 13-04: legacy createGame shake state DELETED (grep shakeMagnitude == 0, no-legacy) — state lives only in createCameraFeel; FOV kick taps only own-crit handlers (spawnWorldNumber isMine&&crit, spawnPlayerNumber isMine&&(crit||pvpCrit)), never damage-taken spawnSelfNumber (D-06); human playtest APPROVED all 6 perceptual checks, closing phase 13
+- **Wake ≤16 generators/frame, horizontal-motion only**: pooled + reused (`updateGenerator`),
+  never add/remove per projectile; vertical impacts = spray, not wake. Spray is null on WebGL2 —
+  optional-chain every call, degrade silently.
 
 ### Pending Todos
 
-7 pending (see `.planning/todos/pending/`). Latest: Phase 7 crit poise interrupt deferred at
-v0.2.0-alpha close. Miss/evasion decision still needs a user pros/cons ruling.
+10 pending (see `.planning/todos/pending/`) — all carried from prior milestones (raid boss,
+role enforcement/balance, crit poise interrupt, boost-orbit-v2, ciena-star-restyle,
+expand-transcend-scaling, miss/evasion decision). None block this milestone.
 
 ### Blockers/Concerns
 
-- **Phase 9 first task**: verify the installed SpacetimeDB TS SDK exposes the reducer event's
-  server timestamp on row-callback `EventContext` (30-min spike; `Date.now()` fallback is safe).
+- **Pixel-filter reproduction on WebGPU is the make-or-break unknown** (MEDIUM confidence) —
+  resolved only by the Phase 1 spike: prototype BOTH resolution shapes, screenshot-diff vs
+  `master`. If neither works, halt (sanctioned escape hatch, keep WebGL).
 
-- **Perf rules are the milestone's real risk**: frozen matrices, pooled materials, no per-frame
-  allocs, game-loop-owned clocks (never React — the 144→20fps regression class). Every phase
-  ships a `?no*` bisect flag.
+- **On-device WebGPU + WebGL2 FPS unmeasured** — Phase 1 must produce headed-Chrome profiles for
+  both backends (headless Playwright + SwiftShader can't run WebGPU compute).
 
-- **Summed frame cost**: features built per-phase, cost paid together — milestone verification
-  runs `scripts/fps_playtest.py` in a golem-class fight with ALL ambiance enabled (Phase 12 SC4).
+- **Secure-context deploy decision** — plain-http LAN players silently fall back to WebGL2
+  (slower FFT/wake, spray null). Force-https requires confirming the cloudflared `.31→.32:3000`
+  routing survives (remote-domain-topology memory). Resolved at the ship gate (DPLY-01, Phase 6).
 
-- **Phase 11 open decision**: ~2s bend-trail vs shared 4–5s bend decay clock — decide in
-  planning (accept shared clock vs second influence texture), not mid-implementation.
+- **Sky Pro `data/` + starmap must survive the Vite build** — verify `data/` resolves in the
+  laragon-served `dist/` at `elements.kingdom.lv`, not just dev; ship a PD starmap or night is
+  black. First checked in Phase 1, wired in Phase 5.
 
-- **Ops invariants**: pnpm only; server module path `./spacetimedb`; no publishes expected this
-  milestone at all (client-only).
-
-- Phase 8 human playtest NOT yet run — 08-05 Task 2 checkpoint was auto-approved in --auto mode; a human must walk the 10-item checklist via /gsd-verify-work before phase sign-off
-
-### Roadmap Evolution
-
-- Phase 09.1 inserted after Phase 9: Dynamic sun/shadows — user request post-Phase-9; deliberately overrides D-02/DAYNITE-01 frozen-sun (URGENT)
+- **Perf rules are the real risk** (past 144→20 and 24fps regressions): start `medium` tier,
+  profile every step, preserve frozen-matrix/gated-shadow throttles through the shader port,
+  pool everything, no per-frame allocs.
 
 ## Deferred Items
+
+Items acknowledged and carried forward from previous milestone closes:
 
 | Category | Item | Status | Deferred At |
 |----------|------|--------|-------------|
 | Feature | Elemental resistance system | Deferred to future milestone | 2026-07-06 |
 | Feature | XP/levelling for players + enemies | Deferred to future milestone | 2026-07-06 |
-| Feature | Email password reset | Deferred (needs external service) | 2026-07-06 |
-| Phase | Raid boss (party-gated shard faucet, INV-4) | Reserved; spec at `.planning/todos/pending/2026-07-08-phase-6-raid-boss-DEFERRED.md` | 2026-07-08 |
-| Phase | Role enforcement + balance + full validation | Reserved; spec at `.planning/todos/pending/2026-07-08-phase-7-role-enforcement-balance-DEFERRED.md` | 2026-07-08 |
-| Combat | Camp-enemy FSM conversion + hero FSM + tiered poise + weapon crit (XCMB-01..05) | v2 combat expansion | 2026-07-08 |
-| Phase | Crit poise interrupt (POISE-01..03, was Phase 7) | Deferred at v0.2.0-alpha close; spec at `.planning/todos/pending/2026-07-13-phase-7-crit-poise-interrupt-DEFERRED.md` | 2026-07-13 |
-| Feature | Weather (rain, puddles) — WTHR-01 | Deferred at v0.3.0-alpha scoping (real but expensive) | 2026-07-13 |
-| Feature | Time-of-day gameplay hooks (TODG-01) | Needs server work — violates client-only scope | 2026-07-13 |
+| Feature | Email password reset (needs external service) | Deferred | 2026-07-06 |
+| Phase | Raid boss (party-gated shard faucet, INV-4) | Reserved milestone | 2026-07-08 |
+| Phase | Role enforcement + balance + full validation | Reserved milestone | 2026-07-08 |
+| Combat | Camp-enemy FSM + hero FSM + tiered poise + weapon crit (XCMB-01..05) | v2 combat expansion | 2026-07-08 |
+| Phase | Crit poise interrupt (POISE-01..03) | Reserved milestone | 2026-07-13 |
+| Feature | Weather (rain, puddles) — WTHR-01 | Deferred (expensive) | 2026-07-13 |
+| Feature | Time-of-day gameplay hooks (TODG-01) | Needs server work | 2026-07-13 |
+| Verification | Phase 9.1 dynamic-sun FPS/human gate | Superseded by v0.4.0 Sky Pro | 2026-07-28 |
+| Verification | Phase 10 ambient-audio human gate | Backlog | 2026-07-28 |
+| Feature (v2) | Water buoyancy / floating objects (WDEP-01) | Deferred this milestone (YAGNI) | 2026-07-28 |
+| Feature (v2) | Underwater camera mode (WDEP-02) | Deferred (camera never submerges) | 2026-07-28 |
 
 ## Session Continuity
 
-Last session: 2026-07-21T08:23:21.291Z
-Stopped at: Completed 13-04-PLAN.md — phase 13 ready for verification
-traceability updated. Next: `/gsd-plan-phase 8` (Wind Core).
+Last session: 2026-07-28
+Stopped at: ROADMAP.md + STATE.md written for v0.4.0-alpha; REQUIREMENTS.md traceability confirmed.
 Resume file: None
 
-## Deferred Items
-
-Items acknowledged and deferred at v0.3.0-alpha milestone close on 2026-07-28:
-
-| Category | Item | Status |
-|----------|------|--------|
-| verification | phase-09.1-dynamic-sun (09.1-03 FPS/human gate) | deferred — superseded by v0.4.0 Sky Pro |
-| verification | phase-10-ambient-audio (10-VERIFICATION) | deferred — human gate → backlog |
-| uat | phase-09.1 (2 pending scenarios) | deferred |
-| uat | phase-10 (partial) | deferred |
-| debug | flag-droop-and-projectile-reaction | diagnosed — backlog |
-| debug | flag-wind-direction-gust | diagnosed — backlog |
-| todo | boost-orbit-v2-paths-shapes | pending backlog |
-| todo | ciena-star-restyle | pending backlog |
-| todo | expand-transcend-scaling | pending backlog |
-| todo | miss-evasion-system-decision | pending backlog |
-| todo | phase-6-raid-boss-DEFERRED | reserved milestone |
-| todo | phase-7-role-enforcement-balance-DEFERRED | reserved milestone |
-| todo | phase-7-crit-poise-interrupt-DEFERRED | reserved milestone |
+Next: `/gsd-plan-phase 1` (Feasibility Spike) — the highest-uncertainty phase; flagged for
+`--research-phase` (pixel-filter TSL reproduction, WebGPU/WebGL2 on-device perf, both no-API asks).
+</content>
