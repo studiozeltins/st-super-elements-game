@@ -5,16 +5,16 @@ milestone_name: WebGPU Sky & Water
 current_phase: 01
 current_phase_name: feasibility-spike
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-07-28T14:40:40.716Z"
+stopped_at: 01-04 Task 1 done; HALTED at blocking-human go/no-go gate (GO-NO-GO.md awaiting perceptual sign-off)
+last_updated: "2026-07-28T14:45:11.206Z"
 last_activity: 2026-07-28
 last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 0
+  completed_plans: 4
+  percent: 17
 ---
 
 # Project State
@@ -135,6 +135,8 @@ expand-transcend-scaling, miss/evasion decision). None block this milestone.
   profile every step, preserve frozen-matrix/gated-shadow throttles through the shader port,
   pool everything, no per-frame allocs.
 
+- Phase 1 go/no-go PENDING human sign-off: open elements.kingdom.lv/waterpro-spike.html in headed Chrome, compare ?shape=whole|final vs master through the pixel filter (D-02), record WebGPU/WebGL2 FPS, then fill the VERDICT in GO-NO-GO.md (GO shape=… or STOP)
+
 ## Deferred Items
 
 Items acknowledged and carried forward from previous milestone closes:
@@ -157,9 +159,9 @@ Items acknowledged and carried forward from previous milestone closes:
 
 ## Session Continuity
 
-Last session: 2026-07-28T14:40:28.269Z
-Stopped at: Completed 01-03-PLAN.md
-Resume file: None
+Last session: 2026-07-28T14:45:10.474Z
+Stopped at: 01-04 Task 1 done; HALTED at blocking-human go/no-go gate (GO-NO-GO.md awaiting perceptual sign-off)
+Resume file: .planning/phases/01-feasibility-spike/GO-NO-GO.md
 
 Next: `/gsd-plan-phase 1` (Feasibility Spike) — the highest-uncertainty phase; flagged for
 `--research-phase` (pixel-filter TSL reproduction, WebGPU/WebGL2 on-device perf, both no-API asks).

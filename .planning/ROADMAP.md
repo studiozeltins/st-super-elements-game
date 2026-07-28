@@ -68,7 +68,7 @@ code). Numbering reset to Phase 1 for this milestone (`--reset-phase-numbers`).
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-04-PLAN.md — Recorded go/no-go human sign-off with STOP escape hatch (SPIKE-02)
+- [x] 01-04-PLAN.md — Recorded go/no-go human sign-off with STOP escape hatch (SPIKE-02)
 
 ### Phase 2: Renderer + Pixel-Filter Port
 
