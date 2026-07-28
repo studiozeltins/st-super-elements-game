@@ -49,7 +49,11 @@ code). Numbering reset to Phase 1 for this milestone (`--reset-phase-numbers`).
   3. WebGPU compute is confirmed running on the target machine AND the WebGL2 auto-fallback path FPS is measured at the candidate quality tier (headed Chrome / user capture — headless can't run WebGPU compute).
   4. Both no-native-API asks are de-risked with a proven technique (lit water = sparkle/SSS/waterColor/bloom + additive overlay; projectile = pooled wake for skim + spray for impact), and a realistic 17-shader port-surface estimate is produced.
   5. The vendored Water Pro + Sky Pro bundles import cleanly from `src/vendor/`, Sky Pro's `data/` cloud-noise resolves in a built `dist/` (not just dev), and a git policy for `src/vendor/**` is decided so the `.31` git-pull→build deploy succeeds.
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 01-01-PLAN.md — Vendor Pro bundles into a private submodule + Vite entry + leading end-to-end tracer (STCK-01, STCK-03, SPIKE-01)
+- [ ] 01-02-PLAN.md — Representative beach slice + TSL pixel filter both shapes + sun-facing outline (SPIKE-01, SPIKE-02)
+- [ ] 01-03-PLAN.md — Both-backend FPS capture + lit-water/wake/spray de-risk + Sky data/ dist check + 17-shader estimate (SPIKE-03, SPIKE-04, STCK-02)
+- [ ] 01-04-PLAN.md — Recorded go/no-go human sign-off with STOP escape hatch (SPIKE-02)
 
 ### Phase 2: Renderer + Pixel-Filter Port
 **Goal**: Migrate the whole game render path from `WebGLRenderer` to `WebGPURenderer` with the pixel filter + outline pixel-correct, proving the migration independent of the shader port by temporarily flat-shading all custom materials.
@@ -112,7 +116,7 @@ code). Numbering reset to Phase 1 for this milestone (`--reset-phase-numbers`).
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Feasibility Spike | 0/TBD | Not started | - |
+| 1. Feasibility Spike | 0/4 | Not started | - |
 | 2. Renderer + Pixel-Filter Port | 0/TBD | Not started | - |
 | 3. Shader Ports to TSL | 0/TBD | Not started | - |
 | 4. Water Pro | 0/TBD | Not started | - |
