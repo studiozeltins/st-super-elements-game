@@ -22,6 +22,7 @@ import { ISLANDS } from "../game/world/terrain";
 import { pixelFilterNode } from "../game/engine/tsl/pixelFilterNode";
 import { setOutlineSunDir } from "../game/engine/tsl/outlineNode";
 import { buildBeachSlice } from "./beachSlice";
+import { createPerfHud, forceWebGLRequested } from "./perfHud";
 
 /**
  * `?tone=neutral|none` swaps ACES filmic tone mapping for neutral, so the
@@ -63,7 +64,12 @@ const BEACH_Z = CITY.centerZ + Math.sin(CITY.beachDir) * CITY.radius; // ~ 0
 
 async function main(): Promise<void> {
   // --- renderer (auto WebGL2 fallback; read backend ONLY after init) ---
-  const renderer = new THREE.WebGPURenderer();
+  // `?forceWebGL=1` forces the WebGL2 path so a second headed run measures the
+  // fallback tier's FPS with the same on-screen instrument (SPIKE-03).
+  const forcedWebGL = forceWebGLRequested();
+  const renderer = new THREE.WebGPURenderer(
+    forcedWebGL ? { forceWebGL: true } : undefined,
+  );
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
   renderer.toneMapping = toneMappingFromQuery();
@@ -128,6 +134,15 @@ async function main(): Promise<void> {
   console.log("[spike] water backend  :", water.backend);
   console.log("[spike] spray available:", water.spray !== null);
 
+  // On-screen FPS + backend readout so a screenshot proves which backend
+  // produced each number (SPIKE-03). Backend values are read post-init above.
+  const perfHud = createPerfHud({
+    rendererBackend: usingWebGPU ? "WebGPU" : "WebGL2",
+    waterBackend: water.backend,
+    sprayAvailable: water.spray !== null,
+    forcedWebGL,
+  });
+
   window.addEventListener("resize", () => {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -152,6 +167,7 @@ async function main(): Promise<void> {
     sunScreenDir(sun.position, camera, sunScreen);
     setOutlineSunDir(sunScreen.x, sunScreen.y);
     await postProcessing.render(); // NEVER renderer.render() — that skips the node graph
+    perfHud.frame(now);
   }
   animate();
 }
