@@ -25,6 +25,12 @@ import { setOutlineSunDir } from "../game/engine/tsl/outlineNode";
 import { buildBeachSlice } from "./beachSlice";
 import { createPerfHud, forceWebGLRequested } from "./perfHud";
 import { isDeriskEnabled, installDerisk } from "./derisk";
+import {
+  mountSpikeControls,
+  stageFromQuery,
+  outlineEnabledFromQuery,
+  pixelSizeFromQuery,
+} from "./spikeControls";
 
 /**
  * `?tone=neutral|none` swaps ACES filmic tone mapping for neutral, so the
@@ -138,11 +144,18 @@ async function main(): Promise<void> {
     : null;
 
   // --- post chain: water fx -> sky composite -> (bloom) -> pixel node LAST ---
+  // The `?stage=` toggle taps the chain at successive points so a broken frame
+  // can be localised on-device (see spikeControls): scene = raw render, comp =
+  // water+sky composite, nofilter = composite(+bloom) with pixel/rim skipped,
+  // full = everything. Headless can't run WebGPU compute, so this is the only
+  // way to bisect the pixel-art chain visually.
+  const stage = stageFromQuery();
   const postProcessing = new THREE.PostProcessing(renderer);
   const scenePass = pass(water.scene, water.camera);
-  let out: Node = scenePass.getTextureNode("output");
-  out = water.postProcessing.buildNode(scenePass, out); // fog / underwater / sun shafts
+  const rawOut: Node = scenePass.getTextureNode("output");
+  let out: Node = water.postProcessing.buildNode(scenePass, rawOut); // fog / underwater / sun shafts
   out = sky.applyTo(out, scenePass); // clouds / god rays (reads depth)
+  const compOut: Node = out;
   // Lit-water bloom lifts the sparkle/SSS highlights — only in the de-risk run
   // so it never alters the plain perceptual/perf side-by-side (SPIKE-04). TSL's
   // typed-node overloads reject the base `Node` here (bloom wants Node<"vec4">
@@ -157,10 +170,24 @@ async function main(): Promise<void> {
     );
     out = (out as unknown as { add(n: Node): Node }).add(bloomNode);
   }
+  const beforePixel: Node = out;
   // <<< pixel-art identity, LAST: both shapes (?shape=whole|final) + sun-facing
   // rim reading this scene pass's depth. near/far feed the linear-depth rebuild.
-  out = pixelFilterNode(out, scenePass, { near: camera.near, far: camera.far });
-  postProcessing.outputNode = out;
+  // `?outline=0` / `?px=N` let the go/no-go isolate the rim vs the downsample.
+  const fullOut: Node = pixelFilterNode(out, scenePass, {
+    near: camera.near,
+    far: camera.far,
+    outline: outlineEnabledFromQuery(),
+    pixelSize: pixelSizeFromQuery(),
+  });
+  postProcessing.outputNode =
+    stage === "scene"
+      ? rawOut
+      : stage === "comp"
+        ? compOut
+        : stage === "nofilter"
+          ? beforePixel
+          : fullOut;
 
   await renderer.compileAsync(scene, camera);
 
@@ -182,6 +209,10 @@ async function main(): Promise<void> {
     sprayAvailable: water.spray !== null,
     forcedWebGL,
   });
+
+  // On-screen control bar: flip shape/tone/backend/stage/rim/px/derisk from the
+  // page (works remotely on prod too) instead of hand-editing the query string.
+  mountSpikeControls();
 
   window.addEventListener("resize", () => {
     const w = window.innerWidth;

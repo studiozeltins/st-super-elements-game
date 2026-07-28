@@ -46,6 +46,8 @@ export interface PixelFilterOptions extends OutlineOptions {
   pixelSize?: number;
   /** Force a shape; defaults to the `?shape=` query param. */
   shape?: PixelShape;
+  /** Sun-facing rim on/off (diagnostic; default on). */
+  outline?: boolean;
 }
 
 /** Nearest-downsample a node: every fragment in a cell samples the cell centre. */
@@ -70,6 +72,7 @@ export function pixelFilterNode(
   options: PixelFilterOptions = {},
 ): Node {
   const shape = options.shape ?? pixelShapeFromQuery();
+  const rim = options.outline ?? true;
   const pixelSize = uniform(options.pixelSize ?? 4);
   const depthTex = scenePass.getTextureNode("depth");
 
@@ -77,6 +80,7 @@ export function pixelFilterNode(
     // Downsample the whole composed chain first, then rim the low-res image with
     // depth reads snapped to the cell grid (chunky, pixel-aligned outline).
     const pix = pixelate(inputNode, pixelSize);
+    if (!rim) return pix;
     const cells = screenSize.div(pixelSize);
     const snappedUV = floor(screenUV.mul(cells)).add(0.5).div(cells);
     const cellTexel = vec2(1, 1).div(cells); // one cell wide
@@ -85,6 +89,8 @@ export function pixelFilterNode(
 
   // final (default): rim on the full-res composite, then pixelate LAST.
   const fullTexel = vec2(1, 1).div(screenSize);
-  const rimmed = outlineNode(inputNode, depthTex, screenUV, fullTexel, options);
+  const rimmed = rim
+    ? outlineNode(inputNode, depthTex, screenUV, fullTexel, options)
+    : inputNode;
   return pixelate(rimmed, pixelSize);
 }
