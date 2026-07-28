@@ -30,6 +30,8 @@ import {
   stageFromQuery,
   outlineEnabledFromQuery,
   pixelSizeFromQuery,
+  viewFromQuery,
+  waterSpeedFromQuery,
 } from "./spikeControls";
 
 /**
@@ -92,8 +94,20 @@ async function main(): Promise<void> {
     0.1,
     CAMERA_FAR,
   );
+  // `?view=` reframes the shot so the sea doesn't dominate: shore (default),
+  // inland (pan toward the island centre + closer → more dry land, less water),
+  // or top (steeper, closer to the game's overhead angle).
+  const view = viewFromQuery();
   const target = new THREE.Vector3(BEACH_X, 0, BEACH_Z);
-  camera.position.copy(target).addScaledVector(CAMERA_OFFSET, CAMERA_FRAMING);
+  let framing = CAMERA_FRAMING;
+  let offset = CAMERA_OFFSET;
+  if (view === "inland") {
+    target.lerp(new THREE.Vector3(CITY.centerX, 0, CITY.centerZ), 0.45);
+    framing = 3.2;
+  } else if (view === "top") {
+    offset = new THREE.Vector3(3, 20, 7);
+  }
+  camera.position.copy(target).addScaledVector(offset, framing);
   camera.lookAt(target.x, target.y + 1, target.z);
 
   // Lights for the plain-material beach (Water/Sky light themselves).
@@ -225,6 +239,9 @@ async function main(): Promise<void> {
   });
 
   // --- async frame loop: sky FIRST, await water, then postProcessing.render ---
+  // `?waves=calm|slow` scales the dt fed to the water so the surface animates
+  // slower (easier to inspect; the sea felt too fast). Sky/de-risk keep real dt.
+  const waterSpeed = waterSpeedFromQuery();
   const sunScreen = new THREE.Vector2(0, 1);
   let last = performance.now();
   let elapsed = 0;
@@ -238,7 +255,7 @@ async function main(): Promise<void> {
     // Drive the de-risk props (horizontal wake skim + vertical spray bob + glow
     // pulse) BEFORE water.update so this frame's wake injection sees the motion.
     deriskHandle?.update(elapsed);
-    await water.update(dt);
+    await water.update(dt * waterSpeed);
     // Feed the sun's screen direction so the rim stays on its sun-facing side.
     sunScreenDir(sun.position, camera, sunScreen);
     setOutlineSunDir(sunScreen.x, sunScreen.y);
