@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.4.0-alpha
 milestone_name: WebGPU Sky & Water
-current_phase: 1
-current_phase_name: Feasibility Spike
+current_phase: 01
+current_phase_name: feasibility-spike
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-07-28T12:56:53.049Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-07-28T14:06:44.401Z"
 last_activity: 2026-07-28
-last_activity_desc: Roadmap created for v0.4.0-alpha (6 phases, numbering reset to 1)
+last_activity_desc: Phase 01 execution started
 progress:
   total_phases: 6
   completed_phases: 0
@@ -27,14 +27,14 @@ See: .planning/PROJECT.md (updated 2026-07-28)
 theft + co-op raids, no progress-wipe churn (C0–C6 is a protected floor). This milestone
 re-platforms the renderer (WebGL→WebGPU/TSL) so the sea and sky become commercial-grade and
 reactive **without losing the sacred pixel-art identity**.
-**Current focus:** Phase 1 — Feasibility Spike
+**Current focus:** Phase 01 — feasibility-spike
 
 ## Current Position
 
-Phase: 1 of 6 (Feasibility Spike)
-Plan: — (not yet planned)
+Phase: 01 (feasibility-spike) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-07-28 — Roadmap created for v0.4.0-alpha (6 phases, numbering reset to 1)
+Last activity: 2026-07-28 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -69,6 +69,11 @@ land one subsystem per commit; old sea/sky deleted in the same commit that repla
 | - | - | - | - |
 
 *Updated after each plan completion.*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P01 | 9 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -93,6 +98,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Locked for this mileston
 - **Wake ≤16 generators/frame, horizontal-motion only**: pooled + reused (`updateGenerator`),
   never add/remove per projectile; vertical impacts = spray, not wake. Spray is null on WebGL2 —
   optional-chain every call, degrade silently.
+
+- [Phase ?]: Vendor repo owner = logingrupa (Option B): studiozeltins is a separate user account the CLI (roulendz) cannot create repos under; used logingrupa org instead. Private repo logingrupa/st-super-elements-vendor as src/vendor submodule.
+- [Phase ?]: Vendored the EXISTING prebuilt build/ output (Jul 21) instead of re-running npm build:lib; copied the FULL build/ tree (not just index.js/d.ts) so tsc -b resolves the bundle's 152 sibling .d.ts re-exports.
 
 ### Pending Todos
 
@@ -143,9 +151,9 @@ Items acknowledged and carried forward from previous milestone closes:
 
 ## Session Continuity
 
-Last session: 2026-07-28T12:12:39.533Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-feasibility-spike/01-CONTEXT.md
+Last session: 2026-07-28T14:06:44.374Z
+Stopped at: Completed 01-01-PLAN.md
+Resume file: None
 
 Next: `/gsd-plan-phase 1` (Feasibility Spike) — the highest-uncertainty phase; flagged for
 `--research-phase` (pixel-filter TSL reproduction, WebGPU/WebGL2 on-device perf, both no-API asks).
