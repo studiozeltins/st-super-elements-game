@@ -15,7 +15,7 @@
  */
 import * as THREE from "three/webgpu";
 import type { Node } from "three/webgpu";
-import { pass } from "three/tsl";
+import { pass, uniform } from "three/tsl";
 import { bloom } from "three/addons/tsl/display/BloomNode.js";
 import { WaterSystem, getPresetParams } from "../vendor/threejs-water-pro";
 import { SkySystem, PRESETS } from "../vendor/threejs-sky-pro";
@@ -31,6 +31,14 @@ import {
   seaStyleFromQuery,
   swellFromQuery,
 } from "./tuneWater";
+import {
+  mountSpikePanel,
+  waterPresetFromQuery,
+  skyPresetFromQuery,
+  timeFromQuery,
+} from "./spikePanel";
+import type { PresetName as WaterPresetName } from "../vendor/threejs-water-pro";
+import { PRESETS as SKY_PRESETS } from "../vendor/threejs-sky-pro";
 import {
   mountSpikeControls,
   stageFromQuery,
@@ -128,7 +136,9 @@ async function main(): Promise<void> {
 
   // --- Water Pro (FFT ocean on WebGPU, RTT on WebGL2) ---
   const water = await WaterSystem.create(renderer, scene, camera, "medium");
-  water.loadPreset(getPresetParams("blackFlag"));
+  // `?water=<preset>` picks a vendored Water Pro preset at boot (default blackFlag).
+  const waterPreset = (waterPresetFromQuery() ?? "blackFlag") as WaterPresetName;
+  water.loadPreset(getPresetParams(waterPreset));
   // On-device tuning knobs (applied over the preset): `?sea=` transparency/style
   // (default transparent is too see-through — stylised/flat read as painterly),
   // `?swell=` wave height (calmer, smaller waves).
@@ -152,7 +162,20 @@ async function main(): Promise<void> {
     scene,
     quality: "medium",
   });
-  await sky.applyPreset(PRESETS.partlyCloudy);
+  // `?sky=<preset>` picks a Sky Pro preset (default partlyCloudy); `?time=0..1`
+  // jumps the day-cycle clock (0 midnight, .5 noon, .75 sunset).
+  const skyPresetName = skyPresetFromQuery();
+  await sky.applyPreset(
+    skyPresetName ? SKY_PRESETS[skyPresetName as keyof typeof SKY_PRESETS] : PRESETS.partlyCloudy,
+  );
+  const time0 = timeFromQuery();
+  if (time0 !== null) {
+    try {
+      (sky as unknown as { timeOfDay: { time: { value: number } } }).timeOfDay.time.value = time0;
+    } catch {
+      /* fallback surface */
+    }
+  }
   // ONE-CALL sky->water coupling; build the provider exactly once.
   water.setSky(sky.createSkyProvider({ envMap: true }));
 
@@ -201,11 +224,14 @@ async function main(): Promise<void> {
   // <<< pixel-art identity, LAST: both shapes (?shape=whole|final) + sun-facing
   // rim reading this scene pass's depth. near/far feed the linear-depth rebuild.
   // `?outline=0` / `?px=N` let the go/no-go isolate the rim vs the downsample.
+  // Pixel size is an externally-owned uniform so the live panel slider can
+  // mutate it without a reload.
+  const pixelSizeU = uniform(pixelSizeFromQuery());
   const fullOut: Node = pixelFilterNode(out, scenePass, {
     near: camera.near,
     far: camera.far,
     outline: outlineEnabledFromQuery(),
-    pixelSize: pixelSizeFromQuery(),
+    pixelSizeNode: pixelSizeU,
   });
   postProcessing.outputNode =
     stage === "scene"
@@ -237,9 +263,14 @@ async function main(): Promise<void> {
     forcedWebGL,
   });
 
-  // On-screen control bar: flip shape/tone/backend/stage/rim/px/derisk from the
-  // page (works remotely on prod too) instead of hand-editing the query string.
+  // On-screen control bar (top): reload-based diagnostic toggles (stage/shape/
+  // backend/tone/rim/view/shelf/sea/swell/speed).
   mountSpikeControls();
+  // Live control panel (right): sliders + presets that mutate the running scene
+  // with no reload — day-cycle, wave height/speed, opacity, colour, pixel size.
+  // speedRef is mutable so the panel's speed slider changes the frame loop live.
+  const speedRef = { value: waterSpeedFromQuery() };
+  mountSpikePanel({ water, sky, pixelSize: pixelSizeU, speed: speedRef });
 
   window.addEventListener("resize", () => {
     const w = window.innerWidth;
@@ -254,7 +285,6 @@ async function main(): Promise<void> {
   // --- async frame loop: sky FIRST, await water, then postProcessing.render ---
   // `?waves=calm|slow` scales the dt fed to the water so the surface animates
   // slower (easier to inspect; the sea felt too fast). Sky/de-risk keep real dt.
-  const waterSpeed = waterSpeedFromQuery();
   const sunScreen = new THREE.Vector2(0, 1);
   let last = performance.now();
   let elapsed = 0;
@@ -268,7 +298,7 @@ async function main(): Promise<void> {
     // Drive the de-risk props (horizontal wake skim + vertical spray bob + glow
     // pulse) BEFORE water.update so this frame's wake injection sees the motion.
     deriskHandle?.update(elapsed);
-    await water.update(dt * waterSpeed);
+    await water.update(dt * speedRef.value);
     // Feed the sun's screen direction so the rim stays on its sun-facing side.
     sunScreenDir(sun.position, camera, sunScreen);
     setOutlineSunDir(sunScreen.x, sunScreen.y);

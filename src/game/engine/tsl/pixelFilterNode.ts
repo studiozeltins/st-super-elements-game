@@ -44,6 +44,13 @@ export function pixelShapeFromQuery(): PixelShape {
 export interface PixelFilterOptions extends OutlineOptions {
   /** Edge length of a chunky pixel, in device pixels. Larger = chunkier. */
   pixelSize?: number;
+  /**
+   * An externally-owned pixel-size uniform node. When supplied it is used
+   * verbatim (so a live slider can mutate `.value`) instead of wrapping
+   * `pixelSize` in a fresh uniform. Spike-only ergonomics.
+   */
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  pixelSizeNode?: any;
   /** Force a shape; defaults to the `?shape=` query param. */
   shape?: PixelShape;
   /** Sun-facing rim on/off (diagnostic; default on). */
@@ -73,7 +80,7 @@ export function pixelFilterNode(
 ): Node {
   const shape = options.shape ?? pixelShapeFromQuery();
   const rim = options.outline ?? true;
-  const pixelSize = uniform(options.pixelSize ?? 4);
+  const pixelSize = options.pixelSizeNode ?? uniform(options.pixelSize ?? 4);
   const depthTex = scenePass.getTextureNode("depth");
 
   if (shape === "whole") {
