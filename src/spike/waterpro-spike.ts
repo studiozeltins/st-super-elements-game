@@ -103,6 +103,16 @@ async function main(): Promise<void> {
   water.loadPreset(getPresetParams("blackFlag"));
 
   // --- Sky Pro (atmosphere/clouds/sun; drives water lighting) ---
+  // STCK-02 FLAG (build-output smoke, plan 03 Task 3): Sky Pro loads its
+  // cloud-noise volumes with `new URL("./data/" + name + ".bin", import.meta.url)`
+  // — a DYNAMICALLY-constructed URL Vite's static asset analyzer cannot see, so a
+  // real `vite build` emits NO `data/` dir. In the built dist/ the spike chunk is
+  // `dist/assets/spike-<hash>.js`, so those loads resolve to
+  //   /assets/data/baseShape{16,32,64}.bin  → 404 (files absent).
+  // Dev works (served from src/vendor/); the BUILT page's clouds break/black-sky.
+  // Fix deferred to Phase 5 (STCK-02 hardening): an inline Vite plugin that copies
+  // src/vendor/threejs-sky-pro/data/*.bin into dist/assets/data/. Do NOT over-build
+  // it here — this is a recorded flag, not a blocker for the spike's go/no-go.
   const sky = await SkySystem.create({
     renderer,
     camera,
