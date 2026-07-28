@@ -2,9 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.4.0-alpha
 milestone_name: WebGPU Sky & Water
+current_phase: 1
+current_phase_name: Feasibility Spike
 status: planning
-last_updated: "2026-07-28"
+stopped_at: Phase 1 context gathered
+last_updated: "2026-07-28T12:12:39.559Z"
 last_activity: 2026-07-28
+last_activity_desc: Roadmap created for v0.4.0-alpha (6 phases, numbering reset to 1)
 progress:
   total_phases: 6
   completed_phases: 0
@@ -139,9 +143,9 @@ Items acknowledged and carried forward from previous milestone closes:
 
 ## Session Continuity
 
-Last session: 2026-07-28
-Stopped at: ROADMAP.md + STATE.md written for v0.4.0-alpha; REQUIREMENTS.md traceability confirmed.
-Resume file: None
+Last session: 2026-07-28T12:12:39.533Z
+Stopped at: Phase 1 context gathered
+Resume file: .planning/phases/01-feasibility-spike/01-CONTEXT.md
 
 Next: `/gsd-plan-phase 1` (Feasibility Spike) — the highest-uncertainty phase; flagged for
 `--research-phase` (pixel-filter TSL reproduction, WebGPU/WebGL2 on-device perf, both no-API asks).
