@@ -38,6 +38,7 @@ import {
 } from "./spikePanel";
 import type { PresetName as WaterPresetName } from "../vendor/threejs-water-pro";
 import { PRESETS as SKY_PRESETS } from "../vendor/threejs-sky-pro";
+import { FAVORITE_WATER } from "./favoritePreset";
 import {
   stageFromQuery,
   outlineEnabledFromQuery,
@@ -136,9 +137,14 @@ async function main(): Promise<void> {
 
   // --- Water Pro (FFT ocean on WebGPU, RTT on WebGL2) ---
   const water = await WaterSystem.create(renderer, scene, camera, "medium");
-  // `?water=<preset>` picks a vendored Water Pro preset at boot (default blackFlag).
-  const waterPreset = (waterPresetFromQuery() ?? "blackFlag") as WaterPresetName;
-  water.loadPreset(getPresetParams(waterPreset));
+  // Default = the user's hand-tuned favourite (exported from the vendor demo).
+  // `?water=<vendorPreset>` overrides it with one of the 8 built-ins.
+  const waterVendor = waterPresetFromQuery();
+  if (waterVendor) {
+    water.loadPreset(getPresetParams(waterVendor as WaterPresetName));
+  } else {
+    water.loadPreset(FAVORITE_WATER);
+  }
   // On-device tuning knobs (applied over the preset): `?sea=` transparency/style
   // (default transparent is too see-through — stylised/flat read as painterly),
   // `?swell=` wave height (calmer, smaller waves).

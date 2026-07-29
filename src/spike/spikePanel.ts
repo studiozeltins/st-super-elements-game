@@ -12,6 +12,7 @@ import type { WaterSystem } from "../vendor/threejs-water-pro";
 import { getPresetParams } from "../vendor/threejs-water-pro";
 import type { SkySystem } from "../vendor/threejs-sky-pro";
 import { PRESETS as SKY_PRESETS } from "../vendor/threejs-sky-pro";
+import { FAVORITE_WATER } from "./favoritePreset";
 
 export const SKY_NAMES = [
   "partlyCloudy",
@@ -366,6 +367,17 @@ export function mountSpikePanel(
   panel.appendChild(sp);
 
   const wp = section("water preset (click)");
+  const favBtn = document.createElement("button");
+  favBtn.textContent = "★ favourite";
+  favBtn.style.cssText = BTN + ";font-size:11px;margin-bottom:4px";
+  favBtn.addEventListener("click", () => {
+    try {
+      (water as any).loadPreset(FAVORITE_WATER);
+    } catch {
+      /* ignore */
+    }
+  });
+  wp.appendChild(favBtn);
   wp.appendChild(
     presetButtons(WATER_NAMES, (n) => {
       try {
