@@ -45,6 +45,7 @@ import {
   viewFromQuery,
   waterSpeedFromQuery,
   shelfFromQuery,
+  skyFxEnabledFromQuery,
 } from "./spikeControls";
 import { mountSpikeMenu } from "./spikeMenu";
 
@@ -203,7 +204,10 @@ async function main(): Promise<void> {
   const scenePass = pass(water.scene, water.camera);
   const rawOut: Node = scenePass.getTextureNode("output");
   let out: Node = water.postProcessing.buildNode(scenePass, rawOut); // fog / underwater / sun shafts
-  out = sky.applyTo(out, scenePass); // clouds / god rays (reads depth)
+  // Sky Pro's depth-based composite (clouds / god-rays / aerial scatter). It
+  // reads scene depth, so on the terrain it can smear the sun-tinted scatter
+  // into depth bands that sweep with time-of-day. `?nosky=1` skips it to test.
+  if (skyFxEnabledFromQuery()) out = sky.applyTo(out, scenePass);
   const compOut: Node = out;
   // Lit-water bloom lifts the sparkle/SSS highlights — only in the de-risk run
   // so it never alters the plain perceptual/perf side-by-side (SPIKE-04). TSL's

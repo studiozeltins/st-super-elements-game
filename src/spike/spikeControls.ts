@@ -37,6 +37,16 @@ export function outlineEnabledFromQuery(): boolean {
   return !/outline=0/.test(S());
 }
 
+/**
+ * Sky Pro's depth-based atmosphere/god-ray composite on? `?nosky=1` skips
+ * `sky.applyTo` — diagnostic for the time-driven rainbow smear on the terrain
+ * (the sky sun-scatter is composited by scene depth; on land it can hue-shift).
+ * The sky DOME still renders; only the screen-space composite is skipped.
+ */
+export function skyFxEnabledFromQuery(): boolean {
+  return !/nosky=1/.test(S());
+}
+
 /** Chunky-pixel edge length in device px (`?px=N`), default 4. `px=1` = off. */
 export function pixelSizeFromQuery(): number {
   const m = /px=(\d+)/.exec(S());
@@ -102,6 +112,7 @@ export function mountSpikeControls(parent?: HTMLElement): void {
   const backend = /forceWebGL=1/.test(S()) ? "webgl" : "webgpu";
   const derisk = /[?&]derisk=1(?:&|$)/.test(S()) ? "on" : "off";
   const outline = outlineEnabledFromQuery() ? "on" : "off";
+  const skyfx = /nosky=1/.test(S()) ? "off" : "on";
   const px = String(pixelSizeFromQuery());
   const view = viewFromQuery();
   const shelf = /shelf=wide/.test(S())
@@ -291,6 +302,19 @@ export function mountSpikeControls(parent?: HTMLElement): void {
           "off",
           { outline: "0" },
           "Outline OFF. LOOK: edges go plain. If the rainbow band vanishes with rim off, the outline node is the bug.",
+        ],
+      ],
+    },
+    {
+      label: "sky-fx",
+      tip: "Sky Pro's depth-based screen composite (atmosphere / god-rays). Prime suspect for the rainbow smear on land that sweeps as you drag the day-cycle.",
+      current: skyfx,
+      options: [
+        ["on", { nosky: null }, "Sky atmosphere/god-ray composite ON (default)."],
+        [
+          "off",
+          { nosky: "1" },
+          "Skip sky.applyTo (dome still renders). LOOK: if the land rainbow VANISHES, the sky composite is the cause.",
         ],
       ],
     },
