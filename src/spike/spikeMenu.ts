@@ -74,7 +74,9 @@ export function mountSpikeMenu(refs: SpikePanelRefs): void {
     "flex:1 1 auto",
     "overflow-y:auto",
     "-webkit-overflow-scrolling:touch",
-    "padding:10px 14px 20px",
+    // extra bottom padding so the floating ☰/▾ button never covers the last
+    // preset buttons (found in headless test: clicks on bottom rows blocked).
+    "padding:10px 14px 84px",
   ].join(";");
 
   sheet.append(header, body);

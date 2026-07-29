@@ -83,6 +83,26 @@ function tryGet<T>(fn: () => T, fallback: T): T {
   }
 }
 
+/**
+ * Read a FINITE number or fall back. Water Pro accessors (e.g. `waves.amplitude`)
+ * can return a uniform wrapper rather than a plain number on some backends —
+ * feeding that to a slider crashed boot with `v.toFixed is not a function`.
+ */
+function numGet(fn: () => unknown, fallback: number): number {
+  try {
+    const v = fn();
+    const n =
+      typeof v === "number"
+        ? v
+        : typeof (v as any)?.value === "number"
+          ? (v as any).value
+          : Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function timeLabel(v: number): string {
   if (v < 0.06 || v > 0.94) return "midnight";
   if (v < 0.32) return "sunrise";
@@ -114,8 +134,11 @@ function sliderRow(
   step: number,
   value: number,
   onInput: (v: number) => void,
-  fmt: (v: number) => string = (v) => v.toFixed(2),
+  fmt: (v: number) => string = (v) => Number(v).toFixed(2),
 ): HTMLDivElement {
+  // Guard: a non-finite initial value (some backend accessors return wrappers)
+  // must not reach fmt()/the input, or boot throws.
+  value = Number.isFinite(value) ? value : min;
   const row = document.createElement("div");
   row.style.cssText = "display:flex;align-items:center;gap:6px;margin:3px 0";
   const lab = document.createElement("span");
@@ -214,7 +237,7 @@ export function mountSpikePanel(
 
   // --- day / night ---
   const day = section("day cycle");
-  const t0 = tryGet(() => (sky as any).timeOfDay.time.value as number, 0.5);
+  const t0 = numGet(() => (sky as any).timeOfDay.time.value, 0.5);
   day.appendChild(
     sliderRow(
       "time",
@@ -253,7 +276,7 @@ export function mountSpikePanel(
 
   // --- water sliders ---
   const w = section("water");
-  const amp0 = tryGet(() => (water as any).waves.amplitude as number, 1);
+  const amp0 = numGet(() => (water as any).waves.amplitude, 1);
   w.appendChild(
     sliderRow("wave ht", 0, 1.2, 0.02, amp0, (v) => {
       try {
