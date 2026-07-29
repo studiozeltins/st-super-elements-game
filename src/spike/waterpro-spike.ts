@@ -32,7 +32,6 @@ import {
   swellFromQuery,
 } from "./tuneWater";
 import {
-  mountSpikePanel,
   waterPresetFromQuery,
   skyPresetFromQuery,
   timeFromQuery,
@@ -40,7 +39,6 @@ import {
 import type { PresetName as WaterPresetName } from "../vendor/threejs-water-pro";
 import { PRESETS as SKY_PRESETS } from "../vendor/threejs-sky-pro";
 import {
-  mountSpikeControls,
   stageFromQuery,
   outlineEnabledFromQuery,
   pixelSizeFromQuery,
@@ -48,6 +46,7 @@ import {
   waterSpeedFromQuery,
   shelfFromQuery,
 } from "./spikeControls";
+import { mountSpikeMenu } from "./spikeMenu";
 
 /**
  * `?tone=neutral|none` swaps ACES filmic tone mapping for neutral, so the
@@ -263,14 +262,12 @@ async function main(): Promise<void> {
     forcedWebGL,
   });
 
-  // On-screen control bar (top): reload-based diagnostic toggles (stage/shape/
-  // backend/tone/rim/view/shelf/sea/swell/speed).
-  mountSpikeControls();
-  // Live control panel (right): sliders + presets that mutate the running scene
-  // with no reload — day-cycle, wave height/speed, opacity, colour, pixel size.
-  // speedRef is mutable so the panel's speed slider changes the frame loop live.
+  // Mobile-friendly bottom-sheet menu (floating ☰ button, closed by default so
+  // it doesn't cover the scene). Hosts BOTH the reload-based diagnostic toggles
+  // and the live sliders/presets/day-cycle. speedRef is mutable so the panel's
+  // speed slider changes the frame loop live.
   const speedRef = { value: waterSpeedFromQuery() };
-  mountSpikePanel({ water, sky, pixelSize: pixelSizeU, speed: speedRef });
+  mountSpikeMenu({ water, sky, pixelSize: pixelSizeU, speed: speedRef });
 
   window.addEventListener("resize", () => {
     const w = window.innerWidth;

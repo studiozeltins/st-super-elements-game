@@ -156,27 +156,41 @@ function presetButtons(
   return wrap;
 }
 
-/** Build + mount the live panel (right side). Call once after boot. */
-export function mountSpikePanel(refs: SpikePanelRefs): void {
+/**
+ * Build the live panel. When `parent` is given it renders inline (for the
+ * bottom-sheet menu); otherwise it floats fixed on the right.
+ */
+export function mountSpikePanel(
+  refs: SpikePanelRefs,
+  parent?: HTMLElement,
+): void {
   const { water, sky } = refs;
 
+  const embedded = !!parent;
   const panel = document.createElement("div");
-  panel.style.cssText = [
-    "position:fixed",
-    "top:64px",
-    "right:8px",
-    "z-index:9999",
-    "width:270px",
-    "max-height:calc(100vh - 80px)",
-    "overflow:auto",
-    "font:12px/1.35 ui-monospace,Menlo,Consolas,monospace",
-    "color:#e6f6ff",
-    "background:rgba(10,18,26,0.78)",
-    "backdrop-filter:blur(7px)",
-    "-webkit-backdrop-filter:blur(7px)",
-    "border:1px solid rgba(134,226,255,0.25)",
-    "padding:10px 12px",
-  ].join(";");
+  panel.style.cssText = (
+    embedded
+      ? [
+          "font:12px/1.35 ui-monospace,Menlo,Consolas,monospace",
+          "color:#e6f6ff",
+        ]
+      : [
+          "position:fixed",
+          "top:64px",
+          "right:8px",
+          "z-index:9999",
+          "width:270px",
+          "max-height:calc(100vh - 80px)",
+          "overflow:auto",
+          "font:12px/1.35 ui-monospace,Menlo,Consolas,monospace",
+          "color:#e6f6ff",
+          "background:rgba(10,18,26,0.78)",
+          "backdrop-filter:blur(7px)",
+          "-webkit-backdrop-filter:blur(7px)",
+          "border:1px solid rgba(134,226,255,0.25)",
+          "padding:10px 12px",
+        ]
+  ).join(";");
 
   // --- nav + quick looks ---
   const nav = section("navigate");
@@ -340,5 +354,5 @@ export function mountSpikePanel(refs: SpikePanelRefs): void {
   );
   panel.appendChild(wp);
 
-  document.body.appendChild(panel);
+  (parent ?? document.body).appendChild(panel);
 }

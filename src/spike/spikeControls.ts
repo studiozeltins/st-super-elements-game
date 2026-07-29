@@ -90,8 +90,11 @@ function reloadWith(patch: Record<string, string | null>): void {
   window.location.search = p.toString();
 }
 
-/** Build + mount the fixed control bar. Call once after boot. */
-export function mountSpikeControls(): void {
+/**
+ * Build the reload-based control bar. When `parent` is given it renders inline
+ * (for the bottom-sheet menu); otherwise it floats fixed at the top-left.
+ */
+export function mountSpikeControls(parent?: HTMLElement): void {
   const q = new URLSearchParams(S());
   const stage = stageFromQuery();
   const shape = /shape=whole/.test(S()) ? "whole" : "final";
@@ -338,26 +341,40 @@ export function mountSpikeControls(): void {
     },
   ];
 
+  const embedded = !!parent;
   const bar = document.createElement("div");
-  bar.style.cssText = [
-    "position:fixed",
-    "top:8px",
-    "left:8px",
-    "z-index:9999",
-    "display:flex",
-    "flex-wrap:wrap",
-    "gap:6px 12px",
-    "align-items:center",
-    "font:12px/1.4 ui-monospace,Menlo,Consolas,monospace",
-    "color:#e6f6ff",
-    "background:rgba(10,18,26,0.72)",
-    "backdrop-filter:blur(6px)",
-    "-webkit-backdrop-filter:blur(6px)",
-    "border:1px solid rgba(134,226,255,0.25)",
-    "padding:8px 10px",
-    "max-width:calc(100vw - 16px)",
-    "user-select:none",
-  ].join(";");
+  bar.style.cssText = (
+    embedded
+      ? [
+          "display:flex",
+          "flex-wrap:wrap",
+          "gap:6px 12px",
+          "align-items:center",
+          "font:12px/1.4 ui-monospace,Menlo,Consolas,monospace",
+          "color:#e6f6ff",
+          "padding:2px 0 8px",
+          "user-select:none",
+        ]
+      : [
+          "position:fixed",
+          "top:8px",
+          "left:8px",
+          "z-index:9999",
+          "display:flex",
+          "flex-wrap:wrap",
+          "gap:6px 12px",
+          "align-items:center",
+          "font:12px/1.4 ui-monospace,Menlo,Consolas,monospace",
+          "color:#e6f6ff",
+          "background:rgba(10,18,26,0.72)",
+          "backdrop-filter:blur(6px)",
+          "-webkit-backdrop-filter:blur(6px)",
+          "border:1px solid rgba(134,226,255,0.25)",
+          "padding:8px 10px",
+          "max-width:calc(100vw - 16px)",
+          "user-select:none",
+        ]
+  ).join(";");
 
   // Header: what the bar is + how to read it. Tap-and-hold shows tooltips on
   // touch devices too (the title attribute); desktop = hover.
@@ -403,5 +420,5 @@ export function mountSpikeControls(): void {
   url.style.cssText = "opacity:0.5;margin-left:4px;flex-basis:100%";
   bar.appendChild(url);
 
-  document.body.appendChild(bar);
+  (parent ?? document.body).appendChild(bar);
 }
